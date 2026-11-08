@@ -44,8 +44,8 @@ flag "--output <folder>" help="Result folder"
 '''
 
 [tasks.check]
-description = "Check that docs/cli.md is current and the documentation's links resolve"
-depends = ["check:cli", "check:links"]
+description = "Check that docs/cli.md is current, the documentation's links resolve and the console and kit read their spacing from the theme"
+depends = ["check:cli", "check:links", "check:spacing"]
 
 [tasks."check:cli"]
 description = "Check that docs/cli.md is what docs:cli writes"
@@ -54,6 +54,10 @@ run = "scripts/docs-cli --check"
 [tasks."check:links"]
 description = "Check that every relative link, image and anchor of the documentation resolves"
 run = "scripts/check-links"
+
+[tasks."check:spacing"]
+description = "Check that the console and the kit read margins, paddings, spacings and heights from Theme, not numbers"
+run = "scripts/check-spacing"
 
 [tasks."dev:bootstrap"]
 description = "Create each dev project's workspace with its packs' workspace files and seed its local administrator once"

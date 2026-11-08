@@ -1,10 +1,15 @@
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
 // TraceButton is a view's button. Its role says what pressing it does:
 // "navigation" leaves for another view and slides away; "primary" is the
 // view's main action, outlined and washed in the accent; "guarded" takes the
 // error tone; any other ("progress", "action") stays in place. `filled`
-// draws it solid in its tone, as a bar's main action is.
+// draws it solid in its tone, as a bar's main action is. With a `reason` it is
+// off: it reads disabled and does nothing, but says why on hover. It is never
+// wider than `maximumWidth`, its caption eliding instead. `busy`, the trace
+// runs in place of its caption; one that still acts while busy
+// (`allowClickWhileBusy`) keeps its caption, with the trace along its foot.
 Rectangle {
   id: button
 
@@ -12,15 +17,21 @@ Rectangle {
   property string text
   property string icon
   property string tip
+  // Why it cannot be pressed now; empty while it can.
+  property string reason
   property bool dense: false
   property bool armed: false
   property bool filled: false
   property bool busy: false
   property bool allowClickWhileBusy: false
+  property real maximumWidth: Breakpoints.room(parent)
   property color tone: role === "guarded" ? Theme.error : Theme.primary
   readonly property bool primary: role === "primary"
   readonly property bool running: busy
-  readonly property bool hovered: pointer.containsMouse
+  // The caption stays while the trace runs: pressing still does something.
+  readonly property bool captioned: allowClickWhileBusy
+  readonly property bool off: !enabled || reason !== ""
+  readonly property bool hovered: pointer.containsMouse && reason === ""
   readonly property color ink: armed || filled ? Theme.readable(Theme.background, tone, Theme.foreground) : tone
 
   signal clicked()
@@ -29,12 +40,15 @@ Rectangle {
   readonly property real side: dense ? 10 : 14
   readonly property real iconRoom: icon ? (dense ? 12 : 14) + content.spacing : 0
   implicitWidth: Math.max(dense ? 72 : 150, iconRoom + caption.implicitWidth + 2 * side)
-  implicitHeight: dense ? 28 : 44
+  implicitHeight: dense ? Breakpoints.target(Window.width) : Theme.size.control
+  // The width, not the implicit width, is bounded: what sizes itself from the
+  // button's implicit width never depends on its own.
+  width: Math.min(implicitWidth, maximumWidth)
   activeFocusOnTab: true
-  opacity: enabled ? 1 : 0.35
+  opacity: off ? 0.35 : 1
   color: armed || filled ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
   border.color: primary || filled ? tone : Theme.line
-  scale: pointer.pressed ? 0.97 : 1
+  scale: pointer.pressed && !off ? 0.97 : 1
   transform: Translate { id: departure }
 
   Behavior on color { ColorAnimation { duration: 180 } }
@@ -43,12 +57,14 @@ Rectangle {
 
   Keys.onReturnPressed: press()
   Keys.onSpacePressed: press()
+  Keys.onEscapePressed: event => { event.accepted = hint.visible; hint.dismiss() }
 
   onArmedChanged: if (armed) guardNudge.restart()
 
   function press() {
-    if (!enabled || (running && !allowClickWhileBusy))
+    if (off || (running && !allowClickWhileBusy))
       return
+    hint.dismiss()
     if (role === "navigation") {
       if (depart.running)
         return
@@ -56,8 +72,6 @@ Rectangle {
     }
     clicked()
   }
-
-  function restartTrace() { trace.restart() }
 
   SequentialAnimation {
     id: depart
@@ -68,7 +82,13 @@ Rectangle {
 
   LoadingTrace {
     id: trace
-    anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 7; bottomMargin: 7 }
+    anchors {
+      fill: parent
+      leftMargin: button.captioned ? 0 : Theme.space.cell
+      rightMargin: button.captioned ? 0 : Theme.space.cell
+      topMargin: button.captioned ? button.height - 3 : 7
+      bottomMargin: button.captioned ? 0 : 7
+    }
     running: button.running
     tone: button.tone
     backdrop: button.color
@@ -81,10 +101,10 @@ Rectangle {
     clip: true
     Row {
       id: content
-      // Back once the trace has reached the end and gone.
-      visible: !trace.visible
+      // Back once the trace has reached the end and gone, unless it stays.
+      visible: button.captioned || !trace.visible
       anchors.centerIn: parent
-      spacing: 10
+      spacing: Theme.space.gap
       transform: Translate { id: contentShift }
 
       Icon {
@@ -123,11 +143,12 @@ Rectangle {
     id: pointer
     anchors { fill: parent; margins: -4 }
     hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
+    cursorShape: button.off ? Qt.ArrowCursor : Qt.PointingHandCursor
+    onPressed: hint.dismiss()
     onClicked: button.press()
   }
 
   GuardNudge { id: guardNudge; targetObject: contentShift }
-  FocusRing { border.color: button.armed ? Theme.background : Theme.primary }
-  Hint { visible: (button.hovered || button.activeFocus) && button.tip.length > 0; text: button.tip }
+  FocusRing { border.color: button.armed || button.filled ? Theme.background : Theme.primary }
+  Hint { id: hint; active: pointer.containsMouse || button.activeFocus; text: button.reason || button.tip }
 }

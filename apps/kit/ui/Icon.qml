@@ -10,6 +10,8 @@ Item {
   property string name
   property color color: Theme.foreground
   property real size: 14
+  // Stroke weight in screen pixels, the same at every size.
+  property real weight: 1.25
 
   readonly property var paths: ({
     play: "M5 3.5v9l7.5-4.5z",
@@ -24,6 +26,7 @@ Item {
     "chevron-down": "M4.5 6.5l3.5 3.5 3.5-3.5",
     "chevron-up": "M4.5 9.5l3.5-3.5 3.5 3.5",
     "chevron-left": "M9.5 4.5l-3.5 3.5 3.5 3.5",
+    open: "M9.5 2.5h4v4 M13.5 2.5l-6 6 M11.5 9v4.5h-9v-9h4.5",
     "chevron-right": "M6.5 4.5l3.5 3.5-3.5 3.5",
     enter: "M12.5 3.5v4.5c0 1-0.5 1.5-1.5 1.5h-7.5 M6 7l-2.5 2.5 2.5 2.5",
     warning: "M8 2.5l6 11h-12z M8 6.5v3.5 M8 12v0.01",
@@ -36,7 +39,15 @@ Item {
     send: "M13.5 2.5l-11 4.5 4.5 2 2 4.5z M7 9l6.5-6.5",
     map: "M2.5 3.5h4v3h-4z M9.5 9.5h4v3h-4z M9.5 3.5h4v3h-4z M6.5 5h3 M4.5 6.5v3.5c0 .6.4 1 1 1h4",
     cost: "M8 2v12 M11 4.5c0-1-1.3-1.5-3-1.5s-3 .7-3 2c0 3 6 1.5 6 4.5 0 1.3-1.3 2-3 2s-3-.6-3-1.7",
-    key: "M2 8a2.75 2.75 0 1 0 5.5 0a2.75 2.75 0 1 0 -5.5 0 M7.5 8h6.5 M11.5 8v2.5 M14 8v2"
+    attach: "M11 4.5v7a3 3 0 0 1 -6 0v-8a2 2 0 0 1 4 0v7",
+    key: "M2 8a2.75 2.75 0 1 0 5.5 0a2.75 2.75 0 1 0 -5.5 0 M7.5 8h6.5 M11.5 8v2.5 M14 8v2",
+    info: "M2.5 8a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0 M8 7.5v3.5 M8 5.2v0.01",
+    // A prompt and its line: a step an agent took.
+    step: "M3 4.5l3.5 3.5-3.5 3.5 M8.5 11.5h4.5",
+    // A line that branches off: a work handed down.
+    branch: "M4.5 2.5v11 M4.5 5.5c0 3 2 4 5 4h3 M10.5 7.5l2 2-2 2",
+    // Two quote marks: words quoted from someone.
+    quote: "M3 8h3.5v3.5h-3.5z M3 8c0-2.2 1-3.5 3-4 M9.5 8h3.5v3.5h-3.5z M9.5 8c0-2.2 1-3.5 3-4"
   })
 
   implicitWidth: size
@@ -50,8 +61,8 @@ Item {
 
     ShapePath {
       strokeColor: icon.color
-      // 1.25 screen pixels at every size.
-      strokeWidth: 1.25 * 16 / icon.size
+      // The dots of "more" are strokes of no length: a heavier one fills them.
+      strokeWidth: (icon.name === "more" ? 2 : 1) * icon.weight * 16 / icon.size
       fillColor: "transparent"
       capStyle: ShapePath.RoundCap
       joinStyle: ShapePath.RoundJoin

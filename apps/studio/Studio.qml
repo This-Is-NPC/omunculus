@@ -13,7 +13,7 @@ Singleton {
 
   // Once the server answers, everything the settings show is read.
   Project {
-    id: client
+    id: connection
     onReached: {
       root.loadSetup()
       root.loadMembers()
@@ -23,19 +23,20 @@ Singleton {
       root.loadCatalog()
     }
   }
-  property alias socket: client.socket
-  property alias project: client.project
-  property alias connected: client.connected
-  property alias message: client.message
-  property alias messageIsError: client.messageIsError
-  property alias noticeCount: client.noticeCount
-  readonly property Http http: client.http
+  // The project's connection, which also registers new projects.
+  readonly property Project client: connection
+  property alias socket: connection.socket
+  property alias project: connection.project
+  property alias connected: connection.connected
+  // What the window tells, as toasts.
+  readonly property Notices notices: connection.notices
+  readonly property Http http: connection.http
   // The project's setup, as GET /v1/projects/{id}/config?whole=true gives it: {root, agents, models,
   // workspaces, workspace, workflows, document, literal_keys, revision, names};
   // null until it answers.
   property var setup: null
 
-  function tell(text, isError) { client.tell(text, isError) }
+  function tell(text, isError) { connection.tell(text, isError) }
 
   // The file of an agent's image, as a url, or "" while it has none or it
   // is being fetched.
@@ -44,7 +45,7 @@ Singleton {
     id: images
     http: root.http
     socket: root.socket
-    base: client.base
+    base: connection.base
     agents: root.setup ? root.setup.agents : []
   }
 
@@ -58,15 +59,6 @@ Singleton {
   // Every project of the server's registry, the one on screen among them, as
   // {id, socket}, as GET /v1/projects lists them on this socket.
   property var projects: []
-
-  // Adds the project `id`, whose config is the file at `config`, to the
-  // running server, then reads every project again. `failed` gets the reason.
-  function registerProject(id, config, done, failed) {
-    client.call("POST", "/v1/projects", { id: id, config: config }, false, () => {
-      loadOverviews()
-      done()
-    }, failed)
-  }
 
   // Writes one item of the config ("agents.worker", "policy") with PUT, or
   // removes it with DELETE for a null value, renaming `from` when given; then
@@ -102,7 +94,7 @@ Singleton {
   // manage the project's access.
   property var members: null
   function loadMembers() {
-    client.call("GET", client.base + "/members", null, false, data => members = data.items, () => members = null)
+    connection.call("GET", connection.base + "/members", null, false, data => members = data.items, () => members = null)
   }
 
   // Assigns `role` to the member, or removes the member for a null role; then
@@ -113,9 +105,9 @@ Singleton {
       done()
     }
     if (role === null)
-      client.call("DELETE", client.base + "/members/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(subject), null, false, done_, failed)
+      connection.call("DELETE", connection.base + "/members/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(subject), null, false, done_, failed)
     else
-      client.call("POST", client.base + "/members", { issuer: issuer, subject: subject, role: role }, false, done_, failed)
+      connection.call("POST", connection.base + "/members", { issuer: issuer, subject: subject, role: role }, false, done_, failed)
   }
 
   // What the project's model replies used, as GET .../usage gives it:
@@ -123,7 +115,7 @@ Singleton {
   // null until it answers, or while this window may not manage the config.
   property var usage: null
   function loadUsage() {
-    client.call("GET", client.base + "/usage", null, false, data => usage = data, () => usage = null)
+    connection.call("GET", connection.base + "/usage", null, false, data => usage = data, () => usage = null)
   }
 
   // Sends one short prompt to the model `name` as `value` would make it, and
@@ -213,7 +205,7 @@ Singleton {
   // Project id -> the packs it imports, as its config route lists them.
   property var packsOf: ({})
   function loadOverviews() {
-    client.call("GET", "/v1/projects", null, false, data => {
+    connection.call("GET", "/v1/projects", null, false, data => {
       projects = data.items
       for (const each of projects) {
         http.command(each.socket, "overview", { whole: true }, output => {

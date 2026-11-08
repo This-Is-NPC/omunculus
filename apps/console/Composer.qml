@@ -1,34 +1,67 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Requests.js" as Requests
+import "kit/client/Shortcuts.js" as Shortcuts
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run,
-// which Enter leaves while the box is noting. A message carries the files
-// picked under the box; a note carries none.
-// Sending shows the trace while the agent you write to is working; the agents
-// below it never hold it. In the box, while anything waits on you, how much
-// does, and the way to the agents map where it is answered.
+// which Enter leaves while the box is noting. Over the box, the quick chips
+// it is given, numbered as Alt and the number choose them, then the files
+// the message carries; the clip in the box picks more, and a note carries
+// none. In the main thread, the words not sent are kept for the conversation
+// they were written in, and come back when it is open again.
+// SEND keeps its caption over the trace while the agent you write to is
+// working, says so on hover, and still sends; the agents below it never
+// hold it. It is dim while the box is empty. While a form waits, the
+// keyboard goes to the form, and the box offers to say something else. The
+// box empties at once and the words show in the thread, dim, until the
+// server's copy takes their place; they come back to the box to be sent
+// again if the server refused them. Under 420 px of its own width its buttons show their icons
+// only.
 ColumnLayout {
   id: composer
 
-  property bool compact: false
+  property bool compact: Breakpoints.tight(width)
   // The work written to, or "" for the main thread.
   property string work: ""
-  // Whether it leads to what waits on you; not where that is answered.
-  property bool pendingShown: true
-
-  // Whether the agent written to has a run open: the root agent's, at depth 0,
+  // The quick chips over the box, [{text, tip, run}]; the chords that choose
+  // them are the window's. `chipsShown` false keeps their room, not their keys.
+  property var quick: []
+  property bool chipsShown: true
+  // Whether the agent written to has a run open: the front agent's own,
   // in the main thread; the work's own in a work.
-  readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
+  readonly property bool busy: work === "" ? Omunculus.busy("") : Omunculus.busy(work)
+  // The agent written to, "" when none is known yet.
+  readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
+  // Whether a question waits on you in the main thread: its answer goes in
+  // its card, so the box does not invite it.
+  readonly property bool answerWaits: work === "" && Omunculus.waiting.some(request => Requests.kind(request) === "needs-you")
+
+  // Whether the box holds nothing to send.
+  readonly property bool empty: entry.text.trim() === ""
+  // Whether a message is on its way to the server: the box is already empty
+  // and the thread shows the words, and SEND shows busy, until the server
+  // takes it or refuses it.
+  property bool sending: false
 
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
   property bool noting: false
 
-  signal pendingChosen()
+  spacing: Theme.space.tight
 
-  spacing: 10
+  // A message on its way is not in the box, whatever opens.
+  Connections {
+    target: Omunculus
+    enabled: composer.work === ""
+    function onConversationIdChanged() {
+      if (!composer.sending)
+        entry.text = Omunculus.composerDrafts[Omunculus.conversationId] || ""
+    }
+  }
 
   // Put the keyboard in the box; in a work, `note` makes Enter leave a note.
   function focusEntry(note) {
@@ -40,17 +73,26 @@ ColumnLayout {
   function take() {
     const value = entry.text.trim()
     if (value)
-      entry.text = ""
+      entry.clear()
     return value
   }
 
   function submit() {
-    const value = take()
-    if (!value)
+    const value = entry.text.trim()
+    if (!value || composer.sending)
       return
-    if (composer.busy)
-      sendButton.restartTrace()
-    Omunculus.send(value, composer.work, files.take())
+    const picked = files.take()
+    entry.clear()
+    composer.sending = true
+    Omunculus.send(value, composer.work, picked, () => {
+      composer.sending = false
+    }, () => {
+      // Refused: the words come back, ahead of anything typed since.
+      entry.text = entry.text.trim() === "" ? value : value + "\n" + entry.text
+      files.paths = picked
+      composer.sending = false
+      entry.focusBox()
+    })
   }
 
   function note() {
@@ -61,71 +103,20 @@ ColumnLayout {
     noting = false
   }
 
-  Rectangle {
+  Flow {
     Layout.fillWidth: true
-    implicitHeight: 42
-    color: Theme.highlight
-    border.color: entry.activeFocus ? Theme.primary : Theme.line
-    border.width: entry.activeFocus ? 2 : 1
-    Behavior on border.color { ColorAnimation { duration: 140 } }
-
-    RowLayout {
-      anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
-      spacing: 10
-      Icon { name: "chevron-right"; size: 14; color: entry.activeFocus ? Theme.primary : Theme.dim }
-      TextBox {
-        id: entry
-        Layout.fillWidth: true
-        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
-        background: Item {}
-        onAccepted: composer.noting ? composer.note() : composer.submit()
-        Keys.onEscapePressed: event => {
-          if (composer.noting)
-            composer.noting = false
-          else
-            event.accepted = false
-        }
-      }
-      TraceButton {
-        id: pendingButton
-        dense: true
-        role: "navigation"
-        visible: composer.pendingShown && Omunculus.pending > 0
-        tone: Theme.warning
-        armed: true
-        icon: "warning"
-        text: composer.compact ? String(Omunculus.pending) : Omunculus.pending + " PENDING"
-        tip: "what waits on you, on the map"
-        onClicked: composer.pendingChosen()
-        // It breathes while something waits.
-        SequentialAnimation on opacity {
-          running: pendingButton.visible
-          loops: Animation.Infinite
-          NumberAnimation { to: 0.6; duration: 900; easing.type: Easing.InOutSine }
-          NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutSine }
-        }
-      }
-      TraceButton {
-        dense: true
-        role: composer.noting ? "primary" : "progress"
-        implicitWidth: composer.compact ? 32 : 110
-        visible: composer.work !== ""
-        icon: "plus"
-        text: composer.compact ? "" : "NOTE"
-        tip: "context for the work's agents, without a run"
-        onClicked: composer.note()
-      }
-      TraceButton {
-        id: sendButton
-        dense: true
-        role: "progress"
-        implicitWidth: composer.compact ? 32 : 86
-        busy: composer.busy
-        allowClickWhileBusy: true
-        icon: "enter"
-        text: composer.compact ? "" : "SEND"
-        tip: "SEND"
-        onClicked: composer.submit()
+    visible: composer.chipsShown && composer.quick.length > 0
+    spacing: Theme.space.tight
+    Repeater {
+      model: composer.quick
+      delegate: Chip {
+        required property var modelData
+        required property int index
+        readonly property var keys: Shortcuts.keys("quick")
+        // Its number is its key among others; alone, it would read as a count.
+        text: (composer.quick.length > 1 && index < keys.length ? (index + 1) + "  " : "") + modelData.text
+        tip: modelData.tip + (index < keys.length ? "  " + keys[index] : "")
+        onClicked: modelData.run()
       }
     }
   }
@@ -133,6 +124,77 @@ ColumnLayout {
   FilePicker {
     id: files
     Layout.fillWidth: true
-    visible: !composer.noting
+    visible: paths.length > 0 && !composer.noting
+  }
+
+  InputFrame {
+    Layout.fillWidth: true
+    implicitHeight: row.implicitHeight
+    color: Theme.highlight
+    focused: entry.focused
+
+    // The chevron sits by the first line and the buttons by the last, each
+    // centred on a box of one line.
+    RowLayout {
+      id: row
+      anchors { left: parent.left; right: parent.right; leftMargin: Theme.space.inset; rightMargin: Theme.space.trail }
+      spacing: Theme.space.gap
+      Icon {
+        Layout.alignment: Qt.AlignTop
+        Layout.topMargin: (Theme.size.control - Theme.type.input.chevron) / 2
+        name: "chevron-right"
+        size: Theme.type.input.chevron
+        color: entry.focused ? Theme.primary : Theme.dim
+      }
+      TextArea {
+        id: entry
+        Layout.fillWidth: true
+        framed: false
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.answerWaits ? "or say something else" + (composer.addressee ? " to " + composer.addressee : "") : composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
+        onSubmitted: composer.noting ? composer.note() : composer.submit()
+        onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
+        Keys.onEscapePressed: event => {
+          if (composer.noting)
+            composer.noting = false
+          else
+            event.accepted = false
+        }
+      }
+      IconButton {
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: (Theme.size.control - height) / 2
+        visible: !composer.noting
+        name: "attach"
+        size: Theme.type.input.chevron
+        tip: "files to send with the message"
+        onClicked: files.pick()
+      }
+      TraceButton {
+        dense: true
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: (Theme.size.control - height) / 2
+        role: composer.noting ? "primary" : "progress"
+        implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 110
+        visible: composer.work !== ""
+        icon: "plus"
+        text: composer.compact ? "" : "NOTE"
+        tip: "context for the work's agents, without a run"
+        onClicked: composer.note()
+      }
+      TraceButton {
+        dense: true
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: (Theme.size.control - height) / 2
+        role: "progress"
+        implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 86
+        busy: composer.busy || composer.sending
+        allowClickWhileBusy: true
+        reason: composer.empty ? "write something first" : ""
+        icon: "enter"
+        text: composer.compact ? "" : "SEND"
+        tip: composer.busy ? (composer.addressee || "the agent") + " is working; SEND still sends" : "SEND"
+        onClicked: composer.submit()
+      }
+    }
   }
 }

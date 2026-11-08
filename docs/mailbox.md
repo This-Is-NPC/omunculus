@@ -87,7 +87,7 @@ Each thread has a state, read from its snapshot (works with their state and
 stage, runs with their status and `via`, requests) and its events. It shows
 in its row and, with what happens next, under the open thread's subject:
 
-- WAITING ON YOU while a request whose arbiter is you is pending, with
+- WAITING FOR YOU while a request whose arbiter is you is pending, with
   DECIDE, and, while nothing else is, when a work you gave waits for your
   next message (a root work whose `waiting` is `message`, as `wait` leaves
   it), naming who waits and on which work, with REPLY;

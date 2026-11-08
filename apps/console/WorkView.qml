@@ -1,16 +1,21 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Requests.js" as Requests
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // WorkView is one work on a page of its own, as an issue is read: where it
 // is — its project, its conversation, the work it came from — and its title
-// on top; then, on the left, what it is for, what it asked and its notes,
-// and under them its runs, the files it changed or the prompt a run was
-// given; on the right, its properties: its state, its project, its workflow
+// on top, then a header strip of its state, stage and age, with ANSWER, in
+// the warning tone, while it asked you something, and a tool to its
+// conversation's team; then, on the left, what it is for, what it asked and
+// its notes, and under them the tabs of its runs, the files it changed and
+// the prompt a run was given; on the right, its properties: its state, its project, its workflow
 // with each stage over the agent that takes it, or the agent it is with,
 // where it came from and the works it handed down, each opening here, whom
-// it goes to next, where it works and when it began and last changed.
+// it goes to next, where it works and when it began and last changed. On a
+// narrow page the properties follow the description instead.
 // Esc leaves.
 FocusScope {
   id: view
@@ -18,12 +23,17 @@ FocusScope {
   required property string key
   signal leave()
   signal picked(string key)
+  // A request it asked you, to answer in its decision over the page.
+  signal answer(string id)
+  // Its conversation's team, it picked.
+  signal openTeam()
 
   readonly property var work: key !== "" ? Omunculus.work(key) : null
   readonly property string agent: work ? Omunculus.agentOf(work) : ""
   readonly property var parentWork: work ? Omunculus.work(work.parent_id || "") : null
-  readonly property var children: Omunculus.works.filter(item => item.parent_id === key)
+  readonly property var handedDown: Omunculus.works.filter(item => item.parent_id === key)
   readonly property var running: Omunculus.running.find(run => (run.work_id || "") === key) || null
+  readonly property var askedOfYou: Omunculus.asked(key).filter(request => Requests.human(request.arbiter))
   // Its workflow's stages, {name, agent}, and the one it is at.
   readonly property var steps: {
     const flow = Omunculus.setup && work && work.workflow ? Omunculus.setup.workflows.find(each => each.name === work.workflow) : null
@@ -48,6 +58,7 @@ FocusScope {
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
 
   // What shows under the description: "runs", "changes" or "prompt".
+  readonly property var sections: ["runs", "changes", "prompt"]
   property string section: "runs"
   // The run whose prompt shows, or "" for the work's last.
   property string promptRun: ""
@@ -55,6 +66,9 @@ FocusScope {
     section = "runs"
     promptRun = ""
   }
+
+  // Whether the properties sit under the description rather than beside it.
+  readonly property bool stacked: Breakpoints.size(width) === "narrow"
 
   Keys.onEscapePressed: leave()
 
@@ -64,12 +78,12 @@ FocusScope {
     property string name
     default property alias body: value.data
     Layout.fillWidth: true
-    spacing: 4
+    spacing: Theme.space.line
     Caption { text: property.name }
     ColumnLayout {
       id: value
       Layout.fillWidth: true
-      spacing: 4
+      spacing: Theme.space.line
     }
   }
 
@@ -85,7 +99,7 @@ FocusScope {
     id: link
     required property var item
     Layout.fillWidth: true
-    implicitHeight: linkText.implicitHeight + 4
+    implicitHeight: linkText.implicitHeight + Theme.space.line
     activeFocusOnTab: true
     Keys.onReturnPressed: view.picked(link.item.id)
     Keys.onSpacePressed: view.picked(link.item.id)
@@ -119,15 +133,118 @@ FocusScope {
     }
   }
 
+  // Its properties, one under the other.
+  component PropertyList: ColumnLayout {
+    spacing: Theme.space.section
+
+    Property {
+      name: "STATE"
+      Value { text: view.stateText; color: view.stateTone; font.letterSpacing: 1 }
+    }
+    Property {
+      name: "PROJECT"
+      Value { text: Omunculus.project }
+    }
+    Property {
+      name: view.steps.length > 0 ? "WORKFLOW  ·  " + String(view.work.workflow).toUpperCase() : "WITH"
+      // Each stage over the agent that takes it: passed checked, the
+      // one it is at lit.
+      Repeater {
+        model: view.steps
+        delegate: RowLayout {
+          id: stage
+          required property var modelData
+          required property int index
+          readonly property bool passed: view.finished || index < view.at
+          readonly property bool current: !view.finished && index === view.at
+          Layout.fillWidth: true
+          spacing: Theme.space.tight
+          Label {
+            Layout.preferredWidth: 10
+            text: stage.passed ? "✓" : stage.current ? "▸" : "·"
+            color: stage.current ? Theme.primary : Theme.dim
+            font.pixelSize: 12
+          }
+          Label {
+            Layout.preferredWidth: Math.min(implicitWidth, stage.width * 0.45)
+            text: stage.modelData.name
+            color: stage.current ? Theme.primary : stage.passed ? Theme.foreground : Theme.dim
+            font.pixelSize: 12
+            elide: Text.ElideRight
+          }
+          Portrait { implicitWidth: 18; implicitHeight: implicitWidth; agent: stage.modelData.agent; source: Omunculus.imageOf(stage.modelData.agent); tone: Omunculus.toneOf(stage.modelData.agent) }
+          Label {
+            Layout.fillWidth: true
+            text: stage.modelData.agent
+            color: stage.current ? Omunculus.toneOf(stage.modelData.agent) : Theme.dim
+            font.pixelSize: 11
+            elide: Text.ElideRight
+          }
+        }
+      }
+      RowLayout {
+        visible: view.steps.length === 0
+        spacing: Theme.space.tight
+        Portrait { implicitWidth: 18; implicitHeight: implicitWidth; agent: view.agent; source: Omunculus.imageOf(view.agent); tone: Omunculus.toneOf(view.agent) }
+        Value { text: view.agent; color: Omunculus.toneOf(view.agent) }
+      }
+    }
+    Property {
+      name: "FROM"
+      WorkLink { visible: view.parentWork !== null; item: view.parentWork || ({ id: "", title: "", state: "" }) }
+      Value { visible: view.parentWork === null; text: "you, through " + (Omunculus.agent || "the conversation's agent") }
+    }
+    Property {
+      name: view.handedDown.length > 0 ? "HANDED DOWN  ·  " + view.handedDown.length : "HANDED DOWN"
+      Repeater {
+        model: view.handedDown
+        delegate: WorkLink {
+          required property var modelData
+          item: modelData
+        }
+      }
+      Value { visible: view.handedDown.length === 0; text: "nothing"; color: Theme.dim }
+    }
+    Property {
+      name: view.finished ? "REPORTED TO" : "NEXT"
+      Value {
+        text: view.finished ? view.reportsTo
+          : view.at >= 0 && view.at < view.steps.length - 1
+            ? view.steps[view.at + 1].name + ", with " + view.steps[view.at + 1].agent
+            : "reports to " + view.reportsTo
+      }
+    }
+    Property {
+      name: "WORKSPACE"
+      Value { text: (view.place.name ? view.place.name + "  ·  " : "") + view.place.root; elide: Text.ElideMiddle; wrapMode: Text.NoWrap }
+    }
+    Property {
+      name: "BEGAN  ·  CHANGED"
+      Value {
+        text: view.work ? Omunculus.ago(view.work.created_at, view.now) + " ago  ·  "
+          + Omunculus.ago(view.work.updated_at || view.work.created_at, view.now) + " ago" : ""
+        color: Theme.dim
+      }
+    }
+  }
+  Component { id: propertyList; PropertyList {} }
+
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.gap
 
     // Where it is: its project, its conversation, the work it came from.
     RowLayout {
       Layout.fillWidth: true
-      spacing: 8
-      Label { text: Omunculus.project.toUpperCase(); color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 3 }
+      spacing: Theme.space.tight
+      Label {
+        Layout.maximumWidth: view.width * 0.3
+        text: Omunculus.project.toUpperCase()
+        color: Theme.primary
+        font.pixelSize: 11
+        font.letterSpacing: 3
+        elide: Text.ElideRight
+      }
       Label { text: "/"; color: Theme.dim; font.pixelSize: 11 }
       Label {
         Layout.maximumWidth: view.width * 0.3
@@ -162,7 +279,45 @@ FocusScope {
       font.letterSpacing: 1
       wrapMode: Text.Wrap
     }
-    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
+
+    // The header strip: its state, stage and age, and what to do with it.
+    Rectangle {
+      Layout.fillWidth: true
+      implicitHeight: Theme.size.strip
+      color: "transparent"
+      border.color: Theme.line
+
+      RowLayout {
+        anchors { fill: parent; leftMargin: Theme.space.inset; rightMargin: Theme.space.trail }
+        spacing: Theme.space.gap
+        Label {
+          Layout.fillWidth: true
+          Layout.minimumWidth: 0
+          text: [
+            view.stateText,
+            view.at >= 0 ? "stage " + (view.at + 1) + " of " + view.steps.length + " " + view.steps[view.at].name : "",
+            view.work ? "began " + Omunculus.ago(view.work.created_at, view.now) + " ago" : ""
+          ].filter(part => part).join(Theme.type.meta.separator).toUpperCase()
+          color: Theme.dim
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: Theme.type.meta.tracking
+          elide: Text.ElideRight
+        }
+        // Urgent, never the main: its tone says so.
+        TraceButton {
+          visible: view.askedOfYou.length > 0
+          dense: true
+          role: "progress"
+          tone: Theme.warning
+          icon: "enter"
+          text: view.stacked ? "" : "ANSWER"
+          Layout.preferredWidth: view.stacked ? Breakpoints.target(Window.width) : -1
+          tip: "answer what it asked you"
+          onClicked: view.answer(view.askedOfYou[0].id)
+        }
+        IconButton { name: "people"; tip: "its conversation's team, this work picked"; onClicked: view.openTeam() }
+      }
+    }
 
     RowLayout {
       Layout.fillWidth: true
@@ -173,21 +328,22 @@ FocusScope {
       ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.rightMargin: 20
-        spacing: 12
+        Layout.rightMargin: view.stacked ? 0 : Theme.space.page
+        spacing: Theme.space.cell
 
-        Caption { Layout.topMargin: 6; text: "DESCRIPTION" }
+        Caption { Layout.topMargin: Theme.space.tight; text: "DESCRIPTION" }
         ScrollPage {
           id: described
           Layout.fillWidth: true
-          // As tall as it reads, up to two fifths of the room.
-          Layout.preferredHeight: Math.min(about.implicitHeight, view.height * 0.4)
+          // As tall as it reads, up to two fifths of the room, or half
+          // with the properties under it.
+          Layout.preferredHeight: Math.min(about.implicitHeight, view.height * (view.stacked ? 0.5 : 0.4))
           contentHeight: about.implicitHeight
 
           ColumnLayout {
             id: about
             width: described.width
-            spacing: 12
+            spacing: Theme.space.cell
             Prose {
               Layout.fillWidth: true
               source: view.work ? String(view.work.goal || "") : ""
@@ -201,30 +357,31 @@ FocusScope {
               whole: false
               onPicked: key => view.picked(key)
             }
+            Loader {
+              Layout.fillWidth: true
+              Layout.topMargin: Theme.space.tight
+              active: view.stacked
+              visible: active
+              sourceComponent: propertyList
+            }
           }
         }
 
-        RowLayout {
+        Flow {
           Layout.fillWidth: true
-          Layout.topMargin: 8
-          spacing: 6
+          Layout.topMargin: Theme.space.tight
+          spacing: Theme.space.section
           Repeater {
-            model: [
-              { name: "runs", tip: "its runs: how each ended, failures, cost" },
-              { name: "changes", tip: "the files it changed" },
-              { name: "prompt", tip: "the prompt a run was given" }
-            ]
-            delegate: TraceButton {
-              required property var modelData
-              Layout.preferredWidth: 120
-              dense: true
-              role: view.section === modelData.name ? "primary" : "action"
-              text: modelData.name.toUpperCase()
-              tip: modelData.tip
-              onClicked: view.section = modelData.name
+            model: view.sections
+            delegate: Tab {
+              required property string modelData
+              required property int index
+              label: modelData
+              digit: String(index + 1).padStart(2, "0")
+              current: view.section === modelData
+              onChosen: view.section = modelData
             }
           }
-          Item { Layout.fillWidth: true }
         }
 
         WorkRuns {
@@ -255,111 +412,23 @@ FocusScope {
         }
       }
 
-      Rectangle { Layout.fillHeight: true; implicitWidth: 1; color: Theme.line }
+      Rectangle { visible: !view.stacked; Layout.fillHeight: true; implicitWidth: 1; color: Theme.line }
 
-      // Its properties.
+      // Its properties, beside the work.
       ScrollPage {
         id: properties
+        visible: !view.stacked
         Layout.preferredWidth: Math.min(300, view.width * 0.36)
         Layout.fillHeight: true
-        contentHeight: propertyList.implicitHeight + 12
+        contentHeight: beside.implicitHeight + 12
 
-        ColumnLayout {
-          id: propertyList
+        Loader {
+          id: beside
           x: 20
           y: 6
           width: properties.width - 20
-          spacing: 16
-
-          Property {
-            name: "STATE"
-            Value { text: view.stateText; color: view.stateTone; font.letterSpacing: 1 }
-          }
-          Property {
-            name: "PROJECT"
-            Value { text: Omunculus.project }
-          }
-          Property {
-            name: view.steps.length > 0 ? "WORKFLOW  ·  " + String(view.work.workflow).toUpperCase() : "WITH"
-            // Each stage over the agent that takes it: passed checked, the
-            // one it is at lit.
-            Repeater {
-              model: view.steps
-              delegate: RowLayout {
-                id: stage
-                required property var modelData
-                required property int index
-                readonly property bool passed: view.finished || index < view.at
-                readonly property bool current: !view.finished && index === view.at
-                Layout.fillWidth: true
-                spacing: 8
-                Label {
-                  Layout.preferredWidth: 10
-                  text: stage.passed ? "✓" : stage.current ? "▸" : "·"
-                  color: stage.current ? Theme.primary : Theme.dim
-                  font.pixelSize: 12
-                }
-                Label {
-                  Layout.preferredWidth: 70
-                  text: stage.modelData.name
-                  color: stage.current ? Theme.primary : stage.passed ? Theme.foreground : Theme.dim
-                  font.pixelSize: 12
-                  elide: Text.ElideRight
-                }
-                Portrait { implicitWidth: 18; implicitHeight: 18; agent: stage.modelData.agent; source: Omunculus.imageOf(stage.modelData.agent); tone: Omunculus.toneOf(stage.modelData.agent) }
-                Label {
-                  Layout.fillWidth: true
-                  text: stage.modelData.agent
-                  color: stage.current ? Omunculus.toneOf(stage.modelData.agent) : Theme.dim
-                  font.pixelSize: 11
-                  elide: Text.ElideRight
-                }
-              }
-            }
-            RowLayout {
-              visible: view.steps.length === 0
-              spacing: 8
-              Portrait { implicitWidth: 18; implicitHeight: 18; agent: view.agent; source: Omunculus.imageOf(view.agent); tone: Omunculus.toneOf(view.agent) }
-              Value { text: view.agent; color: Omunculus.toneOf(view.agent) }
-            }
-          }
-          Property {
-            name: "FROM"
-            WorkLink { visible: view.parentWork !== null; item: view.parentWork || ({ id: "", title: "", state: "" }) }
-            Value { visible: view.parentWork === null; text: "you, through " + (Omunculus.agent || "the conversation's agent") }
-          }
-          Property {
-            name: view.children.length > 0 ? "HANDED DOWN  ·  " + view.children.length : "HANDED DOWN"
-            Repeater {
-              model: view.children
-              delegate: WorkLink {
-                required property var modelData
-                item: modelData
-              }
-            }
-            Value { visible: view.children.length === 0; text: "nothing"; color: Theme.dim }
-          }
-          Property {
-            name: view.finished ? "REPORTED TO" : "NEXT"
-            Value {
-              text: view.finished ? view.reportsTo
-                : view.at >= 0 && view.at < view.steps.length - 1
-                  ? view.steps[view.at + 1].name + ", with " + view.steps[view.at + 1].agent
-                  : "reports to " + view.reportsTo
-            }
-          }
-          Property {
-            name: "WORKSPACE"
-            Value { text: (view.place.name ? view.place.name + "  ·  " : "") + view.place.root; elide: Text.ElideMiddle; wrapMode: Text.NoWrap }
-          }
-          Property {
-            name: "BEGAN  ·  CHANGED"
-            Value {
-              text: view.work ? Omunculus.ago(view.work.created_at, view.now) + " ago  ·  "
-                + Omunculus.ago(view.work.updated_at || view.work.created_at, view.now) + " ago" : ""
-              color: Theme.dim
-            }
-          }
+          active: !view.stacked
+          sourceComponent: propertyList
         }
       }
     }

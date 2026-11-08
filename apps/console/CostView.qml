@@ -3,68 +3,101 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// CostView is what the conversation open has used: the model calls, the
-// tokens read, read from cache and written, and what they cost, in all and
-// by agent. A cost shows only for calls whose provider reported one. Esc
-// leaves.
+// CostView is what the conversation open has used. A header strip sums it
+// up — the model replies, the tokens read by the model (with those from
+// cache) and written by it — with its cost at the right; then a row per
+// agent, the busiest first, its name in its colour over the same figures,
+// its cost at the top right, "-" for an agent none priced. When no provider reported a price there is no
+// cost anywhere, only one note saying so. Esc leaves.
 FocusScope {
   id: view
 
   signal leave()
 
-  readonly property var agents: Object.keys(Omunculus.usage.agents).sort()
+  readonly property var all: Omunculus.usage.all
+  readonly property var agents: Object.keys(Omunculus.usage.agents).sort((a, b) => {
+    const used = name => Omunculus.usage.agents[name].input + Omunculus.usage.agents[name].output
+    return used(b) - used(a) || a.localeCompare(b)
+  }).map(name => Object.assign({ name: name }, Omunculus.usage.agents[name]))
+  readonly property bool unpriced: all.calls > 0 && all.priced === 0
 
-  function tokens(count) {
-    return count.toLocaleString(Qt.locale("en_US"), "f", 0)
+  // A tally's calls and tokens, as one line.
+  function used(tally) {
+    return [
+      tally.calls + (tally.calls === 1 ? " reply" : " replies"),
+      Omunculus.tokens(tally.input) + " read" + (tally.cached > 0 ? " (" + Omunculus.tokens(tally.cached) + " from cache)" : ""),
+      Omunculus.tokens(tally.output) + " written"
+    ].join(Theme.type.meta.separator)
+  }
+  // A tally's cost, "-" when none of its replies was priced.
+  function spent(tally) {
+    if (tally.priced === 0)
+      return "-"
+    return Omunculus.money(tally.cost) + (tally.priced < tally.calls ? "  ·  " + tally.priced + " of " + tally.calls + " priced" : "")
   }
 
   Keys.onEscapePressed: leave()
+  onActiveFocusChanged: if (activeFocus) table.focusRows()
 
-  component Figures: GridLayout {
-    id: figures
-    required property var used
-    columns: 2
-    columnSpacing: 14
-    rowSpacing: 6
-    Label { text: "model calls"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: String(figures.used.calls); font.pixelSize: 11 }
-    Label { text: "tokens read"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: view.tokens(figures.used.input) + (figures.used.cached > 0 ? "  ·  " + view.tokens(figures.used.cached) + " from cache" : ""); font.pixelSize: 11 }
-    Label { text: "tokens written"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: view.tokens(figures.used.output); font.pixelSize: 11 }
-    Label { text: "cost"; color: Theme.dim; font.pixelSize: 11 }
-    Label {
-      text: figures.used.priced === 0 ? "not reported" : Omunculus.money(figures.used.cost)
-        + (figures.used.priced < figures.used.calls ? "  ·  " + figures.used.priced + " of " + figures.used.calls + " calls priced" : "")
-      color: figures.used.priced === 0 ? Theme.dim : Theme.primary
-      font.pixelSize: 11
-    }
-  }
-
-  ScrollPage {
-    id: scroll
+  ColumnLayout {
     anchors.fill: parent
-    contentHeight: form.implicitHeight
+    spacing: Theme.space.block
 
-    ColumnLayout {
-      id: form
-      width: Math.min(scroll.width, 560)
-      spacing: 18
+    // In all; its figures wrap rather than cut on a narrow window.
+    Rectangle {
+      Layout.fillWidth: true
+      implicitHeight: Math.max(Theme.size.strip, inAll.implicitHeight + Theme.space.gap * 2)
+      color: "transparent"
+      border.color: Theme.line
 
-      Kicker { Layout.fillWidth: true; text: "in all" }
-      Figures { Layout.fillWidth: true; used: Omunculus.usage.all }
-
-      Repeater {
-        model: view.agents.length > 1 ? view.agents : []
-        delegate: ColumnLayout {
-          id: agent
-          required property string modelData
+      RowLayout {
+        anchors { fill: parent; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+        spacing: Theme.space.gap
+        Label {
+          id: inAll
           Layout.fillWidth: true
-          spacing: 8
-          Kicker { Layout.fillWidth: true; text: agent.modelData; tone: Omunculus.toneOf(agent.modelData) }
-          Figures { Layout.fillWidth: true; used: Omunculus.usage.agents[agent.modelData] }
+          Layout.minimumWidth: 0
+          text: ("in all" + Theme.type.meta.separator + view.used(view.all)).toUpperCase()
+          color: Theme.dim
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: Theme.type.meta.tracking
+          wrapMode: Text.Wrap
+        }
+        Label {
+          visible: !view.unpriced
+          text: view.spent(view.all)
+          color: Theme.primary
+          font.pixelSize: Theme.type.input.size
         }
       }
+    }
+
+    Label {
+      Layout.fillWidth: true
+      visible: view.unpriced
+      text: "The provider sends no price."
+      color: Theme.dim
+      font.pixelSize: Theme.type.tab.size
+      wrapMode: Text.Wrap
+    }
+
+    // By agent.
+    DataTable {
+      id: table
+      Layout.fillWidth: true
+      Layout.fillHeight: true
+      active: view.activeFocus
+      rows: view.agents
+      idOf: entry => entry.name
+      columns: view.unpriced
+        ? [{ title: "Agent", weight: 0.25 }, { title: "Used", weight: 0.75 }]
+        : [{ title: "Agent", weight: 0.25 }, { title: "Used", weight: 0.55 }, { title: "Cost", weight: 0.2 }]
+      cells: entry => view.unpriced ? [entry.name, view.used(entry)] : [entry.name, view.used(entry), view.spent(entry)]
+      tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 2 && entry.priced === 0 ? Theme.dim : ""
+      stacked: [[0], [1]]
+      status: view.unpriced ? -1 : 2
+      emptyText: "Nothing used yet."
+      onBackRequested: view.leave()
     }
   }
 }

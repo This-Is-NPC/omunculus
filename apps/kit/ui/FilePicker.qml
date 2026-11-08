@@ -2,8 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
 
-// FilePicker holds the files a message will carry: a chip that picks them
-// and a chip for each picked, which takes it off when chosen.
+// FilePicker holds the files a message will carry, a chip for each picked,
+// which takes it off when chosen; `pick()` asks for more. Empty, it takes
+// no room.
 Flow {
   id: picker
 
@@ -17,14 +18,11 @@ Flow {
     return picked
   }
 
-  spacing: 6
+  // Asks for files to add.
+  function pick() { dialog.open() }
 
-  Chip {
-    icon: "plus"
-    text: "ATTACH"
-    tip: "files to send with the message"
-    onClicked: dialog.open()
-  }
+  visible: paths.length > 0
+  spacing: Theme.space.tight
 
   Repeater {
     model: picker.paths

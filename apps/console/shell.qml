@@ -1,27 +1,39 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "kit/client/Projects.js" as Projects
+import "kit/client/Shortcuts.js" as Shortcuts
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 ShellRoot {
-  // The omunculus window. At the start: a new conversation, the project's
-  // conversations or the board. Entered: the pages of the level on screen
-  // down the left — the project's conversations and board, or the chat, map,
-  // log and cost of the conversation open — the one on screen beside the bar
-  // of its commands, and the page under them; back from the first page
-  // entered is back to the start.
+  // The omunculus window. At the start: on a project, a new conversation,
+  // its conversations, the board or the projects; on the registry alone, the
+  // projects or the board. Entered: on the registry and a project, the pages
+  // of the level down the left — the registry's projects and board, a
+  // project's conversations and board — the one on screen beside the bar of
+  // its commands, and the page under them; on a narrow window the rail is
+  // hidden and the bar's page switcher lists the pages. In a conversation,
+  // its pages under its own head and tabs (PagesView), with no rail and no
+  // bar: the masthead's buttons open its cost, its menu of rarer actions and
+  // close it, back to the list. The masthead names the way to the page; while
+  // a project is open, a notice says how many conversations need you in the
+  // other projects, and in a conversation, how many notes to you are unread.
+  // Back from the first page entered is back to the start.
   FloatingWindow {
     id: panel
 
     title: "omunculus"
     implicitWidth: 1080
-    implicitHeight: 720
-    minimumSize: Qt.size(240, 320)
+    // 3 : 2.
+    implicitHeight: implicitWidth * 2 / 3
+    minimumSize: Qt.size(360, 480)
     color: Theme.background
 
-    // Below this width, controls drop their labels and keep their icons.
-    readonly property bool compact: width < 560
+    // The window's size class: "wide", "medium" or "narrow".
+    readonly property string size: Breakpoints.size(width)
     // Below this height, the window keeps its room for the conversation: tighter
     // margins, and the targets of the composer only as the one picked.
     readonly property bool short: height < 560
@@ -35,15 +47,39 @@ ShellRoot {
       pagesView.enter(page)
       started = true
     }
-
-    // Chooses a page by its place, round from either end, and gives it the
-    // keyboard, so the carousel folds away.
-    function choose(index) {
-      const pages = pagesView.pages
-      pagesView.go(pages[(index + pages.length) % pages.length])
-      rail.pinned = false
-      Qt.callLater(pagesView.focusEntry)
+    // Enters the pages at a project's conversations; BACK returns to the start.
+    function enterProject(place, chip) {
+      pagesView.enterProject(place, chip)
+      started = true
     }
+
+    // The window's margin, and the room between its masthead and the rest.
+    readonly property int margin: short ? Theme.space.pageShort : Theme.space.page
+    readonly property int section: short ? Theme.space.sectionShort : Theme.space.section
+
+    // The counts of the notices put away, -1 for none; a notice shows again
+    // once its count changes.
+    property int elsewhereKept: -1
+    property int notesKept: -1
+
+    // The ways in at the start: on a project, a new conversation, its
+    // conversations, the board and the projects; on the registry alone, the
+    // projects and the board.
+    readonly property var ways: {
+      const projects = { key: "start-projects", page: "projects", text: "PROJECTS", icon: "folder" }
+      const board = { key: "start-board", page: "board", text: "BOARD", icon: "board" }
+      return Omunculus.registry ? [projects, board] : [
+        { key: "start-new", page: "new", text: "NEW CONVERSATION", icon: "play" },
+        { key: "start-history", page: "conversations", text: "CONVERSATIONS", icon: "list" },
+        board, projects
+      ]
+    }
+
+    // The way to the page on screen, as the masthead takes it: entered, the
+    // pages'; at the start, the project, or, on the registry, whether the
+    // server answers.
+    readonly property var crumbs: started ? pagesView.crumbs
+      : Omunculus.registry ? [{ text: !Omunculus.connected ? "offline" : Projects.reading(Omunculus.projectRows) ? "reading" : "ready" }] : [{ text: Omunculus.project }]
 
     // Whether a dialog holds the keyboard, so the keys of the pages wait.
     readonly property bool dialogOpen: shortcuts.visible || pagesView.dialogOpen
@@ -51,36 +87,91 @@ ShellRoot {
     onClosed: Qt.quit()
 
     Rectangle {
+      id: frame
       anchors.fill: parent
       color: Theme.background
       border.color: Theme.line
 
       // When the keyboard is left on nothing — a dialog closed, a view changed —
-      // the page on screen takes it back.
+      // the page on screen takes it back, unless text was being written a
+      // moment ago: that text is not carried into another field, and the
+      // keyboard waits on the sink, where typing only says so.
       readonly property Item focused: Window.activeFocusItem
       // Nothing, or only the window itself, has the keyboard.
       function lost(item) { return !item || !item.parent || item === panel.contentItem }
       onFocusedChanged: if (lost(focused)) Qt.callLater(() => {
-        if (lost(Window.activeFocusItem))
+        if (!lost(Window.activeFocusItem))
+          return
+        if (!Typing.idle)
+          sink.forceActiveFocus()
+        else
           panel.started ? pagesView.focusEntry() : start.forceActiveFocus()
       })
 
+      // Whether the bare keys of navigation may act: an item to navigate has
+      // the keyboard, and no text field saw a key for a second.
+      readonly property bool bare: !lost(focused) && focused !== sink && Typing.idle
+
+      // Printable keys no one took are not commands and not text.
+      Keys.onPressed: event => {
+        if (event.text >= " " && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+          Omunculus.tell("Click a field to type", false)
+          event.accepted = true
+        }
+      }
+      Item { id: sink }
+
       ColumnLayout {
         anchors.fill: parent
-        anchors.margins: panel.short ? 12 : 20
-        spacing: panel.short ? 10 : 18
+        anchors.margins: panel.margin
+        spacing: panel.section
 
         Masthead {
           Layout.fillWidth: true
           Layout.fillHeight: false
-          section: panel.started ? pagesView.heading : Omunculus.project
-          // Entered, the page's bar gives the readout.
-          StatusLine {
-            message: panel.started ? "" : Omunculus.message
-            error: Omunculus.messageIsError
-            offline: !panel.started && !Omunculus.connected
-            count: Omunculus.noticeCount
-            maxWidth: Math.max(0, panel.width - 480)
+          tight: panel.short
+          crumbs: panel.crumbs
+          // Requests waiting for you in the other projects, while one is
+          // open; it opens them, the waiting ones picked out.
+          NoticeChip {
+            readonly property int count: Omunculus.elsewhere
+            shown: panel.started && pagesView.level !== "registry" && count > 0 && panel.elsewhereKept < 0
+            text: count + (panel.size === "narrow" ? " ELSEWHERE" : " NEED YOU ELSEWHERE")
+            tip: "the projects where conversations need you"
+            closeTip: "put it away until it changes"
+            onOpened: pagesView.showProjects("waiting")
+            onDismissed: panel.elsewhereKept = count
+            onCountChanged: panel.elsewhereKept = -1
+          }
+          // The notes to you of the conversation open, unread; it shows the
+          // oldest and marks it read.
+          NoticeChip {
+            readonly property int count: Omunculus.unread.length
+            shown: panel.started && pagesView.inside && count > 0 && panel.notesKept < 0
+            text: count + (count === 1 ? " NOTE" : " NOTES")
+            tip: "show the oldest note to you and mark it read  " + Shortcuts.label("mark-read")
+            closeTip: "put it away until another comes"
+            onOpened: pagesView.readNote()
+            onDismissed: panel.notesKept = count
+            onCountChanged: panel.notesKept = -1
+          }
+          IconButton {
+            visible: !panel.started
+            name: "info"
+            tip: "the keys  " + Shortcuts.label("help")
+            onClicked: shortcuts.open()
+          }
+          ActionMenu {
+            visible: panel.started && pagesView.inside
+            tip: "more"
+            items: pagesView.more
+            onChosen: id => pagesView.more.find(item => item.id === id).run()
+          }
+          IconButton {
+            visible: panel.started && pagesView.inside
+            name: "close"
+            tip: pagesView.fresh ? "close it, back to choosing whom to talk with" : "close it, back to the conversations"
+            onClicked: pagesView.leave()
           }
         }
 
@@ -88,79 +179,112 @@ ShellRoot {
           Layout.fillWidth: true
           Layout.fillHeight: true
 
-          // Start: the ways in, and nothing else.
+          // Start: the ways in, centred, and under them what the server
+          // holds: the projects, or the project, and the conversations that
+          // need you in each, read while the start is on screen too.
           Stage {
             id: start
             anchors.fill: parent
             shown: !panel.started
             focus: shown
-            onShownChanged: if (shown) forceActiveFocus()
+            // After the pages let the registry go.
+            onShownChanged: if (shown) {
+              forceActiveFocus()
+              Qt.callLater(() => Omunculus.watchRegistry(true))
+            }
+            Component.onCompleted: Omunculus.watchRegistry(true)
             Keys.onPressed: event => {
-              if (event.key === Qt.Key_N)
-                beginButton.press()
-              else if (event.key === Qt.Key_H)
-                historyButton.press()
-              else if (event.key === Qt.Key_B)
-                boardButton.press()
+              if (!Typing.idle)
+                return
+              const at = panel.ways.findIndex(way => Shortcuts.keys(way.key).includes(event.text.toUpperCase()))
+              if (at >= 0)
+                (wayButtons.itemAt(at) as TraceButton).press()
             }
 
             Column {
               anchors.horizontalCenter: parent.horizontalCenter
               // Whole pixels, or the first button's top hairline is not drawn;
-              // never past the view's edges on a short window.
-              y: Math.round(Math.max(0, Math.min(parent.height - height, (parent.height - height) / 2 + Math.min(90, Math.max(0, parent.height / 6)))))
-              spacing: 14
-              TraceButton {
-                id: beginButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                implicitWidth: Math.min(260, panel.width - 40)
-                implicitHeight: 48
-                role: "navigation"
-                icon: "play"
-                text: "NEW CONVERSATION"
-                enabled: Omunculus.connected
-                tip: "n"
-                onClicked: panel.enter("new")
+              // never past the view's top on a short window.
+              y: Math.round(Math.max(0, (parent.height - height) / 2))
+              spacing: panel.short ? Theme.space.blockShort : Theme.space.block
+              // The first way in is the main one, and stands taller.
+              Repeater {
+                id: wayButtons
+                model: panel.ways
+                delegate: TraceButton {
+                  required property var modelData
+                  required property int index
+                  // A delegate torn down has no parent.
+                  anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+                  implicitWidth: Math.min(260, panel.width - 2 * panel.margin)
+                  implicitHeight: index === 0 ? Theme.size.control + Theme.space.line : Theme.size.control
+                  role: index === 0 ? "primary" : "navigation"
+                  icon: modelData.icon
+                  text: modelData.text
+                  enabled: Omunculus.connected
+                  tip: Shortcuts.label(modelData.key)
+                  onClicked: panel.enter(modelData.page)
+                }
               }
-              TraceButton {
-                id: historyButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                implicitWidth: Math.min(260, panel.width - 40)
-                role: "navigation"
-                icon: "list"
-                text: "CONVERSATIONS"
-                enabled: Omunculus.connected
-                tip: "h"
-                onClicked: panel.enter("conversations")
-              }
-              TraceButton {
-                id: boardButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                implicitWidth: Math.min(260, panel.width - 40)
-                role: "navigation"
-                icon: "board"
-                text: "BOARD"
-                enabled: Omunculus.connected
-                tip: "b"
-                onClicked: panel.enter("board")
-              }
-              Item { width: 1; height: 6 }
+              Item { width: 1; height: Theme.space.tight }
               DecodeLabel {
+                readonly property int count: Omunculus.boardProjects.length
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(0, panel.width - 40)
-                value: Omunculus.connected ? "Project " + Omunculus.project + " · its agents wait for a word"
-                  : "The server does not answer"
+                width: Math.max(0, panel.width - 2 * panel.margin)
+                value: !Omunculus.connected ? "The server does not answer"
+                  : !Omunculus.registry ? "Project " + Omunculus.project + " · its agents wait for a word"
+                  : count > 0 ? count + (count === 1 ? " project" : " projects") + " · open PROJECTS to choose one"
+                  : "No project yet · open PROJECTS to add one"
                 soft: true
                 horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
+                wrapMode: Text.Wrap
                 color: Omunculus.connected ? Theme.dim : Theme.warning
-                font.pixelSize: 10
-                font.letterSpacing: 2
+                font.pixelSize: Theme.type.meta.size
+                font.letterSpacing: Theme.type.meta.tracking
+              }
+              // The projects where conversations need you, most first, each
+              // a way into its conversations; none is said before every
+              // project is read.
+              Column {
+                readonly property var needing: Omunculus.connected ? Omunculus.projectRows.filter(row => row.needsYou > 0) : []
+                readonly property bool reading: Omunculus.connected && Projects.reading(Omunculus.projectRows)
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, panel.width - 2 * panel.margin)
+                spacing: Theme.space.line
+                DecodeLabel {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  visible: parent.reading
+                  value: "reading what waits for you…"
+                  soft: true
+                  color: Theme.dim
+                  font.pixelSize: Theme.type.meta.size
+                  font.letterSpacing: Theme.type.meta.tracking
+                }
+                Repeater {
+                  model: parent.reading ? [] : parent.needing
+                  delegate: LinkLabel {
+                    id: need
+                    required property var modelData
+                    anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+                    width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                    value: need.modelData.id + " · " + need.modelData.needsYou + (need.modelData.needsYou === 1 ? " needs you" : " need you")
+                    soft: true
+                    elide: Text.ElideRight
+                    color: over.hovered || activeFocus ? Theme.foreground : Theme.warning
+                    font.pixelSize: Theme.type.meta.size
+                    font.letterSpacing: Theme.type.meta.tracking
+                    onClicked: {
+                      panel.enterProject({ id: need.modelData.id, socket: need.modelData.socket }, "needs-you")
+                    }
+                    HoverHandler { id: over }
+                  }
+                }
               }
             }
           }
 
-          // Entered: the pages, the bar of the one shown, and the page.
+          // Entered: the pages, the rail and the bar of the one shown over a
+          // project's or the registry's, and the page.
           Stage {
             anchors.fill: parent
             shown: panel.started
@@ -169,96 +293,161 @@ ShellRoot {
 
             PagesView {
               id: pagesView
-              anchors { left: bar.left; right: parent.right; top: bar.bottom; topMargin: panel.short ? 10 : 16; bottom: parent.bottom }
+              // Beside the rail and under the bar, while they are there.
+              anchors {
+                fill: parent
+                leftMargin: chrome.visible ? bar.x : 0
+                topMargin: chrome.visible ? bar.height + panel.section : 0
+              }
               active: panel.started
               onStartWanted: panel.started = false
-              compact: panel.compact
               short: panel.short
+            }
+
+            Item {
+              id: chrome
+              anchors.fill: parent
+              visible: !pagesView.inside
+
+              TabRail {
+                id: rail
+                // Over the bar and the page while it unfolds, opaque.
+                z: 1
+                tabs: pagesView.pages.map(name => ({ name: pagesView.nameOf(name) }))
+                current: pagesView.tabIndex
+                onChosen: index => pagesView.choose(index)
+                onEscaped: pagesView.focusEntry()
               }
 
-            TabRail {
-              id: rail
-              // Over the bar and the page while it unfolds.
-              z: 1
-              tabs: pagesView.pages.map(name => ({ name: name }))
-              current: pagesView.tabIndex
-              onChosen: index => panel.choose(index)
+              PageBar {
+                id: bar
+                // No rail on a narrow window: the bar takes the whole width.
+                anchors { left: parent.left; leftMargin: rail.visible ? rail.foldedWidth + Theme.space.section : 0; right: parent.right }
+                height: rail.headHeight
+                commands: pagesView.commands
+                readout: pagesView.readout
+                section: rail.current
+                pages: rail.tabs
+                current: rail.current
+                pageSwitcher: true
+                onPageChosen: index => pagesView.choose(index)
+              }
             }
 
-            PageBar {
-              id: bar
-              anchors { left: parent.left; leftMargin: rail.foldedWidth + 16; right: parent.right }
-              height: rail.headHeight
-              commands: pagesView.commands
-              section: rail.current
-              message: Omunculus.message
-              error: Omunculus.messageIsError
-              offline: !Omunculus.connected
-              notices: Omunculus.noticeCount
-            }
-
-            // The digit a page shows, or Ctrl with it, chooses it (a field being written,
-            // or the picker of a new conversation, keeps its digits); Ctrl+Tab
-            // and Ctrl+Shift+Tab go to the next or the previous page.
+            // The digit a page shows chooses it while a page is being navigated
+            // (the picker of a new conversation keeps its digits); Ctrl with
+            // it chooses it from a field being written too. Ctrl+Tab and
+            // Ctrl+Shift+Tab go to the next or the previous page.
             Repeater {
               model: pagesView.pages.length
               delegate: Item {
+                id: numbered
                 required property int index
                 Shortcut {
+                  enabled: panel.started && !panel.dialogOpen && frame.bare && !pagesView.digitsTaken
+                  sequence: Shortcuts.keys("page")[numbered.index]
+                  onActivated: pagesView.choose(numbered.index)
+                }
+                Shortcut {
                   enabled: panel.started && !panel.dialogOpen
-                  sequences: pagesView.digitsTaken ? ["Ctrl+" + (index + 1)] : [String(index + 1), "Ctrl+" + (index + 1)]
-                  onActivated: panel.choose(index)
+                  sequence: Shortcuts.keys("page-chord")[numbered.index]
+                  onActivated: pagesView.choose(numbered.index)
                 }
               }
             }
-            // The keys of the page's commands, R to reply and the like, or
-            // Alt with them, which a field being written leaves to them; the
-            // field keeps the letters alone.
+            // The chords of the page's commands and of its other chords, Alt+R
+            // to answer, Alt and a quick chip's number and the like, which a
+            // field being written leaves to them. They have no bare key: what
+            // is typed never runs one.
             Repeater {
-              model: pagesView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false)
+              model: pagesView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false).concat(pagesView.chords)
               delegate: Item {
                 id: keyed
                 required property var modelData
                 Shortcut {
                   enabled: panel.started && !panel.dialogOpen
-                  sequences: [keyed.modelData.key, "Alt+" + keyed.modelData.key]
+                  sequence: keyed.modelData.key
                   onActivated: keyed.modelData.run()
                 }
               }
             }
             Shortcut {
               enabled: panel.started && !panel.dialogOpen
-              sequence: "Ctrl+Tab"
-              onActivated: panel.choose(rail.current + 1)
+              sequences: Shortcuts.keys("next-page")
+              onActivated: pagesView.choose(pagesView.tabIndex + 1)
             }
             Shortcut {
               enabled: panel.started && !panel.dialogOpen
-              sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab"]
-              onActivated: panel.choose(rail.current - 1)
+              sequences: Shortcuts.keys("previous-page")
+              onActivated: pagesView.choose(pagesView.tabIndex - 1)
+            }
+            Shortcut {
+              enabled: panel.started && !panel.dialogOpen && Omunculus.project !== ""
+              sequences: Shortcuts.keys("new-conversation")
+              onActivated: pagesView.newConversation()
             }
           }
         }
       }
 
       ShortcutsDialog { id: shortcuts }
-      Shortcut { sequences: ["?", "F1"]; onActivated: shortcuts.open() }
+      // What the window tells, at its bottom right, above the composer.
+      ToastStack {
+        anchors { right: parent.right; bottom: parent.bottom; margins: panel.margin; bottomMargin: panel.margin + (panel.started ? pagesView.bottomRoom : 0) }
+        width: Math.min(340, panel.width - 2 * panel.margin)
+        maxHeight: panel.height / 2
+        notices: Omunculus.notices.items
+        onDismissed: id => Omunculus.notices.dismiss(id)
+      }
+      // Logs the text drawn out of its place, when asked for.
+      Loader {
+        active: Quickshell.env("OMUNCULUS_TEXT_AUDIT") === "1"
+        sourceComponent: TextAudit {}
+      }
+      // The projects, from anywhere, a field being written too.
+      Shortcut {
+        enabled: !panel.dialogOpen && Omunculus.connected
+        sequences: Shortcuts.keys("projects")
+        onActivated: panel.started ? pagesView.showProjects("") : panel.enter("projects")
+      }
+      Shortcut { enabled: frame.bare; sequence: "?"; onActivated: shortcuts.open() }
+      Shortcut { sequence: "F1"; onActivated: shortcuts.open() }
     }
   }
 
   // `quickshell ipc --path apps/console call omunculus <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "omunculus"
-    function newConversation(): void { panel.started ? pagesView.newConversation() : panel.enter("new") }
+    function newConversation(): void {
+      if (Omunculus.project === "")
+        return
+      panel.started ? pagesView.newConversation() : panel.enter("new")
+    }
     function conversations(): void { page("conversations") }
     function open(conversationId: string): void {
+      if (Omunculus.project === "")
+        return
       if (!panel.started)
         panel.enter("conversations")
       pagesView.openConversation(conversationId)
     }
-    // A page by its name: conversations or board, or, with a conversation
-    // open, chat, map, log or cost.
+    function projects(): void { page("projects") }
+    // A project of the registry, by its id, at its conversations.
+    function project(id: string): void {
+      const place = Omunculus.boardProjects.find(item => item.id === id)
+      if (!place)
+        return
+      if (panel.started)
+        pagesView.openProject(place)
+      else
+        panel.enterProject(place)
+    }
+    // A page by its name: projects, conversations or board, or, with a
+    // conversation open, chat, map, log or cost.
     function page(name: string): void {
-      if (!["conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
+      if (!["projects", "conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
+        return
+      if (name === "conversations" && Omunculus.project === "")
         return
       if (panel.started)
         pagesView.go(name)

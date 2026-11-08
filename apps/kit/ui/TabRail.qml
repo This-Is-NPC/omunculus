@@ -1,110 +1,148 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
-// TabRail is an app's pages as a carousel down the left edge: the one on
-// screen sits at the top beside the command bar, the others follow in order
-// below it, the ones before it coming round after the last. Folded, it takes
-// only the width of the pages' numbers; under the pointer it unfolds over
-// what is beside it, each page naming itself, the one on screen stretched
-// and decoding. Choosing one turns the carousel until it is at the top.
+// TabRail is an app's pages in a fixed order down the left edge, the one on
+// screen marked in its place. While its names take at most a fifth of the
+// window's width it always shows them beside their numbers; on a window
+// short of that, folded, it takes only the width of the numbers, and under
+// the pointer or with the keyboard in it, it unfolds as an opaque panel over
+// what is beside it; on a narrow one it is hidden and takes no width,
+// the bar's page switcher choosing the pages instead. One click chooses a
+// page and folds the rail, which stays folded until the pointer has left and
+// come back; Esc folds it too. Each page is a stop of the Tab chain: ↑ ↓ Home
+// End move the keyboard along the rail, Enter or Space chooses.
 Item {
   id: rail
 
   // [{name}], in order.
   required property var tabs
   property int current: 0
-  // The height of the stretched tab, which the command bar shares.
+  // The height of the command bar beside the rail.
   readonly property real headHeight: 44
 
+  // Chosen by a click or Enter; Esc folded it, so the page takes the keyboard.
   signal chosen(int index)
+  signal escaped()
 
-  readonly property real tabHeight: 34
-  readonly property real gap: 10
+  readonly property real tabHeight: 36
+  readonly property real gap: 8
+  readonly property real unfoldedWidth: 220
+  readonly property real windowWidth: Window.window ? Window.window.width : 0
+  readonly property string size: Breakpoints.size(windowWidth)
+  // A character of a tab, monospaced, its tracking included.
+  readonly property real advance: tabFont.advanceWidth("0")
+  FontMetrics { id: tabFont; font.family: Theme.fontFamily; font.pixelSize: 12; font.letterSpacing: 2 }
+  // The width of a tab with its number and the longest name.
+  readonly property real namedWidth: Math.ceil(2 * Theme.space.cell + Theme.space.gap
+    + advance * (2 + tabs.reduce((most, tab) => Math.max(most, String(tab.name).length), 0)))
+  // The window has room to keep the names on screen.
+  readonly property bool wide: size !== "narrow" && windowWidth >= 5 * namedWidth
   // The width it keeps folded, which what is beside it leaves room for.
-  readonly property real foldedWidth: 52
-  // Unfolded while the pointer is over it or the keyboard is in it, and a
-  // moment after; a tap on its head unfolds or folds it, for touch.
-  property bool unfolded: false
-  property bool pinned: false
-  readonly property bool wanted: hover.hovered || focusedTabs > 0 || pinned
+  readonly property real foldedWidth: size === "narrow" ? 0 : wide ? namedWidth : 52
   // How many of its tabs hold the keyboard: one, or none.
   property int focusedTabs: 0
-  onWantedChanged: {
-    if (wanted) {
-      fold.stop()
-      unfolded = true
-    } else {
-      fold.restart()
-    }
-  }
-  HoverHandler { id: hover }
-  Timer { id: fold; interval: 260; onTriggered: rail.unfolded = false }
+  // Folded by a choice or Esc until the pointer and the keyboard have left.
+  property bool dismissed: false
+  readonly property bool engaged: hover.hovered || focusedTabs > 0
+  readonly property bool unfolded: !wide && engaged && !dismissed
+  readonly property bool named: wide || unfolded
+  readonly property int motion: Theme.reducedMotion ? 0 : 160
 
-  width: unfolded ? 260 : foldedWidth
-  height: headHeight + gap + (tabs.length - 1) * (tabHeight + gap)
+  onEngagedChanged: if (!engaged) dismissed = false
+  function fold() { dismissed = true }
+  function escapeRail() {
+    fold()
+    escaped()
+  }
+  Shortcut {
+    enabled: rail.unfolded
+    sequence: "Escape"
+    onActivated: rail.escapeRail()
+  }
+
+  HoverHandler { id: hover }
+
+  // Gives the keyboard to the tab at `index`, kept within the rail.
+  function reach(index) {
+    tabRepeater.itemAt(Math.max(0, Math.min(tabs.length - 1, index))).forceActiveFocus(Qt.TabFocusReason)
+  }
+
+  visible: size !== "narrow"
+  // Wide enough that the pointer on the unfolded panel is still over the rail.
+  width: unfolded ? unfoldedWidth : foldedWidth
+  height: tabs.length * tabHeight + (tabs.length - 1) * gap
+
+  // The opaque panel an unfolded rail is, over the page.
+  Rectangle {
+    visible: rail.unfolded
+    x: -8
+    y: -8
+    width: rail.unfoldedWidth + 16
+    height: rail.height + 16
+    color: Theme.background
+    border.color: Qt.alpha(Theme.foreground, 0.35)
+  }
 
   Repeater {
+    id: tabRepeater
     model: rail.tabs
     delegate: Rectangle {
       id: tab
       required property var modelData
       required property int index
-      // Its place in the carousel: 0 at the top.
-      readonly property int slot: (index - rail.current + rail.tabs.length) % rail.tabs.length
-      readonly property bool head: slot === 0
+      readonly property bool head: index === rail.current
       readonly property color tone: head ? Theme.primary : pointer.containsMouse ? Theme.foreground : Theme.dim
 
-      y: head ? 0 : rail.headHeight + rail.gap + (slot - 1) * (rail.tabHeight + rail.gap)
-      width: !rail.unfolded ? rail.foldedWidth : head ? 260 : 200
-      height: head ? rail.headHeight : rail.tabHeight
-      Behavior on y { NumberAnimation { duration: 360; easing.type: Easing.OutCubic } }
-      Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-      Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+      y: index * (rail.tabHeight + rail.gap)
+      width: rail.unfolded ? rail.unfoldedWidth : rail.foldedWidth
+      height: rail.tabHeight
+      Behavior on width { NumberAnimation { duration: rail.motion; easing.type: Easing.OutCubic } }
 
       color: head ? Qt.tint(Theme.background, Qt.alpha(Theme.primary, 0.08)) : Theme.background
       border.color: head ? Qt.alpha(Theme.primary, 0.7) : pointer.containsMouse ? Qt.alpha(Theme.foreground, 0.35) : Theme.line
-      // Further down, the carousel's names fade.
-      readonly property real fade: head ? 1 : Math.max(0.4, 1 - (slot - 1) * 0.09)
-
-      onHeadChanged: if (head) title.replay()
+      clip: true
 
       // The keyboard reaches each page; Enter or Space chooses it.
       activeFocusOnTab: true
       onActiveFocusChanged: rail.focusedTabs += activeFocus ? 1 : -1
-      Keys.onReturnPressed: rail.chosen(tab.index)
-      Keys.onSpacePressed: rail.chosen(tab.index)
+      Keys.onReturnPressed: pointer.choose()
+      Keys.onSpacePressed: pointer.choose()
+      Keys.onEscapePressed: rail.escapeRail()
+      Keys.onUpPressed: rail.reach(tab.index - 1)
+      Keys.onDownPressed: rail.reach(tab.index + 1)
+      Keys.onPressed: event => {
+        if (event.key === Qt.Key_Home)
+          rail.reach(0)
+        else if (event.key === Qt.Key_End)
+          rail.reach(rail.tabs.length - 1)
+        else
+          return
+        event.accepted = true
+      }
       FocusRing {}
 
-      clip: true
-      // Unfolding, each name decodes.
-      Connections {
-        target: rail
-        function onUnfoldedChanged() { if (rail.unfolded) title.replay() }
-      }
-
       Row {
-        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: rail.unfolded ? (tab.head ? 16 : 12) : (rail.foldedWidth - digit.implicitWidth) / 2 }
-        Behavior on anchors.leftMargin { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-        spacing: 10
-        opacity: tab.fade
-        Behavior on opacity { NumberAnimation { duration: 300 } }
+        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: rail.named ? Theme.space.cell : (rail.foldedWidth - digit.implicitWidth) / 2 }
+        spacing: Theme.space.gap
         Label {
           id: digit
           anchors.verticalCenter: parent.verticalCenter
           text: String(tab.index + 1).padStart(2, "0")
-          color: tab.head ? Theme.primary : rail.unfolded ? Theme.line : tab.tone
-          font.pixelSize: tab.head && !rail.unfolded ? 13 : 10
+          color: tab.tone
+          font.pixelSize: 12
           font.letterSpacing: 2
         }
-        DecodeLabel {
-          id: title
+        Label {
           anchors.verticalCenter: parent.verticalCenter
-          opacity: rail.unfolded ? 1 : 0
-          Behavior on opacity { NumberAnimation { duration: 200 } }
-          value: tab.modelData.name.toUpperCase()
+          visible: rail.named
+          // Elided short of the tab's right edge.
+          width: Math.max(0, Math.min(implicitWidth, tab.width - 2 * Theme.space.cell - digit.width - parent.spacing))
+          elide: Text.ElideRight
+          text: tab.modelData.name.toUpperCase()
           color: tab.tone
-          font.pixelSize: tab.head ? 13 : 10
-          font.letterSpacing: tab.head ? 4 : 3
+          font.pixelSize: 12
+          font.letterSpacing: 2
         }
       }
 
@@ -113,15 +151,11 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        // A tap on the head of a folded rail unfolds it rather than choosing.
-        onClicked: {
-          if (tab.head && !rail.unfolded) {
-            rail.pinned = true
-            return
-          }
-          rail.pinned = false
+        function choose() {
+          rail.fold()
           rail.chosen(tab.index)
         }
+        onClicked: choose()
       }
     }
   }

@@ -3,30 +3,45 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// HistoryView filters the project's conversations — those agents work in,
-// those waiting on you, and what was first said in them — and opens a selected
-// row. `/` goes to the search; ↓ or Enter back to the rows; Esc on them leaves.
+// HistoryView filters the project's conversations — those needing you,
+// those agents work in, those not started, and their titles and what was
+// first said in them — and opens a selected row, at its chat or, from its
+// menu, its team or its log. ALL lists every one, and its readout, for the
+// bar, counts what it lists. `/` goes to the search; ↓ or
+// Enter back to the rows, ↑ on the first row back to the search; Esc on
+// them leaves.
 ColumnLayout {
   id: history
-  spacing: 14
+  spacing: Theme.space.block
 
   property bool active: false
-  // "", "working" or "waiting".
+  // "", or a state of the table: "needs-you", "working" or "not-started".
   property string filter: ""
   property string search: ""
-  signal opened(string id)
+  // The page it opens at: "" for the chat, "map" or "log".
+  signal opened(string id, string page)
   signal leave()
+
+  // A filter or search that narrows the list reads "14 OF 17".
+  readonly property string readout: (shown.length === Omunculus.conversations.length ? "" : shown.length + " OF ") + Omunculus.conversations.length + (Omunculus.conversations.length === 1 ? " CONVERSATION" : " CONVERSATIONS")
 
   function focusEntry() { table.focusRows() }
 
-  function known(conversation) { return Omunculus.summaries[conversation.id] || null }
-  readonly property int working: Omunculus.conversations.filter(item => { const s = known(item); return s && s.running > 0 }).length
-  readonly property int waiting: Omunculus.conversations.filter(item => { const s = known(item); return s && s.waiting > 0 }).length
+  function clearFilters() {
+    filter = ""
+    search = ""
+    searchBox.clear()
+  }
+
+  function count(state) { return Omunculus.conversations.filter(item => table.stateOf(item) === state).length }
+  readonly property int working: count("working")
+  readonly property int waiting: count("needs-you")
+  readonly property int fresh: count("not-started")
   readonly property var shown: Omunculus.conversations.filter(item => {
-    const s = known(item)
+    const known = Omunculus.summaries[item.id]
+    const said = [table.titleOf(item), known ? known.title : ""].join(" ").toLowerCase()
     const words = history.search.toLowerCase().split(/\s+/).filter(word => word)
-    return (history.filter === "" || (s && (history.filter === "working" ? s.running > 0 : s.waiting > 0)))
-      && words.every(word => s && s.title.toLowerCase().includes(word))
+    return (history.filter === "" || table.stateOf(item) === history.filter) && words.every(word => said.includes(word))
   })
 
   Keys.onPressed: event => {
@@ -37,50 +52,47 @@ ColumnLayout {
   }
   Keys.onEscapePressed: leave()
 
-  RowLayout {
+  FilterBox {
+    id: searchBox
     Layout.fillWidth: true
-    spacing: 10
-    FilterBox {
-      id: searchBox
-      Layout.fillWidth: true
-      placeholderText: "search what was said first"
-      onApplied: value => history.search = value
-      onLeave: table.focusRows()
-    }
-    Label {
-      text: history.shown.length + (history.shown.length === 1 ? " conversation" : " conversations")
-      color: Theme.dim
-      font.pixelSize: 10
-      font.letterSpacing: 1
-    }
+    placeholderText: "Search titles and what was said first…  /"
+    onApplied: value => history.search = value
+    onLeave: table.focusRows()
   }
 
-  Flow {
+  // One line however many filters, so the rows stay in reach in a small window.
+  ChipStrip {
     Layout.fillWidth: true
-    visible: history.working > 0 || history.waiting > 0
-    spacing: 6
+    visible: history.working > 0 || history.waiting > 0 || history.fresh > 0
     Chip {
       text: "ALL"
       checked: history.filter === ""
-      dim: history.filter !== ""
       onClicked: history.filter = ""
+    }
+    Chip {
+      visible: history.waiting > 0
+      text: "NEEDS YOU  " + history.waiting
+      icon: "warning"
+      accent: Theme.warning
+      alert: true
+      tip: "the conversations where something waits on you"
+      checked: history.filter === "needs-you"
+      onClicked: history.filter = "needs-you"
     }
     Chip {
       visible: history.working > 0
       text: "WORKING  " + history.working
       icon: "play"
+      tip: "the conversations agents work in and nothing waits on you"
       checked: history.filter === "working"
-      dim: history.filter !== "working"
       onClicked: history.filter = "working"
     }
     Chip {
-      visible: history.waiting > 0
-      text: "WAITING ON YOU  " + history.waiting
-      icon: "warning"
-      accent: Theme.warning
-      checked: history.filter === "waiting"
-      dim: history.filter !== "waiting"
-      onClicked: history.filter = "waiting"
+      visible: history.fresh > 0
+      text: "NOT STARTED  " + history.fresh
+      tip: "the conversations nothing was said in yet"
+      checked: history.filter === "not-started"
+      onClicked: history.filter = "not-started"
     }
   }
 
@@ -90,8 +102,16 @@ ColumnLayout {
     Layout.fillHeight: true
     conversations: history.shown
     active: history.active
-    emptyText: history.search ? "nothing first said matches “" + history.search + "”" : "no conversation yet"
-    onOpened: conversation => history.opened(conversation.id)
+    emptyText: history.search ? "nothing said matches “" + history.search + "”"
+      : history.filter !== "" ? "no conversation in this state" : "no conversation yet"
+    emptyAction: history.search || history.filter !== "" ? "CLEAR FILTERS" : ""
+    onEmptyActed: {
+      history.clearFilters()
+      table.focusRows()
+    }
+    onTopLeft: searchBox.forceActiveFocus()
+    onOpened: conversation => history.opened(conversation.id, "")
+    onOpenedAt: (conversation, page) => history.opened(conversation.id, page)
     onBackRequested: history.leave()
   }
 }

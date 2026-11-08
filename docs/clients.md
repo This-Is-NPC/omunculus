@@ -23,9 +23,11 @@ OpenAPI document the server publishes at `/openapi.json`.
 - Apps call each other only through Quickshell IPC
   (`quickshell ipc --path apps/<app> call …`), never by importing.
 - A launcher may find a project's socket with `mix omunculus.socket
-  <server.toml> [<id>]`, where the id may be left out while the registry
-  holds one project; from there, `GET /v1/projects` lists every project
-  of the registry with its socket.
+  <server.toml> [<id>] [--any]`, which prints the id and the socket
+  separated by a tab. The id may be left out while the registry holds one
+  project; with `--any`, a registry of several prints an empty id and the
+  socket of its first project by id. From there, `GET /v1/projects` lists
+  every project of the registry with its socket.
 
 ## The setup, read through the config routes
 
@@ -82,47 +84,104 @@ the file from external tools.
 `apps/` holds the clients that come with Omunculus, each a folder that
 `apps/kit/run <app> --config <server.toml> [--project <id>]` opens on a
 project, given as `OMUNCULUS_PROJECT` and its local socket as
-`OMUNCULUS_SOCKET`:
+`OMUNCULUS_SOCKET`. Without `--project`, a registry of one project opens on
+it; of several, the console opens on the registry, with an empty
+`OMUNCULUS_PROJECT` and the socket of one of its projects, while the mailbox
+and the studio ask for `--project`:
 
 | App | Is |
 | --- | --- |
-| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs, and the orchestration map of its agents, works and requests; and a board of the works of every project of the registry, by state |
+| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs with their tool calls and the works they handed down, the progress of its works, and the team page, its agents as a tree of who handed work to whom with their works and requests; and a board of the works of every project of the registry, by state |
 | [`apps/mailbox`](mailbox.md) | a mailbox over every project: a thread is a conversation with one agent of depth 0, and its requests to you are answered there |
 | [`apps/studio`](studio.md) | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
 
 All are QML on Quickshell and share `apps/kit`:
 
-- `apps/kit/ui`: the theme and the controls more than one app uses, among
-  them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
-  `ZoomControl`, and `TabRail`, an app's pages as a carousel down the left
-  edge, with `PageBar`, the commands of the page on screen beside it, ranked
-  — BACK apart, the page's actions in a `CommandRow`, and its tools at the
-  end as icons — and the app's readout, which the app gives it; `CommandRow`,
-  a bar's actions in their order, the main one solid, the others outlined,
-  those of one group joined as one control with the checked one lit, each
-  shortened to its short name or its icon when the names do not fit, which
-  the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
-  the files a message carries and a file attached in a conversation;
-  `Portrait`, an agent's picture, which the app fetched, or while it has
-  none its initial in its colour, which the console and the mailbox show;
-  and `Prose`, what an agent wrote as Markdown as it was written, each line
-  break kept and a line after a list that is no item of it a paragraph of
-  its own, rather than more of the last item; its web addresses, bare or
-  linked, links in the accent that the pointer turns over, Tab reaches,
-  Left and Right pick and Enter opens with `xdg-open`, only http and https.
-  It knows nothing of Omunculus.
+- `apps/kit/ui`: the theme and the controls of the apps, taken from eco's
+  kit and kept to what Omunculus shows. `Theme` holds the colours — text
+  tones lifted to 4.5:1 on the background, `faint`, for a mark beside a
+  text naming the same thing, as a tab's digit, to 3:1 — and the layout
+  tokens every layout reads instead of numbers of its own:
+  `Theme.space` (the window's margin `page`, `section`, `block`, `inset`,
+  `insetTop`, `trail`, `gap`, `tight`, `line`, `row` and `cell`, with
+  `pageShort`, `sectionShort` and `blockShort` for a window under 560 px
+  tall), `Theme.size` (a header `strip`, a list `row` and a stacked one, a
+  section `rule`, a `control` and a dense one, a `chip`, a bubble's `gutter`,
+  `bubbleInset` and `measure`) and `Theme.type` (the pixel size and letter
+  spacing of a `name`, `stamp`, `body`, `cardBody`, `kicker`, `meta`,
+  `header`, `section`, `tab` and its digit, and `input`). `mise run
+  check:spacing` (part of `mise run check`) fails on a margin, padding,
+  spacing or height written as a number in the console or the kit, but 0, 1
+  and a negative reach past an item; `scripts/check-spacing.allow` lists the
+  kit's drawn geometry it leaves out.
+
+  The controls: `Masthead`, the window's top line, the name (left out under
+  560 px), the crumbs of where the window is, those that lead somewhere as
+  links, and its tools on the right; `TabRail`, an app's pages in a fixed order down the left edge,
+  ↑ ↓ Home End moving along it, with `PageBar`, the commands of the page on
+  screen beside it, ranked by its `CommandRow` — BACK apart, the page's main
+  action solid on the left, the others outlined on the right, the guarded
+  ones last behind a hairline, those of one group joined as one control with
+  the checked one lit — and the page's readout at its end, which gives way
+  first. When the names do not fit, BACK is only its chevron and the actions
+  take their short names, then all but the main one their icons, then the
+  lowest ranked move into the `ActionMenu` of a `⋯` button; BACK and the main
+  action stay. Under 700 px the rail is hidden and the bar's page switcher
+  (when the app gives it its pages) lists the pages. `Tab` is a section
+  switch, `01 CHAT`, underlined while shown. `TraceButton`, `IconButton` and
+  `Chip` are the buttons; each with a `reason` reads disabled and says why
+  on hover. `ChipStrip` keeps chips on one line that scrolls sideways;
+  `TagChip` is a `#name` chip with an optional menu; `NoticeChip` a notice
+  to follow or close; `ActionMenu` a view's rare actions behind `⋯`, in a
+  `MenuPopup` of `ChoiceRow`s on a `PopupFrame`. `DataTable` lists records
+  as rows of columns, stacked into lines under 700 px, grouped under section
+  rules, with a status, tools on the right and an empty state. `ToastStack`
+  shows what a window tells as toasts at its bottom right, each a
+  `StatusMessage`: information closes itself, an error stays until closed.
+  `Field`, `FieldError`, `TextBox`, `SyncedBox`, `NumberField`, `TextBlock`,
+  `Dropdown` and `PickRow` are the form's inputs, `ProgressTrack` a fraction
+  filled, `Panel`, `ModalDialog`, `ConfirmDialog` and `DialogFooter` the
+  frames. `FlowCanvas` is a canvas that moves, zooms and pinches, with its
+  `ZoomControl`. `Breakpoints.js` holds the widths the apps change their
+  layout at (narrow under 700 px, wide from 1100, tight under 420) and the
+  margins, control heights and indents at each; buttons, chips, captions
+  and tips never grow past what holds them or the window, eliding or
+  wrapping instead. `TextAudit`, when an app loads it, logs each text that
+  escapes its box, the window or a clipping item, as a `text-fit:` line.
+  `FilePicker` and `FileChip` are the files a message carries and a file
+  attached in a conversation; `Portrait` an agent's picture, which the app
+  fetched, or while it has none its initial in its colour; and `Prose`, what
+  an agent wrote as Markdown as it was written, each line break kept and a
+  line after a list that is no item of it a paragraph of its own, rather
+  than more of the last item; an image shows as its alt text and is never
+  loaded (`Markdown.js`); its web addresses, bare or linked, are links in
+  the accent that the pointer turns over, an inline code span sits on a tint, Tab reaches, Left and Right pick
+  and Enter opens with `xdg-open`, only http and https. It knows nothing of
+  Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
   `curl` or saves its answer into a file, posts a message with files through
   `post-with-files` and saves and opens an attached file through
   `open-attachment`, the scripts beside it, `AgentImages`, which keeps the
   agents' images in Quickshell's cache, and `Requests.js`, the helpers
   that read a request's status and participants, the decisions it gathers
-  from below and the option a reply chose, whether the harness opened it
-  and the questions it then passes on, and build a reply; `Project`, the
-  project a window was opened on, whether the server answers and the
-  window's last message, which the console and the studio share; and
-  `Model.js`, which reads the text a model event carries.
+  from below and the option a reply chose, the request holding a question
+  as it climbs and the works it climbed from, whether the harness opened it
+  and the questions it then passes on, and build a reply; `Progress.js`,
+  which derives from a conversation's state and stage events where its
+  works are, nested by stage and level, with what each does, waits on and
+  spent, and fits one-line stages and phrases to a width in characters;
+  `Team.js`, which lays those works out as the team page's tree of agents,
+  what shows and what folds, and moves through it by key;
+  `Calls.js`, which groups a run's tool calls into rows and reads the diff
+  of an edit or a write from its args; `Phrases.js`, which says a tool call
+  in plain words and in brief; `Events.js`, which says any event in one
+  plain sentence for the log, and tells a hook's call from a tool's; `Project`, the project a window is on, or
+  only the registry it was opened on, and whether the server answers, which
+  the console and the studio share; `Notices`, what a window tells, as its
+  `ToastStack` shows them, with a pinned error while the server does not
+  answer, which the three apps use; and `Model.js`, which reads the text a
+  model event carries.
 
 Each app reaches the kit through a `kit` link to `apps/kit/`, since
 Quickshell imports only from within the folder it runs. The kit imports no
-app, and a control moves into it only once two apps use it.
+app.

@@ -14,8 +14,11 @@ ModalDialog {
   property string question
   property string warning
   property string confirmText
+  property string confirmIcon: "close"
   property string cancelText: "CANCEL"
   signal confirmed()
+  // The way back was pressed; Esc and a press outside only close it.
+  signal cancelled()
 
   maxWidth: 460
   edge: Theme.error
@@ -34,7 +37,7 @@ ModalDialog {
     ColumnLayout {
       id: form
       anchors.fill: parent
-      spacing: 18
+      spacing: Theme.space.section
 
       DecodeLabel {
         id: questionLabel
@@ -56,11 +59,18 @@ ModalDialog {
         Layout.fillWidth: true
         RowLayout { id: lead; spacing: 8 }
         Item { Layout.fillWidth: true }
-        Chip { id: cancel; text: dialog.cancelText; onClicked: dialog.close() }
+        Chip {
+          id: cancel
+          text: dialog.cancelText
+          onClicked: {
+            dialog.close()
+            dialog.cancelled()
+          }
+        }
         TraceButton {
           dense: true
           role: "guarded"
-          icon: "close"
+          icon: dialog.confirmIcon
           text: dialog.confirmText
           armed: true
           onClicked: {

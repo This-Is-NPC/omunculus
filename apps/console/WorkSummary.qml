@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // WorkSummary is a work as the map's inspector and the work's page show it:
@@ -22,7 +23,7 @@ ColumnLayout {
   readonly property var parentWork: work ? Omunculus.work(work.parent_id || "") : null
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
 
-  spacing: 10
+  spacing: Theme.space.gap
 
   Label {
     Layout.fillWidth: true
@@ -84,7 +85,7 @@ ColumnLayout {
       required property var modelData
       Layout.fillWidth: true
       key: modelData.id
-      stamp: String(modelData.created_at).slice(11, 16)
+      stamp: Time.clock(modelData.created_at, Date.now())
     }
   }
 
@@ -94,13 +95,13 @@ ColumnLayout {
       id: note
       required property var modelData
       Layout.fillWidth: true
-      implicitHeight: noted.implicitHeight + 20
+      implicitHeight: noted.implicitHeight + Theme.space.insetTop * 2
       variant: "filled"
       tone: Theme.warning
       RowLayout {
         id: noted
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
-        spacing: 8
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+        spacing: Theme.space.tight
         Prose {
           Layout.fillWidth: true
           source: Omunculus.inline(Omunculus.notes[note.modelData.id] || "")

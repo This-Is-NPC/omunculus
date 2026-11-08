@@ -66,7 +66,7 @@ ListView {
     }
     FocusRing { shown: rail.activeFocus && (tab.current || (rail.selectedIndex < 0 && tab.index === 0)) }
     Hint {
-      visible: pointer.containsMouse || (rail.activeFocus && tab.current)
+      active: pointer.containsMouse || (rail.activeFocus && tab.current)
       text: tab.modelData.agent + " · " + tab.modelData.subject + (tab.modelData.status.label !== "" ? "\n" + tab.modelData.status.label : "")
     }
   }

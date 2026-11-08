@@ -1,19 +1,26 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
+import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
-// AgentTurn is one run of an agent in the conversation, said like a line of
-// chat: on the left, under the agent's portrait and name in its colour, its
-// words drawn as they stream, and the files it attached.
-// Below them, one dim line says what it did — the calls it made,
-// which failed, the work it closed or the access it granted; clicking it lists
-// the calls in place, with why a failed one failed. Until the agent says or
-// does anything, that line is the loading trace and how long it has worked.
-// A turn that continues the same agent's drops its name and time. Hovering
-// the words shows the way to copy them, in a gutter they never take.
+// AgentTurn is one run of an agent in the conversation. One that speaks is a
+// line of chat: on the left, under a heading of the agent's tone dot, its
+// name, the time and how long it has worked ("Working 0:12" while the run is
+// open, "Worked 1 minute" after), its words drawn as they stream in a bubble
+// tinted with its colour, the files it attached, and under them the group of
+// its tool calls (ToolCalls), the log's rows. One that only acted is those
+// rows alone, its agent, how long and when on their line, with no heading.
+// Until the agent says or does anything the turn is not drawn. A turn that
+// continues the same agent's drops its heading. Once it has said something,
+// the "more" button beside the words, in a gutter they never take, copies
+// them or shows the run's work in the log.
 Item {
   id: turn
 
+  // The run, and the work it ran on ("" for the conversation's own).
+  required property string run
+  property string work: ""
   required property string who
   required property string text
   required property string partial
@@ -21,65 +28,88 @@ Item {
   required property string steps
   // The files the run attached, as JSON.
   required property string files
-  required property real at
   required property string stamp
   property bool continued: false
-  property bool callsOpen: false
+  // The keyboard is on this turn: its menu is then a stop of Tab.
+  property bool selected: false
+  // The log of the run's work is wanted.
+  signal logged(string work)
 
   readonly property var lines: JSON.parse(steps)
-  readonly property var calls: lines.filter(line => !line.outcome)
-  readonly property var outcomes: lines.filter(line => line.outcome)
   readonly property var attached: JSON.parse(files)
-  readonly property var failed: calls.filter(call => !call.ok)
+  // When the run started and ended, in seconds; the end is 0 while it is open.
+  readonly property real started: Omunculus.runStarts[run] || 0
+  readonly property real ended: {
+    const record = Omunculus.runs.find(item => item.id === run)
+    return record && record.finished_at ? Date.parse(record.finished_at) / 1000 : 0
+  }
+  readonly property string worked: started <= 0 ? ""
+    : streaming ? "Working " + Progress.span(Omunculus.tick - started)
+    : ended > 0 ? "Worked " + Progress.span(ended - started) : ""
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
-  // A run that said and did nothing leaves no trace in the conversation.
-  readonly property bool empty: !streaming && said === "" && lines.length === 0 && attached.length === 0
-  property double now: Date.now()
-  readonly property int worked: Math.max(0, Math.round(now / 1000 - at))
-  // Room beside the words kept for the copy button.
-  readonly property real gutter: copy.implicitWidth + 12
-  readonly property real widest: turn.width < 520 ? turn.width - gutter : Math.min(turn.width * 0.78, turn.width - gutter)
-  readonly property real inset: 10
+  // A run that has said and done nothing so far leaves no trace in the
+  // conversation; the progress strip says that the team works.
+  readonly property bool empty: said === "" && lines.every(line => line.hook && line.ok) && attached.length === 0
+  // About 70 characters at most per line, the gutter kept for the menu.
+  readonly property real widest: Math.min(620, turn.width < Theme.size.measureFrom ? turn.width - Theme.size.gutter : Math.min(turn.width * Theme.size.measure, turn.width - Theme.size.gutter))
+  readonly property real inset: Theme.size.bubbleInset
+  // Words or files head with the agent; steps alone name it on their line.
+  readonly property bool speaks: said !== "" || attached.length > 0
+  readonly property bool headed: speaks && !continued
 
   visible: !empty
-  implicitHeight: empty ? 0 : body.y + body.height + 2
-
-  // The time worked is counted in seconds while nothing has been said.
-  Timer { running: turn.streaming && turn.said === ""; interval: 1000; repeat: true; triggeredOnStart: true; onTriggered: turn.now = Date.now() }
-
-  HoverHandler { id: hover }
-
-  IconButton {
-    id: copy
-    visible: hover.hovered && !turn.streaming && turn.text !== ""
-    x: body.x + words.width + 12
-    y: body.y + words.y + Math.min(0, (words.height - height) / 2)
-    name: "copy"
-    tip: "copy what it said"
-    onClicked: Omunculus.copy(turn.text)
-  }
+  implicitHeight: empty ? 0 : body.y + body.height + Theme.space.row
 
   Column {
     id: body
-    y: turn.continued ? 2 : 14
+    y: turn.headed ? Theme.space.inset : turn.speaks ? Theme.space.row : Theme.space.line
     width: turn.widest
-    spacing: 4
+    spacing: Theme.space.line
 
-    Row {
-      visible: !turn.continued
-      spacing: 8
-      Portrait { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
-      Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
-      Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
+    RowLayout {
+      visible: turn.headed
+      width: turn.widest
+      spacing: Theme.space.tight
+      Dot { Layout.alignment: Qt.AlignVCenter; tone: turn.tone }
+      Label {
+        Layout.minimumWidth: 0
+        Layout.maximumWidth: implicitWidth
+        Layout.fillWidth: true
+        text: turn.who.toUpperCase()
+        color: turn.tone
+        font.pixelSize: Theme.type.name.size
+        font.letterSpacing: Theme.type.name.tracking
+        elide: Text.ElideRight
+      }
+      Label {
+        Layout.minimumWidth: 0
+        text: turn.stamp.toUpperCase()
+        color: Qt.alpha(turn.tone, Theme.type.stamp.opacity)
+        font.pixelSize: Theme.type.stamp.size
+        font.letterSpacing: Theme.type.stamp.tracking
+        elide: Text.ElideRight
+      }
+      Item { visible: turn.worked === ""; Layout.fillWidth: true }
+      // How long it worked reads at the dim text's contrast.
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: (Theme.type.meta.separator + turn.worked).toUpperCase()
+        visible: turn.worked !== ""
+        color: Theme.dim
+        font.pixelSize: Theme.type.stamp.size
+        font.letterSpacing: Theme.type.stamp.tracking
+        elide: Text.ElideRight
+      }
     }
 
     Rectangle {
       id: words
       visible: turn.said !== ""
       width: Math.min(turn.widest, line.implicitWidth + 2 * turn.inset)
-      height: line.implicitHeight + 14
-      color: Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
+      height: line.implicitHeight + Theme.space.inset
+      color: Theme.bubble(turn.tone)
       Prose {
         id: line
         anchors.verticalCenter: parent.verticalCenter
@@ -89,8 +119,8 @@ Item {
         // words already read never move.
         source: Omunculus.inline(turn.streaming ? Omunculus.closed(turn.said) : turn.said)
         color: Theme.foreground
-        font.pixelSize: 12
-        lineHeight: 1.2
+        font.pixelSize: Theme.type.body.size
+        lineHeight: Theme.type.body.lineHeight
         wrapMode: Text.Wrap
       }
     }
@@ -99,7 +129,7 @@ Item {
     Flow {
       visible: turn.attached.length > 0
       width: turn.widest
-      spacing: 6
+      spacing: Theme.space.tight
       Repeater {
         model: turn.attached
         delegate: FileChip {
@@ -110,86 +140,38 @@ Item {
       }
     }
 
-    // Working and nothing to show yet: the trace, and for how long.
-    Row {
-      visible: turn.streaming && turn.said === "" && turn.calls.length === 0
-      spacing: 10
-      LoadingTrace {
-        anchors.verticalCenter: parent.verticalCenter
-        width: 120
-        height: 16
-        running: parent.visible
-        tone: turn.tone
-      }
-      Label { anchors.verticalCenter: parent.verticalCenter; text: "WORKING " + turn.worked + "S"; color: turn.tone; font.pixelSize: 9; font.letterSpacing: 2 }
+    ToolCalls {
+      // Under words, the rows keep the bubble's measure; alone, the thread's width.
+      width: turn.speaks ? turn.widest : turn.width
+      steps: turn.lines
+      live: turn.streaming
+      who: turn.speaks ? "" : turn.who
+      worked: turn.speaks ? "" : turn.worked.toLowerCase()
+      stamp: turn.speaks ? "" : turn.stamp
     }
+  }
 
-    // What it did, on one dim line; the calls open below it.
-    Item {
-      visible: turn.lines.length > 0
-      width: Math.min(turn.widest, did.implicitWidth + 18)
-      height: did.implicitHeight + 4
-      Row {
-        id: did
-        spacing: 6
-        Icon { anchors.verticalCenter: parent.verticalCenter; name: turn.callsOpen ? "chevron-down" : "chevron-right"; size: 10; color: pointer.containsMouse ? turn.tone : Theme.dim }
-        Label {
-          anchors.verticalCenter: parent.verticalCenter
-          width: Math.min(implicitWidth, turn.widest - 24)
-          text: turn.calls.map(call => call.name + (call.ok ? "" : " ✗")).concat(turn.outcomes.map(outcome => outcome.text)).join("  ·  ")
-            + (turn.streaming ? "  ·  working " + turn.worked + "s" : "")
-          color: pointer.containsMouse ? Theme.foreground : Theme.dim
-          font.pixelSize: 11
-          elide: Text.ElideRight
-        }
-      }
-      MouseArea {
-        id: pointer
-        anchors.fill: parent
-        enabled: turn.calls.length > 0
-        hoverEnabled: true
-        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: turn.callsOpen = !turn.callsOpen
-      }
-    }
+  // The words' menu, always in sight once they are whole: beside the box's
+  // first row, on the side that faces the rest of the thread.
+  IconButton {
+    id: more
+    visible: words.visible && !turn.streaming && turn.text !== ""
+    quiet: true
+    activeFocusOnTab: turn.selected
+    highlighted: activeFocus || menu.opened
+    implicitWidth: Theme.size.gutter - Theme.space.line
+    implicitHeight: Theme.size.gutter - Theme.space.line
+    x: body.x + words.width + Theme.space.line
+    // Centred on the box's first row, however many rows it has.
+    y: body.y + words.y + Theme.space.inset / 2 + line.implicitHeight / Math.max(1, line.lineCount) / 2 - height / 2
+    name: "more"
+    tip: menu.opened ? "" : "copy what it said, or show its work in the log"
+    onClicked: menu.opened ? menu.close() : menu.open()
 
-    Column {
-      visible: turn.callsOpen
-      x: 16
-      width: turn.widest - 16
-      spacing: 6
-      Repeater {
-        model: turn.callsOpen ? turn.calls : []
-        delegate: Column {
-          id: call
-          required property var modelData
-          width: parent.width
-          spacing: 2
-          Row {
-            spacing: 8
-            Icon { anchors.verticalCenter: parent.verticalCenter; name: call.modelData.ok ? "check" : "close"; size: 10; color: call.modelData.ok ? Theme.success : Theme.error }
-            Label { text: call.modelData.name; color: Theme.foreground; font.pixelSize: 11 }
-          }
-          Label {
-            visible: call.modelData.text !== ""
-            x: 18
-            width: parent.width - 18
-            text: call.modelData.text
-            color: Theme.dim
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-          }
-          Label {
-            visible: call.modelData.output !== ""
-            x: 18
-            width: parent.width - 18
-            text: call.modelData.output
-            color: Theme.error
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-          }
-        }
-      }
+    MenuPopup {
+      id: menu
+      entries: [{ icon: "copy", text: "COPY" }, { icon: "list", text: "SHOW IN LOG" }]
+      onPicked: index => index === 0 ? Omunculus.copy(turn.text) : turn.logged(turn.work)
     }
   }
 }

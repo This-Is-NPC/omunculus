@@ -1,5 +1,11 @@
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
+// IconButton is a square button that is only an icon, its name in the tip;
+// taller on a narrow window, where it is touched rather than pointed at.
+// With a `reason` it is off: it reads disabled and does nothing, but says why
+// on hover. `quiet`, it has no frame until hovered or highlighted, for a
+// button repeated on every row of a list.
 Rectangle {
   id: button
 
@@ -8,24 +14,33 @@ Rectangle {
   property string tip
   property color tone: Theme.primary
   property bool highlighted: false
+  // Why it cannot be pressed now; empty while it can.
+  property string reason
+  property bool quiet: false
   // A count waiting behind the button, on a badge at its corner; none hides it.
   property int count: 0
-  readonly property bool hovered: pointer.containsMouse
+  readonly property bool off: !enabled || reason !== ""
+  readonly property bool hovered: pointer.containsMouse && reason === ""
 
   signal clicked()
 
-  implicitWidth: 28
-  implicitHeight: 28
+  implicitWidth: Breakpoints.target(Window.width)
+  implicitHeight: implicitWidth
   activeFocusOnTab: true
+  Accessible.role: Accessible.Button
+  Accessible.name: tip
+  Accessible.onPressAction: press()
   color: hovered || highlighted ? Qt.alpha(tone, 0.1) : "transparent"
-  border.color: hovered || highlighted ? tone : Theme.line
-  scale: pointer.pressed ? 0.9 : 1
+  border.color: hovered || highlighted ? tone : quiet ? "transparent" : Theme.line
+  opacity: off ? 0.35 : 1
+  scale: pointer.pressed && !off ? 0.9 : 1
 
   Behavior on color { ColorAnimation { duration: 150 } }
   Behavior on border.color { ColorAnimation { duration: 150 } }
   Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
-  function press() { if (enabled) { tap.restart(); clicked() } }
+  function press() { if (!off) { hint.dismiss(); tap.restart(); clicked() } }
+  Keys.onEscapePressed: event => { event.accepted = hint.visible; hint.dismiss() }
   Keys.onReturnPressed: press()
   Keys.onSpacePressed: press()
 
@@ -72,9 +87,10 @@ Rectangle {
     id: pointer
     anchors { fill: parent; margins: -4 }
     hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
+    cursorShape: button.off ? Qt.ArrowCursor : Qt.PointingHandCursor
+    onPressed: hint.dismiss()
     onClicked: button.press()
   }
   FocusRing {}
-  Hint { visible: (pointer.containsMouse || button.activeFocus) && button.tip.length > 0; text: button.tip }
+  Hint { id: hint; active: pointer.containsMouse || button.activeFocus; text: button.reason || button.tip }
 }

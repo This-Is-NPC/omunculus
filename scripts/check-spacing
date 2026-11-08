@@ -1,0 +1,72 @@
+#!/usr/bin/env elixir
+# Fails when a QML file of the console or the kit writes a margin, a padding,
+# a spacing or a fixed height as a number instead of reading Theme.space,
+# Theme.size or Theme.type. 0 and 1 (a hairline) are allowed, as is Theme.qml.
+# scripts/check-spacing.allow lists the kit's drawn geometry (icons, traces,
+# a control's own parts): a file, or a file and a property of it.
+
+defmodule CheckSpacing do
+  @pathspecs ~w(apps/console/*.qml apps/kit/ui/*.qml)
+  @allow "scripts/check-spacing.allow"
+  # A property set, not read: `name:` at the start of a statement, after
+  # `anchors.` or `Layout.` or not, never `item.spacing : 0` in a condition.
+  @property ~r/(?:^|[\s{;])((?:anchors\.|Layout\.)?(?:margins?|[A-Za-z]*Margin|spacing|[A-Za-z]*Padding|padding|height|implicitHeight)):\s*([^;}\n]*)/
+  # A number of its own, not part of a name, a decimal or a colour; a
+  # negative one reaches past the item, as a hit area does, and is no spacing.
+  @number ~r/(?<![\w.#-])(\d+(?:\.\d+)?)(?![\w.])/
+
+  def main do
+    root = System.get_env("MISE_PROJECT_ROOT") || git(["rev-parse", "--show-toplevel"])
+    File.cd!(root)
+
+    # "file" allows the whole file, "file property" that property in it.
+    allowed =
+      @allow
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Enum.reject(&String.starts_with?(&1, "#"))
+      |> Enum.map(&(&1 |> String.split() |> List.to_tuple()))
+      |> MapSet.new()
+
+    hits =
+      git(["ls-files", "--cached", "--others", "--exclude-standard", "--" | @pathspecs])
+      |> String.split("\n", trim: true)
+      |> Enum.reject(&(Path.basename(&1) == "Theme.qml" or MapSet.member?(allowed, {&1})))
+      |> Enum.flat_map(&check(&1, allowed))
+
+    Enum.each(hits, &IO.puts/1)
+
+    if hits != [] do
+      IO.puts(:stderr, "spacing: #{length(hits)} literal margins, paddings, spacings or heights; read Theme.space, Theme.size or Theme.type")
+      System.halt(1)
+    end
+  end
+
+  defp git(args) do
+    {out, 0} = System.cmd("git", args)
+    String.trim_trailing(out)
+  end
+
+  defp check(file, allowed) do
+    file
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _} -> String.trim_leading(line) |> String.starts_with?("//") end)
+    |> Enum.flat_map(fn {line, n} ->
+      @property
+      |> Regex.scan(line, capture: :all_but_first)
+      |> Enum.filter(fn [name, value] -> literal?(value) and not MapSet.member?(allowed, {file, name}) end)
+      |> Enum.map(fn [name, value] -> "#{file}:#{n}: #{name}: #{String.trim(value)}" end)
+    end)
+  end
+
+  # A factor or a divisor (`/ 2`, `* 0.5`) is a share, not a length.
+  defp literal?(value) do
+    @number
+    |> Regex.scan(Regex.replace(~r/[*\/]\s*\d+(?:\.\d+)?/, value, ""), capture: :all_but_first)
+    |> Enum.any?(fn [number] -> number not in ["0", "1"] end)
+  end
+end
+
+CheckSpacing.main()

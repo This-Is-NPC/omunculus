@@ -6,10 +6,14 @@ the store or the TOML.
 ## Requirements and launch
 
 It needs Quickshell, `curl` with WebSocket support and a Wayland session.
-`apps/kit/run console` takes the server registry and a project id, which may
-be left out when the registry holds one project. `mix omunculus.socket`
-resolves the project's socket, and the launcher passes both as
-`OMUNCULUS_SOCKET` and `OMUNCULUS_PROJECT`, as it does for every app.
+`apps/kit/run console` takes the server registry and, optionally, a project
+id. `mix omunculus.socket` resolves the project's socket, and the launcher
+passes both as `OMUNCULUS_SOCKET` and `OMUNCULUS_PROJECT`, as it does for
+every app. Without an id, a registry of one project opens on it; a registry
+of several opens on the registry itself, with an empty `OMUNCULUS_PROJECT`
+and the socket of one of its projects, from which `GET /v1/projects` lists
+them all. `--project` is where the window starts, not a lock: any project of
+the registry opens from PROJECTS.
 
 ## How it reads the project
 
@@ -17,7 +21,24 @@ The `Omunculus` singleton holds the project as the window sees it and makes
 every request through `curl` on the project's local socket. Views only bind
 that singleton. The conversation's event stream is `curl` on its WebSocket,
 whose frames `EventStream` splits into events. It reads the snapshot again
-after each event, and keeps every event as a line of a log too.
+after each event. Every event is also a row of `eventLog` (`EventLog`, a
+`ListModel`), taken at any rate and moved into the rows by a 150 ms timer, so
+a burst costs one layout; it is emptied for another conversation. From the
+state it derives, soon after each change, the `progress` (the kit's
+`Progress.build`): the conversation's state, one node per work nested under
+the stage that handed it down, the work in focus and the path from it to the
+agent at work, what waits on you, and each branch's time, calls and cost. The
+stages a work went through, its rounds and who sent it back or stopped it
+come from the `continue`, `reopen` and `break` events (`Progress.journal`,
+in `journeys`); the calls and the last thing done on each work (`callsOf`) and
+the model usage by work come from the `tool` and `model` events. A clock,
+`tick`, moves every second while a run is open, and the views count their
+elapsed times from it. It keeps when each run started and why it ended
+(`runStarts`, from the events), and, for each request being answered,
+`sending` or `failed` until the answer is read back.
+
+Every time shown is local, formatted by the kit's `Time.js`: a chat stamp is
+"21:59" today, "Yesterday 21:59" or "03 Nov 21:59".
 
 The theme and the controls more than one app uses are in `apps/kit/ui`, a
 copy of eco's overlay, Omarchy's voice session app. Every request goes
@@ -25,49 +46,349 @@ through `apps/kit/client`'s `Http`, which finds the scripts beside it. Each
 app reaches the kit through its `kit` link to `apps/kit/`, since Quickshell
 imports only from within the folder it runs.
 
+## How it reads the registry
+
+While the window is entered, at any level, `Omunculus` follows every project
+the window's socket lists (`GET /v1/projects`, `watchRegistry`): on its own
+socket, its conversations (`GET /conversations`), each one's snapshot for
+its summary, its works (`GET /works`) and its setup, then its project
+stream. An event re-summarizes only the conversation it is of and reads
+again only its project's works, once events pause for 250 ms; a new
+conversation reads its project's conversations again. A project whose
+socket does not answer is marked not reachable. The kit's `Projects.js`
+turns all of it into `projectRows`, one per project, sorted by the
+conversations needing you first, then those working, then the latest
+activity, then the id, and `elsewhere`, the conversations needing you in
+the projects the window is not on. A project whose conversations, or any
+summary of them, are not read yet is `reading` and counts none, so no count
+shows partial: `elsewhere` is 0 while another project is read. A conversation's state comes from its
+summary (`Projects.state`): NOT STARTED, NEEDS YOU while a request waits on
+you, WORKING while its agents run, DONE, or IDLE; every count of
+conversations on the start, PROJECTS and CONVERSATIONS is of those states,
+so they agree. The summary (`Projects.summary`) also keeps whom the
+conversation is with (the agent of its first run at depth 0), what waits
+on you by kind (each item of a numbered question counted), since when, and
+what the newest request asks. The start follows the projects too, while it
+is on screen, for its count of what needs you.
+
+`switchProject` moves the window to another project: the conversation on
+screen closes (its agents go on), and the project's conversations, setup
+and capabilities are read once its socket answers. What was typed in the
+chat's composer and not sent is kept by conversation (`composerDrafts`) and
+comes back when it opens again.
+
 ## A new conversation
 
 A new conversation starts, on a screen of CONVERSATIONS, by choosing whom it
 is with: a card for each agent of depth 0 not only in workflows, with its
 portrait (fetched by `apps/kit/client`'s `AgentImages`, which the studio
-shares). The conversation keeps the agent its first message named, and
-every message names it again.
+shares). Choosing a card makes nothing on the server: the chat opens empty
+with that agent, and the first message makes the conversation and then
+sends. If making it fails, the words stay in the box and a toast
+says so; BACK after a choice returns to the cards having made nothing. The
+conversation keeps the agent its first message named, and every message
+names it again.
 
 A conversation opened from CONVERSATIONS that has no message yet names no
 agent. When several agents of depth 0 may take it, its chat shows the same
 cards in place of the timeline and the composer, and the card chosen is the
 agent its first message names; Esc goes back. With one, the server names it.
 
+The page asks "Who do you want to talk with?" and groups the agents. FOR
+YOUR WORK, the project's own agents, a card each filling the width, as many
+a row as 200 px allow: the portrait, the name and the role, the first
+sentence of its text without a leading "You are the". FOR THE PROJECT
+ITSELF, smaller, a line each with the portrait, the name and the role under
+it: the agents of
+the system pack (the setup's pack named `system`), which change how the
+project's agents work, each change only once you approve it. A card's tooltip also gives the model it runs on and the
+number that picks it; no number is drawn on the cards. The agent last
+talked to in the window comes first in its group, marked LAST USED; the
+others follow in the order of the setup. The keyboard starts on it, else
+on the first card, its focus ring showing which one Enter picks; the arrows
+move along a group's rows and between the groups.
+
 ## Threads
 
 The console folds the events into threads: the main one, yours with the root
-agent, and one per work handed down, where its agent's runs show. A run at
-depth 0 belongs to the main thread, a deeper one to its work's.
+agent, and one per work drawn as a block in a thread (handed down, or a root work a
+run opened), where its agent's runs show. A run on any other work, or none,
+belongs to the main thread.
 
-Each agent's turn, in a thread or in the inspector, shows its portrait,
-small, beside its name, or its initial in its colour while it has none
-(`Portrait`, as on the map's cards and in the inspector); yours shows none.
+Every kind of entry has its own form, the same across the thread. Messages are
+filled bubbles: each line (`SpeechTurn`) and each agent's turn that speaks
+(`AgentTurn`) is a bubble under a heading of its speaker's tone dot, name and
+time, as in eco: yours on the right, filled with the text's ink at a low
+alpha; an agent's on the left, filled with a tint of its colour
+(`Theme.bubble`); a line that continues the same speaker's turn drops the
+heading. Body text in every bubble and card reads at more than 10:1 on its
+fill. Everything else an agent did is the log: system rows (`LogLine`,
+`ToolCalls`, `SubWorkBlock`, the exchange's line), unframed, at the log's
+smaller size (`Theme.type.log`), dim, each with its icon in a mark column of
+their own (`Theme.size.mark`) and its time at the right, so they read as
+secondary to what was said. The chat shows no portraits; they
+stay in the agent picker and on the team page. A turn's heading says how
+long the run has worked, in the short form used everywhere: "Working 12 s"
+while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
+it is named: the turns, the header strip, its lines and the cards. Tones go
+by the order agents first appear in the conversation on screen, from the
+agent you wrote to, and stay while it is open; no two are within 30° of
+hue, and none within 30° of the accent, success, warning or error. A theme
+whose colours leave little room yields fewer tones, and they then repeat. The board's agents have their own, in the order the window meets them.
+While
+an agent works for the thread, its end holds a live line (`Progress.live`):
+a dot breathing in the tone of the agent at work, the agents from the one you
+wrote to down to that one, each in its tone ("sales › seller › design-lead ›
+designer"; a run of the front agent outside any work stands alone; short of
+room the first give way to "…"), "working" and its clock, the trace at the
+row's end, and under them what it does: "Thinking · wrote files", with "· no
+news for 12 minutes" after ten minutes without an event. A call is known only
+once it finished, so the line says the last one in the past, after
+"Thinking", and a run that has made no call for 15 s reads "Thinking", not
+"Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
+and it gives way to that agent's own turn while the turn streams in the
+thread and shows something. A work's own page names the chain from its work
+down; a thread nested in a sub-work block has none, the block says it. When
+a run of a work below ends, it leaves a line of the log in the main thread at
+that moment: "✓ designer  worked 4 min · 12 steps", or "failed after 4 min"
+in the error tone, so the chat tells the team's work in order. Who works is
+the chat's to say; the header strip does not repeat it.
+Once its words are whole, the "more" button beside them, in a gutter
+they never take, copies them or shows the log of the run's work (the
+thread's `openLog`).
 
 A note the harness left, as when it stopped a work and tells you so, is no
 one's words: it reads NOTE, muted, where a speaker's name would be, as in
 the mailbox, and the log names its events' actor `harness`.
+A harness note about a question you already see as a card (its request is
+one the harness opened or gathers) says nothing new: it is not shown, not
+counted as unread, and marked read when you answer.
 
 What an agent says, a request's reason and a work's goal and notes are the
 kit's `Prose`, their web addresses links that open in the browser.
 
-A message carries the files picked under the composer with the kit's
-`FilePicker`, sent through `Http.post`. A file a message or an agent's
+Under its words, a turn's tool calls are one group (`ToolCalls`, from the
+kit's `Calls.group`), system rows behind the step mark ("›_"), its chevron
+after the words. A turn that said nothing is that line alone, with no
+heading: its agent in its tone leads it and how long it worked ends it,
+"sales  Passed your answers to seller · worked 3 s", the time at the right.
+Folded, one line counts them, how many failed and the
+first that did, in plain words: "9 steps · 1 failed: could not move to the next stage"; a lookup that found nothing (a folder not there yet) is no failure; a lone call that went well is named by what it did ("Passed a question up", "Looked in design/", "Ran: npx build"; a reply, by whom it answers: "Passed your answer to seller", or "answers" for a numbered form), and a turn that says nothing names its agent on that line, so these lines never stand under no name. While the run is open its last three calls show
+live under it. Unfolded, each call is a row with the raw tool name and its args
+in brief (`Phrases.brief`: the path of a file tool, the command of `bash`, whom an `ask` or
+`escalate` goes to and never its question, which its card or exchange shows,
+the first work a `work` call opens), and a failed call shows its output, six
+lines and then all on demand. An `edit` opens a small diff of the lines it
+replaced, a `write` the first lines it wrote. Every call is shown, those
+chained through another tool too; the hooks that ran without trouble are one
+row, "3 hooks ran". What moved the work is a row in plain words: "moved on to
+design", "sent "Home page" back to design", "stopped: ...", "granted ...". A
+turn that has said and done nothing yet is not drawn. An entry that draws
+nothing takes no room, not even the gap between entries, and words with no
+text and no files are not added to the thread.
+
+A work handed down is a block (`SubWorkBlock`) in the thread of the run that
+handed it down, where it did; so is a root work a run opened. A system row
+behind the branch mark, "sub-work" with its agent, title and time, it says on
+a second line its state, for how long and
+how many steps (tool calls; hook runs are not steps, here and in the turn):
+with those of the works it handed down, then how many are its own ("34 steps
+· 20 its own"), so the count moves while the team works; and, when some
+failed, how many, what was attempted and why the first failed ("5 failed:
+could not move to the next stage (reason)"), in the error tone only if the work itself
+failed; when each failed tool later succeeded, a dim "5 retried" instead,
+its stages when it has a workflow, and the round with
+who sent it back. A comment on a work of the conversation's own (not one nested below it) also
+appears in the main thread at its own time, as a quoted card (`TeamNote`):
+outlined, headed by a quote mark, NOTE FROM and the agent in its tone, the
+time at its right, and the text at the body size in the full tone, at most as
+wide as a bubble, six lines and then unfolding by its heading; for the
+newest note once the conversation's work is done, its result: DELIVERED BY and
+the agent, in the success tone, whole and as wide as the thread. The strip's "✓ DONE" then takes the chat to it. Its addresses are links
+in the accent. It is the team's news, not a message to you. Until the work's data arrives, it shows the title the event
+named and "Handing down…", or nothing when the event named none. A work that
+waits on a branch says who works below it ("● designer working", in the
+working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
+as everywhere, in the line's frame, since only the card can be acted on; the
+conversation's own work leaves out its title and stages, which the masthead
+and the strip show. Choosing it unfolds it in place, in an outlined frame under its row, into the tabs
+01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
+scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
+The open glyph at its top right shows the work's thread as a page of its own
+(see [Pages](#pages)).
+
+A request is a card only while it waits on you, and it is in the main
+thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
+YOU ANSWERED and the time (YOU CHOSE APPROVE for a chosen option, YOU ASKED TO
+ADJUST for adjust, YOU GRANTED · THIS WORK ONLY, or the saved scope, for a grant; the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
+and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
+margin, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
+kept whole) and its first line with words, cut at 120 characters; a permission reads instead "clerk asked · via seller › sales to publish the site to production"; Enter, Space or
+a click opens it in place to its full text. Sending an answer, like sending
+a message, takes the view to the end, so it never counts as news; when the
+answer comes and the keyboard was in the card, it moves to the composer. A
+reply says nothing in the bar when it succeeds; the card shows it. A
+question for you that arrives while the view follows is held by its top.
+
+What an agent asks another is an exchange (`TeamRow`) in the thread it was
+asked in: a system row behind the people mark, "seller asked design-lead ·
+design-lead decides", each agent in its tone, and under it, in an outlined
+frame at the body size, the question in its first three lines and, once
+answered, who answered and what. It is open while it waits, and DECIDE INSTEAD opens the request's
+card in place, to answer it yourself. A request another gathers (`Requests.contained`), as the
+lower ones of a question passed up, is not shown on its own.
+
+## The progress
+
+A conversation's pages share its head (`ProgressStrip`), over the tabs. First
+a 40 px header strip with its meta — the agent it is with, its dot and name
+in its tone, the stage of the work in focus and how long it has run, in
+words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
+once done, the stage's name being the stepper's under it; "WAITING FOR YOU
+SINCE 22:43", in the warning tone, in place of the clock while a question
+waits on you, also when the work asking is a sub-work; the clock keeps counting while any work is open; before any work, "● SALES · STARTING" while its first run goes or the person has written,
+NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
+follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
+once the provider priced a call; each opens what it counts, the team and the cost, and
+the agents' tip names them. At its right the chevron, which opens the full
+view, and ANSWER, in the warning tone and with the count when more than one
+waits, while a question waits on you, which puts the keyboard in the newest
+question's card on the chat. This is the overview; who works and on what is
+the chat's live line, and on the team, log and cost pages their own views say
+how the work stands. Under it, unframed, one line: the stages of
+the work in focus, the newest open root work (`Stepper`: "✓ qualify › ●
+design · round 2 › ○ assess …", shorter forms as the width shrinks, down to
+one dot per stage and the current name), or its title when it has no stages
+and the masthead does not already say it. Once you have written, the line
+keeps its room, blank until there is something to say, so the tabs below hold
+their place from the first message. A finished conversation says "✓ DONE ·
+TOOK 1 HOUR 20 MINUTES" in the success tone in the strip's top line. The line
+is hidden while no work exists and no agent runs.
+
+The chevron and Alt+P open the full view, on the chat
+(`ProgressSheet`, holding a `ProgressTree`): what waits on you with ANSWER,
+then each root work, newest open first, with its title, start and length,
+its stages one per row with their agent and time, and under each stage the
+works handed down while it was current, nested by level (`ProgressNode`).
+An open work is a framed card: its agent and state, its title, its stages,
+what it calls, the round with who sent it back and why, the questions it
+asked and its tool calls; a done, cancelled or coming one is one line, what
+is below it folded. Siblings handed down in one stage are headed "N in
+parallel", and the done and cancelled works of each place fold into one
+row, "✓ 2 sub-works done · 18 min", with "· 9 in all" when works lie below
+them, unless a question waiting on you climbed from there. Picking a work shows its agent's last words, its questions in
+full, and OPEN (its thread as a page), LOG (the log kept to it) and TEAM (the
+team page, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
+or folds, Esc returns to the composer.
+
+A work's state follows its questions up their climb. An escalated question
+is held by the pending request that gathers it, at any depth
+(`Requests.holder`). A question for you counts once, for the deepest work it
+climbed from (`Requests.works`): that work alone needs you, even when the
+request now waiting on you belongs to no work, as one an agent at depth 0
+escalated. The works it climbed through wait ("Waiting for your answer to
+design-lead"); one whose question an agent holds waits on that agent. The
+NEEDS YOU chip of the team counts these questions. A work waiting for an answer that is not read yet says
+"Waiting for an answer". The works above one that needs you keep their own
+state, and a done or coming one there is not folded.
+
+Where it opens depends on the window's width: from 1100 px it is docked
+beside the thread, 380 px wide and the page's height, and open from the
+start once the conversation has a work; from 700 px it is a card under the
+strip, pushing the thread down, at most 55 % of the chat's height and
+scrolling inside; under 700 px it is a sheet over the whole chat, headed
+‹ CHAT, PROGRESS and a close button, which Esc closes. Below 1100 px it starts
+closed.
+
+Alt+R, as ANSWER, puts the keyboard in the words of the newest question
+waiting on you, from any page of the conversation. Esc in a question's card
+or in the progress returns to the composer.
+
+While a decision waits on you, numbered quick chips sit over the composer:
+the options of the newest one (`Omunculus.deciding`, from
+`Requests.choices`, without the grants saved for good, which are chosen on
+its card), then PROGRESS: "1 ADJUST  2 APPROVE  3 PROGRESS". Pressing an
+option, or Alt and its number, decides it with the note written in the card,
+through that card, which comes into view and shows the option chosen while it
+goes. While the card's own buttons are in view there are no chips. On a
+window under
+560 px tall the chips are hidden; their chords still answer.
+
+The composer is the kit's `TextArea` in a frame with a chevron: one line that
+grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
+breaks the line, and a pasted text keeps its line breaks. While the agent
+written to works, SEND keeps its caption with the trace along its foot, its
+tip says "sales is working; SEND still sends", and it still sends. SEND is
+dim while the box is empty. A sent message empties the box at once and shows
+in the thread as your bubble, dim, with SENDING… where the time goes, until the
+server's copy replaces it in place; if the server refuses it, the bubble goes
+and the words come back to the box. While a question waits on you, form or not, the keyboard
+goes to its card (a form's first unanswered field), not the box, for every question that arrives while the box is empty, and the box says "or
+say something else to sales"; the count of what
+arrived out of view rises above the form's floating actions. Under 420 px its
+buttons show their icons only.
+
+The clip in the composer's frame picks files for the message, which show
+over the box as chips (the kit's `FilePicker`, a click takes one off) and
+are sent through `Http.post`. A file a message or an agent's
 `attach` carries shows under it as the kit's `FileChip`, which
 `Http.openAttachment` saves to the downloads directory and opens, as in the
 mailbox.
 
 ## Requests
 
-A request's card (`RequestDecision`) says who asked, what for and who
-decides, you or an agent you can overrule. One the harness opened, passing
-on a question an agent left unanswered, leads with that question as its
-asker wrote it, under the asker's name, the harness's sentence in small
-print beneath, as in the mailbox.
+A request's card (`RequestDecision`) is built as eco's answer card. Its
+heading names the kind, who asks (the asker in their tone, then how it came to you when it
+climbed: "design-lead asks · via seller › sales") and on which work, and the time, on two lines when
+the card is under 520 px, with its tools at the top right: copy
+the question, the "more" menu that holds ESCALATE while it waits on you, and
+close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
+NEEDS YOU (an answer in words; a numbered list of questions has a box
+for each, `QuestionForm`), YOUR DECISION (a button per option and an optional
+note) and PERMISSION (what the asker wants to do in plain words, GRANT · THIS WORK
+ONLY as its main action, and a no with a reason; behind "ALWAYS ALLOW…" are
+the scopes saved in the project settings — FOR <AGENT>, IN THE <STAGE> STAGE,
+IN FOLDER <name> or IN THE PROJECT). The quick chips under a card use its
+order and words, and the answer heads YOU GRANTED. Its question shows once,
+as its asker wrote it, in full contrast; one passed up has a chip naming
+through whom, in order, that opens the wordings of each level and the
+harness's own sentence. Its actions sit at its bottom left: its options,
+SEND while words are written (not on a decision, whose options carry the
+words), "I can't answer this", which tells the team so
+in a plain reply, and DENY last. ESCALATE, from the menu, turns the words
+into the reason it goes up and the action into ESCALATE; ANSWER INSTEAD
+turns it back. Sending shows your answer dimmed under SENDING…; answered,
+the card shrinks to the question and your answer; a failure reopens it with
+your words kept and an error line. The words are written in the kit's
+`TextBlock`, one line tall and growing with its text; on a decision it is
+captioned YOUR NOTE OR ANSWERS (OPTIONAL), Enter breaks the line there (a
+button decides), and the keyboard arrives in it. Under a decision that gathers
+only one, the buttons carry no caption of their own.
+
+The header's title is the conversation's subject (`Omunculus.subject`, as in
+the masthead: the first root work's title, else the first message), or the
+work of the question's origin when the harness passed it up.
+
+`QuestionForm` puts "N OF M ANSWERED" in the card's heading (on its second
+line under 520 px), and SEND (off with "answer at least one to send" beside it; solid once one is answered) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. The
+form grows in the thread; the view starts at the card's top. While
+that end is below the view, the two float on the view's bottom edge over the
+card's fill and a hairline, with what passes under them fading out above, with "N MORE QUESTIONS BELOW" at the right
+(above them under 520 px) while items start under them; the chip brings the
+first of those into view with the keyboard in its box; the last box scrolls into view with the asker's closing paragraph. The form's dim words use the card's lifted dim tone. Each item is its
+number, its question wrapped in sentence case at a 620 px measure and a box
+(`TextBlock`) as wide as the card's text that grows with its text, with the toggle chip "I DON'T
+KNOW YET" under it, which fills the box and, switched off, restores what was
+typed. Enter moves to the next box that can take the keyboard (it stays in
+the box when none can), Enter in the last and Ctrl+Enter in any send, and the
+item whose box takes the keyboard scrolls into view above the floating
+actions without changing whether the thread follows its end. The form's model is held by value (`formJson` of
+`RequestDecision`), and what was typed, with the box the keyboard was in, is
+kept in `Omunculus.drafts` by request, so a form rebuilt takes both back; the
+thread keeps two views of entries each way, and a box taking the keyboard
+never makes its entry the thread's current one. A line continues its item when no blank line precedes it or it is indented; an unindented line
+after a blank one ends the list, and the closing paragraph shows after the
+last box and is not sent.
 
 While it is pending it has its options as buttons, and so are those of
 every decision it gathers from below — an origin still waiting whose options
@@ -77,47 +398,100 @@ origin's asker and work, an option of an origin given through the reply's
 `parts`, down to it (the kit's `Requests.choices` and `Requests.answer`, as
 in the mailbox).
 
-Every option carries the words of its field: ANSWER replies with them
+Every option carries the words of its field: SEND replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
-it waits on you, ESCALATE raises it with them as the reason through
+it waits on you, ESCALATE (from the card's menu) raises it with them as the
+reason through
 `POST …/requests/escalate`, as one part named after its asker.
 
-## The orchestration map
+## The team
 
-Requests and unread notes are not in threads: they hang from the work that
-made them on the orchestration map, a flowchart on the kit's `FlowCanvas`,
-which moves and zooms as the studio's flow does.
+The team page (`TeamView`) draws the conversation's agents as a tree, who
+handed work to whom, every level deep (`Team.rows`, one `TeamNode` a row).
+When the agent that talks with you hands its works to others, it is the
+root ("sales · talks with you · 11 agents", with its state at the right:
+"Needs you" while a question waits on you, the run it has open and its
+clock, "Waiting for seller" while a work of the team is open and no run is
+its own, "Idle" once nothing is open; and a badge "⇡ surgeon asks you 1
+question" while one does). Each work sits under the work that handed it
+down, one level further right; an elbow line joins it to its parent, and a
+line goes on down a level's column while rows of it follow, as in a file
+tree. The lines are in the faint ink, never coloured.
 
-You are on top, with a row per depth named at its left. Each work is a card
-with its agent's portrait, model, title, state and the tool it calls while
-it runs, laid out as a tree, each under the one it came from, parents
-centred over their children. Running agents are ringed and their links
-flow; idle ones are hollow. On the map, a card the keyboard reaches comes
-into view.
+```
+● sales  talks with you · 11 agents                       ⚠ Needs you
+└─▾ seller  Doce Ana, bakery in Campinas: new website   ✦ surgeon working
+    ├─› ✓ 2 sub-works done · 1 h 02 min · 3 in all · design-lead, language_lawyer
+    └─▾ administrator  Build the site from the approved design
+        ├─› ✓ 3 sub-works done · 30 min · toolsmith, surgeon ×2
+        ├─● surgeon › copilot  page: about   ✦ Thinking · ran a command 1:17
+        ├─● surgeon › copilot  page: order                       ⚠ Needs you
+        └─› ○ 2 up next · surgeon ×2
+```
 
-A work that goes through a workflow is a lane instead (`WorkflowLane`), as
-the studio's flow draws a workflow: a frame named after it with a card per
-stage, in order, each of the agent the setup gives that stage. The stage the
-work is at is its live card, those it went through hollow and checked,
-those ahead hollow, showing who takes it. The lane is the work's node in the
-tree, its parent's link arriving at its frame and its children's leaving
-from the stage it is at.
+A work's row has its mark — a chevron while it handed works down, else a
+dot in its agent's tone — then its agent in that tone, its title, and its
+state at the right: what it does and a clock while it works, "Waiting for
+design-lead", "Needs you" in the warning tone, "Done", "Stopped". A work
+that waits on works at work below it reads as them at work ("surgeon
+working", in the working tone). A work in a workflow names the agents of
+its stages where there is room ("designer › design-reviewer › publisher"),
+the one at work lit and those to come faint. Under them are its stages
+(`Stepper`, in a shorter form when short of room), its time, its own steps
+(tool calls) and its branch's cost (tokens as "40k read · 2k written", as
+the cost page words them), and, while it is folded, what it handed down
+("3 sub-works, 1 working, 2 done"); short of room these give way a part at
+a time. Under 520 px of room the title goes under the agent. A badge per
+request between it and others shows its climb (`⇡ surgeon › administrator
+› seller › sales › you`, in the warning tone when it is to you; `⇣ 1
+question from designer`); it goes to the other end of the request, lights
+both rows and opens the request in the detail.
 
-## The inspector
+What shows opens itself by what is going on (`Team.groups`). A work with a
+work still open below it shows its works, and so does a root, the rest
+folded behind their chevron. Under an open work, the done and cancelled
+ones fold into one line, "✓ 2 sub-works done · 18 min · design-lead,
+language_lawyer" (with "· 1 cancelled", and "· 9 in all" with the works
+below them, so the folds add up to ALL N WORKS), and those up next into
+another, "○ 2 up next · surgeon ×2", two or more each; under a work whose
+works are all done, three or more of one agent fold into one line at the
+place of the first. A work in a workflow counts as the agent of its first
+stage, the surgeon of a page its copilot reviewed. A fold stays folded
+unless a question waiting on you climbed from there. A click on a chevron
+or a fold, Enter on a fold, or → and ←, unfold and fold; what you unfolded
+or folded stays so while the page is open. Picking a work from elsewhere —
+a badge, OPEN IN TEAM, the detail's way down — opens the works above it and
+the fold it is in.
 
-Picking a work opens its inspector: its portrait, for how long it has run
-and what it calls now, where it stands in its workflow (`WorkflowTrack`: the
-stages in order, those passed checked, the current lit), the work, and its
-runs, what it said and did.
+Chips keep the works that need you or work, and `/` filters by title,
+agent or stage; a filter keeps the works above each it keeps and shows them
+all unfolded. The chips' counts are of works, folded ones included; ALL
+names its unit ("ALL 12 WORKS"). ↑ and ↓ move from row to row; → unfolds a
+folded work or fold, else goes to the first row under it; ← folds an
+unfolded one, else goes to its parent; Enter opens the detail, or its tabs
+beside the tree; the keyboard's row has the focus ring.
 
-Beside WORK, its other sections read the core's tools through
-`POST /v1/call`:
+The work picked shows in full (`NodeDetail`). Its header strip names its
+agent, title, round and state, with its action at the right: ANSWER, in
+the warning tone, while it or a work below it waits on you, which opens the
+decision (`decide` for the page to open `RequestDialog`), else OPEN THREAD;
+then LOG, and behind "more" ESCALATE, while it asked
+you something, and MARK READ, while it left you notes. Under it are its way
+down (`Breadcrumb`), its stages and the tabs OVERVIEW (what it does now and
+did last, a send-back or a stop and why, whom it waits on and who asks it,
+its team with their portraits, each stage's time, its branch's totals, and
+the work itself: goal, workspace, where it came from, what it asked and the
+notes it left you), THREAD (what its agents said and did, with a composer
+to write to its agent or leave it a note), REQUESTS (what it asked and what
+it is asked, each with the way it climbed, to answer in place), CHANGES,
+RUNS and LOG; `[` and `]`, or ← and → on the tabs, move between them.
 
 - RUNS, the work's runs as `runs` sums up the project's last closed ones,
   matched by id with the snapshot's — how each ended, its calls, those that
   failed and what its model used and cost, a run still open saying so —
   with the runs, failed calls and cost in all above them, each opening call
-  by call (`runs --run`, Esc back);
+  by call (`runs --run`, Esc back), and the prompt each run was given
+  (`prompt --run`);
 - CHANGES, the files its calls changed (`changes --work_id`) or, with DIFF,
   their unified diff, added and removed lines coloured, or why there is
   none, as the project not recording changes. REVERT, shown to a member
@@ -126,51 +500,146 @@ Beside WORK, its other sections read the core's tools through
   added, in the workspace the work ran in and under that workspace's write
   rules (`POST /works/{id}/revert`). It restores nothing when a file changed
   since the work's last change to it or is not writable there, and says
-  why;
-- PROMPT, the prompt its last run, or the run opened, was given
-  (`prompt --run`), or that it recorded none.
+  why.
 
-Each scrolls and copies what it shows.
+From 1100 px the tree and the detail sit side by side, the focus work
+picked at first. Narrower, the tree takes the page and the detail opens as
+a page over it; BACK or Esc returns to the same row.
 
 ## Pages
 
-The window opens on its start, clean: NEW CONVERSATION (N), CONVERSATIONS
-(H) and BOARD (B), and the project's name. Entered by one of them, its pages
-(`PagesView`) are in two levels, only those of the level on screen showing.
+The window opens on its start, clean: the ways in, centred, with the
+masthead's ⓘ opening the keys dialog. On a project: NEW CONVERSATION (N),
+CONVERSATIONS (H), BOARD (B) and PROJECTS (P), keys of this screen only,
+and "Project agency · its agents wait for a word". On the registry alone,
+the masthead says READY, or READING while a project is read: PROJECTS and BOARD, and "3 projects · open
+PROJECTS to choose one". Under the line, in the warning tone, each project
+where conversations need you, "agency · 13 need you", a link that opens
+that project's conversations with NEEDS YOU lit; until every project is
+read the line says "reading what waits for you…" instead. When the server does
+not answer, the ways in are disabled and the line says so. Entered by one of them, its pages (`PagesView`) are in three levels
+(`level`), only those of the level on screen showing.
+
+The registry's level:
+
+- PROJECTS (`ProjectsView`, `ProjectsTable`), every project of the
+  registry, under a rule of its state (NEEDS YOU, WORKING, IDLE, NOT
+  REACHABLE, READING), each row two lines at every width, with no header:
+  its id, `· OPEN` after the one the window is on, and its state at the top
+  right: NEEDS YOU, WORKING (behind a dot), IDLE, NOT REACHABLE when its
+  socket did not answer, or READING… until its conversations are read.
+  Under it, dim, as much as fits, never cut: "16 conversations · 13 need
+  you · 1 working · Today 22:22", with the last activity (the newest
+  conversation begun or work changed); the working goes first, then the last
+  activity, then the conversations shorten to "16 conv." (`Projects.meta`).
+  The search line (`/`) searches the ids; the chips ALL, NEEDS YOU and
+  WORKING, shown while a project is in either state, keep those, on one
+  line that scrolls sideways (`ChipStrip`); NEEDS YOU reads in the warning
+  tone while it counts any. A list the filters empty offers CLEAR FILTERS.
+  Enter or a click opens the project at its conversations; ↑ on the first
+  row goes back to the search. The view's `readout`, "3 PROJECTS", counts
+  the projects, and reads "1 OF 3 PROJECTS" while a filter or search narrows
+  the rows listed;
+- BOARD, the works of every project.
 
 The project's level:
 
-- CONVERSATIONS, the project's, filtered by what agents do there and what
-  was first said, which it opens from;
-- BOARD, the works of every project the window's socket lists
-  (`GET /v1/projects`), each read on its own socket through `GET /works`
-  and kept live by its project stream (`GET /stream`) while the board is on
-  screen.
+- CONVERSATIONS (`HistoryView`, `ConversationsTable`), the project's: those
+  needing you first under NEEDS YOU, the one waiting longest first, then the
+  others under a rule of the day each began, newest first; filtered by
+  their state (chips NEEDS YOU, WORKING, NOT STARTED; ALL lists every one)
+  and by their titles and what was first said in them, which it opens from.
+  Each row is two or three lines at every width, with no header. Its title
+  is its first work's, else what was first said, with its state at the top
+  right: what waits on you ("7 QUESTIONS", "A DECISION", "A PERMISSION",
+  joined when several do), NOT STARTED (nothing was said), WORKING (behind
+  a dot), DONE (every work done or cancelled) or IDLE. Under it, dim:
+  "waiting since 22:43" while something does, whom it is with and the agent
+  its first work is with at its stage ("with sales › seller · design 2/6",
+  or "with sales · qualify 1/6" when they are the same; read from the
+  project's works, which the window follows while entered), then since when
+  it waits, else "began Today 21:59" ("Yesterday 21:59" or "03 Nov 21:59"). The third line quotes what the newest request asks, or, under a
+  work's title, what was first said. Each row's `⋯` opens the conversation
+  at its TEAM or its LOG instead of its chat. A list the filters empty
+  offers CLEAR FILTERS; ↑ on the first row goes back to the search. The
+  view's `readout`, "16 CONVERSATIONS", counts the project's conversations and reads
+  "14 OF 16 CONVERSATIONS" while a filter or search narrows the rows listed;
+- BOARD, the same board, opened kept to the project's works, every
+  project's one click away.
 
 A conversation's level, in place of the project's once one is opened:
 
-- CHAT, the chat with the root agent and its composer;
-- MAP, the orchestration map;
-- LOG, every event a row of a table that filters by text and opens an event
-  whole;
-- COST, what the conversation used, model calls, tokens and cost, in all and
-  by agent (`CostView`).
+- CHAT, the chat with the root agent, its progress and its composer;
+- TEAM, the conversation's agents as a tree and the work picked in full. Its SHOW
+  IN LOG opens the LOG kept to that work, and BACK returns;
+- LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
+  ("question", "step", "reply", "passed up"), what it says as one plain
+  sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
+  event's raw type, JSON and milliseconds only in its card), who, and FAILED,
+  RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is
+  still open), under rules naming the day and each run.
+  A call reads in plain words ("read design/rounds.md", "looked in design/",
+  "looked at design/README.md", "ran a command on quotes/", "could not read
+  design/rounds.md: permission denied"), never by its tool name; a command
+  is worded by the files it touches, named relative to the workspace (never a
+  header or a URL; a glob reads "the .html files in site/"), and its raw line is in the row's card; a
+  failed command gives the last line of its output as the reason; a failure
+  a later call of the same tool settled is dim with RETRIED, not red; a lookup that found nothing is dim ("found no
+  quotes yet"), not FAILED. An answer names whom it answers ("answered
+  seller: …", "chose grant for clerk") and leaves out the request ids the agent
+  echoed. Plumbing (a run's start and end, hooks, replies without text, an
+  answer passed down a level on its way to the one asked, and a call whose
+  result has a row of its own, such as a note, a question or a grant) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
+  FAILED and BEHIND THE SCENES and an agent picker filter it; the
+  count of rows and a "more" menu with COPY, the event picked or else the
+  rows shown, sit at the filters' right, or under them when they do not fit
+  beside it. The event opened shows in a card
+  under the list, with its local time and the server's ISO stamp as UTC and
+  its copy and close tools at the top right;
+- COST, what the conversation used (`CostView`): a header strip with the
+  model calls and the tokens read by the model (with those from cache) and
+  written in all, and the cost at its right; then a row per agent, the
+  busiest first, its cost at the top right, "-" when its provider reported
+  none. When the provider sends no price, one note says so and the cost
+  column and figure are left out.
+
+A work's thread also opens as a page of the chat, from a sub-work block's
+OPEN or the progress: the way down to it (`Breadcrumb`, "Conversation ›
+Bakery website › Home page", each crumb going back up, the first to the
+chat), its transcript and a composer to its agent. The masthead's menu has
+OPEN IN TEAM (Alt+O), the team page with the work picked, and ITS LOG.
+
+The log, the team and the cost are loaded when first on screen and let go
+after it, so a closed page costs nothing; the work picked on the team page
+is kept meanwhile.
 
 ## The board
 
 The board (`BoardView`) is a kanban, a column per state: open, waiting on a
 child, a request or your next message, broken (waiting with nothing named,
 for its parent to decide), done and cancelled, the latest changed first.
+Each column opens with a rule of its state and how many works it holds,
+what the state means on hover.
 
-Each card (`BoardCard`) is the work first — its project, its title, in a
-workflow the stage it is at of how many, waiting what on, its conversation
-and the work it came from — then, small, its agent's portrait and name and
-its age, its border lit while an agent runs on it.
+Each card (`BoardCard`) is framed as a list row: the work's title, and at
+the top right its age, or RUNNING behind a dot while an agent runs on it
+(its border lit then); under it, behind a dot in its agent's colour, the
+agent, the project, in a workflow the stage it is at of how many, and
+waiting what on; then its conversation and the work it came from. A work
+done or cancelled steps back.
 
-BY STATE (S), BY AGENT (A) and BY PROJECT (P) cross the columns with a lane
-of each, chips keep one project, and `/` filters by title, project,
-conversation, workflow, stage or agent. The arrows move across and down the
-columns, and Enter or a click opens the work on a page of its own.
+BY STATE (Alt+S), BY AGENT (Alt+A) and BY PROJECT (Alt+J) cross the columns
+with a lane of each, opened by a rule of its name (an agent's in its colour)
+and count. `#project` chips keep one project, and the filter line (`/`)
+filters by title, project, conversation, workflow, stage or agent. The
+arrows move across and down the columns, and Enter or a click opens the work
+on a page of its own. Under 700 px the board is one list (`DataTable`)
+instead: each work a row of title, the same lines under it and its age or
+RUNNING at the top right, under a rule of its state, and of its lane while
+grouped. Opened from the registry's level it shows every project, ALL
+PROJECTS lit; from a project's, that project's chip is lit. The chip chosen
+holds while the level stays the same. The view's `readout`, "24 WORKS",
+counts the works shown.
 
 ## A work's page
 
@@ -178,9 +647,14 @@ A work's page (`WorkView`), reached from the board as BACK shows, reads as
 an issue. On top are where it is — its project, its conversation, the work
 it came from, which opens — and its title.
 
+Under them a header strip says its state, stage and age, with ANSWER, in
+the warning tone, while it asked you something (`answer`, for the page to
+open the decision), and a tool to its conversation's team, the work picked
+(`openTeam`).
+
 On the left are its description, the goal it was given, what it asked and
-the notes it left (`WorkSummary`, as the map's inspector has them), and
-under them its RUNS, CHANGES and PROMPT.
+the notes it left (`WorkSummary`), and under them the tabs RUNS, CHANGES
+and PROMPT. Under 700 px its properties stack under them.
 
 On the right are its properties: its state, its project, its workflow with
 each stage beside the agent that takes it, those passed checked and the one
@@ -189,63 +663,154 @@ the conversation's agent, the works it handed down, each opening on its
 page, what comes next — the next stage or whom it reports to — where it
 works, and how long ago it began and last changed.
 
-Its bar has REPLY (R) while it asked you something and OPEN IN MAP (O), its
-conversation's map with it picked. The window turns to the work's project
-first when it is another one (`Omunculus.switchProject`).
+Its bar has BACK alone; Alt+R answers what it asked you and Alt+O opens its
+team. Opening its team, the window turns to the work's project first when it is
+another one (`Omunculus.switchProject`).
 
-## The masthead, the carousel and the bar
+## The masthead, the rail and the bar
 
-The masthead names the page: the project, then the conversation open and
-its page, or the page. As in the studio, the pages of the level are a
-carousel down the left edge (the kit's `TabRail`), the one on screen at its
-head beside the bar of its commands (the kit's `PageBar`).
+The masthead names the way to the page in crumbs: PROJECTS or BOARD on the
+registry's level; the project, then the page, on a project's; the project and
+the conversation open (the title of its first work, else "conversation with
+sales", never what was first said, which the chat shows), and on a thread
+its work's title, in a conversation, whose tabs name
+its page. At the start it names the
+project, or, on the registry alone, READY (OFFLINE while the server does not
+answer), and the slash after OMUNCULUS shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
+crumbs its room. The project's crumb opens PROJECTS, and the
+conversation's its chat. Crumbs that do not fit elide from the left, the
+project's never below 8 characters. While a project is open and
+conversations need you in the other ones, the masthead's right shows their
+count in the notice `2 NEED YOU ELSEWHERE` (`2 ELSEWHERE` under 700 px),
+which opens PROJECTS with NEEDS YOU lit, and its × puts it away until the count changes; at the
+start and on the registry's level, where the projects' list carries the
+count, it does not show.
 
-The bar ranks the commands — BACK apart, the page's main action solid (NEW
-CONVERSATION on CONVERSATIONS, REPLY where something waits on you, PENDING
-on MAP), the others outlined, BY STATE, BY AGENT and BY PROJECT joined as
-one control, and FILTER, COPY and FIT as icons at its end. It carries the
-readout and shortens the commands' names when they do not fit.
+In a conversation there is no rail and no bar. Its pages are eco's tabs under
+its head, `01 CHAT  02 TEAM  03 LOG  04 COST`, wrapping on a narrow window,
+LOG marked while a work failed, and shown once there is more than the chat; the digits and Ctrl with them choose them as
+they choose the rail's pages. The masthead's right has, after the notices,
+`⋯` and × (back to the conversations; on a conversation that has
+said nothing, back to the picker it began on, as BACK and Esc do). The menu `⋯` holds the page's rarer actions that the page does
+not show itself, and NEW CONVERSATION: on TEAM, WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
+TEAM and ITS LOG. While notes to you are unread, a notice `1 NOTE`
+shows the oldest on the chat and marks it read (Alt+M); its × puts it away
+until another comes.
+
+On the registry's and a project's levels, as in the studio, the pages of the level are a rail down the left
+edge (the kit's `TabRail`) in a fixed order, the one on screen marked in its
+place, beside the bar of its commands (the kit's `PageBar`). While the rail
+with the pages' names takes at most a fifth of the window's width (from
+about 860 px for CONVERSATIONS), it shows them beside their numbers; from
+700 px it is folded to their numbers and unfolds as an opaque panel over the
+page while the pointer or the keyboard is in it. One click chooses a page and folds the rail, which stays folded until
+the pointer has left and come back, and the page takes the keyboard; Esc
+folds it too. Under 700 px there is no rail: the bar's page switcher names
+the page and lists the four in a menu. The chat, team, log and cost pages are
+named so. When the desktop setting `enable-animations` is off, nothing in the
+window slides, sweeps or decodes.
+
+The bar ranks the commands — BACK apart, the page's main action solid on the
+left (NEW CONVERSATION on CONVERSATIONS, NEW PROJECT on PROJECTS), the
+others outlined on the right, BY STATE, BY AGENT and BY PROJECT joined as one
+control. When the names do not fit, BACK is only
+its chevron and the commands take their short names, then all but the main
+one their icons; when even those do not fit, the lowest ranked commands move
+into the menu of a `⋯` button.
+
+What the window tells — copied, sent, refused — shows as a toast at its
+bottom right, above the composer: information closes itself after a few seconds, an error stays
+until closed, and while the server does not answer an error says so until it
+answers again.
+
+The window opens at 1080 by 720 px and is at least 360 by 480 px; its
+margin is 20 px, 10 px on a window under 560 px tall.
 
 Choosing another page of the level replaces the one on screen, while every
-move into another level, conversation or project is remembered. BACK
-returns to exactly where it was, its page, project, conversation and the
-node picked, and from the first page entered to the start, the board
-keeping its grouping, filter and the card the keyboard was on.
+move into another level, conversation, project or a work's thread is
+remembered. BACK returns to exactly where it was, its page, level,
+project, conversation and the work picked, switching back to the project
+it was on, and from the first page entered to the
+start, the board keeping its grouping, filter and the card the keyboard was
+on. On the team page BACK first lets go of the detail page. A conversation that has no message yet, or is not made yet, is left
+for the picker it began on, or for the list; a page of a conversation is
+never shown without one.
+
+A tooltip shows below its control after 450 ms of pointer or Tab focus. A
+press, Esc on the control, or the control being hidden or disabled closes it,
+and it stays closed until the pointer leaves and comes back. One shows at a
+time.
+
+With `OMUNCULUS_TEXT_AUDIT=1` the window loads the kit's `TextAudit`, which
+logs each text drawn out of its box, the window or a clipping item as a
+`text-fit:` line.
 
 ## Commands by page
 
-- On CONVERSATIONS, NEW CONVERSATION (N).
-- On CHAT, while a request waits on you REPLY (R), which brings the oldest
-  into view and opens its decision (`RequestDialog`, the card over the
-  page); while a note to you is unread MARK READ (M), which brings the
-  oldest into view and marks it read; then NEW CONVERSATION (N).
-- On MAP, FIT (F) and, while something waits on you, PENDING, which picks
-  it. With a node picked, instead of FIT and PENDING, what applies to it:
-  REPLY (R) while it has a pending request, the one waiting on you first;
-  ESCALATE (E) while one waits on you, which opens the decision with Enter
-  escalating; COMMENT (C) for a work, which puts the keyboard in its
-  inspector's composer with Enter leaving a note (Esc back to writing);
-  MARK READ (M) while it has notes unread, all of them; and WRITE (W), the
-  composer writing to its agent. The in-place cards and the note's check
-  still answer and mark one.
-- On LOG, FILTER (`/`) and COPY, the event picked or else the rows shown.
-- On COST, BACK.
-- On BOARD, its groupings and FILTER (`/`).
+- On PROJECTS, NEW PROJECT, which asks for an id and the path of the
+  project's config (typed, or picked with PICK FILE) and registers it with
+  the server (`POST /v1/projects`, the kit's `NewProjectDialog`); the list
+  is read again with the new row picked. It has no key. FILTER (`/`).
+- On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered on a
+  project).
+- In a conversation, from any of its pages: ANSWER (Alt+R) in the header
+  strip, which brings the newest question into view on the chat and puts the
+  keyboard in its card; the strip's chevron (Alt+P), which opens or closes
+  the progress on the chat and puts the keyboard in it; its counts, which
+  open TEAM and COST; the `1 NOTE` notice
+  (Alt+M on the chat); the quick chips (Alt+1 … Alt+9) on the chat; and NEW
+  CONVERSATION (Ctrl+N) in `⋯`. Elsewhere than on the chat a request is
+  answered in its decision (`RequestDialog`, the card over the page).
+- On TEAM, Alt+R answers the request waiting on you nearest the work picked
+  (its own, above it, below it), else the newest, or, with none for you, what
+  the work asked, instead of whoever decides. The items of `⋯` answer to
+  their chords: WRITE TO ITS AGENT (Alt+W), the composer of its THREAD tab
+  writing to its agent, and LEAVE A NOTE (Alt+C), the same composer leaving a
+  note (Esc back to writing). Those of the detail's `⋯`
+  too: ESCALATE (Alt+E) while it asked you something, which opens the
+  decision with Enter escalating, and the notes marked read (Alt+M), all of
+  them. Alt+L and Alt+G open its LOG and
+  CHANGES tabs, `[` and `]` the previous and next tab, `/` the filter. The
+  in-place cards and the note's check still answer and mark one.
+- On a work's thread, OPEN IN TEAM (Alt+O) and ITS LOG in `⋯`.
+- On LOG, `/` filters, and its own `⋯` copies the event picked or else the
+  rows shown.
+- On BOARD, its groupings (Alt+S, Alt+A, Alt+J) and FILTER (`/`).
+- On a work's page, BACK alone; ANSWER in its header strip (Alt+R) and its
+  team's tool (Alt+O).
 
 ## Keys and IPC
 
-The digit each page shows, or Ctrl with it, chooses it, and a command's
-letter, or Alt with it, runs the command, a field being written keeping its
-digits and letters and the picker of a new conversation its digits.
-Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
+Typed text never runs a command. The keys are in tiers, one table,
+`apps/kit/client/Shortcuts.js`, read by the shell, the pages' commands, the
+picker and the keys dialog:
 
-The IPC's `start`, `page <name>` (`conversations`, `board` and, with a
-conversation open, `chat`, `map`, `log`, `cost`), `conversations`,
-`agents`, `log`, `board`, `open <id>`, `work <id>` (a work of the board, on
-its page), `newConversation` and `back` move it too, and `send <message>`
+- No key of its own: anything that creates, sends, answers, grants, denies,
+  escalates, reverts, deletes or cancels is pressed or clicked. Enter in the
+  composer and in a request's words send what is written there, and a quick
+  chip over the composer is chosen by Alt and its number; no other key does.
+- Bare keys, for navigation without effect: the digit of a page, `/`, `[`
+  and `]` on the team page, `?`, F1 and Esc, the digits of the cards of the
+  picker, and N, H, B and P on the start screen. They act only while an item to navigate has the keyboard and
+  no text field saw a key in the last second (`Typing`, marked by every
+  `TextArea` and `TextBox`), so text that lost its field is not taken for
+  commands. With nothing holding the keyboard, a printable key does nothing
+  but say "Click a field to type"; text is never redirected into another
+  field.
+- Chords, which a field being written leaves to them: Ctrl and the digit of
+  a page, Ctrl+Tab and Ctrl+Shift+Tab for the next or the previous page,
+  Ctrl+N for a new conversation, Ctrl+P for the projects, Alt with a
+  letter for the commands of a page (R, P, M, O, W, C, E, L, G, F, S, A, J),
+  and Alt with a digit for the quick chips over the composer.
+
+The IPC's `start`, `page <name>` (`projects`, `conversations`, `board` and,
+with a conversation open, `chat`, `map`, `log`, `cost`), `projects`,
+`project <id>` (a project of the registry, at its conversations),
+`conversations`, `agents`, `log`, `board`, `open <id>`, `work <id>` (a work
+of the board, on its page), `newConversation` and `back` move it too, and `send <message>`
 sends a message to the conversation open, as the composer does.
 
 `?` or F1 opens a dialog of every key, by where it works
-(`ShortcutsDialog`). Esc first lets go of what the page holds — the map's
-inspector, the log's filter and the event picked, the board's filter — then
-goes back as BACK does.
+(`ShortcutsDialog`). Esc first lets go of what the page holds — the progress
+sheet, the team's detail page, the log's filter and the event
+picked, the board's filter — then goes back as BACK does.

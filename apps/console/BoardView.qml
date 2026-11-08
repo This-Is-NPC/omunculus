@@ -6,15 +6,17 @@ import "kit/ui"
 // BoardView is the works of every project the window reaches, those of
 // every conversation you may read there, on a board: a column per state —
 // open, waiting on a child, a request or your next message, broken and
-// waiting on its parent to decide, done, cancelled — the latest changed
-// first, each card a work. By agent or by project, the columns are crossed
-// by a lane of each; with several projects, chips keep one. It follows each project's stream while
-// it is on screen. A card opened opens its conversation's map with the work
-// picked, on its project. `/` goes to the filter, which keeps the works
-// whose title, project, conversation, workflow, stage or agent holds it;
-// the arrows move between the cards, across the
-// columns and down them; Esc on the filter empties it, then goes back to the
-// cards, and on a card leaves.
+// waiting on its parent to decide, done, cancelled — each headed by a rule,
+// the latest changed first, each card a work. By agent or by project, the
+// columns are crossed by a lane of each; with several projects, chips keep
+// one. Under 700 px the board is one list instead, its rows under a rule of
+// each state, and of each lane. Its readout counts the works shown, for the
+// bar. A work opened opens its conversation's map with the work picked, on
+// its project. `/` goes to the filter, which keeps the works whose title,
+// project, conversation, workflow, stage or agent holds it; the arrows move
+// between the cards, across the columns and down them, or along the list;
+// Esc on the filter empties it, then goes back to the works, and on a work
+// leaves.
 Item {
   id: board
 
@@ -23,24 +25,45 @@ Item {
   // The project whose works alone are shown, or "" for all of them.
   property string project: ""
   property string filter: ""
-  // The time now, which the cards' ages follow.
+  // The time now, which the works' ages follow.
   property real now: Date.now()
   Timer { interval: 30000; repeat: true; running: board.visible; onTriggered: board.now = Date.now() }
   signal opened(var work)
   signal leave()
 
-  readonly property var states: [
+  readonly property string readout: shown.length + (shown.length === 1 ? " WORK" : " WORKS")
+
+  readonly property var stateColumns: [
     { key: "open", tip: "an agent has it" },
     { key: "waiting", tip: "on a child, a request or your next message" },
     { key: "broken", tip: "it broke; its parent decides" },
     { key: "done", tip: "" },
     { key: "cancelled", tip: "" }
   ]
-  readonly property int gap: 12
   readonly property int narrowest: 200
 
   // A work that broke waits on its parent without waiting on anything named.
   function stateOf(work) { return work.state === "waiting" && !work.waiting ? "broken" : work.state }
+
+  // What the board says of a work: the agent it is with, its project, its
+  // stage of how many, and what it waits on; the conversation it is in and
+  // the work it came from; how long since it changed; whether it runs now.
+  function metaOf(work) {
+    const lane = Omunculus.laneOf(work)
+    return [
+      Omunculus.agentOf(work),
+      work.project,
+      lane ? "stage " + lane.steps[lane.at].name + " " + (lane.at + 1) + "/" + lane.steps.length : "",
+      work.state === "waiting" && work.waiting ? "on a " + work.waiting : ""
+    ].filter(part => part !== "").join(Theme.type.meta.separator)
+  }
+  function originOf(work) {
+    const above = work.parent_id ? Omunculus.board.find(item => item.project === work.project && item.id === work.parent_id) : null
+    return ["in " + Omunculus.conversationLabel(work.conversation_id), above ? "under " + above.title : ""]
+      .filter(part => part !== "").join(Theme.type.meta.separator)
+  }
+  function ageOf(work) { return Omunculus.ago(work.updated_at || work.created_at, now) }
+  function runs(work) { return Omunculus.boardBusy.includes(work.project + "/" + work.id) }
 
   readonly property var shown: {
     const words = filter.toLowerCase().split(/\s+/).filter(word => word)
@@ -51,12 +74,15 @@ Item {
       })
       .sort((a, b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at))
   }
+  readonly property string emptyText: Omunculus.board.length === 0 ? "no work yet" : "no work matches “" + board.filter + "”"
+  // Whether the board is one list rather than columns side by side.
+  readonly property bool stacked: width < 700
   // Every state where there is room for them all, else those with a work.
   readonly property var columns: {
-    const used = states.filter(state => shown.some(work => stateOf(work) === state.key))
-    return width >= states.length * (narrowest + gap) || used.length === 0 ? states : used
+    const used = stateColumns.filter(state => shown.some(work => stateOf(work) === state.key))
+    return width >= stateColumns.length * (narrowest + Theme.space.gap) || used.length === 0 ? stateColumns : used
   }
-  readonly property real columnWidth: Math.floor((width - (columns.length - 1) * gap) / columns.length)
+  readonly property real columnWidth: Math.floor((width - (columns.length - 1) * Theme.space.gap) / columns.length)
   // The lane of a work: its agent's, or its project's.
   function laneOf(work) { return group === "agent" ? Omunculus.agentOf(work) : work.project }
   // The lanes: one for every work, or one per agent or project with a work
@@ -69,12 +95,20 @@ Item {
   // arrows go.
   readonly property var grid: columns.map(column => [].concat(...lanes.map(lane => cell(lane, column.key).map(work => work.id))))
   readonly property var first: grid.reduce((found, ids) => found || ids[0] || "", "")
+  // The list's rows: each lane's works by state, under the rule of both.
+  readonly property var listed: [].concat(...lanes.map(lane => [].concat(...stateColumns.map(column => {
+    const works = cell(lane, column.key)
+    const title = (lane === null ? "" : lane + Theme.type.meta.separator) + column.key + "  " + works.length
+    return works.map(work => Object.assign({ group: title }, work))
+  }))))
 
   // Work id -> its card, and the one the keyboard was on last.
   property var cards: ({})
   property string current: ""
 
   function focusEntry() {
+    if (stacked)
+      return list.focusRows()
     const item = cards[current] || cards[first]
     if (item)
       item.forceActiveFocus()
@@ -117,40 +151,46 @@ Item {
   Keys.onPressed: event => {
     if (event.text === "/")
       focusFilter()
-    else if ([Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right].includes(event.key) && cards[first])
-      cards[first].forceActiveFocus()
+    else if ([Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right].includes(event.key) && (stacked || cards[first]))
+      focusEntry()
     else
       return
     event.accepted = true
   }
 
+  // A state's rule over its column, with how many works are in it, and
+  // what it means on hover.
+  component StateHead: Item {
+    id: head
+    required property var column
+    required property int count
+    width: board.columnWidth
+    height: Theme.size.rule
+    Kicker {
+      anchors.fill: parent
+      text: head.column.key + "  " + head.count
+      tone: head.count > 0 ? Omunculus.stateTone(head.column.key) : Theme.dim
+    }
+    HoverHandler { id: hover }
+    Hint { active: hover.hovered; text: head.column.tip }
+  }
+
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.block
 
-    RowLayout {
+    FilterBox {
+      id: filterBox
       Layout.fillWidth: true
-      spacing: 10
-      FilterBox {
-        id: filterBox
-        Layout.fillWidth: true
-        placeholderText: "filter by title, project, conversation, workflow, stage or agent"
-        onApplied: value => board.filter = value
-        onLeave: board.focusEntry()
-      }
-      Label {
-        text: board.shown.length + (board.filter.trim() ? " of " + Omunculus.board.length : "") + (Omunculus.board.length === 1 ? " work" : " works")
-        color: Theme.dim
-        font.pixelSize: 10
-        font.letterSpacing: 1
-      }
+      placeholderText: "Filter by title, project, conversation, workflow, stage or agent…  /"
+      onApplied: value => board.filter = value
+      onLeave: board.focusEntry()
     }
 
     // With several projects, one may be kept alone.
-    Flow {
+    ChipStrip {
       Layout.fillWidth: true
       visible: Omunculus.boardProjects.length > 1
-      spacing: 6
       Chip {
         text: "ALL PROJECTS"
         checked: board.project === ""
@@ -159,9 +199,10 @@ Item {
       }
       Repeater {
         model: Omunculus.boardProjects
-        delegate: Chip {
+        delegate: TagChip {
           required property var modelData
-          text: modelData.id.toUpperCase() + "  " + (Omunculus.boardWorks[modelData.id] || []).length
+          tag: modelData.id
+          text: "#" + modelData.id + "  " + (Omunculus.boardWorks[modelData.id] || []).length
           checked: board.project === modelData.id
           dim: board.project !== modelData.id
           onClicked: board.project = board.project === modelData.id ? "" : modelData.id
@@ -169,46 +210,51 @@ Item {
       }
     }
 
-    // The columns' heads: each state, with how many works are in it.
+    // Narrow: one list, under a rule of each state and lane.
+    DataTable {
+      id: list
+      visible: board.stacked
+      Layout.fillWidth: true
+      Layout.fillHeight: true
+      rows: board.stacked ? board.listed : []
+      idOf: work => work.project + "/" + work.id
+      section: "group"
+      columns: [
+        { title: "work", weight: 0.3 },
+        { title: "about", weight: 0.3 },
+        { title: "from", weight: 0.25 },
+        { title: "changed", weight: 0.15 }
+      ]
+      cells: work => [work.title, board.metaOf(work), board.originOf(work), board.runs(work) ? "RUNNING" : board.ageOf(work)]
+      tone: (work, column) => column === 3 && !board.runs(work) ? Theme.dim : ""
+      dotted: work => board.runs(work)
+      dimmed: work => work.state === "done" || work.state === "cancelled"
+      stacked: [[0], [1], [2]]
+      status: 3
+      emptyText: board.emptyText
+      onOpened: work => board.opened(work)
+      onTopLeft: board.focusFilter()
+      onBackRequested: board.leave()
+    }
+
+    // Wide: the columns' rules, each state with how many works are in it.
     Row {
       Layout.fillWidth: true
-      spacing: board.gap
+      visible: !board.stacked
+      spacing: Theme.space.gap
       Repeater {
-        model: board.columns
-        delegate: Rectangle {
-          id: head
+        model: board.stacked ? [] : board.columns
+        delegate: StateHead {
           required property var modelData
-          readonly property int count: board.shown.filter(work => board.stateOf(work) === modelData.key).length
-          width: board.columnWidth
-          height: 34
-          color: "transparent"
-          border.color: Theme.line
-          RowLayout {
-            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-            spacing: 8
-            Dot { tone: Omunculus.stateTone(head.modelData.key); size: 7; filled: head.count > 0 }
-            DecodeLabel {
-              value: head.modelData.key.toUpperCase()
-              color: head.count > 0 ? Theme.foreground : Theme.dim
-              font.pixelSize: 11
-              font.letterSpacing: 3
-            }
-            Label {
-              Layout.fillWidth: true
-              text: head.modelData.tip
-              color: Theme.dim
-              font.pixelSize: 9
-              elide: Text.ElideRight
-              visible: board.columnWidth > 260
-            }
-            Label { text: head.count; color: Theme.dim; font.pixelSize: 11 }
-          }
+          column: modelData
+          count: board.shown.filter(work => board.stateOf(work) === modelData.key).length
         }
       }
     }
 
     ScrollPage {
       id: scroll
+      visible: !board.stacked
       Layout.fillWidth: true
       Layout.fillHeight: true
       contentHeight: lanesColumn.implicitHeight
@@ -216,75 +262,49 @@ Item {
       Column {
         id: lanesColumn
         width: scroll.width
-        spacing: 16
+        spacing: Theme.space.section
 
         Repeater {
-          model: board.lanes
+          model: board.stacked ? [] : board.lanes
           delegate: Column {
             id: lane
             required property var modelData
-            required property int index
             width: lanesColumn.width
-            spacing: 8
+            spacing: Theme.space.tight
 
-            // A lane opens with a hairline, its name — an agent's with its
-            // portrait — and how many works it holds.
-            Rectangle {
+            // A lane opens with a rule of its name, an agent's in its
+            // colour, and how many works it holds.
+            Kicker {
               visible: lane.modelData !== null
               width: parent.width
-              height: 1
-              color: Theme.line
-              opacity: lane.index > 0 ? 1 : 0
-            }
-            RowLayout {
-              visible: lane.modelData !== null
-              width: parent.width
-              spacing: 10
-              readonly property var works: board.shown.filter(work => board.laneOf(work) === lane.modelData)
-              Portrait {
-                visible: board.group === "agent"
-                Layout.preferredWidth: 26
-                Layout.preferredHeight: 26
-                agent: lane.modelData || ""
-                source: Omunculus.imageOf(lane.modelData || "", parent.works.length > 0 ? parent.works[0].project : "")
-                tone: Omunculus.toneOf(lane.modelData || "")
-                framed: true
-                initialSize: 12
-              }
-              Label {
-                Layout.fillWidth: true
-                text: board.group === "project" ? (lane.modelData || "").toUpperCase() : lane.modelData || ""
-                color: board.group === "agent" ? Omunculus.toneOf(lane.modelData || "") : Theme.foreground
-                font.pixelSize: 12
-                font.letterSpacing: board.group === "project" ? 3 : 1.5
-                elide: Text.ElideRight
-              }
-              Label {
-                text: parent.works.length
-                color: Theme.dim
-                font.pixelSize: 11
-              }
+              height: Theme.size.rule
+              text: (lane.modelData || "") + "  " + board.shown.filter(work => board.laneOf(work) === lane.modelData).length
+              tone: board.group === "agent" ? Omunculus.toneOf(lane.modelData || "") : Theme.foreground
             }
 
             Row {
-              spacing: board.gap
+              spacing: Theme.space.gap
               Repeater {
                 model: board.columns
                 delegate: Column {
-                  id: column
+                  id: stateColumn
                   required property var modelData
+                  readonly property var works: board.cell(lane.modelData, modelData.key)
                   width: board.columnWidth
                   // Never empty to the Row, which places only what has a size.
                   height: Math.max(1, implicitHeight)
-                  spacing: 8
+                  spacing: Theme.space.tight
                   Repeater {
-                    model: board.cell(lane.modelData, column.modelData.key)
+                    model: stateColumn.works
                     delegate: BoardCard {
                       id: card
                       required property var modelData
                       work: modelData
-                      now: board.now
-                      width: column.width
+                      meta: board.metaOf(modelData)
+                      origin: board.originOf(modelData)
+                      age: board.ageOf(modelData)
+                      running: board.runs(modelData)
+                      width: stateColumn.width
                       Keys.onPressed: event => event.accepted = board.move(work.id, event.key)
                       Keys.onEscapePressed: board.leave()
                       onActiveFocusChanged: if (activeFocus) board.current = work.id
@@ -304,8 +324,8 @@ Item {
 
   Label {
     anchors.centerIn: parent
-    visible: board.shown.length === 0
-    text: Omunculus.board.length === 0 ? "no work yet" : "no work matches “" + board.filter + "”"
+    visible: !board.stacked && board.shown.length === 0
+    text: board.emptyText
     color: Theme.dim
     font.pixelSize: 11
     font.letterSpacing: 2

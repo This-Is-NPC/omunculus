@@ -3,26 +3,10 @@ import Quickshell
 import "kit/ui"
 
 ShellRoot {
-  // A word pressed as a link, as the projects in the corner are; the
-  // keyboard reaches it, and its hit area is larger than its letters.
-  component Link: DecodeLabel {
-    id: link
-    property bool current: false
-    signal clicked()
-    activeFocusOnTab: true
-    Keys.onReturnPressed: clicked()
-    Keys.onSpacePressed: clicked()
-    color: current ? Theme.primary : linkPointer.containsMouse || activeFocus ? Theme.foreground : Theme.dim
-    font.pixelSize: 11
-    font.letterSpacing: 4
-    MouseArea { id: linkPointer; anchors { fill: parent; margins: -12 } hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: link.clicked() }
-    FocusRing { anchors.margins: -4 }
-  }
-
-  // The studio, laid out as a canvas: the sections a carousel down the left,
-  // the one on screen at its head beside the bar of its commands; the flow
-  // fills the whole window under them, the other sections stand right of the
-  // carousel over the canvas's dots.
+  // The studio, laid out as a canvas: the sections a rail down the left, the
+  // one on screen marked beside the bar of its commands; the flow fills the
+  // whole window under them, the other sections stand right of the rail over
+  // the canvas's dots.
   FloatingWindow {
     id: window
 
@@ -56,12 +40,11 @@ ShellRoot {
       ? [adding("AGENT", 3, "agents", "primary"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces"), { text: "NEW PROJECT", short: "PROJECT", icon: "plus", run: () => newProject.open() }]
       : settings.commands
 
-    // Chooses a section and gives it the keyboard, so the carousel folds
+    // Chooses a section and gives it the keyboard, so the rail folds
     // away and the arrows reach what is on screen.
     function choose(index) {
       settings.forget()
       page = (index + sections.length) % sections.length
-      rail.pinned = false
       Qt.callLater(() => page === 0 ? flow.forceActiveFocus() : settings.takeFocus())
     }
 
@@ -82,7 +65,7 @@ ShellRoot {
         visible: window.page === 0
         leftInset: rail.x + rail.foldedWidth
         topInset: bar.y + bar.height
-        bottomInset: footer.height
+        bottomInset: foot.height
         onAgentPicked: name => settings.reveal("agents", name)
       }
 
@@ -104,7 +87,7 @@ ShellRoot {
       }
 
       Rectangle {
-        anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20; top: bar.bottom; topMargin: 16; bottom: footer.top; bottomMargin: 12 }
+        anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20; top: bar.bottom; topMargin: 16; bottom: foot.top; bottomMargin: 12 }
         visible: window.page !== 0
         color: Qt.alpha(Theme.background, 0.92)
         border.color: Theme.line
@@ -137,17 +120,13 @@ ShellRoot {
         height: rail.headHeight
         commands: window.commands
         section: window.page
-        message: Studio.message
-        error: Studio.messageIsError
-        offline: !Studio.connected
-        notices: Studio.noticeCount
       }
 
       // The footer: the studio, and the project the flow draws; with several
       // in the registry, each is named and picking one draws it. The
       // sections end above it.
       Rectangle {
-        id: footer
+        id: foot
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: 52
         // Over the flow, it hides what runs under it.
@@ -160,10 +139,11 @@ ShellRoot {
           Label { anchors.verticalCenter: parent.verticalCenter; text: "STUDIO"; color: Theme.secondary; font.pixelSize: 10; font.letterSpacing: 4 }
           Repeater {
             model: Studio.projects.length > 0 ? Studio.projects.map(project => project.id) : [Studio.project]
-            delegate: Link {
+            delegate: LinkLabel {
               id: projectName
               required property string modelData
-              anchors.verticalCenter: parent.verticalCenter
+              // A delegate torn down has no parent.
+              anchors.verticalCenter: parent ? parent.verticalCenter : undefined
               value: modelData.toUpperCase()
               current: modelData === flow.projectId
               onClicked: { flow.projectId = projectName.modelData; window.page = 0 }
@@ -172,18 +152,27 @@ ShellRoot {
         }
       }
 
+      // What the window tells, at its bottom right, over the footer.
+      ToastStack {
+        anchors { right: parent.right; rightMargin: 20; bottom: foot.top; bottomMargin: 12 }
+        maxHeight: window.height / 2
+        notices: Studio.notices.items
+        onDismissed: id => Studio.notices.dismiss(id)
+      }
+
       NewProjectDialog {
         id: newProject
-        onRegistered: id => { flow.projectId = id; window.page = 0 }
+        client: Studio.client
+        onRegistered: id => { Studio.loadOverviews(); flow.projectId = id; window.page = 0 }
       }
 
       ZoomControl {
-        anchors { right: parent.right; rightMargin: 20; verticalCenter: footer.verticalCenter }
+        anchors { right: parent.right; rightMargin: 20; verticalCenter: foot.verticalCenter }
         visible: window.page === 0
         target: flow
       }
 
-      // 1 to 8, or Ctrl with them, choose a section (a field being written keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
+      // 1 to 8, or Ctrl with them, choose a section (a field being written keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab go to the next or the previous section.
       Repeater {
         model: window.sections.length
         delegate: Item {

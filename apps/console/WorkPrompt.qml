@@ -53,11 +53,11 @@ Item {
 
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.gap
 
     RowLayout {
       Layout.fillWidth: true
-      spacing: 8
+      spacing: Theme.space.tight
       Label {
         Layout.fillWidth: true
         text: section.shownRun

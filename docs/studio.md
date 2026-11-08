@@ -17,10 +17,12 @@ socket, all through `POST /v1/call`, and tries a model through `model_test`.
 
 ## The sections and the bar
 
-Its sections are a carousel down the left edge, the one on screen at the
-top beside the bar of its commands. They are folded to their numbers until
-the pointer or the keyboard is in them, or a tap on the head unfolds them
-over the canvas. 1 to 8 (or Ctrl with them) and Ctrl+Tab turn it.
+Its sections are a rail down the left edge in a fixed order, the one on
+screen marked in its place, beside the bar of its commands. They are folded
+to their numbers until the pointer or the keyboard is in them, when they
+unfold over the canvas; a window at least 1100 px wide always shows their
+names. One click chooses a section and folds the rail. 1 to 8 (or Ctrl with
+them) and Ctrl+Tab choose one.
 
 The bar ranks its commands as the kit's `PageBar` does — BACK apart, the
 main action solid (an ADD, EDIT, SAVE), the others outlined, DELETE and
@@ -70,8 +72,9 @@ and picking one draws it.
 The flow's bar holds what the project can be given — an agent, a workflow, a
 model, a provider, a workspace — each opening the section it is added in;
 when the names do not fit, each drops its ADD. NEW PROJECT asks for an id and
-the path of an `omunculus.toml`, and registers it with the running server
-(`POST /v1/projects`); the flow then draws it.
+the path of an `omunculus.toml`, typed or chosen with PICK FILE, and
+registers it with the running server (`POST /v1/projects`); the flow then
+draws it. A refusal shows in the dialog, which stays open.
 
 ## The other sections
 

@@ -1,11 +1,13 @@
 import QtQuick
 import "kit/ui"
 
-// SpeechTurn is one thing said in the conversation, in a box, with the files
-// attached with it below: yours on the right, each agent's on the left tinted
-// with its colour, under its portrait; a note the harness left, no one's
-// words, on the left too, muted, under NOTE where a name would be. A line that continues the same
-// speaker's turn drops the name and time and sits close to the one before.
+// SpeechTurn is one thing said in the conversation, in a box under a heading
+// of its speaker's tone dot, name and time, with the files attached with it
+// below: yours on the right, its lines left aligned in the box; each agent's
+// on the left tinted with its colour; a note the harness left, no one's
+// words, on the left too, muted, under NOTE where a name would be. A line
+// that continues the same speaker's turn drops the heading and sits close to
+// the one before.
 Item {
   id: turn
 
@@ -13,52 +15,62 @@ Item {
   required property string text
   required property bool mine
   property bool note: false
+  // Yours, still on its way: dim, SENDING… where the time goes.
+  property bool pending: false
   required property string stamp
   // The files attached with it, as JSON.
   required property string files
   property bool continued: false
 
   readonly property var attached: JSON.parse(files)
-  readonly property color tone: Omunculus.toneOf(who)
-  // At most this wide: the whole width on a narrow window, about three quarters otherwise.
-  readonly property real widest: turn.width < 520 ? turn.width : turn.width * 0.78
-  readonly property real inset: 10
+  readonly property color tone: turn.note ? Theme.dim : Omunculus.toneOf(who)
+  // At most this wide: the whole width on a narrow window, about three
+  // quarters otherwise, and about 70 characters at most per line.
+  readonly property real widest: Math.min(620, turn.width < Theme.size.measureFrom ? turn.width : turn.width * Theme.size.measure)
+  readonly property real inset: Theme.size.bubbleInset
 
-  implicitHeight: (chips.visible ? chips.y + chips.height : body.y + body.height) + 2
+  implicitHeight: (chips.visible ? chips.y + chips.height : body.y + body.height) + Theme.space.row
 
   Column {
     id: body
-    y: turn.continued ? 2 : 14
+    y: turn.continued ? Theme.space.row : Theme.space.inset
     width: Math.min(turn.widest, Math.max(heading.implicitWidth, line.implicitWidth + 2 * turn.inset))
     x: turn.mine ? turn.width - width : 0
-    spacing: 4
+    spacing: Theme.space.line
+    opacity: turn.pending ? 0.55 : 1
 
     Row {
       id: heading
       visible: !turn.continued
-      spacing: 8
+      spacing: Theme.space.tight
       x: turn.mine ? body.width - width : 0
-      Rectangle { visible: turn.mine; width: 5; height: 5; anchors.verticalCenter: parent.verticalCenter; color: turn.tone }
-      Portrait { visible: !turn.mine && !turn.note && turn.who !== ""; width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
-      Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
-      Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
+      Dot { anchors.verticalCenter: parent.verticalCenter; tone: turn.tone }
+      Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: Theme.type.name.size; font.letterSpacing: Theme.type.name.tracking }
+      Label {
+        anchors.verticalCenter: parent.verticalCenter
+        text: turn.pending ? "SENDING…" : turn.stamp
+        color: Qt.alpha(turn.tone, Theme.type.stamp.opacity)
+        font.pixelSize: Theme.type.stamp.size
+        font.letterSpacing: Theme.type.stamp.tracking
+      }
     }
 
     Rectangle {
       width: parent.width
-      height: line.implicitHeight + 14
-      color: turn.mine ? Theme.highlight : Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
+      height: line.implicitHeight + Theme.space.inset
+      color: turn.mine ? Theme.bubble() : Theme.bubble(turn.tone)
       Prose {
         id: line
         anchors.verticalCenter: parent.verticalCenter
         x: turn.inset
         width: parent.width - 2 * turn.inset
-        horizontalAlignment: turn.mine ? Text.AlignRight : Text.AlignLeft
+        // Yours sits on the right, its lines read from the left.
+        horizontalAlignment: Text.AlignLeft
         plain: turn.mine
         source: turn.mine ? turn.text : Omunculus.inline(turn.text)
         color: Theme.foreground
-        font.pixelSize: 12
-        lineHeight: 1.2
+        font.pixelSize: Theme.type.body.size
+        lineHeight: Theme.type.body.lineHeight
         wrapMode: Text.Wrap
       }
     }
@@ -69,10 +81,10 @@ Item {
     id: chips
     visible: turn.attached.length > 0
     x: turn.mine ? turn.width - width : 0
-    y: body.y + body.height + 6
+    y: body.y + body.height + Theme.space.tight
     width: turn.widest
     layoutDirection: turn.mine ? Qt.RightToLeft : Qt.LeftToRight
-    spacing: 6
+    spacing: Theme.space.tight
     Repeater {
       model: turn.attached
       delegate: FileChip {

@@ -1,71 +1,68 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui"
 
-// ShortcutsDialog lists every key the window answers to, by where it works;
-// ? or F1 opens it and the arrows or PgUp/PgDn scroll it.
+// ShortcutsDialog lists every key the window answers to, by where it works,
+// each key beside what it does, or above it in a dialog under 480 px wide;
+// ? or F1 opens it and the arrows or PgUp/PgDn scroll it. It stays short of
+// the window's edges as ModalDialog keeps it.
 ModalDialog {
   id: dialog
 
   maxWidth: 620
-  height: Math.min(parent.height - 48, panel.implicitHeight)
+  height: Math.min(parent.height - Theme.size.gutter * 2, panel.implicitHeight)
   onOpened: scroll.forceActiveFocus()
 
   // [group, [[keys, what they do]…]]; keys are written as they are pressed.
+  // Those with a key of the table are read from it; the others are the keys
+  // of the controls themselves. Nothing that sends, answers, grants, denies,
+  // escalates, reverts, deletes or cancels has a key of its own; a quick chip
+  // over the composer that decides is chosen by its chord.
   readonly property var groups: [
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
-      ["Enter · Space", "press the control"],
-      ["1 · 2 · …", "the page of that number: the conversations and the board, or, in a conversation, its chat, map, log and cost"],
-      ["Ctrl+1 · Ctrl+2 · …", "the same, from a field being written or the picker"],
-      ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
-      ["Esc", "let go of what the page holds, then back to where you were, at last the start"],
-      ["Alt + a key of the bar", "the key, from a field being written"],
-      ["? · F1", "these keys"]
+      ["Enter · Space", "press the control"]
+    ].concat(Shortcuts.rows("everywhere"), [
+      ["Alt + a key of the bar", "the key, from a field being written"]
+    ])],
+    ["typing", [
+      ["any key", "text goes only into a field; with none under the cursor, keys do nothing but say so"],
+      ["a bare key", "acts only on what you navigate, a second after the last key typed in a field"]
     ]],
-    ["start", [
-      ["N · H · B", "a new conversation, the conversations, the board"]
-    ]],
+    ["start", Shortcuts.rows("start")],
+    ["projects", [
+      ["↑ · ↓", "choose"],
+      ["Enter", "open it, at its conversations"]
+    ].concat(Shortcuts.rows("projects"))],
     ["conversations", [
       ["↑ · ↓", "choose"],
-      ["Enter", "open"],
-      ["N", "new conversation"],
-      ["/", "search"]
-    ]],
+      ["Enter", "open"]
+    ].concat(Shortcuts.rows("conversations"))],
     ["new conversation", [
       ["← · → · ↑ · ↓", "choose whom it is with"],
-      ["1 … 9 · Enter", "start it with them"]
-    ]],
-    ["chat", [
-      ["R", "answer the oldest request waiting on you"],
-      ["M", "show the oldest note to you and mark it read"],
-      ["N", "new conversation"]
-    ]],
-    ["map", [
-      ["F", "the whole map in view"],
-      ["R", "answer what the node picked asked"],
-      ["E", "escalate what it asked you"],
-      ["C", "leave it a note, without a run"],
-      ["M", "mark its notes read"],
-      ["W", "write to its agent"]
-    ]],
-    ["work", [
-      ["R", "answer what it asked you"],
-      ["O", "its conversation's map, the work picked"],
-      ["Esc", "back"]
-    ]],
+      ["Enter", "start it with them"]
+    ].concat(Shortcuts.rows("new conversation"))],
+    ["chat", Shortcuts.rows("chat")],
+    ["team", [
+      ["↑ · ↓", "move between the works; the detail follows"],
+      ["→ · ←", "unfold, fold; on a folded work, go to its parent"],
+      ["Enter", "open its detail, or its tabs beside the outline"]
+    ].concat(Shortcuts.rows("team"), [
+      ["Esc", "the detail, then the outline, then back"]
+    ])],
+    ["work", Shortcuts.rows("work").concat([["Esc", "back"]])],
+    ["thread", Shortcuts.rows("thread").concat([["Esc", "back"]])],
     ["board", [
       ["← · → · ↑ · ↓", "move between the works, across and down the columns"],
-      ["Enter · Space", "open the work on its page"],
-      ["S · A · P", "by state, a lane per agent, a lane per project"],
-      ["/", "filter the works"],
+      ["Enter · Space", "open the work on its page"]
+    ].concat(Shortcuts.rows("board"), [
       ["Esc", "empty the filter, then back to the works"]
-    ]],
-    ["log", [
-      ["/", "filter the events"],
+    ])],
+    ["log", Shortcuts.rows("log").concat([
       ["Esc", "empty the filter, then back to the rows"]
-    ]],
+    ])],
     ["timeline", [
       ["↑ · ↓ · PgUp · PgDn", "move between entries"],
       ["Home · End", "first and last entry"],
@@ -73,17 +70,18 @@ ModalDialog {
     ]],
     ["composer", [
       ["Enter", "send, or leave the note"],
+      ["Shift+Enter", "a new line"],
       ["Esc", "write to the agent rather than note"]
     ]],
     ["request", [
-      ["Enter", "in its words: answer, or escalate when escalating"]
+      ["Enter", "in its words: answer, or escalate when escalating"],
+      ["Ctrl+Enter", "in a list of questions: send the answers"]
     ]]
   ]
 
   contentItem: DialogPanel {
     id: panel
     dialogOpen: dialog.visible
-    implicitHeight: list.implicitHeight + 56
     index: "?"
     title: "keys"
     active: true
@@ -91,33 +89,42 @@ ModalDialog {
     ScrollPage {
       id: scroll
       anchors.fill: parent
+      // The panel is as tall as its list, up to the dialog's height.
+      implicitHeight: list.implicitHeight
       contentHeight: list.implicitHeight
 
       ColumnLayout {
         id: list
         width: scroll.width
-        spacing: 14
+        spacing: Theme.space.block
         Repeater {
           model: dialog.groups
           delegate: ColumnLayout {
             id: group
             required property var modelData
             Layout.fillWidth: true
-            spacing: 6
+            spacing: Theme.space.tight
             Kicker { Layout.fillWidth: true; text: group.modelData[0] }
             Repeater {
               model: group.modelData[1]
-              delegate: RowLayout {
+              delegate: GridLayout {
                 id: key
                 required property var modelData
                 Layout.fillWidth: true
-                spacing: 14
+                columns: list.width < 480 ? 1 : 2
+                columnSpacing: Theme.space.block
+                rowSpacing: Theme.space.row
+                // A long chord wraps within its column rather than running over what it does.
                 Label {
-                  Layout.preferredWidth: 200
+                  Layout.preferredWidth: key.columns === 1 ? -1 : 170
+                  Layout.maximumWidth: key.columns === 1 ? -1 : 170
+                  Layout.fillWidth: key.columns === 1
+                  Layout.alignment: Qt.AlignTop
                   text: key.modelData[0]
                   color: Theme.primary
                   font.pixelSize: 11
                   font.letterSpacing: 1
+                  wrapMode: Text.Wrap
                 }
                 Label {
                   Layout.fillWidth: true
