@@ -91,6 +91,20 @@ defmodule Omunculus.Config.PacksTest do
     assert config.agents["hand"].ceiling.granted == ["end", "write"]
   end
 
+  test "the dream team hands every page item down together after base" do
+    path = Path.expand("../../../packs/dream-team/pack.toml", __DIR__)
+    text = Toml.decode!(File.read!(path))["agents"]["administrator"]["text"]
+
+    refute text =~ "Hand down the next only when the last came back done."
+    refute text =~ "one item at a time"
+    assert text =~ "hand base down alone"
+
+    assert text =~
+             "hand every page item down together, in one step, within [execution] max_concurrent and the local server's four slots"
+
+    assert text =~ "Hand down the release only when every page item is done"
+  end
+
   test "refuses what it cannot bind or lay", %{dir: dir, pack: pack} do
     other = Path.join(dir, "other")
     File.mkdir_p!(other)

@@ -21,9 +21,12 @@ whole to homologation, then to production once the person grants `promote`.
 The administrator first writes `docs/plan.md`: a `## base` item, the
 structure every page shares, then a `## page: <name>` item per page, each
 with what it shows and how to check it. Each item is a work of the
-workflow `page` — build (surgeon), review (copilot) — handed down one at a
-time, base first; then one work of the workflow `release` — publish, then
-promote (clerk) — takes the whole out. The pack's tool `deliver`, the
+workflow `page` — build (surgeon), review (copilot). Base is handed down
+first and alone. Once it is done, every page item is handed down together,
+in one step, within `[execution] max_concurrent` and the local server's
+four slots. One work of the workflow `release` — publish, then promote
+(clerk) — is handed down only when every page item is done, and takes the
+whole out. The pack's tool `deliver`, the
 administrator's way to conclude, refuses a build until every item and the
 release came back done. A release that breaks because of what an item
 built is not sent back to hold it: the administrator retires it, hands the
