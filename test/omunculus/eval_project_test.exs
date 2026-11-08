@@ -118,7 +118,17 @@ defmodule Omunculus.EvalProjectTest do
       })
 
     stage = Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
-    clerk = configured_actor(conn, config, conversation, "clerk", child, 2, stage)
+
+    clerk =
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "clerk",
+        child,
+        config.agents["clerk"].depth,
+        stage
+      )
 
     assert {:ok, %{ok: true}, made} =
              Harness.dispatch(
@@ -133,7 +143,16 @@ defmodule Omunculus.EvalProjectTest do
              )
 
     origin = Enum.find(made, &(&1.type == "request")).request_id
-    seller = configured_actor(conn, config, conversation, "seller", root, 0)
+
+    seller =
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "seller",
+        root,
+        config.agents["seller"].depth
+      )
 
     assert {:ok, %{ok: true}, made} =
              Harness.dispatch(
@@ -156,7 +175,19 @@ defmodule Omunculus.EvalProjectTest do
 
     assert {:ok, _} = Store.close_run(conn, seller.run_id)
     assert {:ok, _} = Store.close_run(conn, sales.run_id)
-    resumed = configured_actor(conn, config, conversation, "seller", root, 0, nil, envelope)
+
+    resumed =
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "seller",
+        root,
+        config.agents["seller"].depth,
+        nil,
+        envelope
+      )
+
     assert {:ok, _} = Store.close_run(conn, resumed.run_id)
     assert {:ok, run} = Store.view(conn, "run", resumed.run_id)
 
@@ -624,7 +655,17 @@ defmodule Omunculus.EvalProjectTest do
         })
 
       stage = Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
-      clerk = configured_actor(conn, config, conversation, "clerk", release, 2, stage)
+
+      clerk =
+        configured_actor(
+          conn,
+          config,
+          conversation,
+          "clerk",
+          release,
+          config.agents["clerk"].depth,
+          stage
+        )
 
       assert {:ok, %{ok: true}, events} =
                Harness.dispatch(
@@ -645,7 +686,7 @@ defmodule Omunculus.EvalProjectTest do
       upstream =
         Enum.reduce(
           [
-            {"seller", seller_work, 0,
+            {"seller", seller_work, config.agents["seller"].depth,
              Enum.find(config.workflows["sale"], &(&1.name == "build")).ceiling},
             {"sales", nil, 0, nil}
           ],
@@ -770,7 +811,16 @@ defmodule Omunculus.EvalProjectTest do
             stage: "qualify"
           })
 
-        actor = configured_actor(conn, config, conversation, "seller", work, 0, stage)
+        actor =
+          configured_actor(
+            conn,
+            config,
+            conversation,
+            "seller",
+            work,
+            config.agents["seller"].depth,
+            stage
+          )
 
         assert {:ok, %{ok: true}, events} =
                  Harness.dispatch(project, "ask", %{"question" => question}, actor)

@@ -7,7 +7,9 @@ defmodule Omunculus.Tools.Work do
   and one `delegate` per item. In a run without a work it emits the `work`
   action with the report and the items, which creates the root work with
   the report as its first comment: the one item itself, or, when each
-  names an agent or a workflow of depth 1, a root that hands them down. Its manifest's
+  names an agent or a workflow of depth 1, a root that hands them down.
+  Where depth 0 requires no workflow and depth 1 requires one, a run
+  without `delegate` opens that workflow as the root. Its manifest's
   `then` appends `end`.
   """
 

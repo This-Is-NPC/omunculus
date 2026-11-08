@@ -339,13 +339,18 @@ defmodule Omunculus.Run do
   end
 
   defp resolve_agent(config, conn, work, nil) do
-    depth = Store.work_depth(conn, work)
+    tree = Store.work_depth(conn, work)
 
     with {:ok, steps} <- workflow_steps(config, work),
          {:ok, step} <- step_for(steps, work.stage) do
       case step do
-        nil -> assignee_agent(config, work.assignee, depth)
-        step -> {:ok, {step.agent, agent_text(config, step.agent), depth, step.ceiling}}
+        nil ->
+          assignee_agent(config, work.assignee, Config.placed_depth(config, tree, work.assignee))
+
+        step ->
+          {:ok,
+           {step.agent, agent_text(config, step.agent),
+            Config.placed_depth(config, tree, step.agent), step.ceiling}}
       end
     end
   end

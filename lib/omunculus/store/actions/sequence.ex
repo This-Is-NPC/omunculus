@@ -89,7 +89,8 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <- Helpers.ensure_text(:delegate, body, "goal"),
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
          :ok <- no_broken_child(:delegate, conn, parent.id),
-         child_depth = View.work_depth(conn, parent) + 1,
+         child_depth =
+           Config.placed_depth(ctx.config, View.work_depth(conn, parent), parent.assignee) + 1,
          {:ok, start} <-
            Helpers.tag_error(
              :delegate,
@@ -231,7 +232,9 @@ defmodule Omunculus.Store.Actions.Sequence do
        do: {:error, {:reopen, :agent_with_workflow}}
 
   defp reopen_assignee(conn, config, child, agent, nil) do
-    if List.keymember?(Config.agents_at_depth(config, View.work_depth(conn, child)), agent, 0),
+    depth = Config.placed_depth(config, View.work_depth(conn, child), child.assignee)
+
+    if List.keymember?(Config.agents_at_depth(config, depth), agent, 0),
       do: {:ok, {child.stage, agent}},
       else: {:error, {:reopen, {:agent_not_allowed, agent}}}
   end

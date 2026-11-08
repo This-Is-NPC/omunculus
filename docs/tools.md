@@ -206,7 +206,7 @@ argument of the call.
 | `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
-| `agents` | the agents and workflows a new work may name, below the run's work (depth 0 without one): the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
+| `agents` | the agents and workflows a new work may name, one depth below the run (1 when the run has no work). The run's depth is the work's place in the tree, or its assignee's depth when that is deeper. Listed: the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
 | `paths` | the path permissions of the run's ceiling | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`) | |
 | `skills` | the Agent Skills the run's ceiling has, each its `name`, `description` and `dir` | |
@@ -300,16 +300,21 @@ to create, each with a `title`, a `goal`, and optionally an `agent` or a
 `workflow`, and a `workspace`.
 
 - In a run on a work W it chains `comment` with the report on W, one
-  `delegate` per item — children of W, one depth below — and `end`.
+  `delegate` per item — children of W, one depth below the run, which is
+  the work's place in the tree or its assignee's depth when that is
+  deeper — and `end`.
 - In the run `send` opens, which has no work, it takes exactly one item
   and emits the `work` action: the store creates the root work at depth 0
   with the report as its first comment, links the run to it and opens
-  the root's run once this run has ended.
+  the root's run once this run has ended. Where depth 0 requires no
+  workflow and depth 1 requires one, a run without `delegate` opens that
+  workflow as the root; naming an agent is refused.
 
 `delegate` is only a chain step (`triggers = ["chain"]`), so an agent
 with `work` needs `delegate`, `end` and `comment` as have too, but for
 one that never holds a work — at a depth that requires workflows, on none
-of their stages — whose `work` runs `end` alone; the
+of their stages, or at a free depth whose depth below requires a workflow
+it does not delegate — whose `work` runs `end` alone; the
 `sequence` group carries `work`, `delegate` and `end`. The manifest's
 `[schemas.staged]` drops `agent` and `workflow` from the items, leaving
 each its title, goal and workspace, for the layer whose new

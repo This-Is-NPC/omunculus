@@ -9,7 +9,7 @@ project and adjusted by hand.
 | Agent | Depth | Role |
 |---|---|---|
 | sales | 0 | the generalist: opens and forwards work, batches received questions and distributes client replies |
-| seller | 0, workflow only | works the request through the workflow `sale`, talking with the client on it |
+| seller | 1, workflow only | works the request through the workflow `sale`, talking with the client on it |
 
 Each agent's `image` is a portrait in `images/`, 1950s photographs after Mad
 Men: the generalist as the office manager who knows where everything goes,
@@ -17,11 +17,12 @@ the seller as the creative director who pitches and closes.
 
 Each client's request is a work that goes through the stages of the
 workflow `sale`: qualify, design, assess, propose, owner, build. The
-pack's depth layer requires it at the desk's depth (`[policy.depth.0]
-workflows = ["sale"]`): a work the generalist opens goes through `sale`
-whether it names it or not, and one naming an agent — the generalist
-itself included — is refused, so the generalist never holds a work of its
-own. The
+pack's depth layer requires it one depth below the generalist
+(`[policy.depth.1] workflows = ["sale"]`): a work the generalist opens
+goes through `sale` whether it names the workflow or not, and one naming
+an agent — the generalist itself included — is refused, so the generalist
+never holds a work of its own. The seller runs at depth 1, and the works
+it hands down start at depth 2. The
 seller asks the client through requests — a choice, as accepting the price,
 with named options the client gets as buttons — records progress with comments and moves it on with
 the pack's tool `next_stage`, in place of `done`: it refuses the move
@@ -55,12 +56,13 @@ not at all.
 
 It expects a team below it whose front agent is `administrator` and
 answers a work that begins "Assessment only, build nothing:" without
-building — the dream team (`packs/dream-team`) imported one depth down:
+building — the dream team (`packs/dream-team`) imported one depth below
+the seller:
 
 ```sh
 omunculus pack --path packs/sales-desk --models team=<model>
 omunculus pack --path packs/dream-team --models team=<model> \
-  --auth homologation=<login>,production=<login> --depth 1
+  --auth homologation=<login>,production=<login> --depth 2
 ```
 
 The client talks with it by name: `omunculus send --agent sales "…"`.
