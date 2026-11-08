@@ -91,16 +91,23 @@ defmodule Omunculus.Config.PacksTest do
     assert config.agents["hand"].ceiling.granted == ["end", "write"]
   end
 
-  test "the dream team hands every page item down together after base" do
+  test "the dream team hands page items down in batches that fit the free run slots" do
     path = Path.expand("../../../packs/dream-team/pack.toml", __DIR__)
     text = Toml.decode!(File.read!(path))["agents"]["administrator"]["text"]
 
     refute text =~ "Hand down the next only when the last came back done."
     refute text =~ "one item at a time"
+    refute text =~ "four slots"
+    refute text =~ "in one step"
+    refute text =~ "hand every page item down together"
+
     assert text =~ "hand base down alone"
 
     assert text =~
-             "hand every page item down together, in one step, within [execution] max_concurrent and the local server's four slots"
+             "each batch only as large as the free run slots under [execution] max_concurrent"
+
+    assert text =~
+             "Pages that do not fit in the current free slots are handed down only after that batch has finished and released its slots"
 
     assert text =~ "Hand down the release only when every page item is done"
   end
