@@ -419,7 +419,7 @@ defmodule Omunculus.Store.Actions.Requests do
         name: name,
         kind: kind,
         agent: agent,
-        depth: View.work_depth(conn, work),
+        depth: Config.placed_depth(ctx.config, View.work_depth(conn, work), work.assignee),
         scope: nil
       })
     end
@@ -449,7 +449,10 @@ defmodule Omunculus.Store.Actions.Requests do
   @spec work_ceiling(Omunculus.Store.Connection.t(), map, map, String.t(), [String.t()]) ::
           {:ok, map} | {:error, term}
   def work_ceiling(conn, ctx, work, agent, names) do
-    depth = if work, do: View.work_depth(conn, work), else: ctx.config.agents[agent].depth
+    depth =
+      if work,
+        do: Config.placed_depth(ctx.config, View.work_depth(conn, work), work.assignee),
+        else: ctx.config.agents[agent].depth
 
     with {:ok, grants} <- Helpers.grants(conn, work) do
       workspace_name = Config.effective_workspace(ctx.config, work)

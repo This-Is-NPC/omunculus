@@ -11,7 +11,9 @@ defmodule Omunculus.Store.Actions do
   the run's agent and each is delegated below it, so the root's run opens
   once they are back — only for a run whose ceiling has `delegate`:
   without it, an unnamed work is the root itself and naming an agent or a
-  workflow of depth 1 is refused. `work` and `delegate` may name the new
+  workflow of depth 1 is refused. When depth 0 requires no workflow and
+  depth 1 requires one, a run without `delegate` opens that workflow as
+  the root, unnamed or naming it, and naming an agent is refused. `work` and `delegate` may name the new
   work's `agent` or its `workflow`, as `Helpers.stage_and_assignee/4`
   allows at its depth; the work keeps its workflow, whose stages it goes
   through. `attach` records the files a run attached to its conversation,
@@ -320,7 +322,7 @@ defmodule Omunculus.Store.Actions do
         delegates? and down?(ctx.config, items) ->
           hand_down(conn, body["report"], items, ctx)
 
-        not delegates? and Enum.any?(items, &below?(ctx.config, &1)) ->
+        not delegates? and Enum.any?(items, &below_without_capture?(ctx.config, &1)) ->
           {:error, {:work, :no_delegate}}
 
         match?([_], items) ->
@@ -353,6 +355,18 @@ defmodule Omunculus.Store.Actions do
     do:
       item["agent"] in children(config) or
         item["workflow"] in Config.workflows_at(config, 1)
+
+  # Depth 1's required workflow is the root when the run cannot delegate:
+  # naming that workflow, or none, is not a child.
+  defp below_without_capture?(config, item) do
+    below?(config, item) and not capture_root?(config, item)
+  end
+
+  defp capture_root?(config, item) do
+    Config.workflows_for(config, 0) == [] and Config.workflows_for(config, 1) != [] and
+      is_nil(item["agent"]) and
+      (is_nil(item["workflow"]) or item["workflow"] in Config.workflows_for(config, 1))
+  end
 
   # Works go to depth 1 when each names one of its agents or workflows, or
   # neither: an unnamed work goes through the workflow the depth requires or to its
@@ -392,15 +406,29 @@ defmodule Omunculus.Store.Actions do
   # stage takes it.
   defp own_root(conn, report, item, ctx) do
     workflow = item["workflow"]
-    free? = is_nil(workflow) and Config.workflows_for(ctx.config, 0) == []
+    depth = root_depth(ctx.config, item)
+    free? = is_nil(workflow) and Config.workflows_for(ctx.config, depth) == []
     agent = item["agent"] || (free? && ctx.agent) || nil
 
     with {:ok, start} <-
-           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, agent, workflow)),
+           Helpers.tag_error(
+             :work,
+             Helpers.stage_and_assignee(ctx.config, depth, agent, workflow)
+           ),
          {:ok, workspace} <-
            Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, item["workspace"], nil)) do
       create_root(conn, Map.put(item, "report", report), ctx, start, workspace, true)
     end
+  end
+
+  # A free depth 0 whose depth below requires a workflow cannot keep the
+  # root: that workflow's first stage takes it, and a named agent is
+  # refused there. Naming some other workflow stays at depth 0.
+  defp root_depth(config, item) do
+    captured? =
+      Config.workflows_for(config, 0) == [] and Config.workflows_for(config, 1) != []
+
+    if captured? and (capture_root?(config, item) or is_binary(item["agent"])), do: 1, else: 0
   end
 
   # Works for agents of depth 1 go below a root the run's agent holds, which

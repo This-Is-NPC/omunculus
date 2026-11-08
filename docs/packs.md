@@ -57,12 +57,12 @@ Each of the sales desk's conversations is one client's: the project
 importing it sets `[project] conversations`, so no client's proposal,
 design or site is in another's reach, and the dream team's deploy tools
 name each conversation's apps apart. Its depth layer requires the
-workflow `sale` at its depth, so every work there is a client's request
-the seller works through it: a work the generalist opens without naming
-it goes through `sale`, and one naming an agent is refused. The system
-team beside it opens no work, so the requirement leaves it as it is; a
-project whose other agents at that depth open works imports the desk a
-depth below them.
+workflow `sale` at depth 1, below the generalist, so every work there is
+a client's request the seller works through it: a work the generalist
+opens without naming an agent goes through `sale`, and one naming an
+agent is refused. The generalist stays at depth 0 and holds no work of
+its own. The system team beside it opens no work; a project whose other
+agents at depth 0 open works imports the desk a depth below them.
 
 The sales desk and its `next_stage` refusal name the logical `owner` route,
 which the project importing it configures, as do the dream team's

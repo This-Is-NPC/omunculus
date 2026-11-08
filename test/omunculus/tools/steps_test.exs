@@ -50,4 +50,43 @@ defmodule Omunculus.Tools.StepsTest do
              "clerk: work runs delegate, which clerk lacks"
            ]
   end
+
+  test "a generalist above a required workflow does not hold the root" do
+    config =
+      Fixtures.config("""
+      [agents.sales]
+      depth = 0
+      text = "sales"
+      tools = ["work", "end"]
+
+      [agents.seller]
+      depth = 1
+      text = "seller"
+      workflow_only = true
+      tools = ["work", "end"]
+
+      [agents.administrator]
+      depth = 2
+      text = "administrator"
+      tools = ["work", "delegate", "end"]
+
+      [workflows.sale]
+      steps = [{ name = "qualify", agent = "seller" }]
+
+      [workflows.page]
+      steps = [{ name = "build", agent = "seller" }]
+
+      [policy.depth.1]
+      workflows = ["sale"]
+
+      [policy.depth.3]
+      workflows = ["page"]
+      """)
+
+    assert Steps.missing(config, ["sales", "seller", "administrator"]) == [
+             "administrator: work runs comment, which administrator lacks",
+             "seller: work runs comment, which seller lacks",
+             "seller: work runs delegate, which seller lacks"
+           ]
+  end
 end

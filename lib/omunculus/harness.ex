@@ -485,7 +485,13 @@ defmodule Omunculus.Harness do
   # `tools`, each agent comes with the model tools its own ceiling has at
   # that depth.
   defp agents_view(project, config, work, catalog, workspace, spec) do
-    depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 1
+    depth =
+      if work do
+        Config.placed_depth(config, Store.work_depth(project.conn, work), work.assignee) + 1
+      else
+        1
+      end
+
     required = Config.workflows_for(config, depth) != []
 
     workflows =

@@ -310,6 +310,22 @@ defmodule Omunculus.Config do
     do: Map.get(config.depth_workflows, depth, config.policy_workflows)
 
   @doc """
+  The depth a run of a work takes: its place in the tree, or its
+  assignee's depth when that is deeper. A root opened into a workflow
+  one depth down still runs at the stage agent's depth, and the works
+  it hands down start one below that.
+  """
+  @spec placed_depth(t, non_neg_integer, String.t() | nil) :: non_neg_integer
+  def placed_depth(%__MODULE__{} = config, tree, assignee) when is_binary(assignee) do
+    case config.agents[assignee] do
+      %{depth: depth} -> max(tree, depth)
+      _missing -> tree
+    end
+  end
+
+  def placed_depth(%__MODULE__{}, tree, _assignee), do: tree
+
+  @doc """
   The workflows a work at `depth` may name: those it must go through one
   of, or, where none is required, every workflow whose stage agents are
   all of that depth.
