@@ -171,6 +171,18 @@ def published(workspace, outcome):
     return site
 
 
+def deploy_descriptor(workspace):
+    """The build commits a Dockerfile and a deploy.toml holding app and port, and nothing else."""
+    if not (workspace / "Dockerfile").is_file():
+        fail("the Dockerfile is missing at the workspace's root")
+    descriptor = workspace / "deploy.toml"
+    if not descriptor.is_file():
+        fail("deploy.toml is missing at the workspace's root")
+    keys = re.findall(r"^\s*([A-Za-z_][\w-]*)\s*=", descriptor.read_text(), re.M)
+    if sorted(keys) != ["app", "port"]:
+        fail(f"deploy.toml holds {sorted(keys)}, not exactly app and port")
+
+
 def proposals(outcome):
     """The data of each proposal the sales desk's proposal tool wrote, its latest version."""
     return outcome.get("proposals") or []
