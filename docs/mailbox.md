@@ -27,7 +27,8 @@ The thread shows, newest first as mail reads:
 
 - what you wrote;
 - each answer you gave a request whose arbiter is you, as a message of yours
-  to whoever asked, its words and the option it chose (the `reply` events
+  to whoever asked, its words and the option it chose, as one phrase of
+yours, "You chose: accept" (the `reply` events
   whose actor is you);
 - what each run of an agent of depth 0 said to you — the text of its model
   replies that call no tool, its comments and the files it attached — as
@@ -129,7 +130,9 @@ thread's subject:
   "sales could not go on right now", with "Write again to try once more."
   The error text is not shown here; the console's log has it;
 - STALLED when nothing runs, nothing is pending and a work is still open or
-  waiting, as "sales stopped before finishing";
+  waiting, as "sales stopped before finishing", once the thread has been
+  quiet for 20 s: right after an answer nothing runs for a moment, and that
+  reads WORKING, with no notice;
 - DONE or CANCELLED once every root work is.
 
 Stuck and stalled threads offer WRITE AGAIN, which opens the reply. It is

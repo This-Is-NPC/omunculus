@@ -66,6 +66,16 @@ Singleton {
 
   // Thread key -> {cursor, events, snapshot}: what its thread is built from.
   property var cache: ({})
+  // How long a thread is quiet, in ms, before it reads stalled.
+  readonly property int settle: 20000
+  // Threads whose state waits on that, until it is out.
+  readonly property var settling: Object.keys(threads).filter(key => threads[key].status.settling)
+  Timer {
+    interval: 3000
+    repeat: true
+    running: root.settling.length > 0
+    onTriggered: root.settling.forEach(key => root.rebuild(key))
+  }
   // Request id -> {option, body}: an answer just given, shown as answered
   // until a snapshot says so, or the server refuses it.
   property var answering: ({})
@@ -454,10 +464,11 @@ Singleton {
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
       waiting: waiting.map(request => request.id),
-      status: status(snapshot, events, waiting, agent, asked.some(request => answering[request.id])),
+      status: status(snapshot, events, waiting, agent, asked.some(request => answering[request.id]), events.length > 0 ? Date.parse(events[events.length - 1].at) : 0),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
-      snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
+      snippet: latest ? oneLine((latest.kind === "you" && latest.option && latest.text === "" ? chose(latest.option)
+        : (latest.kind === "you" ? "you: " : "") + latest.text)
         + (latest.files.length > 0 ? " [" + latest.files.map(file => file.name).join(", ") + "]" : "")) : "",
       entries: entries
     }
@@ -474,7 +485,7 @@ Singleton {
   // when nothing runs, nothing is pending and a work is not over; "done" when
   // every work it began is done or cancelled; "idle" otherwise. `brief` is for
   // the list, `line` and `next` for the thread's head.
-  function status(snapshot, events, pending, to, answered) {
+  function status(snapshot, events, pending, to, answered, lastAt) {
     const agent = to || "the agent"
     const ended = {}
     for (const event of events)
@@ -520,6 +531,10 @@ Singleton {
     // With nothing running or pending, a work open, or waiting, waits on nothing.
     const stuck = snapshot.works.find(work => work.state === "open") || snapshot.works.find(work => work.state === "waiting")
     if (stuck) {
+      // Between an answer and the next run's start nothing runs for a moment:
+      // stalled only once the thread has been quiet for `settle`.
+      if (Date.now() - lastAt < settle)
+        return Object.assign({ settling: true }, working)
       return { state: "stalled", label: "STALLED", brief: agent + " stopped before finishing",
         line: agent + " stopped before finishing, and nothing runs now.",
         next: "Write again to pick it up." }
@@ -577,6 +592,11 @@ Singleton {
       .reduce((longest, reason) => reason.length > longest.length ? reason : longest, request.reason || "")
     return { from: agent, text: text,
       origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))) }
+  }
+
+  // The option you gave, in a phrase of yours: "You chose: accept".
+  function chose(option) {
+    return "You chose: " + String(option || "").replace(/[-_]/g, " ").toLowerCase()
   }
 
   // A text on one line, without its Markdown marks, cut short when long.

@@ -74,7 +74,7 @@ SurfaceFrame {
         Label {
           Layout.fillWidth: true
           visible: !card.expanded
-          text: (card.entry.option ? card.entry.option.toUpperCase() + " — " : "") + Mail.oneLine(card.entry.text) + (card.entry.files.length > 0 ? "  [" + card.entry.files.length + (card.entry.files.length === 1 ? " file]" : " files]") : "")
+          text: (card.entry.option ? Mail.chose(card.entry.option) + (card.entry.text !== "" ? " — " : "") : "") + Mail.oneLine(card.entry.text) + (card.entry.files.length > 0 ? "  [" + card.entry.files.length + (card.entry.files.length === 1 ? " file]" : " files]") : "")
           color: Theme.dim
           font.pixelSize: 12
           elide: Text.ElideRight
@@ -135,10 +135,9 @@ SurfaceFrame {
     Label {
       Layout.fillWidth: true
       visible: card.expanded && !!card.entry.option
-      text: "CHOSE  " + (card.entry.option || "").toUpperCase()
-      color: Theme.primary
-      font.pixelSize: 10
-      font.letterSpacing: 1.5
+      text: Mail.chose(card.entry.option)
+      color: Theme.foreground
+      font.pixelSize: 13
       wrapMode: Text.Wrap
     }
 
