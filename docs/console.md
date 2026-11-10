@@ -76,7 +76,11 @@ is on screen, for its count of what needs you.
 
 `switchProject` moves the window to another project: the conversation on
 screen closes (its agents go on), and the project's conversations, setup
-and capabilities are read once its socket answers. What was typed in the
+and capabilities are read once its socket answers. The window's conversations
+are read again whenever the project's stream announces a conversation, made by
+anyone (the mailbox, another window), and whenever the conversations page
+opens; the list shows every conversation the person may read, whoever began it.
+What was typed in the
 chat's composer and not sent is kept by conversation (`composerDrafts`) and
 comes back when it opens again.
 
@@ -362,7 +366,11 @@ mailbox.
 ## Requests
 
 A request's card (`RequestDecision`) is built as eco's answer card. Its
-heading names the kind, who asks (the asker in their tone, then how it came to you when it
+heading names whom it is for, with an icon, then its kind: OWNER DECISION
+when the request took the `owner` route or went to the project's owners, CLIENT
+QUESTION when it went to the conversation's person ("CLIENT QUESTION · YOUR
+DECISION"). A request of a server that records neither `route` nor
+`destination` reads as the client's. The heading names the kind, who asks (the asker in their tone, then how it came to you when it
 climbed: "design-lead asks · via seller › sales") and on which work, and the time, on two lines when
 the card is under 520 px, with its tools at the top right: copy
 the question, the "more" menu that holds ESCALATE while it waits on you, and
@@ -436,7 +444,9 @@ root ("sales · talks with you · 11 agents", with its state at the right:
 "Needs you" while a question waits on you, the run it has open and its
 clock, "Waiting for seller" while a work of the team is open and no run is
 its own, "Idle" once nothing is open; and a badge "⇡ surgeon asks you 1
-question" while one does). Each work sits under the work that handed it
+question" while one does). A badge says whom a request is for, with its
+icon, in the words of the cards: OWNER DECISION, CLIENT QUESTION, or, between
+agents, AGENT QUESTION. Each work sits under the work that handed it
 down, one level further right; an elbow line joins it to its parent, and a
 line goes on down a level's column while rows of it follow, as in a file
 tree. The lines are in the faint ink, never coloured.
@@ -575,8 +585,8 @@ The project's level:
   and by their titles and what was first said in them, which it opens from.
   Each row is two or three lines at every width, with no header. Its title
   is its first work's, else what was first said, with its state at the top
-  right: what waits on you ("7 QUESTIONS", "A DECISION", "A PERMISSION",
-  joined when several do), NOT STARTED (nothing was said), WORKING (behind
+  right: whom it waits on you for (OWNER DECISION, CLIENT QUESTION), then what
+  ("7 QUESTIONS", "A DECISION", "A PERMISSION", joined when several do), NOT STARTED (nothing was said), WORKING (behind
   a dot), DONE (every work done or cancelled), ✕ FAILED (in the error tone;
   the last run ended in an error) or IDLE. Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
@@ -630,7 +640,13 @@ A conversation's level, in place of the project's once one is opened:
   written in all, and the cost at its right; then a row per agent, the
   busiest first, its cost at the top right, "-" when its provider reported
   none. When the provider sends no price, one note says so and the cost
-  column and figure are left out.
+  column and figure are left out;
+- ARTIFACTS, the documents agents made in the conversation (`ArtifactsView`),
+  read from `GET .../artifacts` each time the page opens: a rule per artifact
+  with its name and kind, and a row per version under it, oldest first, with its
+  note and, dim, its size, media type, when and by whom it was written.
+  Enter on a version saves it to the downloads directory through the versions
+  route and opens it, as an attachment is. A conversation without one says so.
 
 A work's thread also opens as a page of the chat, from a sub-work block's
 OPEN or the progress: the way down to it (`Breadcrumb`, "Conversation ›
@@ -638,7 +654,7 @@ Bakery website › Home page", each crumb going back up, the first to the
 chat), its transcript and a composer to its agent. The masthead's menu has
 OPEN IN TEAM (Alt+O), the team page with the work picked, and ITS LOG.
 
-The log, the team and the cost are loaded when first on screen and let go
+The log, the team, the cost and the artifacts are loaded when first on screen and let go
 after it, so a closed page costs nothing; the work picked on the team page
 is kept meanwhile.
 
@@ -735,8 +751,8 @@ about 860 px for CONVERSATIONS), it shows them beside their numbers; from
 page while the pointer or the keyboard is in it. One click chooses a page and folds the rail, which stays folded until
 the pointer has left and come back, and the page takes the keyboard; Esc
 folds it too. Under 700 px there is no rail: the bar's page switcher names
-the page and lists the four in a menu. The chat, team, log and cost pages are
-named so. When the desktop setting `enable-animations` is off, nothing in the
+the page and lists the five in a menu. The chat, team, log, cost and artifacts
+pages are named so. When the desktop setting `enable-animations` is off, nothing in the
 window slides, sweeps or decodes.
 
 The bar ranks the commands — BACK apart, the page's main action solid on the
@@ -833,7 +849,7 @@ picker and the keys dialog:
   and Alt with a digit for the quick chips over the composer.
 
 The IPC's `start`, `page <name>` (`projects`, `conversations`, `board` and,
-with a conversation open, `chat`, `map`, `log`, `cost`), `projects`,
+with a conversation open, `chat`, `map`, `log`, `cost`, `artifacts`), `projects`,
 `project <id>` (a project of the registry, at its conversations),
 `conversations`, `agents`, `log`, `board`, `open <id>`, `work <id>` (a work
 of the board, on its page), `newConversation` and `back` move it too, and `send <message>`

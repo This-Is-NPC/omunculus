@@ -36,7 +36,7 @@ These keys work on every screen of the console:
 | --- | --- |
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
-| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log and cost; only while you navigate, not a second after typing |
+| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log, cost and artifacts; only while you navigate, not a second after typing |
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Ctrl+P | the projects, also from a field being written |
