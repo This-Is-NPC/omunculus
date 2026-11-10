@@ -45,6 +45,8 @@ Item {
   readonly property bool filtered: filter.trim() !== "" || asksOnly || failedOnly || agent !== "" || !showMinor
   readonly property var source: filtered ? shown : Omunculus.eventLog.rows
   property int seen: 0
+  // How many rows only BEHIND THE SCENES being off keeps out.
+  property int hidden: 0
   signal leave()
 
   // Whether the line is a question that still waits on the person.
@@ -52,10 +54,10 @@ Item {
     return line.request !== "" && Omunculus.waiting.some(request => request.id === line.request)
   }
 
-  function matches(line) {
+  function matches(line, minor) {
     const wanted = filter.trim().toLowerCase()
     return (!asksOnly || waits(line)) && (!failedOnly || (!line.ok && !line.retried)) && (agent === "" || line.who === agent)
-      && (showMinor || !line.minor || line.head !== "")
+      && (minor || !line.minor || line.head !== "")
       && (wanted === "" || [line.kind, line.who, line.run, line.work, line.what].join(" ").toLowerCase().includes(wanted))
   }
 
@@ -64,6 +66,7 @@ Item {
   function refilter() {
     shown.clear()
     seen = 0
+    hidden = 0
     extend()
   }
 
@@ -73,8 +76,10 @@ Item {
     const rows = Omunculus.eventLog
     for (; seen < rows.rows.count; seen++) {
       const line = rows.row(seen)
-      if (matches(line))
+      if (matches(line, showMinor))
         shown.append(line)
+      else if (matches(line, true))
+        hidden++
     }
   }
 
@@ -193,7 +198,8 @@ Item {
         Layout.maximumWidth: filters.stacked ? Number.POSITIVE_INFINITY : implicitWidth
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events").toUpperCase()
+        text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events"
+          + (view.hidden > 0 ? " · " + view.hidden + " behind the scenes hidden" : "")).toUpperCase()
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: Theme.type.meta.tracking
@@ -282,14 +288,14 @@ Item {
               font.pixelSize: Theme.type.meta.size
             }
             Icon {
-              name: row.kind.icon
+              name: row.bad ? "warning" : row.kind.icon
               size: 10
-              color: row.kind.tone
+              color: row.bad ? Theme.error : row.kind.tone
             }
             Label {
               Layout.preferredWidth: Theme.size.control * 1.4
               text: row.model.kind.toUpperCase()
-              color: row.kind.tone
+              color: row.bad ? Theme.error : row.kind.tone
               font.pixelSize: Theme.type.header.size
               font.letterSpacing: Theme.type.header.tracking
               elide: Text.ElideRight
