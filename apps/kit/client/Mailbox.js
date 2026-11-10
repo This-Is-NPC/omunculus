@@ -34,9 +34,24 @@ function defaultAgent(setup) {
   return chat(setup && setup.agents).includes(name) ? name : "";
 }
 
-// Every agent a thread can be with, across `projects` ([{id, agents}]).
-function recipients(projects) {
-  return projects.reduce((all, place) => all.concat(place.agents.map(agent => person(agent, place.id))), []);
+// Every agent a thread can be with, across `projects` ([{id, agents,
+// defaultAgent, canWrite}]); a project the person cannot write in gives none.
+// Ordered for an address book: the project `first`, its default agent leading
+// it, then the rest of that project, then the other projects in their order.
+function recipients(projects, first) {
+  const ordered = projects.filter(place => place.canWrite !== false)
+    .map((place, index) => ({ place: place, rank: place.id === first ? -1 : index }))
+    .sort((a, b) => a.rank - b.rank);
+  return ordered.reduce((all, entry) => {
+    const agents = entry.place.agents.slice().sort((a, b) => (b === entry.place.defaultAgent) - (a === entry.place.defaultAgent));
+    return all.concat(agents.map(agent => person(agent, entry.place.id)));
+  }, []);
+}
+
+// Whether a project's capabilities (GET /capabilities) let the person start a
+// conversation and write in it.
+function canWrite(capabilities) {
+  return ["conversation.create", "conversation.send"].every(name => (capabilities || []).includes(name));
 }
 
 // The recipients whose name or address holds `query`, case aside.
@@ -72,9 +87,13 @@ function re(subject) { return /^re:/i.test(subject) ? subject : "Re: " + subject
 // A subject as a forward of it reads.
 function fwd(subject) { return /^fwd?:/i.test(subject) ? subject : "Fwd: " + subject; }
 
-// A text quoted as mail does, each line behind "> ".
-function quote(text) {
-  return String(text || "").split("\n").map(line => ("> " + line).trimEnd()).join("\n");
+// A message quoted as mail does: {head: "On <when>, Sales wrote:", lines}, each
+// line of its text behind "> ". `when` is the date as the person reads it.
+function quoted(message, when) {
+  return {
+    head: "On " + when + ", " + message.from.name + " wrote:",
+    lines: String(message.text || "").split("\n").map(line => ("> " + line).trimEnd())
+  };
 }
 
 // What a request asks, each question once: its reason, or an origin's

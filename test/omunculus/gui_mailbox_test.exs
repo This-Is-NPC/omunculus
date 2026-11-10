@@ -31,6 +31,16 @@ defmodule Omunculus.GuiMailboxTest do
     if (Mailbox.suggest(list, "ste").map(x => x.address).join() !== "steward@agency") throw Error("suggest by name");
     if (Mailbox.suggest(list, "@dev").map(x => x.address).join() !== "sales@dev") throw Error("suggest by address");
     if (Mailbox.suggest(list, "").length !== 3) throw Error("empty query lists all");
+    if (Mailbox.suggest(list, "SALES").length !== 2) throw Error("case aside, by name");
+    const places = [
+      {id: "dev", agents: ["a", "b"], defaultAgent: ""},
+      {id: "agency", agents: ["auditor", "sales", "steward"], defaultAgent: "sales"},
+      {id: "locked", agents: ["x"], defaultAgent: "", canWrite: false}
+    ];
+    const order = Mailbox.recipients(places, "agency").map(x => x.address).join();
+    if (order !== "sales@agency,auditor@agency,steward@agency,a@dev,b@dev") throw Error(order);
+    if (Mailbox.recipients(places, "")[0].address !== "a@dev") throw Error("no current project keeps registry order");
+    if (!Mailbox.canWrite(["conversation.create", "conversation.send"]) || Mailbox.canWrite(["conversation.send"]) || Mailbox.canWrite([])) throw Error("capabilities");
     """)
   end
 
@@ -115,7 +125,8 @@ defmodule Omunculus.GuiMailboxTest do
     if (long.subject.length !== 90 || !long.body.startsWith("xxx")) throw Error("long first line");
     if (Mailbox.re("Menu") !== "Re: Menu" || Mailbox.re("re: Menu") !== "re: Menu") throw Error("re");
     if (Mailbox.fwd("Menu") !== "Fwd: Menu") throw Error("fwd");
-    if (Mailbox.quote("a\\n\\nb") !== "> a\\n>\\n> b") throw Error(JSON.stringify(Mailbox.quote("a\\n\\nb")));
+    const q = Mailbox.quoted({from: {name: "Sales"}, text: "a\\n\\nb"}, "10 Nov 2026, 18:02");
+    if (q.head !== "On 10 Nov 2026, 18:02, Sales wrote:" || q.lines.join("|") !== "> a|>|> b") throw Error(JSON.stringify(q));
     """)
   end
 

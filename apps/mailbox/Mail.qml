@@ -159,9 +159,6 @@ Singleton {
     keep(seenFile, seen)
   }
 
-  // What arrives in the thread on screen is read as it arrives.
-  onThreadsChanged: if (selected !== "") markSeen(selected)
-
   // Moves a thread to the archive and goes back to the list.
   function archive(key) {
     archived = Object.assign({}, archived, { [key]: new Date().toISOString() })
@@ -290,10 +287,10 @@ Singleton {
 
   // The agents of each project not yet known, from its config: those of
   // depth 0 a thread can be with, its declared default, and every agent, for
-  // its picture and colour.
+  // its picture and colour; and whether you may write there.
   function loadAgents(items) {
     const known = projects.filter(item => items.some(other => other.id === item.id))
-    projects = items.map(item => known.find(other => other.id === item.id) || { id: item.id, socket: item.socket, agents: [], defaultAgent: "" })
+    projects = items.map(item => known.find(other => other.id === item.id) || { id: item.id, socket: item.socket, agents: [], defaultAgent: "", canWrite: false })
     if (Object.keys(rosters).some(id => !items.some(item => item.id === id)))
       rosters = Object.fromEntries(Object.entries(rosters).filter(([id]) => items.some(item => item.id === id)))
     for (const item of items) {
@@ -304,15 +301,21 @@ Singleton {
           ? Object.assign({}, other, { agents: Mailbox.chat(setup.agents), defaultAgent: Mailbox.defaultAgent(setup) }) : other)
         rosters = Object.assign({}, rosters, { [item.id]: setup.agents })
       })
+      http.call(item.socket, "GET", "/v1/projects/" + item.id + "/capabilities", null, false, caps => {
+        projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { canWrite: Mailbox.canWrite(caps.items) }) : other)
+      })
     }
   }
+
+  // The agents a message can go to, those of the current project first.
+  readonly property var recipients: Mailbox.recipients(projects, project !== "" ? project : home)
 
   // The recipient a new message starts with: the default agent of the project
   // being filtered on, else of the one the window was opened on; none when its
   // config declares none.
   function defaultRecipient() {
     const place = projectOf(project !== "" ? project : home)
-    return place && place.defaultAgent !== "" ? Mailbox.person(place.defaultAgent, place.id) : null
+    return place && place.canWrite && place.defaultAgent !== "" ? Mailbox.person(place.defaultAgent, place.id) : null
   }
 
   function forget(key) {

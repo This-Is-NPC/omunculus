@@ -21,8 +21,12 @@ ModalDialog {
   property string refusal: ""
   property bool discarding: false
 
-  readonly property var suggestions: Mailbox.suggest(Mailbox.recipients(Mail.projects), address.text)
-    .filter(item => dialog.to === null || item.address !== dialog.to.address).slice(0, 6)
+  // Whether the agents matching To are listed, and the one Enter takes.
+  property bool listing: false
+  property int current: 0
+
+  readonly property var suggestions: Mailbox.suggest(Mail.recipients, address.text)
+    .filter(item => dialog.to === null || item.address !== dialog.to.address).slice(0, 8)
 
   maxWidth: 640
 
@@ -36,6 +40,7 @@ ModalDialog {
     body.text = saved ? saved.body : preset.body || ""
     address.text = ""
     refusal = ""
+    listing = false
     discarding = false
     open()
   }
@@ -49,6 +54,8 @@ ModalDialog {
     to = item
     refusal = ""
     address.text = ""
+    listing = false
+    body.forceActiveFocus()
   }
 
   onOpened: { panel.dialogOpen = true; (to === null ? address : body).forceActiveFocus() }
@@ -86,32 +93,100 @@ ModalDialog {
       Flow {
         Layout.fillWidth: true
         spacing: 6
-        Chip {
+        // The recipient: a click selects it, only its x (or Backspace, once
+        // selected) removes it.
+        Rectangle {
+          id: chip
           visible: dialog.to !== null
-          checked: true
-          icon: "close"
-          text: dialog.to ? dialog.to.text : ""
-          tip: "remove " + (dialog.to ? dialog.to.name : "")
-          onClicked: dialog.to = null
+          height: Theme.size.chip
+          width: chipRow.implicitWidth + 16
+          activeFocusOnTab: true
+          color: activeFocus ? Qt.alpha(Theme.primary, 0.12) : "transparent"
+          border.color: activeFocus ? Theme.primary : Theme.line
+          Keys.onPressed: event => {
+            if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+              dialog.to = null
+              address.forceActiveFocus()
+              event.accepted = true
+            }
+          }
+          Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: 8
+            Label {
+              anchors.verticalCenter: parent.verticalCenter
+              text: dialog.to ? dialog.to.text : ""
+              color: chip.activeFocus ? Theme.primary : Theme.foreground
+              font.pixelSize: 11
+              MouseArea { anchors.fill: parent; onClicked: chip.forceActiveFocus() }
+            }
+            IconButton {
+              anchors.verticalCenter: parent.verticalCenter
+              name: "close"
+              size: 10
+              tip: "remove " + (dialog.to ? dialog.to.name : "")
+              onClicked: { dialog.to = null; address.forceActiveFocus() }
+            }
+          }
         }
         TextBox {
           id: address
-          visible: dialog.to === null
-          width: 280
-          placeholderText: Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : "an agent's name or address"
-          onAccepted: if (dialog.suggestions.length > 0) dialog.pick(dialog.suggestions[0])
+          width: dialog.to === null ? 360 : 220
+          placeholderText: Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : dialog.to === null ? "an agent's name or address" : "another recipient"
+          onTextEdited: { dialog.listing = true; dialog.current = 0 }
+          onActiveFocusChanged: if (activeFocus) dialog.listing = true
+          onAccepted: if (dialog.listing && dialog.suggestions.length > 0) dialog.pick(dialog.suggestions[dialog.current])
+          Keys.onEscapePressed: event => {
+            event.accepted = dialog.listing
+            dialog.listing = false
+          }
+          Keys.onDownPressed: dialog.current = Math.min(dialog.suggestions.length - 1, dialog.current + 1)
+          Keys.onUpPressed: dialog.current = Math.max(0, dialog.current - 1)
         }
       }
-      Flow {
+      // The agents whose name or address holds what is typed, under the field.
+      Rectangle {
         Layout.fillWidth: true
-        visible: address.activeFocus || address.text !== ""
-        spacing: 6
-        Repeater {
-          model: dialog.suggestions
-          delegate: Chip {
-            required property var modelData
-            text: modelData.text
-            onClicked: dialog.pick(modelData)
+        visible: dialog.listing && address.activeFocus
+        implicitHeight: matches.implicitHeight + 2
+        color: Theme.background
+        border.color: Theme.line
+        Column {
+          id: matches
+          anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
+          Repeater {
+            model: dialog.suggestions
+            delegate: Rectangle {
+              id: line
+              required property var modelData
+              required property int index
+              width: matches.width
+              height: 28
+              color: index === dialog.current || hover.containsMouse ? Qt.alpha(Theme.primary, 0.1) : "transparent"
+              Label {
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
+                text: line.modelData.text
+                font.pixelSize: 12
+                elide: Text.ElideRight
+              }
+              MouseArea {
+                id: hover
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: dialog.pick(line.modelData)
+              }
+            }
+          }
+          Label {
+            visible: dialog.suggestions.length === 0
+            leftPadding: 12
+            height: 28
+            verticalAlignment: Text.AlignVCenter
+            text: Mail.projects.length === 0 ? "reading the agents" : "no agent matches"
+            color: Theme.dim
+            font.pixelSize: 12
           }
         }
       }
