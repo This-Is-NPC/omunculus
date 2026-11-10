@@ -129,11 +129,13 @@ defmodule Omunculus.GuiRequestsTest do
 
   test "repeated finds the answered request a new one asks again" do
     run!(["Requests"], """
-    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q"});
+    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q", created_at: {a: "1", b: "2", c: "3", d: "4", p: "1", q: "2", r: "3", s: "4"}[id] || "5"});
     const replies = {a: {stamp: "09:48"}, b: {stamp: "09:50"}};
     const list = [ask("a", "closed", "w1", "lead"), ask("b", "closed", "w1", "lead"), ask("c", "closed", "w2", "lead"),
       ask("d", "closed", "w1", "other"), ask("n", "pending", "w1", "lead")];
     if (Requests.repeated(list[4], list, replies).id !== "b") throw Error("the last answered one");
+    if (Requests.repeated(list[4], list.slice().reverse(), replies).id !== "b") throw Error("by when asked, not by order given");
+    if (Requests.repeated(ask("n", "pending", "w1", "lead"), list.slice(0, 2).concat([Object.assign({}, list[4], {id: "z", status: "closed", created_at: "9"})]), Object.assign({z: {}}, replies)).id !== "b") throw Error("one asked later is no earlier one");
     if (Requests.repeated(ask("n", "pending", "w2", "lead"), list, replies) !== null) throw Error("answered request only");
     if (Requests.repeated(ask("n", "pending", "w1", "third"), list, replies) !== null) throw Error("same asker");
     if (Requests.repeated(list[0], [list[0]], replies) !== null) throw Error("not itself");
