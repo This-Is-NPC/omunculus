@@ -139,6 +139,34 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{max_retries: 0}} = load(dir)
   end
 
+  test "[policy] default_agent names an agent of depth 0 that is not workflow-only", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [agents.worker]
+    depth = 1
+    text = "hi"
+
+    [agents.reviewer]
+    depth = 0
+    workflow_only = true
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{default_agent: nil}} = load(dir)
+
+    Fixtures.write_config(dir, agents <> "\n[policy]\ndefault_agent = \"concierge\"\n")
+    assert {:ok, %Config{default_agent: "concierge"}} = load(dir)
+
+    for invalid <- [~s("nobody"), ~s("worker"), ~s("reviewer"), "3", ~s("")] do
+      Fixtures.write_config(dir, agents <> "\n[policy]\ndefault_agent = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :default_agent}}} = load(dir)
+    end
+  end
+
   test "[policy] max_reopens is optional, a non-negative integer", %{dir: dir} do
     agents = """
     [agents.concierge]

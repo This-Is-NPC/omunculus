@@ -71,6 +71,7 @@ You are a Codex-style coding agent. Work in the repository with Bash and filesys
 """
 
 [policy]
+default_agent = "codex"
 request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3

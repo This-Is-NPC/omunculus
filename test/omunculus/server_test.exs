@@ -654,6 +654,7 @@ defmodule Omunculus.ServerTest do
     assert %{"item" => "models.fake", "file" => %{"api" => "module"}} = item.body
     assert item.body["revision"] == revision
     assert local.(:get, config <> "/access", []).body["items"]["file"]["roles"]["admin"]
+    assert local.(:get, config <> "/policy", []).body["items"]["default_agent"] == "concierge"
     assert local.(:get, config <> "/models/nobody", []).status == 404
     assert local.(:get, config <> "/nothing", []).status == 404
 

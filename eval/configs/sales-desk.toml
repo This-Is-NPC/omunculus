@@ -22,4 +22,5 @@ kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
 
 [policy]
+default_agent = "sales"
 request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] }]
