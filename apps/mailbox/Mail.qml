@@ -37,14 +37,12 @@ Singleton {
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
   // "inbox", "sent", "drafts" or "archive".
   property string folder: "inbox"
-  // A project id, or "" for every project.
-  property string project: ""
   // What the search box asks for, lowercased; "" finds every thread.
   property string query: ""
-  readonly property var shown: all.filter(thread => (project === "" || thread.project === project)
-    && Mailbox.inFolder(thread, folder, archived) && Mailbox.matches(thread, query))
-  readonly property var shownDrafts: drafts.filter(draft => (project === "" || draft.project === project)
-    && (query === "" || [draft.subject, draft.body, draft.agent].some(word => String(word).toLowerCase().includes(query))))
+  readonly property var shown: all.filter(thread => Mailbox.inFolder(thread, folder, archived)
+    && Mailbox.matches(thread, query))
+  readonly property var shownDrafts: drafts.filter(draft => query === ""
+    || [draft.subject, draft.body, draft.agent].some(word => String(word).toLowerCase().includes(query)))
   property string selected: ""
   readonly property var thread: threads[selected] || null
   // Asks the window for a message to write, from `preset`: {to, subject, body,
@@ -209,7 +207,6 @@ Singleton {
           if (draft)
             discardDraft(draft)
           selected = project + "/" + data.id
-          tell("sent to " + agent, false)
           sweep()
         })
     })
@@ -226,7 +223,6 @@ Singleton {
     const base = "/v1/projects/" + thread.project + "/conversations/" + thread.id
     const socket = projectOf(thread.project).socket
     const sent = () => {
-      tell("sent to " + thread.agent, false)
       sweep()
     }
     if (request !== "")
@@ -308,13 +304,13 @@ Singleton {
   }
 
   // The agents a message can go to, those of the current project first.
-  readonly property var recipients: Mailbox.recipients(projects, project !== "" ? project : home)
+  readonly property var recipients: Mailbox.recipients(projects, home)
 
   // The recipient a new message starts with: the default agent of the project
-  // being filtered on, else of the one the window was opened on; none when its
+  // the window was opened on; none when its
   // config declares none.
   function defaultRecipient() {
-    const place = projectOf(project !== "" ? project : home)
+    const place = projectOf(home)
     return place && place.canWrite && place.defaultAgent !== "" ? Mailbox.person(place.defaultAgent, place.id) : null
   }
 

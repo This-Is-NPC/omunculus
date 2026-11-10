@@ -44,8 +44,7 @@ Rectangle {
         font.bold: row.unread
         elide: Text.ElideRight
       }
-      MailLabel { visible: !row.narrow && kind !== ""; kind: row.thread.label }
-      ProjectTag { visible: !row.narrow; name: row.thread.project }
+      MailLabel { visible: !row.narrow; kind: row.thread.label }
       Label { text: Mail.when(row.thread.at); color: row.unread ? Theme.primary : Theme.dim; font.pixelSize: 10 }
     }
     RowLayout {
@@ -72,12 +71,10 @@ Rectangle {
     }
     RowLayout {
       Layout.fillWidth: true
-      visible: row.narrow
+      visible: row.narrow && row.thread.label !== ""
       spacing: 8
-      MailLabel { visible: kind !== ""; kind: row.thread.label }
-      ProjectTag { name: row.thread.project }
+      MailLabel { kind: row.thread.label }
     }
-    Item { implicitHeight: 5 }
   }
 
   MouseArea {

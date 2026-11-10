@@ -138,12 +138,12 @@ Item {
     }
     TraceButton {
       anchors.horizontalCenter: parent.horizontalCenter
-      visible: Mail.query !== "" || Mail.project !== ""
+      visible: Mail.query !== ""
       dense: true
       role: "progress"
       icon: "close"
-      text: "CLEAR FILTERS"
-      onClicked: { Mail.query = ""; Mail.project = ""; list.cleared() }
+      text: "CLEAR SEARCH"
+      onClicked: { Mail.query = ""; list.cleared() }
     }
   }
 

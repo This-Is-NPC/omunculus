@@ -26,7 +26,7 @@ ShellRoot {
     readonly property bool narrow: width < 760
     readonly property bool short: height < 560
     // Whether you folded the folders to a rail, and the threads away.
-    property bool foldersFolded: width < 1100
+    property bool foldersFolded: false
     property bool listFolded: false
     readonly property bool reading: Mail.thread !== null
 
@@ -84,7 +84,7 @@ ShellRoot {
           Item {
             visible: !window.narrow
             Layout.fillHeight: true
-            Layout.preferredWidth: window.foldersFolded ? 56 : 210
+            Layout.preferredWidth: window.foldersFolded ? 56 : 180
             Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             clip: true
 
@@ -105,13 +105,6 @@ ShellRoot {
               FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
               FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "archive"; icon: "folder"; label: "Archive" }
               Item { Layout.fillHeight: true }
-              Label {
-                visible: !window.foldersFolded
-                text: Mail.projects.length + (Mail.projects.length === 1 ? " PROJECT" : " PROJECTS")
-                color: Theme.dim
-                font.pixelSize: 9
-                font.letterSpacing: 2
-              }
             }
           }
 
@@ -148,7 +141,6 @@ ShellRoot {
                 FolderTab { rail: true; name: "archive"; icon: "folder"; label: "Archive" }
               }
               Item { id: narrowSearch; visible: window.narrow; Layout.fillWidth: true; Layout.preferredHeight: 30 }
-              ProjectFilter { Layout.fillWidth: true }
               ThreadList {
                 id: threads
                 visible: Mail.folder !== "drafts"
