@@ -348,7 +348,8 @@ A work that keeps breaking does not go round for ever. With `[policy]
 max_reopens`, once a parent has sent one work back that many times in a
 row — its reopens since an answer to a request of the parent's work last
 came — its next `reopen` sends nothing back: the store opens a request
-along the parent's route instead, its reason the question the `reopen`
+instead, on the `owner` route where the project names one and along the
+parent's route otherwise, its reason the question the `reopen`
 tool wrote (`past_limit`: the work, that it went back as often as the
 limit allows, and the instructions it would have gone back with), and
 the parent waits on it, the broken work still waiting on the parent. The

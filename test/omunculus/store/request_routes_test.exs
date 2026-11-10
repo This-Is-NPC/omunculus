@@ -99,6 +99,7 @@ defmodule Omunculus.Store.RequestRoutesTest do
     scope = "conversation"
     capabilities = ["conversation.read", "conversation.manage_access"]
     [policy]
+    max_reopens = 0
     request_routes = [
       { name = "owner", via = ["owners"] },
       { name = "either", via = ["owners", "origin"] },
@@ -184,6 +185,35 @@ defmodule Omunculus.Store.RequestRoutesTest do
       assert {:ok, client} = ask(conn, ctxs.lead, nil)
       assert Jason.decode!(client.arbiter) == Participant.human("test", "client")
       assert {client.route, client.destination} == {nil, "origin"}
+    end
+
+    test "a reopen past max_reopens asks the owners, never the client", %{conn: conn} do
+      ctxs = owners_setup(conn, [{"boss", "admin", "2026-01-01"}])
+
+      child =
+        Fixtures.insert(conn, :works, %{
+          assignee: "worker",
+          parent_id: ctxs.worker.work_id,
+          state: "waiting",
+          conversation_id: ctxs.worker.conversation_id
+        })
+
+      emit = %{
+        "type" => "reopen",
+        "body" => %{"work_id" => child, "body" => "again", "past_limit" => "it keeps breaking"}
+      }
+
+      assert {:ok, [_tool, %{type: "request"} = event]} =
+               Store.record_tools(
+                 conn,
+                 ctxs.worker.run_id,
+                 [{%{name: "reopen", args: %{}}, [emit]}],
+                 ctxs.worker
+               )
+
+      assert {:ok, request} = Store.view(conn, "request", event.request_id)
+      assert Jason.decode!(request.arbiter) == Participant.human("test", "boss")
+      assert {request.route, request.destination} == {"owner", "owners"}
     end
 
     test "the owner added first takes it, whatever the update times", %{conn: conn} do

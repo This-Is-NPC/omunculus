@@ -2355,7 +2355,7 @@ defmodule Omunculus.RunTest do
       assert {:ok, [%{body: body}]} =
                Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [request_id])
 
-      assert body =~ "[policy] max_reopens"
+      assert body =~ "keeps breaking"
       assert body =~ "publish nothing, only comment"
 
       Project.close(project)
