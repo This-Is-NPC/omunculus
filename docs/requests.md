@@ -70,7 +70,7 @@ Text never substitutes for a grant or impersonates an upstream answerer.
 The presets, Amestris and benchmark declare parent then origin in TOML. The
 presets, the sales-desk and agency eval configs and the course-recovery
 overlay also declare the logical `owner` route as `["owners", "origin"]`,
-used by sales decisions: the owner where the project has one, else the one
+used by the agency's decisions (a sale's approval, a discount, production): the owner where the project has one, else the one
 local person. Importing that pack requires configuring this logical
 responsibility; it names the project's owners, not the client.
 
@@ -80,7 +80,7 @@ passes through: `propose_config` and `propose_pack` send their request with
 declares the `owner` route, as the default preset and the development
 projects do. Without it the proposal is refused as an unknown route, naming
 the routes there are; there is no fallback to the default route. In the
-agency, whose default route passes the sales generalist, the system team's
+agency, whose default route passes the front desk, the system team's
 proposals reach the person directly instead of being reworded on the way.
 So does the harness's retry/cancel request for a root work its agent
 stopped on past `max_retries`, in a project with the `owner` route; in one

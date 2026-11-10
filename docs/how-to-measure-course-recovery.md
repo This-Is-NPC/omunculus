@@ -73,7 +73,7 @@ acceptance or deployment. What the steward overlay changes is in
    `omunculus.toml`, `events.jsonl`, `worker.log` and `metrics.json`.
    Trial projects and their processes are removed when the trial ends.
 
-3. Read `report.md`. A trial recovers when `sales` authors a new question
+3. Read `report.md`. A trial recovers when `front-desk` authors a new question
    whose linked origins include the original unresolved permission. No
    client answer or production grant is executed. Compare the outcomes,
    response counts, costs and times of the two arms.
