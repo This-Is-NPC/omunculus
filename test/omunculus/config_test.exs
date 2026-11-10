@@ -279,6 +279,37 @@ defmodule Omunculus.ConfigTest do
              load_with.(%{"deny_read" => ["relative"]})
   end
 
+  test "a command may read more paths and get variables of its own", %{dir: dir} do
+    load_with = fn keys ->
+      write_toml(dir, "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n")
+      {:ok, data} = Toml.decode_file(toml(dir))
+
+      File.write!(
+        toml(dir),
+        Config.Toml.encode(update_in(data, ["execution"], &Map.merge(&1, keys)))
+      )
+
+      load(dir)
+    end
+
+    assert {:ok, %{execution: %{read: [read], variables: %{"MISE_SHARED_INSTALL_DIRS" => "/m"}}}} =
+             load_with.(%{
+               "read" => ["~/.local/share/mise/installs"],
+               "variables" => %{"MISE_SHARED_INSTALL_DIRS" => "/m"}
+             })
+
+    assert read == Path.expand("~/.local/share/mise/installs")
+    assert {:ok, %{execution: %{read: [], variables: %{}}}} = load_with.(%{})
+
+    assert {:error, {:execution, {:invalid, :read}}} = load_with.(%{"read" => ["relative"]})
+
+    assert {:error, {:execution, {:invalid, :variables}}} =
+             load_with.(%{"variables" => %{"bad-name" => "x"}})
+
+    assert {:error, {:execution, {:invalid, :variables}}} =
+             load_with.(%{"variables" => %{"NAME" => 1}})
+  end
+
   test "an HTTP model offers code mode only with code_mode = true", %{dir: dir} do
     model = fn line ->
       """

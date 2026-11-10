@@ -23,12 +23,34 @@ to `max_queue` more wait for a slot, each for at most `queue_timeout_ms`,
 and a run that gets no slot fails with `:queue_full` or
 `:queue_timeout`.
 
-Three keys of `[execution]` are optional. `host = true` shows a command
+Five keys of `[execution]` are optional. `host = true` shows a command
 the machine read-only, as the person sees it, with their home overlaid so
 that what it writes there stays in the run's scratch; without it a
 command sees only the runtimes, the workspace and the folders of the
 catalog's tools. `deny_read` lists paths, absolute or under `~`, a
-command may not read; `write` lists paths it may also write.
+command may not read; `write` lists paths it may also write, given
+`sandbox.write`; `read`, in the same form, lists paths it may also read,
+always read-only, so name none that holds credentials; one that is not
+there is left out. `variables` is a table of environment variables
+every command gets with the value written there, apart from `environment`,
+which passes the server's own.
+
+`read` and `variables` let a command resolve the tools the person's mise
+already installed, without a network or a `mise link` that would not
+outlast its run: a command's home is its run's scratch, so mise's own
+data directory is empty there. Name the installs folder in `read` and
+point mise's read-only shared installs at it:
+
+```toml
+[execution]
+read = ["~/.local/share/mise/installs"]
+variables = { MISE_SHARED_INSTALL_DIRS = "/home/<you>/.local/share/mise/installs" }
+```
+
+`variables` takes the absolute path, `~` is not expanded in it. A pinned
+version the person's mise holds then resolves for `mise install`, which
+downloads nothing, and for `mise run`; one it lacks needs
+`sandbox.network`. Under `host = true` the installs are visible already.
 
 A root in `runtimes` is read-only inside the sandbox and exposes every
 binary it contains; it is not a per-binary allowlist, so keep those

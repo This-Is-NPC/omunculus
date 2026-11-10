@@ -43,6 +43,40 @@ defmodule Omunculus.Execution.BubblewrapTest do
              )
   end
 
+  test "a command resolves a tool the host's mise installed, read-only, without a link or network",
+       %{workspace: workspace} do
+    # A synthetic mise install; the real data directory is never touched.
+    shared = Omunculus.Fixtures.tmp_dir()
+    bin = Path.join([shared, "node", "22.99.0", "bin"])
+    File.mkdir_p!(bin)
+    File.write!(Path.join(bin, "node"), "#!/usr/bin/sh\necho fixture-node\n")
+    File.chmod!(Path.join(bin, "node"), 0o755)
+
+    policy =
+      Policy.with_scratch(
+        policy(workspace,
+          read_only: [shared],
+          network: "none",
+          environment: %{"LANG" => "C", "MISE_SHARED_INSTALL_DIRS" => shared}
+        ),
+        Omunculus.Fixtures.tmp_dir()
+      )
+
+    run = fn policy, script ->
+      Omunculus.Execution.run(elem(Command.new("/usr/bin/sh", ["-c", script]), 1), policy)
+    end
+
+    assert {:ok, %{stdout: "fixture-node\n", status: 0}} =
+             run.(policy, "mise exec node@22.99.0 -- node")
+
+    assert {:ok, %{stdout: "refused\n"}} =
+             run.(policy, "touch #{shared}/node/x 2>/dev/null || echo refused")
+
+    # Without the path the same command has nothing to resolve.
+    assert {:error, _} =
+             run.(policy(workspace, network: "none"), "mise exec node@22.99.0 -- node")
+  end
+
   test "a command waits as long as the one holding the run's home overlay runs",
        %{workspace: workspace} do
     policy =
@@ -327,7 +361,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
       host: Keyword.get(overrides, :host, false),
       runtimes: ["/usr"],
       backend: "bubblewrap",
-      environment: %{"LANG" => "C"},
+      environment: Keyword.get(overrides, :environment, %{"LANG" => "C"}),
       network: Keyword.get(overrides, :network, "host"),
       limits: %{
         timeout_ms: Keyword.get(overrides, :timeout_ms, 2_000),
