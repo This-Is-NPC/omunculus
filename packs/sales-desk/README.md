@@ -71,8 +71,9 @@ stages, all the project manager's:
    asks changes (the design lead counts the rounds included, and more are the
    owner's). Only the client waives the preview, by answering an explicit
    question the front desk puts to them; their answer is recorded.
-3. `build`: hands the administrator the build, with the approved design's
-   `design/handoff.md`. When the site is in homologation the release's
+3. `build`: hands the administrator the build, stating the design from the
+   proposal: `design/handoff.md` when it was approved, "the client waived the
+   design" when it was waived, as the administrator requires. When the site is in homologation the release's
    request to grant `promote` comes to the project manager, who has the
    client accept the built site and only then escalates the request to
    the owner, who promotes.
