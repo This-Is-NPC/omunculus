@@ -310,7 +310,7 @@ Item {
       && previous.who === current.who && current.at - previous.at < root.pause
   }
 
-  implicitHeight: timeline.contentHeight + timeline.topMargin + timeline.bottomMargin
+  implicitHeight: timeline.contentHeight + timeline.edge
 
   ListView {
     id: timeline
@@ -340,12 +340,18 @@ Item {
     }
 
     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-    height: Math.min(root.height, contentHeight + topMargin + bottomMargin)
+    // The view's own size does not follow the margins, which a pill sets.
+    height: Math.min(root.height, contentHeight + edge)
     clip: true
     // An entry's outline never lies on the clip's edge, where a fractional scale
-    // would cut it.
-    topMargin: 1
-    bottomMargin: 1
+    // would cut it. Once the thread outgrows the view, each end has a band for
+    // a pill, so a pill never covers an entry; the band does not follow the
+    // pill, whose count follows the view.
+    readonly property bool scrolls: contentHeight + edge > Window.height / 2
+    // The two pixels of an entry's outline, one at each end.
+    readonly property int edge: 2
+    topMargin: scrolls ? earlier.height + Theme.space.gap + Theme.space.gap : edge / 2
+    bottomMargin: scrolls ? newer.anchors.bottomMargin + newer.height + Theme.space.gap : edge / 2
     spacing: 0
     model: root.model
     footer: workingRow
@@ -611,6 +617,7 @@ Item {
   // The entries above the view: an opened conversation lands at its end, and
   // this says that the history goes on above, and leads to its start.
   NewPill {
+    id: earlier
     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.space.gap }
     above: true
     word: "EARLIER"
@@ -623,6 +630,7 @@ Item {
   }
 
   NewPill {
+    id: newer
     anchors {
       horizontalCenter: parent.horizontalCenter
       bottom: parent.bottom

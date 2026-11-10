@@ -114,7 +114,7 @@ Singleton {
   // Work id -> the args of that call.
   property var callArgs: ({})
   // Work id -> the calls its model asked for that have not answered yet.
-  property var asked: ({})
+  property var pendingCalls: ({})
   // Inbox id -> the text its notify event carried, and request id -> how it
   // was answered ({option, who, body}); the snapshot has neither.
   property var notes: ({})
@@ -488,7 +488,7 @@ Singleton {
     runThread = {}
     calling = {}
     callArgs = {}
-    asked = {}
+    pendingCalls = {}
     threads = {}
     notes = {}
     replies = {}
@@ -963,7 +963,7 @@ Singleton {
       // A new run has made no call yet, on a work or the front agent's own.
       keep("calling", work, "")
       keep("callArgs", work, {})
-      keep("asked", work, [])
+      keep("pendingCalls", work, [])
     }
     // Where the event shows: its run's thread, else its work's.
     const key = runThread[event.run_id] !== undefined ? runThread[event.run_id] : threadOf(work)
@@ -994,7 +994,7 @@ Singleton {
     case "model": {
       if (body.usage)
         count(who, work, body.usage)
-      keep("asked", work, Model.calls(body))
+      keep("pendingCalls", work, Model.calls(body))
       const said = Model.text(body)
       const place = rows[event.run_id]
       if (place !== undefined)
@@ -1038,11 +1038,11 @@ Singleton {
           keep("calling", work, body.name)
           keep("callArgs", work, body.args || {})
           // It answered: the rest of those asked for are still going on.
-          const left = (asked[work] || []).slice()
+          const left = (pendingCalls[work] || []).slice()
           const at = left.findIndex(call => call.name === body.name)
           if (at >= 0)
             left.splice(at, 1)
-          keep("asked", work, left)
+          keep("pendingCalls", work, left)
         }
       }
       break
@@ -1118,7 +1118,7 @@ Singleton {
       lanes[item.id] = laneOf(item)
     progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
-      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, asked: asked, runStarts: runStarts,
+      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, asked: pendingCalls, runStarts: runStarts,
       journeys: journeys, rootAgent: agent || lastAgent, now: tick, usage: usage.works, calls: callsOf
     })
   }
@@ -1127,7 +1127,7 @@ Singleton {
   onRequestsChanged: progressTimer.restart()
   onNotedChanged: progressTimer.restart()
   onCallingChanged: progressTimer.restart()
-  onAskedChanged: progressTimer.restart()
+  onPendingCallsChanged: progressTimer.restart()
   onRunStartsChanged: progressTimer.restart()
   onRunErrorsChanged: progressTimer.restart()
   onSetupChanged: progressTimer.restart()
