@@ -151,6 +151,8 @@ Singleton {
   // it ended in an error.
   property var runStarts: ({})
   property var runErrors: ({})
+  // Why the last run to end in the open conversation failed, "" when it did not.
+  property string lastEnded: ""
   // Request id -> "sending" while its answer goes, "failed" when it did not
   // reach the server; cleared once the answer is read back.
   property var sending: ({})
@@ -283,12 +285,33 @@ Singleton {
   function summarize(place, ids) {
     if (ids.length === 0)
       return
-    http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations/" + ids[0] + "/snapshot", null, false, data => {
+    const rest = () => summarize(place, ids.slice(1))
+    const base = "/v1/projects/" + place.id + "/conversations/" + ids[0]
+    const keep = (data, ended) => {
       const next = Object.assign({}, summaries)
-      next[ids[0]] = Projects.summary(data)
+      next[ids[0]] = Projects.summary(data, ended)
       summaries = next
-      summarize(place, ids.slice(1))
-    }, () => summarize(place, ids.slice(1)))
+      rest()
+    }
+    http.call(place.socket, "GET", base + "/snapshot", null, false, data => {
+      if (Projects.unsettled(Projects.summary(data)))
+        lastEnd(place, base, "", "", ended => keep(data, ended))
+      else
+        keep(data, "")
+    }, rest)
+  }
+
+  // Reads the events of a conversation after `cursor`, a page at a time, and
+  // gives `done` why its last run to end failed, "" when it did not.
+  function lastEnd(place, base, cursor, ended, done) {
+    http.call(place.socket, "GET", base + "/events" + (cursor !== "" ? "?after=" + cursor : ""), null, false, data => {
+      const events = data.events
+      const error = events.some(event => event.type === "end-run") ? Projects.ended(events) : ended
+      if (events.length < 500)
+        done(error)
+      else
+        lastEnd(place, base, events[events.length - 1].cursor, error, done)
+    }, () => done(ended))
   }
 
   // What a conversation is called: what was first said in it, or when it began.
@@ -479,6 +502,7 @@ Singleton {
     titles = {}
     runStarts = {}
     runErrors = {}
+    lastEnded = ""
     sending = {}
     lastEventAt = 0
     works = []
@@ -529,7 +553,7 @@ Singleton {
       if (unsettled.length !== Object.keys(sending).length)
         sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
       const next = Object.assign({}, summaries)
-      next[id] = Projects.summary(data)
+      next[id] = Projects.summary(data, lastEnded)
       summaries = next
     })
   }
@@ -978,6 +1002,7 @@ Singleton {
       keep("rows", event.run_id, append(key, { kind: "turn", key: event.run_id, who: body.agent, work: work, streaming: true, stamp: stamp, at: at }))
       break
     case "end-run": {
+      lastEnded = body.error ? String(body.error) : ""
       if (body.error)
         keep("runErrors", event.run_id, String(body.error))
       const place = rows[event.run_id]
