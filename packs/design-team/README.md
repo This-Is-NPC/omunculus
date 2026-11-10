@@ -11,8 +11,33 @@ and the owner approve, the builders work from its `design/handoff.md`.
 | --- | --- | --- |
 | design-lead | 0 | answers the sales desk: briefing, rounds, assessments |
 | designer | 1, workflow only | makes the design in `design/` |
-| design-reviewer | 1, workflow only | checks the design against the briefing, and, where a project composes it into the build, what is built against the approved design, naming for each fault the item of the plan that fixes it |
+| design-reviewer | 1, workflow only | the team's QA, independent of the designer and the builders: checks the design against the briefing, and, where a project composes it into the build, what is built against the approved design (or the scope and plan when the client waived it), sending back only defects, each naming the item of the plan that fixes it |
 | publisher | 1, workflow only | publishes it to homologation |
+
+## Receiving work
+
+The design lead takes a work from the sales desk, in one of three forms:
+
+- **A design.** The goal is the briefing in full: the business, who
+  decides, what the site is for, the pages in scope, the audience, logo,
+  colours and fonts, the content the client sends, references, tone and the
+  main action (`templates/design-brief.md`), the round (0 for the first
+  design) and the client's slug. What is missing the lead asks for before
+  handing the design down. The designer commits `Dockerfile` and
+  `deploy.toml` with `app = "design-<client-slug>"`.
+- **A round.** The goal names the earlier design (title and id) and what
+  the client asked to change. A page or feature outside the briefing's
+  scope is not a round, and with the rounds used up the lead starts none.
+- **An assessment.** The goal begins `Assessment only, build nothing:`. The
+  lead answers it itself, never through the workflow `design`, in writing:
+  yes, no or partly, then the effort (steps in order and how large each is,
+  never a date), what it needs from the client and what blocks it.
+
+The preview is the default. Every design is published as a preview and
+handed up for the client; the team never decides the client does not want
+one. Skipping the design is the client's waiver, and then no work comes to
+this team. The lead's report opens by saying the preview is ready for the
+client's approval.
 
 Every design goes through the workflow `design`: design (designer), review
 (design-reviewer), publish (publisher), which `deploy_preview` concludes,
@@ -26,6 +51,14 @@ at that depth sits beside it. A briefing comes before any design, the
 moodboard and wireframes before the mockup, and the rounds of revision
 included are those `templates/design-brief.md` gives; a change of scope is
 not a round, and rounds beyond those are the owner's decision.
+
+The design reviewer is the team's QA. It changes no file and sends back
+only defects against the briefing, the handoff, the plan's checks or the
+scope, each naming what is wrong, the item to fix and what it must show;
+taste goes in its report as a note. When the client waived the design, the
+plan says "Design: waived by the client" and there is no `design/handoff.md`:
+it then checks each page and the whole site against the scope and the plan,
+and a missing approved design never blocks it.
 
 ## Importing it
 
