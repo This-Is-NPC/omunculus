@@ -33,7 +33,7 @@ Read the modules of §3 in the order they are listed.
 ```text
 bin/omunculus        shell wrapper: mise exec -- mix omunculus
 apps/console/        the window: QML on Quickshell, a client of the server's local socket
-apps/mailbox/        the mailbox: a concept client
+apps/mailbox/        the mailbox: an e-mail client over the projects
 apps/studio/         the studio: the project's settings
 apps/kit/            what the apps share: ui/, the theme and controls, client/, the curl
                      requests to the server's sockets, the request helpers and the scripts

@@ -130,11 +130,9 @@ Item {
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.Wrap
       text: !Mail.connected ? "THE SERVER DOES NOT ANSWER"
-        : !Mail.primed ? "READING THE THREADS"
+        : !Mail.primed ? "READING YOUR MAIL"
         : Mail.query !== "" ? "NO THREAD MATCHES “" + Mail.query.toUpperCase() + "”"
-        : Mail.folder === "waiting" ? "NOTHING WAITS FOR YOU"
-        : Mail.folder === "working" ? "NO AGENT IS WORKING"
-        : "NO THREADS YET"
+        : "NO MAIL HERE"
       color: Theme.dim
       font.pixelSize: 11
       font.letterSpacing: 2

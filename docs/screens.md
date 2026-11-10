@@ -284,39 +284,39 @@ arrows and PgUp/PgDn scroll it.
 
 `apps/kit/run mailbox --config <server.toml> [--project <id>]`. Its IPC
 (`quickshell ipc --path apps/mailbox call mailbox <function>`):
-`newThread`, `open <key>`, `search <query>`, `fold folders|threads` and
-`reply`.
+`compose`, `open <key>`, `search <query>`, `fold folders|list` and `reply`.
+How it maps a conversation to e-mail is in [the mailbox](mailbox.md).
 
-### 13. The threads
+### 13. The folders
 
-The folders — all threads, those waiting for you and those working — the
-project chips, and the threads of the folder, newest first, each with its
-state. A command bar holds NEW THREAD and MARK ALL READ.
+Inbox, Sent, Drafts and Archive, the project chips, and the threads of the
+folder, newest first, each with its sender, subject, snippet, label and time;
+unread ones in bold. A command bar holds COMPOSE and MARK ALL READ.
 
 | Keys | What they do |
 | --- | --- |
-| Ctrl+N | a new thread |
-| / | search threads by subject, agent, project, message or file name |
+| Ctrl+N | compose |
+| / | search by subject, agent, project, message or file name |
 | Esc | clear the search |
 | Ctrl+B | fold the folders to a rail |
-| Ctrl+L | fold the threads to a rail of their agents' portraits |
+| Ctrl+L | fold the list to a rail of the agents' portraits |
 
 ### 14. A thread
 
-One conversation with an agent of depth 0, newest first: what you wrote,
-what the agent said to you, and each request whose decision is yours, with
-its options. Its state and what happens next head it.
+One conversation with an agent of depth 0, stacked oldest first, the latest
+message open, with its label in the head. Each open message offers REPLY,
+REPLY ALL and FORWARD; a reply is written under the messages.
 
 | Keys | What they do |
 | --- | --- |
-| Ctrl+R | reply |
+| Ctrl+R | reply to the latest message |
 | Alt+Up · Alt+Down | the thread before or after |
 | Esc | close the reply, then the thread |
 
-### 15. A new thread
+### 15. Compose
 
-A dialog: its To, an agent of depth 0 of one project, and the first
-message, with the files it carries.
+A dialog: To (one agent, as a chip, with autocomplete), Subject, the message,
+Attach and SEND. It keeps what is written in Drafts when closed.
 
 ## The studio
 

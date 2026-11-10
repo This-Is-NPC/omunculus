@@ -2,11 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// ThreadRow is one thread in the list, as a row of a table: a hairline
-// outline at rest, a faint wash under the pointer, and the highlight with an
-// accent outline when it is the thread on screen. A dot marks it unread; its
-// subject decodes when it arrives while the list is on screen. Under it, its
-// state, and what it is doing or else its last message.
+// ThreadRow is one thread in the list, as a mail client's row: a hairline
+// outline at rest, a wash under the pointer and the accent outline when it is
+// the thread on screen. Unread, it is bold with a dot. It shows who wrote,
+// the subject with the start of the last message, its label and its time.
 Rectangle {
   id: row
 
@@ -18,7 +17,7 @@ Rectangle {
 
   signal chosen()
 
-  implicitHeight: 70
+  implicitHeight: 62
   color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
   border.color: current ? Theme.primary : Theme.line
   Behavior on color { ColorAnimation { duration: 120 } }
@@ -27,8 +26,8 @@ Rectangle {
   Component.onCompleted: if (fresh) subject.replay()
 
   ColumnLayout {
-    anchors { fill: parent; leftMargin: 14; rightMargin: 14; topMargin: 10; bottomMargin: 10 }
-    spacing: 4
+    anchors { fill: parent; leftMargin: 14; rightMargin: 14; topMargin: 8; bottomMargin: 8 }
+    spacing: 3
 
     RowLayout {
       Layout.fillWidth: true
@@ -36,33 +35,32 @@ Rectangle {
       Dot { tone: Theme.primary; opacity: row.unread ? 1 : 0; Behavior on opacity { NumberAnimation { duration: 140 } } }
       Label {
         Layout.fillWidth: true
-        text: row.thread.agent || "—"
+        text: row.thread.parties
         color: row.unread ? Theme.foreground : Theme.dim
         font.pixelSize: 12
         font.bold: row.unread
         elide: Text.ElideRight
       }
+      MailLabel { kind: row.thread.label }
       ProjectTag { name: row.thread.project }
       Label { text: Mail.when(row.thread.at); color: row.unread ? Theme.primary : Theme.dim; font.pixelSize: 10 }
-    }
-    DecodeLabel {
-      id: subject
-      Layout.fillWidth: true
-      value: row.thread.subject
-      soft: true
-      revealOnStage: false
-      font.pixelSize: 13
-      font.bold: row.unread
-      elide: Text.ElideRight
     }
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      ThreadState { thread: row.thread }
+      DecodeLabel {
+        id: subject
+        Layout.maximumWidth: row.width * 0.55
+        value: row.thread.subject
+        soft: true
+        revealOnStage: false
+        font.pixelSize: 13
+        font.bold: row.unread
+        elide: Text.ElideRight
+      }
       Label {
         Layout.fillWidth: true
-        // What it is doing, while that says more than its last message.
-        text: row.thread.status.brief || row.thread.snippet
+        text: row.thread.snippet
         color: Theme.dim
         font.pixelSize: 11
         elide: Text.ElideRight

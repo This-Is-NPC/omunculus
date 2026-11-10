@@ -6,13 +6,14 @@ import Quickshell.Io
 import "kit/ui"
 
 ShellRoot {
-  // The mailbox: the masthead on top, whose notch sweeps
-  // when the section changes, then the folders, the threads of the one picked
-  // and the thread open, parted by hairlines that fade downwards, under a
-  // command bar whose actions follow where you are. Each column is headed by
-  // its name and the arrow that folds it: the folders to a rail, the threads
-  // away, sliding to their width; a narrow window shows one pane at a time. A
-  // new thread is written in a dialog; a thread is answered only when asked.
+  // The mailbox, an e-mail client: the masthead on top, whose notch sweeps
+  // when the folder changes, then the folders (Inbox, Sent, Drafts, Archive),
+  // the messages of the one picked and the thread open, parted by hairlines
+  // that fade downwards, under a command bar whose actions follow where you
+  // are. Each column is headed by its name and the arrow that folds it: the
+  // folders to a rail, the list away, sliding to their width; a narrow window
+  // shows one pane at a time. A new message is written in a dialog; a thread
+  // is answered under its messages.
   FloatingWindow {
     id: window
 
@@ -38,7 +39,7 @@ ShellRoot {
 
     Connections {
       target: Mail
-      function onComposeRequested() { compose.open() }
+      function onComposeRequested(preset) { compose.start(preset) }
     }
 
     Rectangle {
@@ -53,8 +54,7 @@ ShellRoot {
 
         Masthead {
           Layout.fillWidth: true
-          crumbs: [{ text: window.narrow && window.reading ? "thread"
-            : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder] }]
+          crumbs: [{ text: window.narrow && window.reading ? "thread" : Mail.folder }]
         }
 
         CommandBar {
@@ -62,8 +62,7 @@ ShellRoot {
           Layout.fillWidth: true
           place: window.reading ? "thread" : "list"
           narrow: window.narrow
-          onCompose: compose.open()
-          onReply: Mail.replyRequested()
+          onCompose: Mail.compose()
         }
 
         // The one search box: in the command bar, or over the list on a narrow window.
@@ -71,7 +70,7 @@ ShellRoot {
           id: searchBox
           parent: window.narrow ? narrowSearch : commands.searchSlot
           anchors.fill: parent
-          placeholderText: "search threads  /"
+          placeholderText: "search mail  /"
           onApplied: value => Mail.query = value.trim().toLowerCase()
           onLeave: threads.enter()
         }
@@ -101,9 +100,10 @@ ShellRoot {
                 shortcut: "ctrl+b"
                 onToggle: window.foldersFolded = !window.foldersFolded
               }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "all"; icon: "import"; label: "All threads"; count: Mail.unread }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "working"; icon: "spark"; label: "Working"; count: Mail.working }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "sent"; icon: "send"; label: "Sent" }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "archive"; icon: "folder"; label: "Archive" }
               Item { Layout.fillHeight: true }
               Label {
                 visible: !window.foldersFolded
@@ -133,8 +133,8 @@ ShellRoot {
               ColumnHead {
                 Layout.fillWidth: true
                 visible: !window.narrow
-                title: "threads"
-                count: String(Mail.shown.length)
+                title: Mail.folder
+                count: String(Mail.folder === "drafts" ? Mail.shownDrafts.length : Mail.shown.length)
                 shortcut: "ctrl+l"
                 onToggle: window.listFolded = true
               }
@@ -142,17 +142,24 @@ ShellRoot {
                 Layout.fillWidth: true
                 visible: window.narrow
                 spacing: 4
-                FolderTab { rail: true; name: "all"; icon: "import"; label: "All threads"; count: Mail.unread }
-                FolderTab { rail: true; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
-                FolderTab { rail: true; name: "working"; icon: "spark"; label: "Working"; count: Mail.working }
+                FolderTab { rail: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
+                FolderTab { rail: true; name: "sent"; icon: "send"; label: "Sent" }
+                FolderTab { rail: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
+                FolderTab { rail: true; name: "archive"; icon: "folder"; label: "Archive" }
               }
               Item { id: narrowSearch; visible: window.narrow; Layout.fillWidth: true; Layout.preferredHeight: 30 }
               ProjectFilter { Layout.fillWidth: true }
               ThreadList {
                 id: threads
+                visible: Mail.folder !== "drafts"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 onCleared: searchBox.text = ""
+              }
+              DraftList {
+                visible: Mail.folder === "drafts"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
               }
             }
           }
@@ -169,7 +176,7 @@ ShellRoot {
             spacing: 10
             ColumnHead {
               Layout.fillWidth: true
-              title: "threads"
+              title: Mail.folder
               folded: true
               shortcut: "ctrl+l"
               onToggle: window.listFolded = false
@@ -218,7 +225,7 @@ ShellRoot {
               spacing: 14
               DecodeLabel {
                 anchors.horizontalCenter: parent.horizontalCenter
-                value: "PICK A THREAD, OR START A NEW ONE"
+                value: "PICK A MESSAGE, OR WRITE A NEW ONE"
                 soft: true
                 color: Theme.dim
                 font.pixelSize: 10
@@ -226,7 +233,7 @@ ShellRoot {
               }
               Label {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "/ SEARCH   ·   CTRL+N NEW   ·   ALT+↑↓ MOVE"
+                text: "/ SEARCH   ·   CTRL+N COMPOSE   ·   ALT+↑↓ MOVE"
                 color: Theme.line
                 font.pixelSize: 10
                 font.letterSpacing: 2
@@ -246,7 +253,7 @@ ShellRoot {
         onDismissed: id => Mail.notices.dismiss(id)
       }
 
-      Shortcut { sequence: "Ctrl+N"; onActivated: compose.open() }
+      Shortcut { sequence: "Ctrl+N"; onActivated: Mail.compose() }
       Shortcut { sequence: "/"; onActivated: window.search() }
       Shortcut { sequence: "Ctrl+B"; enabled: !window.narrow; onActivated: window.foldersFolded = !window.foldersFolded }
       Shortcut { sequence: "Ctrl+L"; enabled: !window.narrow; onActivated: window.listFolded = !window.listFolded }
@@ -258,11 +265,11 @@ ShellRoot {
   // `quickshell ipc --path apps/mailbox call mailbox <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "mailbox"
-    function newThread(): void { Mail.compose() }
+    function compose(): void { Mail.compose() }
     function open(key: string): void { Mail.open(key) }
     function search(query: string): void { searchBox.text = query; window.search() }
-    // "folders" or "threads".
+    // "folders" or "list".
     function fold(pane: string): void { if (pane === "folders") window.foldersFolded = !window.foldersFolded; else window.listFolded = !window.listFolded }
-    function reply(): void { Mail.replyRequested() }
+    function reply(): void { Mail.replyRequested("") }
   }
 }

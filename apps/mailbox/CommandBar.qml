@@ -4,15 +4,13 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // CommandBar is the mailbox's one row of actions, under the masthead, as a
-// mail client keeps them, ranked: the main action of where you are solid,
-// then the others outlined, in order of importance, which slide in when the
-// place changes, and the search at the end. On the list the main action is a
-// new thread. With a thread open it is the reply, unless the thread waits on
-// a decision of yours: then nothing in it moves until you decide, so DECIDE
-// leads, in the warning tone, and the reply follows. Moving between threads
-// and closing one are the thread's own, in its head; folding a column is the
-// column's. Each action says its name while the names fit; otherwise every
-// one but the main one shows only its icon, its name in the tip.
+// mail client keeps them, ranked: on the list COMPOSE is the solid action,
+// then MARK ALL READ. With a thread open the solid action is the latest
+// message's Reply, so the bar offers ARCHIVE (MOVE TO INBOX from the archive),
+// MARK UNREAD and COMPOSE, outlined. Moving between threads and closing one are
+// the thread's own, in its head; folding a column is the column's. Each action
+// says its name while the names fit; otherwise every one but the main one shows
+// only its icon, its name in the tip. The search sits at the end.
 Item {
   id: bar
 
@@ -20,28 +18,23 @@ Item {
   property string place: "list"
   // Whether the window is narrow, and the search sits over the list instead.
   property bool narrow: false
-  readonly property var thread: Mail.thread
-  readonly property bool deciding: thread !== null && thread.waiting.length > 0
-  // The thread's panel then offers WRITE AGAIN as the screen's solid action.
-  readonly property bool stuck: thread !== null && ["failed", "stalled"].includes(thread.status.state)
   // Where the search box sits while the bar has room for it.
   readonly property alias searchSlot: slot
 
   signal compose()
-  signal reply()
 
   implicitHeight: 40
 
-  readonly property var newThread: ({ text: "NEW THREAD", icon: "plus", tip: "new thread  ctrl+n", enabled: Mail.connected, run: () => bar.compose() })
+  readonly property var newMessage: ({ text: "COMPOSE", icon: "plus", tip: "new message  ctrl+n", enabled: Mail.connected, run: () => bar.compose() })
   // The actions of where you are, in order of importance.
   readonly property var commands: place === "thread" ? [
-    { text: thread && thread.status.ask === "answer" ? "ANSWER" : "DECIDE", icon: "warning", role: "primary", tone: Theme.warning, tip: "what the thread waits on you for",
-      shown: deciding, run: () => Mail.decisionRequested() },
-    { text: "REPLY", icon: "enter", role: deciding || stuck ? "" : "primary", tip: "reply to " + (thread ? thread.agent : "") + "  ctrl+r", run: () => bar.reply() },
+    Mail.folder === "archive"
+      ? { text: "MOVE TO INBOX", icon: "import", tip: "move the thread back to the inbox", run: () => Mail.restore(Mail.selected) }
+      : { text: "ARCHIVE", icon: "folder", tip: "archive the thread", run: () => Mail.archive(Mail.selected) },
     { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) },
-    newThread
-  ].filter(command => command.shown !== false) : [
-    Object.assign({ role: "primary" }, newThread),
+    newMessage
+  ] : [
+    Object.assign({ role: "primary" }, newMessage),
     { text: "MARK ALL READ", icon: "check", tip: "mark every thread shown read", enabled: Mail.shown.some(thread => Mail.isUnread(thread)), run: () => Mail.markAllRead() }
   ]
 

@@ -419,8 +419,7 @@ every decision it gathers from below — an origin still waiting whose options
 are named, as an escalation keeps a decision's options on its origin — each
 under its part name and who asked it, a grant's scopes read for that
 origin's asker and work, an option of an origin given through the reply's
-`parts`, down to it (the kit's `Requests.choices` and `Requests.answer`, as
-in the mailbox).
+`parts`, down to it (the kit's `Requests.choices` and `Requests.answer`).
 
 Every option carries the words of its field: SEND replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
