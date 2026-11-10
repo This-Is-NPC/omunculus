@@ -357,9 +357,13 @@ Item {
       const heldRow = root.held !== "" ? root.rowOf(root.held) : -1
       // A held entry that fits shows whole, its bottom with it.
       const held = heldRow >= 0 ? itemAtIndex(heldRow) : null
-      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin))
+      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin)) {
         positionViewAtIndex(heldRow, ListView.Beginning)
-      else
+        // The entry before it shows whole above it, never cut by the view.
+        const before = heldRow > 0 ? itemAtIndex(heldRow - 1) : null
+        if (before)
+          contentY = Math.max(originY - topMargin, contentY - before.height)
+      } else
         positionViewAtEnd()
     }
 
@@ -628,6 +632,20 @@ Item {
       return false
     const top = entry.y - shown
     return top < tall && top + entry.height > tall
+  }
+
+  // The entries above the view: an opened conversation lands at its end, and
+  // this says that the history goes on above, and leads to its start.
+  NewPill {
+    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.space.gap }
+    above: true
+    word: "EARLIER"
+    tip: "Show the start of the conversation"
+    count: root.revision < 0 || timeline.contentY <= timeline.originY + 4 ? 0 : Math.max(0, timeline.indexAt(1, timeline.contentY + 2))
+    onClicked: {
+      timeline.following = false
+      timeline.positionViewAtBeginning()
+    }
   }
 
   NewPill {

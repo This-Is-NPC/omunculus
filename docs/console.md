@@ -157,7 +157,11 @@ that moment: "✓ designer  worked 4 min · 12 steps", or "failed after 4 min"
 in the error tone, so the chat tells the team's work in order. A run of the
 thread's own that fails leaves a line too, in the error tone with the warning
 icon: "⚠ sales  failed", and under it the error the run ended in. Who works is
-the chat's to say; the header strip does not repeat it.
+the chat's to say; the header strip does not repeat it. A conversation opens
+at its end, and while earlier entries lie above the view an EARLIER pill at
+its top counts them and leads to the start; when the question waiting on you
+is taller than the view, the thread lands at its top with the entry before it
+whole above, never cut by the view.
 Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
 thread's `openLog`).
