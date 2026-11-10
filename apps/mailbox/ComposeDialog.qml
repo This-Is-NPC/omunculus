@@ -4,9 +4,10 @@ import QtQuick.Layouts
 import "kit/client/Mailbox.js" as Mailbox
 import "kit/ui"
 
-// ComposeDialog writes a new message: To holds one agent as a chip, found by
-// typing its name or address (a thread is with one agent, so a second is
-// refused, saying so), then Subject, the message and the files it carries.
+// ComposeDialog writes a new message as a mail client does: a header of one
+// line each, To and Subject, then the message. To holds one agent as a chip
+// with its name (its address in the tip), found by typing a name or an
+// address; a thread is with one agent, so a second is refused, saying so.
 // It starts with the project's default agent in To when its config declares
 // one. Closing it with something written keeps it in Drafts; DISCARD drops it.
 ModalDialog {
@@ -27,6 +28,8 @@ ModalDialog {
 
   readonly property var suggestions: Mailbox.suggest(Mail.recipients, address.text)
     .filter(item => dialog.to === null || item.address !== dialog.to.address).slice(0, 8)
+  // The width of the header's labels, so the fields line up.
+  readonly property int labelWidth: 64
 
   maxWidth: 640
 
@@ -72,10 +75,12 @@ ModalDialog {
     to = null
   }
 
+  readonly property bool sendable: to !== null && (subject.trim() !== "" || body.text.trim() !== "") && Mail.connected
+
   function send() {
-    if (to === null || (subject.trim() === "" && body.text.trim() === ""))
+    if (!sendable)
       return
-    Mail.send(to.project, to.agent, subject, body.take(), files.take(), draft)
+    Mail.send(to.project, to.agent, subject, body.take(), foot.take(), draft)
     discarding = true
     close()
   }
@@ -87,21 +92,22 @@ ModalDialog {
 
     ColumnLayout {
       anchors { left: parent.left; right: parent.right; top: parent.top }
-      spacing: 12
+      spacing: 8
 
-      Caption { text: "TO" }
-      Flow {
+      // To: the label, then the recipient and the field for another.
+      RowLayout {
         Layout.fillWidth: true
-        spacing: 6
-        // The recipient: a click selects it, only its x (or Backspace, once
-        // selected) removes it.
+        spacing: 8
+        Label { Layout.preferredWidth: dialog.labelWidth; text: "To"; color: Theme.dim; font.pixelSize: 12 }
+        // The recipient as a pill: a click selects it, only its x (or
+        // Backspace, once selected) removes it; its address is the tip.
         Rectangle {
           id: chip
           visible: dialog.to !== null
-          height: Theme.size.chip
-          width: chipRow.implicitWidth + 16
+          implicitHeight: Theme.size.chip
+          implicitWidth: chipRow.implicitWidth + 16
           activeFocusOnTab: true
-          color: activeFocus ? Qt.alpha(Theme.primary, 0.12) : "transparent"
+          color: activeFocus ? Qt.alpha(Theme.primary, 0.12) : Qt.alpha(Theme.foreground, 0.04)
           border.color: activeFocus ? Theme.primary : Theme.line
           Keys.onPressed: event => {
             if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
@@ -110,16 +116,17 @@ ModalDialog {
               event.accepted = true
             }
           }
+          MouseArea { id: pill; anchors.fill: parent; hoverEnabled: true; onClicked: chip.forceActiveFocus() }
+          Hint { active: pill.containsMouse && dialog.to !== null; text: dialog.to ? dialog.to.address : "" }
           Row {
             id: chipRow
             anchors.centerIn: parent
             spacing: 8
             Label {
               anchors.verticalCenter: parent.verticalCenter
-              text: dialog.to ? dialog.to.text : ""
+              text: dialog.to ? dialog.to.name : ""
               color: chip.activeFocus ? Theme.primary : Theme.foreground
-              font.pixelSize: 11
-              MouseArea { anchors.fill: parent; onClicked: chip.forceActiveFocus() }
+              font.pixelSize: 12
             }
             IconButton {
               anchors.verticalCenter: parent.verticalCenter
@@ -132,8 +139,9 @@ ModalDialog {
         }
         TextBox {
           id: address
-          width: dialog.to === null ? 360 : 220
-          placeholderText: Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : dialog.to === null ? "an agent's name or address" : "another recipient"
+          Layout.fillWidth: true
+          dense: true
+          placeholderText: Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : dialog.to === null ? "name or address" : "another recipient"
           onTextEdited: { dialog.listing = true; dialog.current = 0 }
           onActiveFocusChanged: if (activeFocus) dialog.listing = true
           onAccepted: if (dialog.listing && dialog.suggestions.length > 0) dialog.pick(dialog.suggestions[dialog.current])
@@ -145,9 +153,11 @@ ModalDialog {
           Keys.onUpPressed: dialog.current = Math.max(0, dialog.current - 1)
         }
       }
+
       // The agents whose name or address holds what is typed, under the field.
       Rectangle {
         Layout.fillWidth: true
+        Layout.leftMargin: dialog.labelWidth + 8
         visible: dialog.listing && address.activeFocus
         implicitHeight: matches.implicitHeight + 2
         color: Theme.background
@@ -185,43 +195,37 @@ ModalDialog {
             height: 28
             verticalAlignment: Text.AlignVCenter
             text: Mail.projects.length === 0 ? "reading the agents" : "no agent matches"
-            color: Theme.dim
+            color: Theme.foreground
             font.pixelSize: 12
           }
         }
       }
-      FieldError { Layout.fillWidth: true; text: dialog.refusal }
+      FieldError { Layout.fillWidth: true; Layout.leftMargin: dialog.labelWidth + 8; text: dialog.refusal }
 
-      Caption { text: "SUBJECT" }
-      TextBox {
+      RowLayout {
         Layout.fillWidth: true
-        text: dialog.subject
-        onTextChanged: dialog.subject = text
-        placeholderText: "what it is about"
+        spacing: 8
+        Label { Layout.preferredWidth: dialog.labelWidth; text: "Subject"; color: Theme.dim; font.pixelSize: 12 }
+        TextBox {
+          Layout.fillWidth: true
+          dense: true
+          text: dialog.subject
+          onTextChanged: dialog.subject = text
+        }
       }
 
-      Caption { text: "MESSAGE" }
       Editor {
         id: body
         Layout.fillWidth: true
-        Layout.preferredHeight: 180
-        placeholderText: "what you need"
+        Layout.preferredHeight: 200
         onSubmitted: dialog.send()
       }
 
-      DialogFooter {
-        IconButton {
-          name: "attach"
-          tip: "files to send with the message"
-          onClicked: files.pick()
-        }
-        FilePicker { id: files; Layout.fillWidth: true }
-        cancelText: "DISCARD"
-        primaryText: "SEND"
-        primaryIcon: "enter"
-        primaryEnabled: dialog.to !== null && (dialog.subject.trim() !== "" || body.text.trim() !== "") && Mail.connected
-        onCancelled: { dialog.discarding = true; dialog.close() }
-        onAccepted: dialog.send()
+      MailFooter {
+        id: foot
+        sendable: dialog.sendable
+        onDiscarded: { dialog.discarding = true; dialog.close() }
+        onSent: dialog.send()
       }
     }
   }

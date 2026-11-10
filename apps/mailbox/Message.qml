@@ -121,6 +121,7 @@ SurfaceFrame {
       TraceButton {
         dense: true
         role: mail.latest && !mail.replying ? "primary" : "action"
+        filled: mail.latest && !mail.replying
         icon: "enter"
         text: "REPLY"
         tip: "reply  ctrl+r"

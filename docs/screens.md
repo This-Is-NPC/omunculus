@@ -289,8 +289,8 @@ How it maps a conversation to e-mail is in [the mailbox](mailbox.md).
 
 ### 13. The folders
 
-Inbox, Sent, Drafts and Archive, the project chips, and the threads of the
-folder, newest first, each with its sender, subject, snippet, label and time;
+Inbox (with its unread count), Sent, Drafts and Archive, named, and the
+threads of the folder, newest first, each with its sender, subject, snippet, label and time;
 unread ones in bold. A command bar holds COMPOSE and MARK ALL READ.
 
 | Keys | What they do |
@@ -316,7 +316,7 @@ REPLY ALL and FORWARD; a reply is written under the messages.
 ### 15. Compose
 
 A dialog: To (one agent, as a chip, with autocomplete), Subject, the message,
-Attach and SEND. It keeps what is written in Drafts when closed.
+Attach and SEND, the filled action. It keeps what is written in Drafts when closed.
 
 ## The studio
 

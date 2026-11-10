@@ -65,7 +65,7 @@ Item {
     if (editor.text.trim() === "")
       return
     const request = target.request
-    Mail.reply(thread.key, request, editor.take(), request === "" ? files.take() : [])
+    Mail.reply(thread.key, request, editor.take(), request === "" ? footer.take() : [])
     replyKey = ""
   }
 
@@ -108,7 +108,6 @@ Item {
           Layout.fillWidth: true
           spacing: 10
           Label { Layout.fillWidth: true; text: view.thread.with.text; color: Theme.dim; font.pixelSize: 11; elide: Text.ElideRight }
-          ProjectTag { name: "· " + view.thread.project }
         }
       }
       Row {
@@ -208,20 +207,12 @@ Item {
             onClicked: view.quoteAll = !view.quoteAll
           }
         }
-        DialogFooter {
-          IconButton {
-            visible: view.target !== null && view.target.request === ""
-            name: "attach"
-            tip: "files to send with the message"
-            onClicked: files.pick()
-          }
-          FilePicker { id: files; Layout.fillWidth: true }
-          primaryText: "SEND"
-          primaryIcon: "enter"
-          primaryEnabled: editor.text.trim() !== ""
-          cancelText: "DISCARD"
-          onCancelled: view.replyKey = ""
-          onAccepted: view.send()
+        MailFooter {
+          id: footer
+          attachable: view.target !== null && view.target.request === ""
+          sendable: editor.text.trim() !== ""
+          onDiscarded: view.replyKey = ""
+          onSent: view.send()
         }
       }
     }

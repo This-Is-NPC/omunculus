@@ -61,16 +61,20 @@ capitalised: `Sales <sales@agency>`.
 - **Archive**: threads you archived. A thread that gets new mail after it was
   archived returns to the inbox.
 
+The folders show their names, with the unread count on Inbox. Ctrl+B folds them
+to icons, and a window narrower than 760 px shows icons only.
+
 Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
 list. A row shows who wrote ("Sales, me (5)") and the time, then the subject
-and the start of the last message, with the label and the project beside them.
-In a list narrower than 380 px the snippet is left out and the label and the
-project take a line of their own, so the sender and the subject keep the
-width.
+and the start of the last message, with the label beside them. In a list
+narrower than 380 px the snippet is left out and the label takes a line of its
+own, so the sender and the subject keep the width. Which project an agent is
+in shows only in its address (`sales@agency`); search can still match it.
 
 ## Labels
 
-A thread has at most one label, on its row and in its header:
+A thread has at most one label, on its row and in its header, a small pill
+with a still icon and a word:
 
 - **In progress**: a run of the conversation is open, a request waits on
   someone other than you, or a work waits on its children.
@@ -85,7 +89,7 @@ an unread e-mail.
 
 Opening a thread stacks its messages, the latest open and the others folded to
 a line. Click a message to open or fold it. An open message offers REPLY,
-REPLY ALL and FORWARD. The latest message's REPLY is the screen's solid action;
+REPLY ALL and FORWARD. The latest message's REPLY is the screen's one filled action;
 REPLY ALL does the same as REPLY, since a thread has one agent. The command bar
 offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
 
@@ -108,21 +112,26 @@ FORWARD opens the compose window with `Fwd:` and the message quoted.
 
 ## Composing
 
-COMPOSE (Ctrl+N) opens a dialog: To, Subject, the message, Attach, SEND.
+COMPOSE (Ctrl+N) opens a dialog laid out as a mail's header: a To line and a
+Subject line, label on the left and field on the right, then the message,
+Attach, DISCARD and SEND. SEND is the filled action, enabled once there is a
+recipient and some text. A sent message gets no toast: it appears in the
+thread.
 
-- To holds one agent as a chip. A click on the chip selects it; only its x, or
+- To holds one agent as a pill with its display name, its address in the tip
+  and an x on the right. A click on the pill selects it; only its x, or
   Backspace once it is selected, removes it. The field beside it lists, under
   it, the agents whose name or address holds what you type, case aside (all of
   them while it is empty); Up and Down move, Enter or a click picks, Esc
   closes the list. The agents are those of depth 0 that are not workflow-only,
   as the config route gives them, of the projects where the capabilities route
   grants `conversation.create` and `conversation.send`. They are ordered: the
-  current project's default agent, the rest of that project, then the other
-  projects. A second recipient is refused with a sentence saying a message
+  project the window was opened on, its default agent first, then the rest of
+  that project, then the other projects. A second recipient is refused with a sentence saying a message
   goes to one agent.
 - When the project's config declares a `default_agent` (the config route's
-  `default_agent`), To starts with it: the project being filtered on, else the
-  one the window was opened on. With none declared, To starts empty.
+  `default_agent`), To starts with it, for the project the window was opened on.
+  With none declared, To starts empty.
 - Closing the dialog with something written keeps it in Drafts; DISCARD drops
   it. A draft opens in the dialog again, and is gone once sent.
 - Files are attached with the attach button (the kit's `FilePicker`) and sent
@@ -140,8 +149,7 @@ rise in; a thread fades in. Subjects never animate.
 ## Search and keys
 
 The search box (`/`) finds threads by subject, agent, project, message or file
-name; Esc clears it. The project chips filter the list when there are several
-projects.
+name; Esc clears it.
 
 | Keys | What they do |
 | --- | --- |
