@@ -99,7 +99,7 @@ The auditor and the refiner are granted `config`, `overview` and
 
 Their proposals go on the logical `owner` route, which a project importing
 the team declares, as the default preset does with
-`{ name = "owner", via = ["origin"] }`; see [requests](requests.md).
+`{ name = "owner", via = ["owners", "origin"] }`; see [requests](requests.md).
 
 Their portraits and their skills (`team-design`, `team-composition`,
 `configure`, `audit`, `refine`) are in the pack; see

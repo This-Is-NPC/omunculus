@@ -48,7 +48,7 @@ workflows = ["design", "page", "release"]
 # the generalist, rather than through the builders' administrator.
 [policy]
 request_routes = [
-  { name = "owner", via = ["origin"] },
+  { name = "owner", via = ["owners", "origin"] },
   { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }, "origin"] },
   { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] },
 ]

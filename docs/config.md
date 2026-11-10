@@ -83,7 +83,7 @@ once into `Config.request_routes`, including workspace overlays. For example:
 ```toml
 [policy]
 request_routes = [
-  { name = "owner", via = ["origin"] },
+  { name = "owner", via = ["owners", "origin"] },
   { via = ["parent", "origin"] },
 ]
 ```
@@ -92,7 +92,9 @@ The first rule matching the optional logical route name (`to`), authenticated
 `from` identity, `workflow` and `stage` selects its `via` list. Unnamed requests
 match unnamed rules. A stage filter requires its workflow; both must exist.
 Destinations are `parent` (the parent work's assignee), `origin` (the authenticated
-conversation creator, or the run/command origin when there is no conversation),
+conversation creator, or the run/command origin when there is no conversation:
+the client), `owners` (the humans whose project role grants `project.own`; none
+without `[access]` or members, see [requests](requests.md#client-and-owner)),
 or an identity `{ kind = "agent", agent = "name" }` / `{ kind = "human",
 issuer = "issuer", subject = "subject" }`. A named agent must be an ancestor's
 assignee or a configured depth-0 agent that can run without a workflow. Missing contextual destinations and
@@ -102,7 +104,7 @@ and changes nothing. There is no implicit human fallback. Routing does not
 authorize grants; sealed capabilities and permanent scopes still need a human's
 selected option on the original request. Escalation resolves a new route from
 the receiving participant's context. Presets, Amestris and the benchmark declare
-`parent` then `origin` in TOML; eval overlays inherit those routes.
+`parent` then `origin` in TOML; eval overlays inherit those routes. The `owner` route is `["owners", "origin"]`.
 
 `[policy] last_run_output_bytes` is optional: a positive integer, how
 many bytes of each tool call's output the `## Last run` section of the

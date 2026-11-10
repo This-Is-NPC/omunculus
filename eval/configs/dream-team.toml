@@ -19,4 +19,4 @@ kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
 
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]

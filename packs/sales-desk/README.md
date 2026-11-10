@@ -106,7 +106,7 @@ rather than to the client. For the authenticated conversation origin:
 
 ```toml
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] }]
+request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] }]
 ```
 
 Replace its destination with the responsible configured participant when the

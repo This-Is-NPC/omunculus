@@ -88,7 +88,7 @@ steps = [
 # The system team proposes changes to the project on the owner route: the
 # project is the person's to change.
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 max_reopens = 3

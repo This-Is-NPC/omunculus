@@ -133,7 +133,7 @@ for example:
 
 ```toml
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]
 ```
 
 Replace its destination with the participant who runs the machine when
