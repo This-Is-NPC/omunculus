@@ -89,6 +89,27 @@ defmodule Omunculus.Execution.PolicyTest do
     assert with_network.network == "host"
   end
 
+  test "adds the paths and variables the project names to every command", %{dir: dir} do
+    shared = Fixtures.tmp_dir()
+    {:ok, config} = Fixtures.load_config(dir)
+
+    execution = %{
+      config.execution
+      | read: [shared, Path.join(shared, "missing")],
+        variables: %{"MISE_SHARED_INSTALL_DIRS" => shared}
+    }
+
+    config = %{config | execution: execution}
+
+    assert {:ok, policy} = policy(config, "worker", dir, ["sandbox.write"], ["sandbox.write"])
+
+    assert shared in policy.read_only
+    refute Path.join(shared, "missing") in policy.read_only
+    assert shared not in policy.read_write
+    assert policy.environment["MISE_SHARED_INSTALL_DIRS"] == shared
+    refute Policy.writable?(policy, Path.join(shared, "x"))
+  end
+
   test "keeps denied paths hidden below a writable workspace", %{dir: dir} do
     private = Path.join(dir, "private")
     File.mkdir_p!(private)

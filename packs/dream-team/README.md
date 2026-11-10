@@ -158,14 +158,19 @@ operation's calls and that the answers stay neutral.
    --auth homologation=<login>,production=<login>`. It writes the pack to
    `[[packs]]` and copies `workspace/AGENTS.md` into the project's workspace.
 
-The network is the person's: `sandbox.network` is in every agent's
-`human` list, and none holds it. `workspace/AGENTS.md` has the builders
-pin the tools the machine already holds, at the version it holds, and
-register that install with `mise link` (`mise link --force
-node@<version> /usr` for the `/usr/bin/node` the runtimes give), so
-`mise install` downloads nothing; only a tool the machine lacks makes the
-surgeon ask, through `request_access` to `owner`, for `sandbox.network`;
-the toolsmith breaks with what is missing instead.
+`sandbox.network` is negotiable for every agent, not sealed to the person:
+a builder's `request_access` for it goes to its parent (the toolsmith's,
+tester's, editor's and language lawyer's to the surgeon, the surgeon's to
+the administrator), which holds `grant` and answers with the grant. Only
+a request routed to `owner` reaches the person. A tool the person's mise
+already installed needs no network: with `[execution] read` naming the
+mise installs folder and `[execution] variables` setting
+`MISE_SHARED_INSTALL_DIRS` to it, a command resolves the pinned version
+read-only ([config](../../docs/config.md#required-tables)).
+`workspace/AGENTS.md` has the builders pin the tools the machine already
+holds, at the version it holds, and register an install of the runtimes
+with `mise link` (`mise link --force node@<version> /usr` for the
+`/usr/bin/node` the runtimes give), so `mise install` downloads nothing.
 
 The names come from the root, so two projects publish apps of their
 own, and, with `[project] conversations`, so do two conversations of one

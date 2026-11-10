@@ -121,7 +121,9 @@ defmodule Omunculus.Config do
           resources: [String.t()],
           host: boolean,
           deny_read: [String.t()],
+          read: [String.t()],
           write: [String.t()],
+          variables: %{String.t() => String.t()},
           sandbox: sandbox
         }
 
@@ -183,7 +185,7 @@ defmodule Omunculus.Config do
     queue_timeout_ms
     resources
   )
-  @execution_optional_keys ~w(host deny_read write)
+  @execution_optional_keys ~w(host deny_read read write variables)
   @known_execution_resources ~w(sandbox.write sandbox.network)
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version secrets)
@@ -1073,7 +1075,9 @@ defmodule Omunculus.Config do
              {:ok, resources} <- execution_resources(rest),
              {:ok, host} <- execution_host(rest),
              {:ok, deny_read} <- execution_paths(rest, "deny_read"),
+             {:ok, read} <- execution_paths(rest, "read"),
              {:ok, write} <- execution_paths(rest, "write"),
+             {:ok, variables} <- execution_variables(rest),
              {:ok, sandbox} <- parse_sandbox(sandbox_data, config_dir) do
           {:ok,
            %{
@@ -1088,7 +1092,9 @@ defmodule Omunculus.Config do
              resources: resources,
              host: host,
              deny_read: deny_read,
+             read: read,
              write: write,
+             variables: variables,
              sandbox: sandbox
            }}
         end
@@ -1184,14 +1190,28 @@ defmodule Omunculus.Config do
     end
   end
 
-  # Paths a command may not read (`deny_read`) or may also write (`write`),
-  # absolute or under `~`.
+  # Paths a command may not read (`deny_read`), may also read (`read`) or
+  # may also write (`write`), absolute or under `~`.
   defp execution_paths(data, key) do
     paths = Map.get(data, key, [])
 
     if is_list(paths) and Enum.all?(paths, &host_path?/1),
       do: {:ok, Enum.map(paths, &Path.expand/1)},
       else: {:error, {:execution, {:invalid, String.to_atom(key)}}}
+  end
+
+  # `variables`, optional: the environment variables every command gets
+  # with the value written here, apart from `environment`'s, which pass the
+  # server's own.
+  defp execution_variables(data) do
+    variables = Map.get(data, "variables", %{})
+
+    if is_map(variables) and
+         Enum.all?(variables, fn {name, value} ->
+           environment_name?(name) and is_binary(value)
+         end),
+       do: {:ok, variables},
+       else: {:error, {:execution, {:invalid, :variables}}}
   end
 
   defp host_path?("~/" <> rest), do: rest != ""

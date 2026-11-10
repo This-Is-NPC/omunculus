@@ -364,6 +364,47 @@ defmodule Omunculus.EvalProjectTest do
     end
   end
 
+  test "dream-team builders may be granted the network by their parent, only a person promote",
+       %{conn: _conn} do
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(
+               Fixtures.tmp_dir(),
+               "dream-team",
+               {"fake", false},
+               nil
+             )
+
+    assert {:ok, config} = Config.load(path)
+
+    class = fn agent, name, kind ->
+      snapshot =
+        Ceiling.mount(
+          config,
+          %{
+            agent: agent,
+            depth: config.agents[agent].depth,
+            grants: [],
+            stage: nil,
+            workspace: nil,
+            groups: %{}
+          },
+          ["sandbox.network", "promote"]
+        )
+
+      Ceiling.classify(snapshot, name, kind)
+    end
+
+    for agent <- ~w(administrator surgeon toolsmith tester editor language_lawyer clerk) do
+      assert class.(agent, "sandbox.network", "resource") == "askable", agent
+    end
+
+    assert class.("clerk", "promote", "tool") == "sealed"
+
+    for agent <- ~w(administrator surgeon) do
+      assert "grant" in config.agents[agent].ceiling.granted
+    end
+  end
+
   for option <- ~w(grant deny) do
     test "dream-team promote reaches its human for #{option}, refusing any administrator answer",
          %{conn: conn} do
