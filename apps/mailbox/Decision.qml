@@ -3,8 +3,8 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// Decision answers a request that waits on you: the questions it gathers from
-// below, its options and those of the decisions it gathers as buttons, and a
+// Decision answers a request that waits on you: its options and those of the
+// decisions it gathers from below as buttons, and a
 // field for an answer in your own words, which goes with an option or alone.
 // Deny and cancel ask to be pressed twice. The entry's head holds the ANSWER
 // of a request with no option, which sends what is written, or, with nothing
@@ -30,18 +30,6 @@ ColumnLayout {
   }
 
   spacing: 10
-
-  Repeater {
-    model: decision.entry.origins
-    delegate: Prose {
-      required property var modelData
-      Layout.fillWidth: true
-      source: "· " + String(modelData.reason).replace(/\s+/g, " ")
-      color: Theme.dim
-      font.pixelSize: 12
-      wrapMode: Text.Wrap
-    }
-  }
 
   // Each decision as buttons: the request's own options, then those of the
   // decisions it gathers from below, each under its part name when there are
@@ -93,7 +81,8 @@ ColumnLayout {
   Editor {
     id: answer
     Layout.fillWidth: true
-    Layout.preferredHeight: 64
+    // It grows with its words, so the card holds no scroll box of its own.
+    Layout.preferredHeight: Math.max(64, answer.wordsHeight)
     placeholderText: decision.entry.choices.length > 0 ? "a word with your choice, or an answer of your own" : "your answer"
     onSubmitted: Mail.decide(decision.thread, decision.entry.key, "", answer.text)
     onActiveFocusChanged: if (activeFocus) decision.reveal()

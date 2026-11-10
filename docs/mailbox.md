@@ -55,6 +55,15 @@ routed straight to you, is the operator's: no card, nothing in the thread's
 state, folders, unread marks or notices, and while it is pending the thread
 reads WORKING. The console shows it.
 
+Your answer is acknowledged at once: the card folds to your answer, its
+buttons and box go, and the thread reads WORKING, until the next snapshot
+takes it in; if the server refuses it, the card comes back and the notice
+says so. The thread then scrolls to its top, where the newest message is, and
+does so too when a message that needs your answer arrives; your own messages
+are never counted on the NEW pill. The answer box grows with its words, so
+the card holds no scroll box of its own, and the card shows no echo of the
+questions below it.
+
 A request of that agent whose arbiter is you, while pending, takes an option or a text
 answer through the reply endpoint. Its card is always the thread's agent's,
 whoever below asked the question; no card, origin or state names another

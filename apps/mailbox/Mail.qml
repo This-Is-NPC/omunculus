@@ -66,6 +66,9 @@ Singleton {
 
   // Thread key -> {cursor, events, snapshot}: what its thread is built from.
   property var cache: ({})
+  // Request id -> {option, body}: an answer just given, shown as answered
+  // until a snapshot says so, or the server refuses it.
+  property var answering: ({})
   property bool sweeping: false
   // After the first sweep, a new word from an agent is announced on the desktop.
   property bool primed: false
@@ -209,12 +212,30 @@ Singleton {
     const thread = threads[key]
     if (!thread || (!option && body.trim() === ""))
       return
+    // At once the request reads answered; a refusal puts it back.
+    answering = Object.assign({}, answering, { [requestId]: { option: option, body: body.trim() } })
+    rebuild(key)
+    const restore = reason => {
+      const left = Object.assign({}, answering)
+      delete left[requestId]
+      answering = left
+      rebuild(key)
+      tell("your answer did not go: " + (reason || "try again"), true)
+    }
     http.call(projectOf(thread.project).socket, "POST",
       "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/requests/" + requestId + "/reply",
       Requests.answer(option, body.trim(), path), true, () => {
         tell(option ? "answered " + option : "answered", false)
         sweep()
-      })
+      }, restore)
+  }
+
+  // A thread again from what was last read of it.
+  function rebuild(key) {
+    const thread = threads[key]
+    const known = cache[key]
+    if (thread && known && known.snapshot)
+      update(key, build(thread.project, thread.id, known.snapshot, known.events))
   }
 
   // Reads who you are and the projects, then every project's conversations; a
@@ -296,6 +317,10 @@ Singleton {
         return rest()
       events(place.socket, base, known.cursor, known.events, (cursor, all) => {
         cache[key] = { cursor: cursor, events: all, snapshot: snapshot }
+        // An answer the snapshot has taken in needs no overlay.
+        const taken = snapshot.requests.filter(request => answering[request.id] && !Requests.pending(request)).map(request => request.id)
+        if (taken.length > 0)
+          answering = Object.fromEntries(Object.entries(answering).filter(([request]) => !taken.includes(request)))
         update(key, build(place.id, id, snapshot, all))
         rest()
       }, rest)
@@ -391,17 +416,22 @@ Singleton {
     }
     const notes = noted(events)
     const asked = snapshot.requests.filter(request => isMe(request.arbiter) && !isNote(request, notes) && (!!notes[request.id] || askedBy(request, agent)))
+    const waiting = asked.filter(request => Requests.pending(request) && !answering[request.id])
     for (const request of asked) {
       const question = asking(request, notes, agent)
       const reply = replies[request.id]
+      const given = answering[request.id]
       entries.push({
         kind: "request", key: request.id, from: question.from, to: "you",
-        text: question.text, at: request.created_at, open: Requests.pending(request),
+        text: question.text, at: request.created_at, open: Requests.pending(request) && !given,
         files: [],
         choices: Requests.choices(request),
         origins: question.origins,
-        answered: !!reply
+        answered: !!reply || !!given
       })
+      if (!reply && given)
+        entries.push({ kind: "you", key: "answering:" + request.id, from: "you", to: agent, answering: true,
+          option: given.option, text: given.body === given.option ? "" : given.body, at: new Date().toISOString(), open: false, files: [] })
       // Your answer is a message of yours: its words, and the option it chose.
       if (reply) {
         const option = Requests.chosen(reply.body)
@@ -423,8 +453,8 @@ Singleton {
       agent: agent,
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
-      waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
-      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent),
+      waiting: waiting.map(request => request.id),
+      status: status(snapshot, events, waiting, agent, asked.some(request => answering[request.id])),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
       snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
@@ -436,14 +466,15 @@ Singleton {
   // What a thread's conversation is doing, as the client reads it: only the
   // agent they write to is named, never a model, tool, stage, work or other
   // agent. {state, label, brief, line, next}: "waiting" while a request of
-  // yours is pending, with `ask` saying you "answer" it or "decide" it; "working" while a run of any depth is open or a request
-  // waits on someone else; "failed" (STUCK) when nothing runs and the last run
+  // yours is pending, with `ask` saying you "answer" it or "decide" it;
+  // "working" while a run of any depth is open, a request waits on someone
+  // else or an answer was just given (`answered`); "failed" (STUCK) when nothing runs and the last run
   // ended with an error, whose reason stays in the console; "awaited" while
   // nothing runs and a work you gave waits for your next message; "stalled"
   // when nothing runs, nothing is pending and a work is not over; "done" when
   // every work it began is done or cancelled; "idle" otherwise. `brief` is for
   // the list, `line` and `next` for the thread's head.
-  function status(snapshot, events, pending, to) {
+  function status(snapshot, events, pending, to, answered) {
     const agent = to || "the agent"
     const ended = {}
     for (const event of events)
@@ -462,7 +493,8 @@ Singleton {
     }
 
     const working = { state: "working", label: "WORKING", brief: agent + " is working on it", line: agent + " is working on it.", next: "" }
-    if (runs.some(run => run.status === "open"))
+    // An answer just given is being handled, before the next snapshot says so.
+    if (answered || runs.some(run => run.status === "open"))
       return working
 
     const finished = runs.filter(run => run.status !== "open").sort((a, b) => String(a.finished_at || "").localeCompare(String(b.finished_at || "")))

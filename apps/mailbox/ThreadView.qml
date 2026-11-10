@@ -124,6 +124,12 @@ Item {
   onEntriesChanged: {
     const added = entries.length - seenCount
     seenCount = entries.length
+    // What you just did, or what waits for your answer, is brought into view,
+    // never counted as news.
+    if (added > 0 && entries.slice(-added).some(entry => entry.kind === "you" || (entry.kind === "request" && entry.open))) {
+      toTop()
+      return
+    }
     if (added <= 0 || anchorKey === "")
       return
     unseen += added
