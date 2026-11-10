@@ -8,5 +8,6 @@
   ],
   "conversation": [["person", "Hi! I want a website for my bakery. How much is it?"], ["agent", "It is R$ 1,500 for 4 pages."]],
   "first_run_made_work": false,
+  "proposals": [{"work": "w1", "status": "accepted", "price": {"lines": [{"label": "Base (4 pages)", "amount": 1500}], "total": 1500}}],
   "delete": []
 }

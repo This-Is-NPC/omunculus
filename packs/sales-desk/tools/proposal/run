@@ -2,66 +2,40 @@
 """The seller's way to write the proposal of the client's request: `fields`
 laid over the latest version of the proposal of the call's work, the price
 worked out by the desk's rules, and the next versions of the artifact
-`proposal` (the data) and of `proposal.md` (the client's document, rendered
-from templates/proposal.md). See ../_proposal/proposal.py."""
+`proposal-<work id>` (the data) and of `proposal-<work id>.md` (the client's
+document, rendered from the template beside ../_proposal/proposal.py). A
+write built on a version another call has replaced is refused."""
 
 import datetime
-import json
 import os
-import pathlib
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "_proposal"))
 import proposal  # noqa: E402
 
-COMPUTED = ("work", "updated", "price")
 
-
-def answer(ok, output, emit=()):
-    json.dump({"ok": ok, "output": output, "emit": list(emit), "chain": []}, sys.stdout)
-    sys.stdout.write("\n")
-    sys.exit(0)
-
-
-def main():
-    call = json.load(sys.stdin)
+def run(call):
     view = call.get("view") or {}
     args = call.get("args") or {}
-    work = view.get("work") or {}
-    root = (call.get("roots") or [None])[0]
-    if not work.get("id") or not root:
-        answer(False, "proposal writes the proposal of a client's request; this run has none")
+    work_id = (view.get("work") or {}).get("id")
+    if not work_id:
+        raise proposal.Refusal("proposal writes the proposal of a client's request; this run has none")
 
     fields = args.get("fields")
-    if not isinstance(fields, dict):
-        answer(False, "fields must be an object")
-    computed = [key for key in COMPUTED if key in fields]
-    if computed:
-        answer(False, f"the desk works out {', '.join(computed)}: leave it out of fields")
-    status = fields.get("status")
-    if status is not None and status not in proposal.STATUSES:
-        answer(False, f"status is one of: {', '.join(proposal.STATUSES)}")
+    proposal.validate(fields)
 
-    previous = proposal.latest(view, work["id"]) or {}
-    discount = args.get("discount", (previous.get("price") or {}).get("discount", 0))
-    if not isinstance(discount, (int, float)) or discount < 0:
-        answer(False, "discount is a percentage, zero or more")
-    if discount > proposal.MAX_DISCOUNT:
-        answer(False, f"the desk gives up to {proposal.MAX_DISCOUNT}% off; a larger discount is the owner's decision, asked with ask")
-
-    template = pathlib.Path(root, "templates", "proposal.md")
-    if not template.is_file():
-        answer(False, "templates/proposal.md is missing in the workspace")
-
-    data = proposal.merge(previous, fields)
-    data["work"] = work["id"]
+    data = proposal.current(view, work_id) or {}
+    data = proposal.merge(data, fields)
+    if "discount" in args:
+        data["discount"] = proposal.check_discount(args["discount"])
+    data["work"] = work_id
     data["updated"] = datetime.date.today().isoformat()
     data.setdefault("status", "draft")
-    data = proposal.priced(data, discount)
+    data = proposal.priced(data)
 
     total = proposal.money(data["price"]["total"]) if "price" in data else "no price yet"
-    answer(True, f"proposal saved: status {data['status']}, total {total}",
-           proposal.emits(data, template.read_text(encoding="utf-8")))
+    note = f"attach the artifact {proposal.document(work_id)} to give the client this version"
+    return f"proposal saved: status {data['status']}, total {total}; {note}", proposal.emits(view, work_id, data), []
 
 
-main()
+proposal.tool(run)

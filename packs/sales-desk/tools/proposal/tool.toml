@@ -1,7 +1,7 @@
 name = "proposal"
 kind = "tool"
 triggers = ["model"]
-description = "Writes the proposal of this client's request: fields are laid over the latest version, the price is worked out from the scope's pages by the desk's table and discount, and the artifacts proposal (the data) and proposal.md (the client's document) get their next versions. Give the client proposal.md with attach, by artifact name: it hands exactly that version."
+description = "Writes the proposal of this client's request: fields are laid over the latest version, the price is worked out from the scope's pages by the desk's table and discount, and the artifacts proposal-<work id> (the data) and proposal-<work id>.md (the client's document) get their next versions. Give the client the document with attach, by its artifact name: it hands exactly that version. A write built on a version another call replaced is refused; read it again."
 tags = ["sales", "artifacts"]
 command = ["./run"]
 
@@ -11,7 +11,7 @@ required = ["fields"]
 
 [parameters.properties.fields]
 type = "object"
-description = "What to set, merged key by key into the proposal: client, business, city, audience, decider, budget_timing, problem, content {texts, products, contacts}, scope {pages, features, excluded} (lists), design {preview}, timing, next_steps, assessment {work, answer, conditions}, pending (list), status (draft, sent, accepted, refused or approved). The client's own words, in their language."
+description = "What to set, merged key by key into the proposal: client, business, city, audience, decider, budget_timing, problem, content {texts, products, contacts}, scope {pages, features, excluded} (lists), design {state (approved or waived), address}, timing, next_steps, assessment {work, answer, conditions}, pending (list), status (draft, sent, accepted, refused or approved). The client's own words, in their language."
 
 [parameters.properties.discount]
 type = "number"
@@ -23,3 +23,4 @@ source = "works"
 [views.artifacts]
 source = "artifacts"
 include = ["data"]
+prefix = "proposal-"

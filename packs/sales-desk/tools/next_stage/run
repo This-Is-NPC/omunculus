@@ -2,9 +2,8 @@
 """The seller's way to move a client's request to the next stage of the
 workflow sale: refused until the stage the work is in holds, then the
 report as a comment on the work and continue. The proposal is the artifact
-`proposal` of the conversation, written by the proposal tool, whose `work`
-is the call's work: the stages check its data and its status words, whatever
-language the client reads them in."""
+`proposal-<work id>` the proposal tool wrote: the stages check its data,
+whatever language the client reads it in."""
 
 import json
 import os
@@ -14,14 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..
 import proposal  # noqa: E402
 
 
-def answer(ok, output, chain=()):
-    json.dump({"ok": ok, "output": output, "emit": [], "chain": list(chain)}, sys.stdout)
-    sys.stdout.write("\n")
-    sys.exit(0)
-
-
 def refuse(stage, missing):
-    answer(False, f"stage {stage} does not hold yet: {missing}. Do that first, then call next_stage again.")
+    raise proposal.Refusal(f"stage {stage} does not hold yet: {missing}. Do that first, then call next_stage again.")
 
 
 def filled(data, paths):
@@ -39,32 +32,31 @@ def body(event):
     return data or {}
 
 
-def main():
-    call = json.load(sys.stdin)
+def run(call):
     view = call.get("view") or {}
     work = view.get("work") or {}
     stage = work.get("stage")
-    report = ((call.get("args") or {}).get("report") or "").strip()
+    report = str((call.get("args") or {}).get("report") or "").strip()
     if not report:
-        answer(False, "report required")
+        raise proposal.Refusal("report required")
     if not stage:
-        answer(False, "next_stage moves a request of the workflow sale; this run has none")
+        raise proposal.Refusal("next_stage moves a request of the workflow sale; this run has none")
 
-    data = proposal.latest(view, work["id"])
+    data = proposal.current(view, work["id"])
     if data is None:
         refuse(stage, "write the proposal with the proposal tool")
 
     if stage == "qualify":
         missing = filled(data, ["business", "city", "audience", "decider", "budget_timing", "problem",
                                 "content.texts", "content.products", "content.contacts"])
-        if not (data.get("scope") or {}).get("pages"):
+        pages = proposal.lookup(data, "scope.pages")
+        if not (proposal.is_text_list(pages) and pages):
             missing.append("scope.pages")
         if missing:
             refuse(stage, "ask the client and write with the proposal tool what they said — that they left it to us, or do not have it, is an answer too: " + ", ".join(missing))
     elif stage == "design":
-        preview = str(proposal.lookup(data, "design.preview") or "").lower()
-        if "approved" not in preview and "not wanted" not in preview:
-            refuse(stage, "design.preview says the address and approved, once the client approved it, or not wanted")
+        if proposal.lookup(data, "design.state") not in proposal.DESIGN_STATES:
+            refuse(stage, "design.state is approved, once the client approved the preview (with its address in design.address), or waived, when they do not want one")
     elif stage == "assess":
         if filled(data, ["assessment.work", "assessment.answer"]):
             refuse(stage, "ask the builders for an assessment and write its work id (assessment.work) and their answer (assessment.answer) with the proposal tool")
@@ -81,7 +73,7 @@ def main():
         if not builds:
             refuse(stage, "send the builders the build as a work naming their administrator, and call next_stage once it comes back done")
 
-    answer(True, "", [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
+    return "", [], [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}]
 
 
-main()
+proposal.tool(run)

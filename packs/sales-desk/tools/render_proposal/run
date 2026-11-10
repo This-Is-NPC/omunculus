@@ -1,41 +1,25 @@
 #!/usr/bin/env python3
 """Renders the latest version of the proposal of the call's work again, as
-the next version of `proposal.md`, after templates/proposal.md changed. The
-data is not touched."""
+the next version of its document, after the template changed. The data is
+not touched."""
 
-import json
 import os
-import pathlib
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "_proposal"))
 import proposal  # noqa: E402
 
 
-def answer(ok, output, emit=()):
-    json.dump({"ok": ok, "output": output, "emit": list(emit), "chain": []}, sys.stdout)
-    sys.stdout.write("\n")
-    sys.exit(0)
-
-
-def main():
-    call = json.load(sys.stdin)
+def run(call):
     view = call.get("view") or {}
-    work = view.get("work") or {}
-    root = (call.get("roots") or [None])[0]
-    if not work.get("id") or not root:
-        answer(False, "render_proposal renders the proposal of a client's request; this run has none")
+    work_id = (view.get("work") or {}).get("id")
+    if not work_id:
+        raise proposal.Refusal("render_proposal renders the proposal of a client's request; this run has none")
 
-    data = proposal.latest(view, work["id"])
+    data = proposal.current(view, work_id)
     if data is None:
-        answer(False, "there is no proposal of this request yet: write it with proposal")
-    template = pathlib.Path(root, "templates", "proposal.md")
-    if not template.is_file():
-        answer(False, "templates/proposal.md is missing in the workspace")
-
-    document = proposal.render(template.read_text(encoding="utf-8"), data)
-    answer(True, f"{proposal.DOCUMENT} rendered from the proposal of {data['updated']}",
-           [proposal.emit(proposal.DOCUMENT, proposal.DOCUMENT_KIND, "text/markdown", document)])
+        raise proposal.Refusal("there is no proposal of this request yet: write it with proposal")
+    return f"{proposal.document(work_id)} rendered from the proposal of {data['updated']}", [proposal.document_emit(view, work_id, data)], []
 
 
-main()
+proposal.tool(run)

@@ -29,3 +29,4 @@ relation = "children"
 [views.artifacts]
 source = "artifacts"
 include = ["data"]
+prefix = "proposal-"

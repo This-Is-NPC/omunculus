@@ -31,11 +31,11 @@ lacks. What a pack holds and how teams talk to each other is
    ```console
    $ <checkout>/bin/omunculus pack --path <checkout>/packs/sales-desk --models team=fake
    imported sales-desk
-   workspace /tmp/omu-howto/first: copied templates/proposal.md
    ```
 
-   The pack is written to `[[packs]]`, and the files of its `workspace/`
-   the project's workspace lacks are copied in. The first line of
+   The pack is written to `[[packs]]`, and the files of its `workspace/`,
+   when it has one, that the project's workspace lacks are copied in
+   (the sales desk has none). The first line of
    `omunculus.toml` is now, the checkout's path shortened to `…`:
 
    ```toml
