@@ -436,11 +436,20 @@ defmodule Omunculus.Store.Runs do
         do: Map.put(body, "to", owner),
         else: body
 
-    with {:ok, [request]} <- Actions.run(conn, [%{"type" => "request", "body" => body}], ctx),
-         inbox = inbox_text.(text, Map.keys(options)),
-         notify = %{"body" => inbox, "work_id" => run.work_id},
-         {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
-      {:ok, [request | inbox]}
+    case Actions.run(conn, [%{"type" => "request", "body" => body}], ctx) do
+      {:ok, [request]} ->
+        inbox = inbox_text.(text, Map.keys(options))
+        notify = %{"body" => inbox, "work_id" => run.work_id}
+
+        with {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx),
+             do: {:ok, [request | inbox]}
+
+      # Nobody is left on the route: a person is told, once.
+      {:error, {:request, :no_route}} ->
+        notify_once(conn, ctx, inbox_text.(text, []))
+
+      error ->
+        error
     end
   end
 

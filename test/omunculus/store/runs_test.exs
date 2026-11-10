@@ -282,6 +282,19 @@ defmodule Omunculus.Store.RunsTest do
     end
   end
 
+  test "unreported notes a root whose owner route reaches nobody, and asks nothing",
+       %{conn: conn} do
+    routes = [%{"name" => "owner", "via" => ["owners"]}, %{"via" => ["origin"]}]
+    config = %{Fixtures.config() | request_routes: routes}
+    work_id = Fixtures.insert(conn, :works)
+    run = Fixtures.open_run(conn, %{work_id: work_id})
+    {:ok, _} = Runs.close(conn, run.id)
+
+    assert {:ok, {:stopped, [notify]}} = unreported(conn, run, 0, config)
+    assert notify.type == "notify"
+    assert {:ok, []} = Query.all(conn, "SELECT id FROM requests")
+  end
+
   test "begin refuses a cancelled work, and a work's own run on a work not open",
        %{conn: conn} do
     waiting = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})

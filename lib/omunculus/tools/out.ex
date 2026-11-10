@@ -110,8 +110,14 @@ defmodule Omunculus.Tools.Out do
     do:
       "#{agent} stopped the work \"#{title}\" without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
 
-  @doc "The inbox note of a request the harness opens with `reason` and `options`."
+  @doc """
+  The inbox note of a request the harness opens with `reason` and `options`,
+  or, with no option, of one that had no arbiter left on its route.
+  """
   @spec request_inbox(String.t(), [String.t()]) :: String.t()
+  def request_inbox(reason, []),
+    do: reason <> " No arbiter is left on its route, so it stays stopped."
+
   def request_inbox(reason, options),
     do: "#{reason} Answer it with #{Enum.join(options, " or ")}."
 
