@@ -1,0 +1,11 @@
+name = "deploy_destroy"
+kind = "tool"
+triggers = ["model"]
+description = "Removes the workspace's app from the preview environment, with its data. Production is not touched."
+tags = ["deploy"]
+command = ["./run"]
+secrets = ["DEPLOY_KEY"]
+
+[parameters]
+type = "object"
+required = []

@@ -1,0 +1,14 @@
+name = "deploy_logs"
+kind = "tool"
+triggers = ["model"]
+description = "Reads the last lines of the log of the workspace's app in the preview environment. lines is how many, from 1 to 1000; 100 when left out."
+tags = ["deploy"]
+command = ["./run"]
+secrets = ["DEPLOY_KEY"]
+
+[parameters]
+type = "object"
+required = []
+
+[parameters.properties.lines]
+type = "integer"

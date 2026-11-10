@@ -15,6 +15,15 @@ bash = "the codex-like preset's tools (priv/presets/codex-like/tools)"
 [secrets.deploy_preview]
 DEPLOY_KEY = "homologation"
 
+[secrets.deploy_status]
+DEPLOY_KEY = "homologation"
+
+[secrets.deploy_logs]
+DEPLOY_KEY = "homologation"
+
+[secrets.deploy_destroy]
+DEPLOY_KEY = "homologation"
+
 [secrets.promote]
 DEPLOY_KEY = "production"
 
@@ -89,7 +98,7 @@ depth = 1
 model = "team"
 image = "images/clerk.webp"
 workflow_only = true
-tools = ["bash", "break", "changes", "comment", "continue", "deploy_preview", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
+tools = ["bash", "break", "changes", "comment", "continue", "deploy_destroy", "deploy_logs", "deploy_preview", "deploy_status", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network", "promote"]
 text = """
 You are the program clerk of the team: you publish what every item of docs/plan.md built, once each passed review, and keep the record of it. ## Work shows your stage.

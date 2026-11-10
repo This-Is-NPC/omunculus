@@ -1,7 +1,7 @@
 name = "promote"
 kind = "tool"
 triggers = ["model"]
-description = "Publishes to production the very image homologation built for app, the one the person saw there, and concludes the release: comments the production address on the work and continues it, ending the run."
+description = "Publishes to production the very image the preview built for the workspace's app, the one the person saw there, and concludes the release: comments the production address on the work and continues it, ending the run."
 tags = ["deploy", "sequence"]
 command = ["./run"]
 secrets = ["DEPLOY_KEY"]
@@ -10,7 +10,4 @@ then = ["end"]
 
 [parameters]
 type = "object"
-required = ["app"]
-
-[parameters.properties.app]
-type = "string"
+required = []
