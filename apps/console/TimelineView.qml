@@ -561,7 +561,10 @@ Item {
         LogLine {
           width: entry.width
           names: [entry.who]
-          text: entry.text
+          // A run of the thread's own that failed: its error under "failed".
+          readonly property bool why: entry.text.startsWith("failed: ")
+          text: why ? "failed" : entry.text
+          detail: why ? entry.text.slice(8) : ""
           failed: entry.text.startsWith("failed")
           icon: entry.text.startsWith("failed") ? "warning" : "check"
           tone: entry.text.startsWith("failed") ? Theme.error : Theme.dim

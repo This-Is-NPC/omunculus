@@ -991,6 +991,9 @@ Singleton {
           const calls = JSON.parse(ran.steps).filter(line => !line.outcome && !line.hook).length
           append("", { kind: "worked", key: event.run_id, who: ran.who, text: Progress.worked(at - (runStarts[event.run_id] || at), calls, !!body.error), stamp: stamp, at: at, work: work })
         }
+        // A run of the thread's own that failed says so in it, with why.
+        else if (body.error)
+          append("", { kind: "worked", key: event.run_id + ":failed", who: entryAt(place).who, text: "failed: " + String(body.error), stamp: stamp, at: at, work: work })
       }
       break
     }

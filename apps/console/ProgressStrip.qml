@@ -84,6 +84,8 @@ ColumnLayout {
     const segments = who !== "" ? [{ text: who.toUpperCase(), tone: Omunculus.toneOf(who), lead: true }] : []
     if (phase === "done") {
       segments.push({ text: "✓ DONE", tone: Theme.success, keep: true })
+    } else if (phase === "failed") {
+      segments.push({ text: "✕ FAILED", tone: Theme.error, keep: true })
     } else if (focus && focus.count > 0) {
       const at = Math.min(focus.at, focus.count - 1)
       // The stepper under the strip names the stage.
