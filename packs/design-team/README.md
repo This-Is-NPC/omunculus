@@ -4,19 +4,19 @@ The design team makes the visual proposal a site starts from — a design
 system (`design/preview/system.css`: colours, fonts, type scale, spacing
 and components), a moodboard, and the wireframes and a mockup of each
 page in scope — and publishes it to homologation, where the
-sales desk shows it to the client before anything is built. It builds no site: once the client
+project manager shows it to the client before anything is built. It builds no site: once the client
 and the owner approve, the builders work from its `design/handoff.md`.
 
 | Agent | Depth | Does |
 | --- | --- | --- |
-| design-lead | 0 | answers the sales desk: briefing, rounds, assessments |
+| design-lead | 0 | answers the project manager: briefing, rounds, assessments |
 | designer | 1, workflow only | makes the design in `design/` |
 | design-reviewer | 1, workflow only | the team's QA, independent of the designer and the builders: checks the design against the briefing, and, where a project composes it into the build, what is built against the approved design (or the scope and plan when the client waived it), sending back only defects, each naming the item of the plan that fixes it |
 | publisher | 1, workflow only | publishes it to homologation |
 
 ## Receiving work
 
-The design lead takes a work from the sales desk, in one of three forms:
+The design lead takes a work from the project manager, in one of three forms:
 
 - **A design.** The goal is the briefing in full: the business, who
   decides, what the site is for, the pages in scope, the audience, logo,
@@ -62,10 +62,10 @@ and a missing approved design never blocks it.
 
 ## Importing it
 
-It works for the sales desk and publishes with the dream team's
+It works for the project manager and publishes with the dream team's
 `deploy_preview`, which it `requires`, as it does `bash`, the codex-like
 preset's (`priv/presets/codex-like/tools`, in the project's `[tools]
-paths`): import the dream team first, then this team one depth below the
+paths`): import the dream team first, then this team beside the
 seller. The publisher commits under the git identity the project
 gives commands, as the dream team's README says, and sets none of its
 own.

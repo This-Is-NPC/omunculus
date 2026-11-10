@@ -14,7 +14,15 @@
       "parent_id": null,
       "title": "Doce Ana site",
       "goal": "Design first, then the four-page site",
-      "assignee": "sales",
+      "assignee": "project-manager",
+      "state": "done"
+    },
+    {
+      "id": "w7",
+      "parent_id": "w1",
+      "title": "Doce Ana site: sale",
+      "goal": "Design first, then the four-page site",
+      "assignee": "seller",
       "state": "done"
     },
     {
