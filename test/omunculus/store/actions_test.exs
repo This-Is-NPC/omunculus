@@ -500,6 +500,21 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_only]} = Store.artifacts(conn, conversation_id)
     end
 
+    test "a write built on a replaced version is refused, and a version records the tool that called it",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      first = put_in(artifact("brief", "brief", "a"), ["body", "base"], 0)
+      assert {:ok, _events} = record_tool(conn, [first], ctx)
+      assert {:ok, [%{"tool" => "t"}]} = Store.artifacts(conn, conversation_id)
+
+      stale = put_in(artifact("brief", "brief", "b"), ["body", "base"], 0)
+
+      assert {:error, {:artifact, {:conflict, "brief", 0, 1}}} = record_tool(conn, [stale], ctx)
+
+      fresh = put_in(artifact("brief", "brief", "b"), ["body", "base"], 1)
+      assert {:ok, _events} = record_tool(conn, [fresh], ctx)
+      assert {:ok, [_, %{"version" => 2}]} = Store.artifacts(conn, conversation_id)
+    end
+
     test "it needs a run, and a version is no attachment",
          %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
       assert {:error, {:artifact, :no_run}} =

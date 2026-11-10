@@ -231,6 +231,22 @@ defmodule Omunculus.Tools.Out do
   @doc "What a model reads of a call that failed: a text as it is, anything else inspected."
   @spec failure(term) :: String.t()
   def failure(reason) when is_binary(reason), do: reason
+
+  def failure({:artifact, {:conflict, name, base, current}}),
+    do: "#{name} is at version #{current}, not #{base}: read it again and build on that"
+
+  def failure({:artifact, {:kind, name, kind}}),
+    do: "#{name} is an artifact of kind #{kind}: a name keeps its kind"
+
+  def failure({:artifact, {:invalid, :kind}}), do: "kind is a lowercase word"
+  def failure({:artifact, :no_conversation}), do: "this run has no conversation"
+  def failure({:attachment, :not_configured}), do: "[store] attachments is not set"
+  def failure({:attachment, {:invalid, field}}), do: "the #{field} is not valid"
+
+  def failure({:attachment, {:too_large, size, limit}}),
+    do: "#{size} bytes is more than the #{limit} a file may hold"
+
+  def failure({:attachment, :not_found}), do: "that file is not kept"
   def failure(reason), do: inspect(reason)
 
   @doc """

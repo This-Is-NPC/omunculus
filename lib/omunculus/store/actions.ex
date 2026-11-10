@@ -187,7 +187,16 @@ defmodule Omunculus.Store.Actions do
            Query.one(conn, "SELECT conversation_id FROM runs WHERE id = ?", [run_id]),
          true <- not is_nil(conversation_id) || {:error, {:artifact, :no_conversation}},
          {:ok, versions} <- View.artifacts(conn, conversation_id),
-         :ok <- same_kind(body["name"], body["kind"], versions),
+         :ok <-
+           Artifacts.check(
+             ctx.config.store,
+             versions,
+             body["name"],
+             body["kind"],
+             body["media_type"],
+             byte_size(body["content"]),
+             body["base"]
+           ),
          {:ok, meta} <-
            Artifacts.put(
              ctx.config.store,
@@ -200,7 +209,8 @@ defmodule Omunculus.Store.Actions do
         meta
         |> Map.merge(%{
           "kind" => body["kind"],
-          "version" => Artifacts.next(body["name"], versions)
+          "version" => Artifacts.next(body["name"], versions),
+          "tool" => Map.get(ctx, :tool)
         })
         |> put_note(body)
 
@@ -212,14 +222,6 @@ defmodule Omunculus.Store.Actions do
 
   defp put_note(record, %{"note" => note}) when is_binary(note), do: Map.put(record, "note", note)
   defp put_note(record, _body), do: record
-
-  defp same_kind(name, kind, versions) do
-    case Artifacts.kind(name, versions) do
-      nil -> :ok
-      ^kind -> :ok
-      other -> {:error, {:artifact, {:kind, name, other}}}
-    end
-  end
 
   defp prompt(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:prompt, body, "message"),

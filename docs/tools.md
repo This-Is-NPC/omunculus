@@ -204,7 +204,7 @@ argument of the call.
 | `requests` | the request named by the `request_id` argument, or the call's request | `from` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
 | `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
-| `artifacts` | the artifact versions of the run's conversation, oldest first, each as its event describes it with `event_id`, `at` and `by` | `include = ["data"]` adds `data`, the decoded content of each version of media type `application/json` |
+| `artifacts` | the artifact versions of the run's conversation, oldest first, each as its event describes it with `event_id`, `at`, `by` and `tool`, the tool that wrote it | `prefix` keeps the names that begin with it; `include = ["data"]` adds `data`, the decoded content of the latest version of each name when it is `application/json` |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
 | `agents` | the agents and workflows a new work may name, one depth below the run (1 when the run has no work). The run's depth is the work's place in the tree, or its assignee's depth when that is deeper. Listed: the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
@@ -258,7 +258,7 @@ keeps no list.
 
 | Tool | Does |
 | --- | --- |
-| `put_artifact` | Writes the next version. `name` (a file name without a directory) and `kind`, then `data`, a JSON object kept as `application/json`, or `content` with its `media_type`; an optional `note`. The output names the version. |
+| `put_artifact` | Writes the next version. `name` (a file name without a directory) and `kind`, then `data`, a JSON object kept as `application/json`, or `content` with its `media_type`; an optional `note`; an optional `base`, the number of the version it builds on (0 for none), which refuses the write when another version came since. A kind, name, size or `base` the store would refuse fails the call. The output names the version. |
 | `get_artifact` | Reads a version as text: `name`, and `version`, the latest when omitted. A version that is not text is refused with its size. |
 | `list_artifacts` | Lists each artifact with its kind and versions, newest last; `kind` keeps those of one kind. |
 | `attach` | With `artifact`, gives the person that version ([attachments](#attachments)). |
@@ -275,8 +275,18 @@ documents, such as a pack's, emits the `artifact` action: `name`, `kind`,
 `media_type`, `content` and an optional `note`. The store keeps the
 content, numbers the version and records an `artifact` event; it refuses a
 kind that differs from the name's, a run with no conversation, and a
-content past `[store] attachment_bytes`. A tool that needs a version's
-data declares `[views.artifacts]` with `include = ["data"]`.
+content past `[store] attachment_bytes`, and a `base` (an integer, 0 for
+none) that is not the number of the name's latest version. The event
+records the `tool` that emitted it, which a pack's gate may check to
+accept only what its own tool wrote. A tool that needs a version's data
+declares `[views.artifacts]` with `include = ["data"]`, and a `prefix`
+to read fewer names.
+
+`attach` hands over any version the agent names; the core does not tell a
+document for the person from data for the agents, since kinds are the
+pack's. A pack that keeps internal data in an artifact renders a document
+of its own for the person, as the sales desk does, and tells its agents
+to attach that.
 
 ## Actions
 

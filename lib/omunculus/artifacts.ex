@@ -13,12 +13,44 @@ defmodule Omunculus.Artifacts do
   @type version :: %{String.t() => term}
 
   @doc "Keeps `content` for a version of `name`, as the backend describes it."
-  @spec put(Attachments.store(), String.t(), term, String.t(), binary) ::
+  @spec put(Attachments.store(), String.t(), term, term, binary) ::
           {:ok, Attachments.meta()} | {:error, {:artifact | :attachment, term}}
   def put(store, name, kind, media_type, content) do
+    with :ok <- valid_kind(kind), do: Attachments.put(store, name, media_type, content)
+  end
+
+  @doc """
+  Whether the next version of `name` may be written among `versions`: a
+  kind that is a lowercase word and the name's own, a name, media type and
+  size the backend accepts, and, when `base` is given, that it is still
+  the number of the name's latest version (0 for none).
+  """
+  @spec check(Attachments.store(), [version], term, term, term, non_neg_integer, term) ::
+          :ok | {:error, {:artifact | :attachment, term}}
+  def check(store, versions, name, kind, media_type, size, base) do
+    current = Enum.count(versions, &(&1["name"] == name))
+
+    with :ok <- valid_kind(kind),
+         :ok <- Attachments.validate(store, name, media_type, size),
+         :ok <- same_kind(name, kind, versions) do
+      if is_nil(base) or base == current,
+        do: :ok,
+        else: {:error, {:artifact, {:conflict, name, base, current}}}
+    end
+  end
+
+  defp valid_kind(kind) do
     if is_binary(kind) and Regex.match?(~r/\A[a-z][a-z0-9_-]*\z/, kind),
-      do: Attachments.put(store, name, media_type, content),
+      do: :ok,
       else: {:error, {:artifact, {:invalid, :kind}}}
+  end
+
+  defp same_kind(name, kind, versions) do
+    case kind(name, versions) do
+      nil -> :ok
+      ^kind -> :ok
+      other -> {:error, {:artifact, {:kind, name, other}}}
+    end
   end
 
   @doc "The content of `version`, as the backend keeps it."

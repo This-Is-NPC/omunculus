@@ -44,7 +44,7 @@ defmodule Omunculus.Tools.AttachmentsToolsTest do
 
     File.write!(Path.join(root, "big.txt"), String.duplicate("x", 65))
     assert %{"ok" => false, "output" => output} = attach(%{"path" => "big.txt"}, ctx)
-    assert output =~ "too_large"
+    assert output == "65 bytes is more than the 64 a file may hold"
   end
 
   test "read_attachment reads a file attached in the conversation, and only those", ctx do

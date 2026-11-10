@@ -317,7 +317,10 @@ a `kind` (a lowercase word the pack chooses; the core keeps no list) and
 versions numbered from 1. A version is `{name, kind, version, media_type,
 bytes, sha256}` with an optional `note`, and the event's `event_id`, `at`
 and `by`. A name has one kind: a later version naming another is refused.
-A version never changes; a change is the next version.
+A version never changes; a change is the next version. A write may name
+the `base` it builds on and is refused when another version came since,
+and the event records the `tool` that wrote the version, so a pack can
+trust only what its own tool wrote.
 
 **Where it lives.** The metadata is an `artifact` event, as an
 attachment is an `attach` or `prompt` event: the store has no table of

@@ -26,11 +26,12 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
   end
 
   describe "put_artifact" do
-    test "emits an artifact action for data, or for content with its media type" do
+    test "emits an artifact action for data, or for content with its media type", ctx do
       assert %{"ok" => true, "output" => "put quote version 1", "emit" => [emit]} =
                PutArtifact.run(%{
                  args: %{"name" => "quote", "kind" => "proposal", "data" => %{"total" => 10}},
-                 view: %{}
+                 view: %{},
+                 config_path: ctx.config_path
                })
 
       assert %{"type" => "artifact", "body" => body} = emit
@@ -51,14 +52,44 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
                    "media_type" => "text/markdown",
                    "note" => "second"
                  },
-                 view: view
+                 view: view,
+                 config_path: ctx.config_path
                })
 
       assert %{"content" => "# Brief", "media_type" => "text/markdown", "note" => "second"} = body
     end
 
-    test "refuses what is not whole" do
-      put = &PutArtifact.run(%{args: &1, view: %{}})
+    test "fails what the store would refuse, instead of reporting a version", ctx do
+      view = %{"artifacts" => [%{"name" => "brief", "kind" => "brief", "version" => 1}]}
+      put = &PutArtifact.run(%{args: &1, view: view, config_path: ctx.config_path})
+
+      args = %{
+        "name" => "brief",
+        "kind" => "brief",
+        "content" => "x",
+        "media_type" => "text/plain"
+      }
+
+      assert %{"ok" => false, "output" => "brief is an artifact of kind brief" <> _} =
+               put.(%{args | "name" => "brief"} |> Map.put("kind", "design"))
+
+      assert %{"ok" => false, "output" => "kind is a lowercase word"} =
+               put.(Map.put(args, "kind", "Bad Kind"))
+
+      assert %{"ok" => false, "output" => "300 bytes is more than the 256" <> _} =
+               put.(Map.put(args, "content", String.duplicate("x", 300)))
+
+      assert %{"ok" => false, "output" => "brief is at version 1, not 0" <> _} =
+               put.(Map.put(args, "base", 0))
+
+      assert %{"ok" => true, "emit" => [%{"body" => %{"base" => 1}}]} =
+               put.(Map.put(args, "base", 1))
+
+      assert put.(Map.put(args, "base", "one")) == Out.fail("base must be a version number, or 0")
+    end
+
+    test "refuses what is not whole", ctx do
+      put = &PutArtifact.run(%{args: &1, view: %{}, config_path: ctx.config_path})
 
       assert put.(%{"kind" => "brief", "data" => %{}}) == Out.fail("name required")
 
@@ -236,6 +267,82 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
     assert attached["sha256"] == v1["sha256"]
     assert attached["note"] == nil
 
+    Project.close(project)
+  end
+
+  test "the artifacts view keeps a prefix and reads the data of each name's latest version alone",
+       %{dir: dir} do
+    Fixtures.write_config(
+      dir,
+      """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["put_artifact", "counter"]
+
+      [store]
+      path = "s.sqlite3"
+      attachments = "files"
+      attachment_bytes = 256
+      """
+    )
+
+    Fixtures.write_tool(
+      dir,
+      "counter",
+      """
+      name = "counter"
+      kind = "tool"
+      triggers = ["model"]
+      command = ["./run"]
+
+      [views.artifacts]
+      source = "artifacts"
+      include = ["data"]
+      prefix = "p-"
+      """,
+      """
+      #!/bin/sh
+      input=$(cat)
+      data=$(echo "$input" | grep -o '"data"' | wc -l)
+      names=$(echo "$input" | grep -o '"name":"[a-z-]*"' | wc -l)
+      echo "{\\"ok\\": true, \\"output\\": \\"$data data, $names names\\", \\"emit\\": []}"
+      """
+    )
+
+    project = Fixtures.open_project(dir)
+    conversation_id = Omunculus.Id.new()
+
+    :ok =
+      Query.insert(project.conn, :conversations, %{
+        id: conversation_id,
+        created_at: "2026-01-01T00:00:00Z",
+        created_issuer: "local",
+        created_subject: Omunculus.Operations.local_principal().subject
+      })
+
+    message_id =
+      Fixtures.insert(project.conn, :prompts, %{
+        kind: "message",
+        body: "hi",
+        conversation_id: conversation_id
+      })
+
+    test_pid = self()
+
+    model = fn _assembled, _tools, call ->
+      for name <- ["p-a", "p-a", "other"] do
+        {:ok, _} = call.("put_artifact", %{"name" => name, "kind" => "k", "data" => %{"n" => 1}})
+      end
+
+      {:ok, counted} = call.("counter", %{})
+      send(test_pid, {:counted, counted})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+    assert {:ok, _run} = Run.open(project, Fixtures.opening(message_id))
+    assert_receive {:counted, "1 data, 3 names"}
     Project.close(project)
   end
 end
