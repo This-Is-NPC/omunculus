@@ -62,8 +62,11 @@ capitalised: `Sales <sales@agency>`.
   archived returns to the inbox.
 
 Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
-list. A row shows who wrote ("Sales, me (5)"), the subject, the start of the
-last message, its label, the project and the time.
+list. A row shows who wrote ("Sales, me (5)") and the time, then the subject
+and the start of the last message, with the label and the project beside them.
+In a list narrower than 380 px the snippet is left out and the label and the
+project take a line of their own, so the sender and the subject keep the
+width.
 
 ## Labels
 

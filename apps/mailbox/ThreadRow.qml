@@ -15,7 +15,11 @@ Rectangle {
 
   signal chosen()
 
-  implicitHeight: 62
+  // A narrow row gives its label and project a line of their own, so the
+  // sender and the subject keep the width.
+  readonly property bool narrow: width < 380
+
+  implicitHeight: lines.implicitHeight + 16
   color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : unread ? Qt.alpha(Theme.foreground, 0.05) : "transparent"
   border.color: current ? Theme.primary : Theme.line
   Behavior on color { ColorAnimation { duration: 120 } }
@@ -23,7 +27,8 @@ Rectangle {
 
 
   ColumnLayout {
-    anchors { fill: parent; leftMargin: 14; rightMargin: 14; topMargin: 8; bottomMargin: 8 }
+    id: lines
+    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 14; rightMargin: 14; topMargin: 8 }
     spacing: 3
 
     RowLayout {
@@ -32,21 +37,24 @@ Rectangle {
       Dot { size: 8; tone: Theme.primary; opacity: row.unread ? 1 : 0 }
       Label {
         Layout.fillWidth: true
+        Layout.minimumWidth: 0
         text: row.thread.parties
         color: row.unread ? Theme.foreground : Theme.dim
         font.pixelSize: 12
         font.bold: row.unread
         elide: Text.ElideRight
       }
-      MailLabel { kind: row.thread.label }
-      ProjectTag { name: row.thread.project }
+      MailLabel { visible: !row.narrow && kind !== ""; kind: row.thread.label }
+      ProjectTag { visible: !row.narrow; name: row.thread.project }
       Label { text: Mail.when(row.thread.at); color: row.unread ? Theme.primary : Theme.dim; font.pixelSize: 10 }
     }
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
       Label {
-        Layout.maximumWidth: row.width * 0.55
+        Layout.fillWidth: row.narrow
+        Layout.minimumWidth: 0
+        Layout.maximumWidth: row.narrow ? -1 : row.width * 0.55
         text: row.thread.subject
         color: row.unread ? Theme.foreground : Theme.dim
         font.pixelSize: 13
@@ -55,12 +63,21 @@ Rectangle {
       }
       Label {
         Layout.fillWidth: true
+        visible: !row.narrow
         text: row.thread.snippet
         color: Theme.dim
         font.pixelSize: 11
         elide: Text.ElideRight
       }
     }
+    RowLayout {
+      Layout.fillWidth: true
+      visible: row.narrow
+      spacing: 8
+      MailLabel { visible: kind !== ""; kind: row.thread.label }
+      ProjectTag { name: row.thread.project }
+    }
+    Item { implicitHeight: 5 }
   }
 
   MouseArea {
