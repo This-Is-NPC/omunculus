@@ -39,7 +39,12 @@ defmodule Omunculus.DeployContractTest do
       echo "deploy lock in place" >&2
       exit 1
     fi
-    echo "remote: dokku@homologation built it"
+    if [ -n "$STUB_PUSH_FAIL" ]; then
+      printf 'remote: dokku@homologation build error\nTo homologation:app\n ! [remote rejected] x -> main\n' >&2
+      exit 1
+    fi
+    echo "remote: =====> Application deployed"
+    echo "To homologation:app"
     exit 0
   fi
   exec /usr/bin/git "$@"
@@ -177,10 +182,18 @@ defmodule Omunculus.DeployContractTest do
     assert length(pushes(ctx)) == 2
   end
 
-  test "build output passes on with the provider's own address scrubbed", ctx do
+  test "a success answers the summary only, a failure the build's own lines", ctx do
     answer = call("deploy_preview", ctx)
-    assert answer["output"] =~ "remote: the deploy environment built it"
-    assert_neutral(answer)
+    short = binary_part(ctx.git.(["rev-parse", "HEAD"]), 0, 7)
+
+    assert answer["output"] ==
+             "published to the preview at http://#{ctx.preview}.homologation.localhost:8080: commit #{short}"
+
+    failed = call("deploy_preview", ctx, %{}, [{"STUB_PUSH_FAIL", "1"}])
+    refute failed["ok"]
+
+    assert failed["output"] ==
+             "publishing to the preview failed:\nthe deploy environment build error"
   end
 
   test "deploy.toml is read from the commit that is pushed", ctx do

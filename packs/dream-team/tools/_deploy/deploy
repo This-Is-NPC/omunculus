@@ -130,12 +130,12 @@ def main():
         if not ok:
             answer(False, f"publishing to the preview failed:\n{output}")
         git(root, "update-ref", PREVIEW_REF, commit)
-        conclude(f"published to the preview at {address}\n{output}", f"Published to the preview at {address}: commit {commit[:7]}.")
+        conclude(f"published to the preview at {address}: commit {commit[:7]}", f"Published to the preview at {address}: commit {commit[:7]}.")
     elif operation == "promote":
         ok, output, address = act("promote", dict(request, environment="production", app=production, source=preview))
         if not ok:
             answer(False, f"promoting to production failed:\n{output}")
-        conclude(f"promoted to production at {address}\n{output}",
+        conclude(f"promoted to production at {address}",
                  f"Promoted to production at {address}: the image the person saw in the preview and approved by granting promote.")
     elif operation == "logs":
         lines = args.get("lines", 100)

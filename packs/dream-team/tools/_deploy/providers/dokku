@@ -4,8 +4,9 @@ The preview environment is the homologation instance, production the
 production instance; each is reached through the unix socket of that instance
 under $OMUNCULUS_DEPLOY, with the key its secret DEPLOY_KEY holds, loaded into
 an ssh-agent of its own that ends with the call: no network, and no key on
-disk. The messages it writes never name the provider; what an app prints,
-its log, is passed on as it is. Any failure is answered as {"ok": false}.
+disk. A success answers only the address; a failure keeps the build's own
+lines, without the push's. The messages it writes never name the provider;
+what an app prints, its log, is passed on as it is. Any failure is answered as {"ok": false}.
 Usage: dokku deploy|promote|status|logs|destroy, the request's JSON on stdin."""
 
 import json
@@ -88,7 +89,8 @@ def remote(instance, args, env, timeout=SHORT):
 
 def tidy(text):
     """The provider's own noise out of what a command printed: its address and the connection's lines."""
-    kept = [line for line in text.splitlines() if not re.match(r"(ssh|Warning): ", line)]
+    kept = [re.sub(r"^remote: ?", "", line) for line in text.splitlines()
+            if not re.match(r"(ssh|Warning|To |hint|error: failed to push)|\s*! \[", line)]
     return re.sub(r"dokku@\S+", "the deploy environment", "\n".join(kept))
 
 
@@ -131,7 +133,7 @@ def deploy(request, instance, app):
         code, said = with_agent(push)
     if code != 0:
         raise Failure(tail(said))
-    return True, tail(said, 5), address(instance, app)
+    return True, "", address(instance, app)
 
 
 def promote(request, instance, app):
@@ -146,7 +148,7 @@ def promote(request, instance, app):
     code, said = with_agent(release)
     if code != 0:
         raise Failure(tail(said))
-    return True, tail(said, 5), address(instance, app)
+    return True, "", address(instance, app)
 
 
 def status(request, instance, app):
