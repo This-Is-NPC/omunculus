@@ -12,6 +12,13 @@ defmodule Omunculus.GuiRequestsTest do
     assert {"", 0} = GuiModules.run(modules, @fixtures <> assertions)
   end
 
+  test "a request's origin has no arbiter, which is no human" do
+    run!(["Requests"], """
+    if (Requests.human(undefined) || Requests.human(null)) throw Error("no participant is no human");
+    if (Requests.kind({status: "pending", options: {}, origins: {}}) !== "team") throw Error("a request without arbiter is the team's");
+    """)
+  end
+
   test "pending, human, answer and label use participant-neutral fields" do
     run!(["Requests"], """
     const owner = {kind: "human", issuer: "local", subject: "1000"};

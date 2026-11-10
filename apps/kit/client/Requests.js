@@ -2,7 +2,7 @@
 .import "Phrases.js" as Phrases
 
 function pending(request) { return request.status === "pending"; }
-function human(participant) { return participant.kind === "human"; }
+function human(participant) { return !!participant && participant.kind === "human"; }
 function label(participant) {
   return human(participant) ? participant.issuer + ":" + participant.subject : participant.agent;
 }

@@ -238,6 +238,10 @@ a message, takes the view to the end, so it never counts as news; when the
 answer comes and the keyboard was in the card, it moves to the composer. A
 reply says nothing in the bar when it succeeds; the card shows it. A
 question for you that arrives while the view follows is held by its top.
+The view follows the end until you scroll up: the live row's growing never
+ends it, and only your own scrolling, to more than a row from the end, does.
+The NEW pill counts the entries below the view, so it is gone when the end is
+in view.
 
 What an agent asks another is an exchange (`TeamRow`) in the thread it was
 asked in: a system row behind the people mark, "seller asked design-lead ·

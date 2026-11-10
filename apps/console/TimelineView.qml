@@ -45,11 +45,13 @@ Item {
   // Counts every change to the entries, a turn streaming included.
   property int changes: 0
 
-  // Entries that arrived while the view was not following, counted once each.
-  property int unseen: 0
-  property var seen: ({})
-  // The turns streaming, by key, so the one that finishes counts as new.
-  property var streams: ({})
+  // How many entries lie below the view: the ones the NEW pill counts.
+  readonly property int below: {
+    if (changes < 0 || timeline.contentHeight < 0)
+      return 0
+    const last = timeline.indexAt(1, timeline.contentY + timeline.height - 2)
+    return last < 0 ? 0 : Math.max(0, timeline.count - 1 - last)
+  }
   // The streaming turn whose top the view holds, and the one you jumped to
   // the end of, which it does not hold.
   property string held: ""
@@ -66,15 +68,6 @@ Item {
   signal openLog(string work)
   // The requests no other request gathers; the rest are its climb.
   readonly property var contained: Requests.contained(Omunculus.requests)
-
-  // Counts a new entry when the view is away from the end; speech has no key.
-  function arrived(key) {
-    if (timeline.following || (key !== "" && root.seen[key]))
-      return
-    if (key !== "")
-      root.seen[key] = true
-    root.unseen++
-  }
 
   function rowOf(key) {
     for (let row = 0; row < model.count; row++) {
@@ -255,27 +248,10 @@ Item {
 
   Connections {
     target: root.model
-    // A turn growing as it streams changes no one's turn, but it is new again
-    // when it finishes.
-    function onDataChanged(topLeft) {
-      root.changes++
-      const entry = root.model.get(topLeft.row)
-      if (entry.streaming)
-        root.streams[entry.key] = true
-      else if (root.streams[entry.key]) {
-        delete root.streams[entry.key]
-        root.arrived(entry.key)
-      }
-    }
-    function onRowsInserted(parent, first, last) {
+    function onDataChanged() { root.changes++ }
+    function onRowsInserted() {
       root.revision++
       root.changes++
-      for (let row = first; row <= last; row++) {
-        const entry = root.model.get(row)
-        if (entry.streaming)
-          root.streams[entry.key] = true
-        root.arrived(entry.key)
-      }
     }
     function onRowsRemoved() {
       root.revision++
@@ -303,9 +279,6 @@ Item {
   onModelChanged: {
     changes++
     timeline.following = true
-    unseen = 0
-    seen = {}
-    streams = {}
     held = ""
     released = ""
     holdingCard = false
@@ -343,7 +316,6 @@ Item {
     id: timeline
 
     property bool following: true
-    onFollowingChanged: if (following) { root.unseen = 0; root.seen = {} }
 
     // Keeps the newest entry in view: its end, or the top of a turn streaming
     // taller than the view.
@@ -377,7 +349,9 @@ Item {
     spacing: 0
     model: root.model
     footer: workingRow
-    onMovementEnded: following = atYEnd
+    // Only the person's own scrolling ends it, and the end is within a row:
+    // the live row under the entries changes height as work goes on.
+    onMovementEnded: following = contentHeight - (contentY + height) < Theme.size.control
     onContentHeightChanged: if (following) Qt.callLater(follow)
     onCountChanged: if (following) Qt.callLater(follow)
 
@@ -389,10 +363,10 @@ Item {
     // an entry also makes the list's activeFocus true, and making an entry
     // current would take the keyboard from that field.
     onActiveFocusChanged: if (activeFocus && Window.activeFocusItem === timeline && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
-    onCurrentIndexChanged: if (!root.inEntry) following = currentIndex === count - 1
+    onCurrentIndexChanged: if (!root.inEntry && currentIndex >= 0) following = currentIndex === count - 1
     // Entries beyond the view are kept for two views each way, so a form
     // scrolled away from while written in is not rebuilt.
-    cacheBuffer: root.height * 2
+    cacheBuffer: Window.height * 2
     Keys.onPressed: event => {
       const page = { [Qt.Key_PageDown]: 5, [Qt.Key_PageUp]: -5 }[event.key]
       if (page !== undefined)
@@ -655,7 +629,7 @@ Item {
       // Over a floating form's actions: a row of them, two when narrow.
       bottomMargin: Theme.space.gap + (root.formFloats ? Theme.size.control + Theme.space.gap + (root.width < Theme.size.measureFrom ? Theme.size.control : 0) : 0)
     }
-    count: root.unseen
+    count: root.below
     onClicked: root.jump()
   }
 
