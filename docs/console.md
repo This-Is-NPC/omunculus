@@ -63,7 +63,10 @@ the projects the window is not on. A project whose conversations, or any
 summary of them, are not read yet is `reading` and counts none, so no count
 shows partial: `elsewhere` is 0 while another project is read. A conversation's state comes from its
 summary (`Projects.state`): NOT STARTED, NEEDS YOU while a request waits on
-you, WORKING while its agents run, DONE, or IDLE; every count of
+you, WORKING while its agents run, DONE, FAILED when nothing runs and the
+last run to end ended in an error, or IDLE; the snapshot does not say why a
+run ended, so a conversation with nothing running, waiting or done has its
+events read for that, a page at a time; every count of
 conversations on the start, PROJECTS and CONVERSATIONS is of those states,
 so they agree. The summary (`Projects.summary`) also keeps whom the
 conversation is with (the agent of its first run at depth 0), what waits
@@ -151,7 +154,9 @@ thread and shows something. A work's own page names the chain from its work
 down; a thread nested in a sub-work block has none, the block says it. When
 a run of a work below ends, it leaves a line of the log in the main thread at
 that moment: "✓ designer  worked 4 min · 12 steps", or "failed after 4 min"
-in the error tone, so the chat tells the team's work in order. Who works is
+in the error tone, so the chat tells the team's work in order. A run of the
+thread's own that fails leaves a line too, in the error tone with the warning
+icon: "⚠ sales  failed", and under it the error the run ended in. Who works is
 the chat's to say; the header strip does not repeat it.
 Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
@@ -246,7 +251,8 @@ in its tone, the stage of the work in focus and how long it has run, in
 words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
 once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
-waits on you, also when the work asking is a sub-work; the clock keeps counting while any work is open; before any work, "● SALES · STARTING" while its first run goes or the person has written,
+waits on you, also when the work asking is a sub-work; "✕ FAILED", in the
+error tone, in place of the stage once the conversation failed; the clock keeps counting while any work is open; before any work, "● SALES · STARTING" while its first run goes or the person has written,
 NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
 follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
 once the provider priced a call; each opens what it counts, the team and the cost, and
@@ -523,13 +529,14 @@ not answer, the ways in are disabled and the line says so. Entered by one of the
 The registry's level:
 
 - PROJECTS (`ProjectsView`, `ProjectsTable`), every project of the
-  registry, under a rule of its state (NEEDS YOU, WORKING, IDLE, NOT
-  REACHABLE, READING), each row two lines at every width, with no header:
-  its id, `· OPEN` after the one the window is on, and its state at the top
-  right: NEEDS YOU, WORKING (behind a dot), IDLE, NOT REACHABLE when its
+  registry, under a rule of its state (NEEDS YOU, WORKING, FAILED, IDLE,
+  NOT REACHABLE, READING), each row two lines at every width, with no
+  header: its id, `· OPEN` after the one the window is on, and its state at
+  the top right: NEEDS YOU, WORKING (behind a dot), ✕ FAILED (in the error
+  tone, while a conversation of it failed and none needs you or works), IDLE, NOT REACHABLE when its
   socket did not answer, or READING… until its conversations are read.
   Under it, dim, as much as fits, never cut: "16 conversations · 13 need
-  you · 1 working · Today 22:22", with the last activity (the newest
+  you · 1 working · 2 failed · Today 22:22", with the last activity (the newest
   conversation begun or work changed); the working goes first, then the last
   activity, then the conversations shorten to "16 conv." (`Projects.meta`).
   The search line (`/`) searches the ids; the chips ALL, NEEDS YOU and
@@ -553,7 +560,8 @@ The project's level:
   is its first work's, else what was first said, with its state at the top
   right: what waits on you ("7 QUESTIONS", "A DECISION", "A PERMISSION",
   joined when several do), NOT STARTED (nothing was said), WORKING (behind
-  a dot), DONE (every work done or cancelled) or IDLE. Under it, dim:
+  a dot), DONE (every work done or cancelled), ✕ FAILED (in the error tone;
+  the last run ended in an error) or IDLE. Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
   its first work is with at its stage ("with sales › seller · design 2/6",
   or "with sales · qualify 1/6" when they are the same; read from the
@@ -577,7 +585,9 @@ A conversation's level, in place of the project's once one is opened:
   sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED,
   RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is
-  still open), under rules naming the day and each run.
+  still open), under rules naming the day and each run. A failed event, such as a run
+  that ended in an error, shows the warning icon in the error tone, not its
+  kind's own.
   A call reads in plain words ("read design/rounds.md", "looked in design/",
   "looked at design/README.md", "ran a command on quotes/", "could not read
   design/rounds.md: permission denied"), never by its tool name; a command
@@ -591,7 +601,9 @@ A conversation's level, in place of the project's once one is opened:
   answer passed down a level on its way to the one asked, and a call whose
   result has a row of its own, such as a note, a question or a grant) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
   FAILED and BEHIND THE SCENES and an agent picker filter it; the
-  count of rows and a "more" menu with COPY, the event picked or else the
+  count of rows, "4 OF 6 EVENTS · 2 BEHIND THE SCENES HIDDEN" while a
+  filter keeps rows out and the plumbing is among those it hides, and a
+  "more" menu with COPY, the event picked or else the
   rows shown, sit at the filters' right, or under them when they do not fit
   beside it. The event opened shows in a card
   under the list, with its local time and the server's ISO stamp as UTC and

@@ -77,9 +77,9 @@ keys.
 ### 2. Projects
 
 Every project of the server's registry, under a rule of its state (NEEDS
-YOU, WORKING, IDLE), two lines each: its id, OPEN beside the one the window
-is on, and its state at the top right — NEEDS YOU, WORKING, IDLE, NOT
-REACHABLE or READING…; under it its conversations, how many need you and
+YOU, WORKING, FAILED, IDLE), two lines each: its id, OPEN beside the one the
+window is on, and its state at the top right — NEEDS YOU, WORKING, ✕ FAILED,
+IDLE, NOT REACHABLE or READING…; under it its conversations, how many need you and
 how many agents work in and its last activity.
 Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
@@ -139,7 +139,8 @@ counts them and unfolding to one row per call, and a run that said nothing
 is that line alone, with its agent's name. A work handed down is a sub-work
 row where it was, which unfolds into its own transcript, changes and runs;
 each run of the works below leaves a row when it ends ("designer worked 4
-min · 12 steps"). A question for you
+min · 12 steps"). A run of the thread's own that fails leaves a line too,
+with its error, in the error tone and the warning icon. A question for you
 is a card in the thread; a numbered list of questions keeps SEND and I CAN'T
 ANSWER THIS on the view's bottom edge, with how many questions are below,
 until the card's end comes into view. What an agent asked another is an exchange in the
@@ -234,7 +235,9 @@ Every event of the conversation, a row each, which opens whole.
 Each row is one line: when, its kind, what the event says, who. Chips keep
 the events that need you or failed, a picker one agent's, and BEHIND THE
 SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
-names each day and each run. Opened from a work of
+names each day and each run. The count says how many rows a filter keeps out,
+and "2 BEHIND THE SCENES HIDDEN" when that is why. A failed event has the
+warning icon in the error tone. Opened from a work of
 the team, it is kept to that work.
 
 ### 9. Cost
