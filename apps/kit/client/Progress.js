@@ -392,7 +392,8 @@ function build(input) {
       .concat([Requests.label(request.requester), human ? "you" : Requests.label(request.arbiter)]);
     asker.asks.push({
       id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
-      question: request.reason || "", toWork: to ? to.work : null, chain: chain
+      question: request.reason || "", toWork: to ? to.work : null, chain: chain,
+      audience: Requests.audience(request)
     });
     const form = Questions.parse(request.reason || "");
     if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "", asks: form ? form.items.length : 1 });
@@ -417,7 +418,7 @@ function build(input) {
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {
       id: request.id, asker: Requests.asker(request), again: Requests.repeated(request, requests, input.replies || {}) !== null,
-      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, asks: form ? form.items.length : 1
+      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, audience: Requests.audience(request), asks: form ? form.items.length : 1
     };
   });
 
@@ -465,7 +466,7 @@ function build(input) {
   const delegated = Array.from(new Set(roots.filter(each => !closed(each.state) && each.agent !== input.rootAgent).map(each => each.agent)));
   const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
     ? {
-      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "",
+      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "", audience: forYou.length > 0 ? forYou[0].audience : "",
       state: talking ? "working" : forYou.length > 0 ? "needs-you" : delegated.length > 0 ? "waiting" : "idle",
       doing: talking ? phrasing(talking.work_id || "") : delegated.length > 0 && forYou.length === 0 ? "Waiting for " + delegated.join(", ") : "",
       since: talking ? runStart(talking) : null

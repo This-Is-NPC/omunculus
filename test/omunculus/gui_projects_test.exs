@@ -133,11 +133,18 @@ defmodule Omunculus.GuiProjectsTest do
     check(summary.title === "Hi! I want a website" && summary.agent === "sales", "who " + JSON.stringify(summary));
     check(summary.started && !summary.finished && summary.running === 2, "runs " + JSON.stringify(summary));
     check(summary.waiting === 4 && summary.since === "2026-11-03T10:10:00Z", "waiting " + JSON.stringify(summary));
-    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1}), "asks " + JSON.stringify(summary.asks));
+    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1, owner: 0, client: 4}), "asks " + JSON.stringify(summary.asks));
     check(summary.question === "May I publish?", "newest " + summary.question);
     check(Projects.state(summary) === "needs-you", "state " + Projects.state(summary));
-    check(Projects.waitsFor(summary.asks) === "A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
+    check(Projects.waitsFor(summary.asks) === "CLIENT QUESTION · A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
     check(Projects.waitsFor({questions: 1, decisions: 2, permissions: 0}) === "2 DECISIONS · A QUESTION", "plural");
+    const owned = Projects.summary({prompts: [], runs: [], works: [], requests: [
+      request("o", "2026-11-03T10:00:00Z", {reason: "Approve?", options: {approve: []}, route: "owner", destination: "owners"}),
+      request("d", "2026-11-03T10:01:00Z", {reason: "Approve too?", options: {approve: []}, destination: "owners"}),
+      request("c", "2026-11-03T10:02:00Z", {reason: "Which?", route: null, destination: "origin"})
+    ]});
+    check(owned.asks.owner === 2 && owned.asks.client === 1, "audience counts " + JSON.stringify(owned.asks));
+    check(Projects.waitsFor(owned.asks) === "OWNER DECISION · CLIENT QUESTION · 2 DECISIONS · A QUESTION", "audience words " + Projects.waitsFor(owned.asks));
     const empty = Projects.summary({prompts: [], runs: [], works: [], requests: []});
     check(empty.agent === "" && empty.since === "" && empty.question === "" && Projects.state(empty) === "not-started", "empty " + JSON.stringify(empty));
     """)
