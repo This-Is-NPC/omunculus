@@ -443,7 +443,7 @@ ShellRoot {
         panel.enterProject(place)
     }
     // A page by its name: projects, conversations or board, or, with a
-    // conversation open, chat, map, log or cost.
+    // conversation open, chat, map, log, cost or artifacts.
     function page(name: string): void {
       if (!["projects", "conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
         return

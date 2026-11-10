@@ -409,7 +409,11 @@ Singleton {
     interval: 250
     onTriggered: {
       Object.values(root.staleWorks).forEach(place => root.loadWorks(place))
-      Object.values(root.staleConversations).forEach(place => root.loadBoardConversations(place, false))
+      Object.values(root.staleConversations).forEach(place => {
+        root.loadBoardConversations(place, false)
+        if (place.id === root.project)
+          root.loadConversations()
+      })
       const ids = {}
       for (const [id, place] of Object.entries(root.staleSummaries))
         (ids[place.id] = ids[place.id] || { place: place, list: [] }).list.push(id)
@@ -538,7 +542,6 @@ Singleton {
   // Closes the conversation on screen; its agents go on without the window.
   function close() {
     clear("")
-    loadConversations()
   }
 
   function refresh() {
@@ -622,6 +625,14 @@ Singleton {
   function openAttachment(file) {
     http.openAttachment(socket, base + "/conversations/" + conversationId + "/attachments/" + file.sha256, file)
     connection.tell("opening " + file.name, false)
+  }
+
+  // Saves a version of an artifact of the conversation, `version` as the
+  // artifacts route lists it, to the downloads directory and opens it.
+  function openArtifact(name, version) {
+    const path = base + "/conversations/" + conversationId + "/artifacts/" + encodeURIComponent(name) + "/versions/" + version.version
+    http.openAttachment(socket, path, { name: name, sha256: version.sha256 })
+    connection.tell("opening " + name, false)
   }
 
   // A note on a work: context its agents read, not a new run.

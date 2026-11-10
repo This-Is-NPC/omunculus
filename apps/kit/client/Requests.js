@@ -198,6 +198,26 @@ function kind(request) {
   return choices(request).length > 0 ? "decision" : "needs-you";
 }
 
+// Whether a request is an owner's decision: put on the owner route or sent to
+// the project's owners. A request without that information (an older server's)
+// is not one.
+function owned(request) {
+  return request.route === "owner" || request.destination === "owners";
+}
+
+// Whom a request is for: "owner" for an owner's decision, "agents" when an
+// agent arbitrates it, else "client", the person of the conversation.
+function audience(request) {
+  return !human(request.arbiter) ? "agents" : owned(request) ? "owner" : "client";
+}
+
+// An audience as its marker reads it: icon and word.
+const audiences = {
+  owner: { icon: "spark", text: "OWNER DECISION" },
+  client: { icon: "people", text: "CLIENT QUESTION" },
+  agents: { icon: "branch", text: "AGENT QUESTION" }
+};
+
 // The climb of a request, nearest origin first: each origin's requester and
 // question, depth first.
 function chain(request) {

@@ -47,7 +47,7 @@ Item {
 
   readonly property bool open: Omunculus.conversationId !== ""
   // The pages of a conversation open, in their order.
-  readonly property var inConversation: ["chat", "map", "log", "cost"]
+  readonly property var inConversation: ["chat", "map", "log", "cost", "artifacts"]
   // The pages of a conversation: its own, and a work's thread, a page of the chat.
   readonly property var ofConversation: inConversation.concat(["thread"])
   // The level on screen: "registry", "project" or "conversation".
@@ -125,6 +125,8 @@ Item {
   // of a conversation on its own; the board and a work's page on the level
   // they were reached from, a project's from a conversation.
   function show(name) {
+    if (name === "conversations" && Omunculus.connected)
+      Omunculus.loadConversations()
     level = name === "projects" ? "registry"
       : ofConversation.includes(name) ? "conversation"
       : ["conversations", "new"].includes(name) || level === "conversation" ? "project"
@@ -518,6 +520,8 @@ Item {
       logPage.forceActiveFocus()
     else if (page === "cost")
       costPage.forceActiveFocus()
+    else if (page === "artifacts")
+      artifactsPage.forceActiveFocus()
     else if (page === "work")
       workPage.forceActiveFocus()
     else if (page === "thread")
@@ -891,6 +895,23 @@ Item {
         active: costStage.shown || costStage.visible
         focus: view.page === "cost"
         sourceComponent: CostView { onLeave: view.back() }
+      }
+    }
+
+    Stage {
+      id: artifactsStage
+      anchors.fill: parent
+      shown: view.page === "artifacts"
+
+      Loader {
+        id: artifactsPage
+        anchors.fill: parent
+        active: artifactsStage.shown || artifactsStage.visible
+        focus: view.page === "artifacts"
+        sourceComponent: ArtifactsView {
+          shown: artifactsStage.shown
+          onLeave: view.back()
+        }
       }
     }
 

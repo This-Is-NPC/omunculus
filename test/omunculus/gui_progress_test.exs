@@ -99,7 +99,9 @@ defmodule Omunculus.GuiProgressTest do
     const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "What is the bakery called?\\nAnd where?"};
     const out = Progress.build(Object.assign({}, base, {requests: [ask]}));
     check(out.state === "needs-you" && nodes(out).w1.state === "needs-you" && nodes(out).w1.doing === "Waiting for your answer", "needs-you", out.state);
-    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", asks: 1}]), "forYou", out.forYou);
+    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", audience: "client", asks: 1}]), "forYou", out.forYou);
+    const owned = Progress.build(Object.assign({}, base, {requests: [Object.assign({}, ask, {route: "owner", destination: "owners"})]}));
+    check(owned.forYou[0].audience === "owner", "owner decision", owned.forYou);
     check(out.spoken === "seller asks you: What is the bakery called?", "spoken", out.spoken);
     check(out.path.map(each => each.agent).join() === "seller,design-lead,designer", "path keeps going down", out.path);
     const broken = [{id: "w9", title: "Menu", state: "waiting", assignee: "designer", created_at: iso(1000), updated_at: iso(1100)}];
@@ -369,7 +371,7 @@ defmodule Omunculus.GuiProgressTest do
     const you = {id: "q3", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Budget?",
       origins: {p: {id: "q0", status: "escalated", requester: agent("design-lead"), reason: "Budget?"}}};
     const n = nodes(Progress.build(Object.assign({}, base, {requests: [ask, you]})));
-    check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", human: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"]}]), "asks", n.w3.asks);
+    check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", human: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"], audience: "agents"}]), "asks", n.w3.asks);
     check(JSON.stringify(n.w2.asked) === JSON.stringify([{id: "q2", from: "designer", fromWork: "w3", question: "Which logo file?", asks: 1}]), "asked", n.w2.asked);
     check(n.w1.asks.length === 1 && n.w1.asks[0].to === "you" && n.w1.asks[0].human && n.w1.asks[0].toWork === null, "you", n.w1.asks);
     check(n.w1.asks[0].chain.join(" › ") === "design-lead › seller › you", "chain", n.w1.asks[0].chain);

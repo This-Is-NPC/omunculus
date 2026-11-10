@@ -11,7 +11,7 @@
 // `where` names the groups of the keys dialog the entry is listed in.
 const table = [
   { id: "page", keys: ["1", "2", "3", "4"], tier: 1, mutates: false, label: "1 · 2 · …", where: ["everywhere"],
-    what: "the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log and cost" },
+    what: "the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log, cost and artifacts" },
   { id: "page-chord", keys: ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"], tier: 2, mutates: false, label: "Ctrl+1 · Ctrl+2 · …", where: ["everywhere"],
     what: "the same, from a field being written or the picker" },
   { id: "next-page", keys: ["Ctrl+Tab"], tier: 2, mutates: false, where: ["everywhere"], what: "the next page" },

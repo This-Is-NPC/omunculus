@@ -94,12 +94,12 @@ SurfaceFrame {
   readonly property bool busy: delivery === "sending"
   // Answered by you or on your behalf, and no longer waiting.
   readonly property bool settled: !open && answer !== null
-  readonly property var badge: ({
-    "needs-you": { text: "NEEDS YOU", icon: "warning" },
-    decision: { text: "YOUR DECISION", icon: "warning" },
-    permission: { text: "PERMISSION", icon: "key" },
-    team: { text: "TEAM", icon: "people" }
-  })[kind] || { text: "", icon: "warning" }
+  // Whom it is for, then what it asks: "OWNER DECISION  ·  PERMISSION".
+  readonly property var badge: {
+    const whom = request ? Requests.audiences[Requests.audience(request)] : { text: "", icon: "warning" }
+    const what = ({ "needs-you": "NEEDS YOU", decision: "YOUR DECISION", permission: "PERMISSION" })[kind]
+    return { icon: whom.icon, text: what ? whom.text + "  \u00b7  " + what : whom.text }
+  }
 
   // Whether the words written escalate it rather than answer it.
   property bool escalating: false
