@@ -35,7 +35,7 @@ Item {
   readonly property var newThread: ({ text: "NEW THREAD", icon: "plus", tip: "new thread  ctrl+n", enabled: Mail.connected, run: () => bar.compose() })
   // The actions of where you are, in order of importance.
   readonly property var commands: place === "thread" ? [
-    { text: "DECIDE", icon: "warning", role: "primary", tone: Theme.warning, tip: "what the thread waits on you for",
+    { text: thread && thread.status.ask === "answer" ? "ANSWER" : "DECIDE", icon: "warning", role: "primary", tone: Theme.warning, tip: "what the thread waits on you for",
       shown: deciding, run: () => Mail.decisionRequested() },
     { text: "REPLY", icon: "enter", role: deciding || stuck ? "" : "primary", tip: "reply to " + (thread ? thread.agent : "") + "  ctrl+r", run: () => bar.reply() },
     { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) },

@@ -49,7 +49,13 @@ comments.
 ## Requests
 
 A request whose arbiter is you, while pending, takes an option or a text
-answer through the reply endpoint. Its options are buttons, and so are those
+answer through the reply endpoint. Its card is always the thread's agent's,
+whoever below asked the question; no card, origin or state names another
+agent or says who waits on whom. While it asks for words, its ANSWER sits in
+the card's head, so a long question never pushes it off the window: it sends
+what is written, or, with nothing written, takes you to the answer box,
+which the thread scrolls into view whenever it takes the keyboard; with
+options, ANSWER under the box sends the words alone. Its options are buttons, and so are those
 of every decision it gathers from below — an origin still waiting whose
 options are named, as an escalation keeps a decision's options on its
 origin — each under its part name when there are several, an option of an
@@ -58,15 +64,16 @@ written. A request closed without an answer of yours says so.
 
 A request whose `request` event the harness wrote (its `actor.kind` is
 `harness`), as when an agent left a question unanswered and the harness
-passed it on, asks what it passes on. Its card leads with the questions of
-its origins, in their askers' own words and language, under the name of the
-first one's asker, and the harness's sentence, which says how it came to
-you, follows in small print. The thread's state says who asks and that
-question too (the kit's `Requests.byHarness` and `Requests.passedOn`).
+passed it on, asks what it passes on: its card leads with the questions of
+its origins, in their askers' own words and language, as the thread's agent's.
+The harness's sentence, which says how it came to you, is not shown, and
+neither is the part name of an origin; a decision's part name labels its
+options only when it is not an agent's name (the kit's `Requests.byHarness`
+and `Requests.passedOn`).
 
 One that passes on no question is a note, no one's words: its card reads
-NOTE, muted, where the requester's name would be, and the thread's state
-says `note:` before its reason rather than who asks.
+NOTE, muted, where the agent's name would be, and its text is the harness's
+reason as written.
 
 A request shows each question once: its reason, or, when an origin's
 question holds it, that question, then each origin's question the text shown
@@ -91,8 +98,11 @@ agent or error text. What happened between agents below that one never
 reaches it. It shows in its row and, with what happens next, under the open
 thread's subject:
 
-- WAITING FOR YOU while a request whose arbiter is you is pending ("sales
-  needs your answer"), with DECIDE, and, while nothing else is, when a work
+- WAITING FOR YOU while a request whose arbiter is you is pending, with
+  ANSWER when it asks questions in words ("sales has 5 questions for you",
+  counted from the numbered items the console's question form parses, else
+  "sales needs your answer") and DECIDE when it offers named options or a
+  permission ("sales needs your decision"), and, while nothing else is, when a work
   you gave waits for your next message (a root work whose `waiting` is
   `message`, as `wait` leaves it), with REPLY;
 - WORKING while a run of any depth is open, or nothing runs and a request
@@ -148,8 +158,9 @@ changes, and the search at the end.
 
 On the list NEW THREAD leads, then MARK ALL READ. With a thread open REPLY
 leads, then MARK UNREAD and NEW THREAD, except while the thread waits on a
-decision of yours: nothing in it moves until you decide, so DECIDE leads, in
-the warning tone, before REPLY.
+request of yours: nothing in it moves until you answer or decide, so ANSWER
+(DECIDE for options) leads, in the warning tone, before REPLY. Stuck or
+stalled, REPLY is outlined: the panel's WRITE AGAIN is the solid one.
 
 Each action shows its name beside its icon while the names fit; otherwise
 every one but the main one shows only its icon, its name in the tip, and on

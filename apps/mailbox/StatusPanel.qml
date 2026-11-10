@@ -5,7 +5,8 @@ import "kit/ui"
 // StatusPanel is the open thread's state, under its subject, outlined and
 // washed in the state's tone: what it is doing in the client's words, never
 // a model, tool, stage or error, what happens next, and the action that is
-// yours to take: DECIDE while a decision of yours is pending, REPLY while its
+// yours to take: ANSWER while a question of yours is pending, DECIDE while a
+// choice is, REPLY while its
 // work waits for your word, WRITE AGAIN, the one solid action, when it is
 // stuck or stalled.
 Rectangle {
@@ -13,7 +14,7 @@ Rectangle {
 
   required property var thread
   readonly property var status: thread.status
-  readonly property string action: status.state === "waiting" ? "DECIDE"
+  readonly property string action: status.state === "waiting" ? status.ask === "answer" ? "ANSWER" : "DECIDE"
     : status.state === "awaited" ? "REPLY"
     : status.state === "failed" || status.state === "stalled" ? "WRITE AGAIN" : ""
 

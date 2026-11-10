@@ -9,10 +9,11 @@ import "kit/ui"
 // opens it. Folded, it is one line with the start of the text. A request for
 // you is a message too: a filled card with its question and, while it waits,
 // the way to answer it; your answer is a message of yours, the option it
-// chose under its words. A question the harness passed on is that of whoever
-// asked it, the harness's sentence under it in small print; a note the
-// harness wrote that passes on none is no one's words: it reads NOTE, muted,
-// where a speaker's name would be.
+// chose under its words. A request is always the thread's agent's, whoever
+// below asked it; a note the harness wrote that passes on none is no one's
+// words: it reads NOTE, muted, where a speaker's name would be. While it
+// waits, its ANSWER or DECIDE sits in its head, in reach however long the
+// question is.
 SurfaceFrame {
   id: card
 
@@ -28,6 +29,8 @@ SurfaceFrame {
   readonly property bool agent: !mine && !note && Mail.isAgent(project, entry.from)
 
   signal toggled()
+  // Its answer box took the keyboard: it is to be brought into view.
+  signal reveal(var item)
 
   implicitHeight: body.implicitHeight + (expanded ? 28 : 20)
   variant: deciding ? "filled" : "outline"
@@ -85,6 +88,16 @@ SurfaceFrame {
           height: 10
           running: visible
         }
+        TraceButton {
+          visible: card.deciding && answers.item !== null && answers.item.choices === 0
+          dense: true
+          role: "primary"
+          tone: Theme.warning
+          icon: "enter"
+          text: "ANSWER"
+          tip: "send your answer, or go to its box  ctrl+enter"
+          onClicked: answers.item.submit()
+        }
         Label { text: Mail.when(card.entry.at); color: Theme.dim; font.pixelSize: 10 }
       }
       MouseArea {
@@ -104,15 +117,6 @@ SurfaceFrame {
       color: card.mine || card.note ? Theme.dim : Theme.foreground
       font.pixelSize: 13
       lineHeight: 1.25
-      wrapMode: Text.Wrap
-    }
-
-    Label {
-      Layout.fillWidth: true
-      visible: card.expanded && !!card.entry.fine
-      text: card.entry.fine || ""
-      color: Theme.dim
-      font.pixelSize: 10
       wrapMode: Text.Wrap
     }
 
@@ -150,10 +154,16 @@ SurfaceFrame {
     }
 
     Loader {
+      id: answers
       Layout.fillWidth: true
       active: card.deciding
       visible: active
-      sourceComponent: Decision { entry: card.entry; thread: card.thread }
+      sourceComponent: Decision {
+        entry: card.entry
+        thread: card.thread
+        project: card.project
+        onReveal: card.reveal(answers.item)
+      }
     }
   }
 }

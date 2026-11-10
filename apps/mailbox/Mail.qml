@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "kit/client"
 import "kit/client/Model.js" as Model
+import "kit/client/Questions.js" as Questions
 import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
@@ -389,12 +390,12 @@ Singleton {
     const notes = noted(events)
     const asked = snapshot.requests.filter(request => isMe(request.arbiter))
     for (const request of asked) {
-      const question = asking(request, notes)
+      const question = asking(request, notes, agent)
       const reply = replies[request.id]
       entries.push({
         kind: "request", key: request.id, from: question.from, to: "you",
         note: question.note,
-        text: question.text, fine: question.fine, at: request.created_at, open: Requests.pending(request),
+        text: question.text, at: request.created_at, open: Requests.pending(request),
         files: [],
         choices: Requests.choices(request),
         origins: question.origins,
@@ -404,7 +405,7 @@ Singleton {
       if (reply) {
         const option = Requests.chosen(reply.body)
         const words = String(reply.body.body || "")
-        entries.push({ kind: "you", key: reply.cursor, from: "you", to: question.note ? agent : question.from, answering: true,
+        entries.push({ kind: "you", key: reply.cursor, from: "you", to: agent, answering: true,
           option: option, text: words === option ? "" : words, at: reply.at, open: false, files: [] })
       }
     }
@@ -434,7 +435,7 @@ Singleton {
   // What a thread's conversation is doing, as the client reads it: only the
   // agent they write to is named, never a model, tool, stage, work or other
   // agent. {state, label, brief, line, next}: "waiting" while a request of
-  // yours is pending; "working" while a run of any depth is open or a request
+  // yours is pending, with `ask` saying you "answer" it or "decide" it; "working" while a run of any depth is open or a request
   // waits on someone else; "failed" (STUCK) when nothing runs and the last run
   // ended with an error, whose reason stays in the console; "awaited" while
   // nothing runs and a work you gave waits for your next message; "stalled"
@@ -451,9 +452,12 @@ Singleton {
     const failure = run => run && ended[run.id] && ended[run.id].error ? String(ended[run.id].error) : ""
 
     if (pending.length > 0) {
-      const needs = agent + " needs your answer"
-      return { state: "waiting", label: "WAITING FOR YOU", brief: needs, line: needs + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
-        next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
+      // Questions are answered, a choice of options or a permission decided.
+      const answers = Requests.kind(pending[0]) === "needs-you"
+      const form = answers ? Questions.parse(Requests.question(pending[0], true)) : null
+      const needs = form ? agent + " has " + form.items.length + " questions for you" : agent + " needs your " + (answers ? "answer" : "decision")
+      return { state: "waiting", ask: answers ? "answer" : "decide", label: "WAITING FOR YOU", brief: needs, line: needs + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
+        next: answers ? "Nothing moves until you answer: ANSWER takes you to the question." : "Nothing moves until you decide: DECIDE takes you to it." }
     }
 
     const working = { state: "working", label: "WORKING", brief: agent + " is working on it", line: agent + " is working on it.", next: "" }
@@ -518,23 +522,23 @@ Singleton {
     return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
   }
 
-  // What a request asks, as {from, text, fine, origins, note}, each question
-  // once: a reason an origin's question holds gives way to that question,
-  // and an origin's question the text shown already holds is left out. A
-  // request the harness opened, among `notes`, asks what it passes on, in
-  // the words of whoever asked it, its own sentence the fine print; passing
-  // on nothing, it is a note, its reason no one's words.
-  function asking(request, notes) {
+  // What a request asks, as {from, text, origins, note}, each question once:
+  // a reason an origin's question holds gives way to that question, and an
+  // origin's question the text shown already holds is left out. It comes from
+  // `agent`, the one the thread is with, whoever below asked it: the harness's
+  // own sentence on how it came to you is left out. A request the harness
+  // opened asks what it passes on; passing on nothing, it is a note, its
+  // reason no one's words.
+  function asking(request, notes, agent) {
     const passed = notes[request.id] ? Requests.passedOn(request) : []
     if (passed.length > 0)
-      return { from: Requests.label(passed[0].requester), text: Requests.question(request, true),
-        fine: request.reason || "", origins: [], note: false }
+      return { from: agent, text: Requests.question(request, true), origins: [], note: false }
     const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase()
-    const origins = Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" }))
+    const origins = Object.keys(request.origins || {}).map(part => ({ reason: request.origins[part].reason || "" }))
     const text = origins.map(origin => origin.reason)
       .filter(reason => plain(reason).includes(plain(request.reason)))
       .reduce((longest, reason) => reason.length > longest.length ? reason : longest, request.reason || "")
-    return { from: notes[request.id] ? "note" : Requests.label(request.requester), text: text, fine: "",
+    return { from: notes[request.id] ? "note" : agent, text: text,
       origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))), note: !!notes[request.id] }
   }
 

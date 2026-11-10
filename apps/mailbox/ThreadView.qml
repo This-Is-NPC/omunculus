@@ -59,6 +59,14 @@ Item {
     Qt.callLater(() => composer.focusEntry())
   }
 
+  // Scrolls so that the bottom of `item` shows, as far as its top allows.
+  function reveal(item) {
+    const flick = scroll.contentItem
+    const bottom = item.mapToItem(flick.contentItem, 0, item.height).y + 16
+    const top = item.mapToItem(flick.contentItem, 0, 0).y
+    flick.contentY = Math.max(0, Math.min(bottom - scroll.availableHeight, top - 8, flick.contentHeight - scroll.availableHeight))
+  }
+
   // The newest message in view.
   function toTop() {
     scroll.contentItem.contentY = 0
@@ -255,6 +263,7 @@ Item {
                 project: view.thread.project
                 expanded: view.isOpen(slot.modelData)
                 onToggled: view.toggle(slot.modelData)
+                onReveal: item => view.reveal(item)
               }
             }
           }
