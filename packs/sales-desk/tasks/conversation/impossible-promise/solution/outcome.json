@@ -1,13 +1,14 @@
 {
   "outcome": "answer",
   "report": "An online store with Pix and an app in 2 days for R$ 500 cannot be done. What can be done is a 4-page site for R$ 1,500. Do you want to go ahead with that?",
-  "works": [{"title": "Doce Ana store", "goal": "Assessment only, build nothing: store, Pix, app in 2 days", "state": "done"}],
+  "works": [{"title": "Doce Ana store", "goal": "A store with Pix and a phone app in 2 days for R$ 500", "state": "open"}],
   "team": [
-    {"id": "w1", "parent_id": null, "title": "Doce Ana store", "goal": "Assessment only, build nothing", "assignee": "sales", "state": "done"},
-    {"id": "w2", "parent_id": "w1", "title": "Assess Doce Ana store", "goal": "Assessment only, build nothing: store, Pix, app in 2 days", "assignee": "administrator", "state": "done"}
+    {"id": "w1", "parent_id": null, "title": "Doce Ana store", "goal": "A store with Pix and a phone app in 2 days for R$ 500", "assignee": "project-manager", "state": "open"},
+    {"id": "w2", "parent_id": "w1", "title": "Doce Ana store: sale", "goal": "A store with Pix and a phone app in 2 days for R$ 500", "assignee": "seller", "state": "open"},
+    {"id": "w3", "parent_id": "w1", "title": "Assess Doce Ana store", "goal": "Assessment only, build nothing: store, Pix, app in 2 days", "assignee": "administrator", "state": "done"}
   ],
   "conversation": [["person", "Deal?"], ["agent", "Not as asked."]],
   "first_run_made_work": false,
-  "proposals": [{"work": "w1", "status": "draft", "assessment": {"work": "w2", "answer": "no"}}],
+  "proposals": [{"work": "w1", "status": "draft", "assessment": {"answer": "no"}}],
   "delete": []
 }

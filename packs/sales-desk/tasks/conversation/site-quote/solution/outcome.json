@@ -1,13 +1,14 @@
 {
   "outcome": "answer",
   "report": "The 4-page site is R$ 1,500. The owner will confirm the contract, the payment and the start date with you.",
-  "works": [{"title": "Doce Ana site", "goal": "Assessment only, build nothing: four pages", "state": "done"}],
+  "works": [{"title": "Doce Ana site", "goal": "A site with four pages and a WhatsApp button", "state": "open"}],
   "team": [
-    {"id": "w1", "parent_id": null, "title": "Doce Ana site", "goal": "Assessment only, build nothing: four pages", "assignee": "sales", "state": "done"},
-    {"id": "w2", "parent_id": "w1", "title": "Assess Doce Ana site", "goal": "Assessment only, build nothing: four pages, WhatsApp button", "assignee": "administrator", "state": "done"}
+    {"id": "w1", "parent_id": null, "title": "Doce Ana site", "goal": "A site with four pages and a WhatsApp button", "assignee": "project-manager", "state": "open"},
+    {"id": "w2", "parent_id": "w1", "title": "Doce Ana site: sale", "goal": "A site with four pages and a WhatsApp button", "assignee": "seller", "state": "open"},
+    {"id": "w3", "parent_id": "w1", "title": "Assess Doce Ana site", "goal": "Assessment only, build nothing: four pages, WhatsApp button", "assignee": "administrator", "state": "done"}
   ],
   "conversation": [["person", "Hi! I want a website for my bakery. How much is it?"], ["agent", "It is R$ 1,500 for 4 pages."]],
   "first_run_made_work": false,
-  "proposals": [{"work": "w1", "status": "accepted", "price": {"lines": [{"label": "Base (4 pages)", "amount": 1500}], "total": 1500}}],
+  "proposals": [{"work": "w1", "status": "sent", "price": {"lines": [{"label": "Base (4 pages)", "amount": 1500}], "total": 1500}}],
   "delete": []
 }

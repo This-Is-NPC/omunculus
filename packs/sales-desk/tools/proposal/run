@@ -17,7 +17,7 @@ import proposal  # noqa: E402
 def run(call):
     view = call.get("view") or {}
     args = call.get("args") or {}
-    work_id = (view.get("work") or {}).get("id")
+    work_id = proposal.engagement(view.get("work") or {})
     if not work_id:
         raise proposal.Refusal("proposal writes the proposal of a client's request; this run has none")
 

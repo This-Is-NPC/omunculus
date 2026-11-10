@@ -1,9 +1,10 @@
 """What the sales desk's tools share about a proposal: the data, the price
 rules and the rendering of the client's document.
 
-The proposal of a work is the artifact `proposal-<work id>`, of kind
+The proposal of an engagement is the artifact `proposal-<work id>`, of kind
 `proposal`, whose versions are JSON, and its document `proposal-<work
-id>.md`, of kind `document`, rendered from template.md beside this file,
+id>.md`, of kind `document`, the id being the project manager's work, the
+root of the engagement, whether the seller or the manager writes it; rendered from template.md beside this file,
 which a run cannot write. Only versions the tool `proposal` wrote count:
 the gates read nothing another tool, however named, put there.
 
@@ -37,8 +38,9 @@ LISTS = ("pending",)
 OBJECTS = {
     "content": {"texts": str, "products": str, "contacts": str},
     "scope": {"pages": list, "features": list, "excluded": list},
-    "design": {"state": str, "address": str},
-    "assessment": {"work": str, "answer": str, "conditions": str},
+    "design": {"state": str, "address": str, "client_answer": str},
+    "assessment": {"answer": str, "conditions": str},
+    "delivery": {"address": str, "accepted": str, "production": str},
 }
 COMPUTED = ("work", "updated", "price", "discount")
 
@@ -59,6 +61,12 @@ def tool(run):
         out = {"ok": False, "output": f"malformed input: {type(error).__name__}: {error}", "emit": [], "chain": []}
     json.dump(out, sys.stdout)
     sys.stdout.write("\n")
+
+
+def engagement(work):
+    """The id of the engagement a work belongs to: the seller's work is a
+    child of the project manager's, which is the root and holds the proposal."""
+    return work.get("parent_id") or work.get("id")
 
 
 def name(work_id):
@@ -125,6 +133,8 @@ def validate_object(key, value):
         raise Refusal(f"{key}.{unknown[0]} is not a field of the proposal")
     if key == "design" and "state" in value and value["state"] not in DESIGN_STATES:
         raise Refusal(f"design.state is one of: {', '.join(DESIGN_STATES)}")
+    if key == "design" and value.get("state") == "waived" and not str(value.get("client_answer") or "").strip():
+        raise Refusal("only the client waives the preview: write their answer to the front desk's question, in their words, in design.client_answer")
 
 
 def check_discount(value):

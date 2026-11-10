@@ -24,9 +24,6 @@ Updated: {{updated}}
 - Products and prices: {{content.products}}
 - Contacts: {{content.contacts}}
 
-## Design
-- Preview: {{design.state}} {{design.address}}
-
 ## What we propose
 ### Pages
 {{scope.pages}}
@@ -36,6 +33,9 @@ Updated: {{updated}}
 
 ### Not included
 {{scope.excluded}}
+
+## Preview
+- You see a preview of the site and approve it before anything is built.
 
 ## Pending
 {{pending}}

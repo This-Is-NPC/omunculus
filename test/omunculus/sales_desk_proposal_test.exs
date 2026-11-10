@@ -289,7 +289,7 @@ defmodule Omunculus.SalesDeskProposalTest do
       assert %{"ok" => true} = stage("qualify", view_after(write(whole, %{}, root)), root)
     end
 
-    test "design wants the state exactly, assess the builders' answer", %{root: root} do
+    test "design wants the state exactly, and the client's own answer to waive", %{root: root} do
       base = write(%{"client" => "Ana"}, %{}, root)
       assert %{"ok" => false} = stage("design", view_after(base), root)
 
@@ -303,16 +303,101 @@ defmodule Omunculus.SalesDeskProposalTest do
                  )
       end
 
-      for state <- ["approved", "waived"] do
-        view = view_after(write(%{"design" => %{"state" => state}}, %{}, root))
-        assert %{"ok" => true} = stage("design", view, root)
-      end
+      approved = write(%{"design" => %{"state" => "approved"}}, %{}, root)
 
-      assert %{"ok" => false, "output" => "stage assess" <> _} =
-               stage("assess", view_after(base), root)
+      assert %{"ok" => false, "output" => "stage design" <> _} =
+               stage("design", view_after(approved), root)
 
-      assessed = write(%{"assessment" => %{"work" => "w2", "answer" => "yes"}}, %{}, root)
-      assert %{"ok" => true} = stage("assess", view_after(assessed), root)
+      address = write(%{"design" => %{"state" => "approved", "address" => "http://x"}}, %{}, root)
+      assert %{"ok" => true} = stage("design", view_after(address), root)
+
+      # Only the client waives the preview: their answer comes with it.
+      assert %{"ok" => false, "output" => "only the client waives the preview" <> _} =
+               write(%{"design" => %{"state" => "waived"}}, %{}, root)
+
+      waived =
+        write(%{"design" => %{"state" => "waived", "client_answer" => "no preview"}}, %{}, root)
+
+      assert %{"ok" => true} = stage("design", view_after(waived), root)
+    end
+
+    test "estimate wants the project manager's answer", %{root: root} do
+      base = write(%{"client" => "Ana"}, %{}, root)
+
+      assert %{"ok" => false, "output" => "stage estimate" <> _} =
+               stage("estimate", view_after(base), root)
+
+      assessed = write(%{"assessment" => %{"answer" => "yes"}}, %{}, root)
+      assert %{"ok" => true} = stage("estimate", view_after(assessed), root)
+    end
+
+    test "the seller, a child of the manager's work, writes the engagement's proposal", %{
+      root: root
+    } do
+      seller = %{"id" => "w2", "parent_id" => "w1", "stage" => "estimate"}
+      out = write(%{"assessment" => %{"answer" => "yes"}}, %{"work" => seller}, root)
+      assert %{"proposal-w1" => _, "proposal-w1.md" => _} = bodies(out)
+
+      view = Map.put(view_after(out), "work", seller)
+      assert %{"ok" => true} = call("next_stage", %{"report" => "done"}, view, root)
+    end
+
+    test "signoff wants the owner's approval and the approved status", %{root: root} do
+      approved = write(%{"status" => "approved"}, %{}, root)
+      cause = %{"type" => "reply", "body" => ~s({"option":"approve"})}
+
+      assert %{"ok" => false, "output" => "stage signoff" <> _} =
+               stage("signoff", view_after(approved), root)
+
+      assert %{"ok" => true} =
+               stage("signoff", Map.put(view_after(approved), "cause", cause), root)
+
+      accepted = write(%{"status" => "accepted"}, %{}, root)
+
+      assert %{"ok" => false, "output" => "stage signoff does not hold yet: set the status" <> _} =
+               stage("signoff", Map.put(view_after(accepted), "cause", cause), root)
+    end
+
+    test "the manager's stages read the works below and the delivery", %{root: root} do
+      approved = write(%{"status" => "approved"}, %{}, root)
+      done = fn assignee, goal -> %{"assignee" => assignee, "state" => "done", "goal" => goal} end
+
+      with_children = fn view, children -> Map.put(view, "children", children) end
+
+      assert %{"ok" => false, "output" => "stage sale" <> _} =
+               stage("sale", view_after(approved), root)
+
+      assert %{"ok" => true} =
+               stage(
+                 "sale",
+                 with_children.(view_after(approved), [done.("seller", "sale")]),
+                 root
+               )
+
+      refused = write(%{"status" => "refused"}, %{}, root)
+
+      assert %{"ok" => false, "output" => "stage sale does not hold yet: the client refused" <> _} =
+               stage("sale", with_children.(view_after(refused), [done.("seller", "sale")]), root)
+
+      assessment = done.("administrator", "Assessment only, build nothing: pages")
+      build = done.("administrator", "Build the site")
+      accepted = write(%{"delivery" => %{"address" => "http://h", "accepted" => "ok"}}, %{}, root)
+      unaccepted = write(%{"client" => "Ana"}, %{}, root)
+
+      assert %{"ok" => false, "output" => "stage build does not hold yet: hand the dev team" <> _} =
+               stage("build", with_children.(view_after(accepted), [assessment]), root)
+
+      assert %{"ok" => false, "output" => "stage build does not hold yet: the client must" <> _} =
+               stage("build", with_children.(view_after(unaccepted), [build]), root)
+
+      assert %{"ok" => true} =
+               stage("build", with_children.(view_after(accepted), [assessment, build]), root)
+
+      assert %{"ok" => false, "output" => "stage handover" <> _} =
+               stage("handover", view_after(accepted), root)
+
+      live = write(%{"delivery" => %{"production" => "http://p"}}, %{}, root)
+      assert %{"ok" => true} = stage("handover", view_after(live), root)
     end
 
     test "malformed data refuses instead of crashing", %{root: root} do

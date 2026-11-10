@@ -1,7 +1,7 @@
 name = "render_proposal"
 kind = "tool"
 triggers = ["model"]
-description = "Renders the latest version of this request's proposal again, as the next version of its document, the artifact proposal-<work id>.md, from the pack's template. The proposal tool already renders each version it writes; use this after the template changed."
+description = "Renders the latest version of this engagement's proposal again, as the next version of its document, the artifact proposal-<work id>.md, from the pack's template. The proposal tool already renders each version it writes; use this after the template changed."
 tags = ["sales", "artifacts"]
 command = ["./run"]
 

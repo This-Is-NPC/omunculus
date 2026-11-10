@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The seller's way to move a client's request to the next stage of the
-workflow sale: refused until the stage the work is in holds, then the
-report as a comment on the work and continue. The proposal is the artifact
-`proposal-<work id>` the proposal tool wrote: the stages check its data,
-whatever language the client reads it in."""
+"""The way to move a client's request to the next stage of its workflow: the
+seller's, sale, or the project manager's, engagement. Refused until the stage
+the work is in holds, then the report as a comment on the work and continue.
+The proposal is the artifact `proposal-<work id>` the proposal tool wrote,
+whose id is the project manager's work: the stages check its data, whatever
+language the client reads it in."""
 
 import json
 import os
@@ -32,6 +33,10 @@ def body(event):
     return data or {}
 
 
+def done(children, assignee):
+    return [child for child in children if child.get("assignee") == assignee and child.get("state") == "done"]
+
+
 def run(call):
     view = call.get("view") or {}
     work = view.get("work") or {}
@@ -40,11 +45,12 @@ def run(call):
     if not report:
         raise proposal.Refusal("report required")
     if not stage:
-        raise proposal.Refusal("next_stage moves a request of the workflow sale; this run has none")
+        raise proposal.Refusal("next_stage moves a client's request through the stages of its workflow; this run has none")
 
-    data = proposal.current(view, work["id"])
+    data = proposal.current(view, proposal.engagement(work))
     if data is None:
         refuse(stage, "write the proposal with the proposal tool")
+    children = view.get("children") or []
 
     if stage == "qualify":
         missing = filled(data, ["business", "city", "audience", "decider", "budget_timing", "problem",
@@ -54,24 +60,39 @@ def run(call):
             missing.append("scope.pages")
         if missing:
             refuse(stage, "ask the client and write with the proposal tool what they said — that they left it to us, or do not have it, is an answer too: " + ", ".join(missing))
-    elif stage == "design":
-        if proposal.lookup(data, "design.state") not in proposal.DESIGN_STATES:
-            refuse(stage, "design.state is approved, once the client approved the preview (with its address in design.address), or waived, when they do not want one")
-    elif stage == "assess":
-        if filled(data, ["assessment.work", "assessment.answer"]):
-            refuse(stage, "ask the builders for an assessment and write its work id (assessment.work) and their answer (assessment.answer) with the proposal tool")
+    elif stage == "estimate":
+        if filled(data, ["assessment.answer"]):
+            refuse(stage, "ask the project manager with ask, to pm, whether the scope can be built and in what time, and write its answer (assessment.answer) with the proposal tool")
     elif stage == "propose":
         if "price" not in data or data.get("status") != "accepted":
-            refuse(stage, "give the client the price, and set the status accepted once they accept; the owner's approval is asked at stage owner, after this one")
-    elif stage == "owner":
+            refuse(stage, "give the client the price, and set the status accepted once they accept; the owner's approval is asked at stage signoff, after this one")
+    elif stage == "signoff":
         cause = view.get("cause") or {}
         if cause.get("type") != "reply" or body(cause).get("option") != "approve":
             refuse(stage, "ask the owner with ask, to owner, the options approve and deny; call next_stage in the run their approve opens")
+        if data.get("status") != "approved":
+            refuse(stage, "set the status approved with the proposal tool")
+    elif stage == "sale":
+        if data.get("status") == "refused":
+            refuse(stage, "the client refused the proposal: tell them it is closed and call break")
+        if not done(children, "seller") or data.get("status") != "approved":
+            refuse(stage, "hand the seller the sale as a work naming the workflow sale, and call next_stage once it came back done with the proposal approved")
+    elif stage == "design":
+        state = proposal.lookup(data, "design.state")
+        if state not in proposal.DESIGN_STATES:
+            refuse(stage, "design.state is approved, once the client approved the preview (with its address in design.address), or waived, when the client answered the front desk's question that they do not want one (their answer in design.client_answer)")
+        if state == "approved" and filled(data, ["design.address"]):
+            refuse(stage, "write the preview's address in design.address")
+        if state == "waived" and filled(data, ["design.client_answer"]):
+            refuse(stage, "only the client waives the preview: write their answer in design.client_answer")
     elif stage == "build":
-        builds = [child for child in view.get("children") or []
-                  if child.get("state") == "done" and not (child.get("goal") or "").lower().startswith("assessment only")]
-        if not builds:
-            refuse(stage, "send the builders the build as a work naming their administrator, and call next_stage once it comes back done")
+        if not [child for child in done(children, "administrator") if not (child.get("goal") or "").lower().startswith("assessment only")]:
+            refuse(stage, "hand the dev team the build as a work naming its administrator, and call next_stage once it came back done")
+        if filled(data, ["delivery.address", "delivery.accepted"]):
+            refuse(stage, "the client must accept the built site at its homologation address before it goes to production: ask them, and write the address (delivery.address) and their answer (delivery.accepted) with the proposal tool")
+    elif stage == "handover":
+        if filled(data, ["delivery.production"]):
+            refuse(stage, "write the production address in delivery.production once the site is live")
 
     return "", [], [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}]
 
