@@ -24,10 +24,17 @@ The design lead takes a work from the project manager, in one of three forms:
   main action (`templates/design-brief.md`), the round (0 for the first
   design) and the client's slug. What is missing the lead asks for before
   handing the design down. The designer commits `Dockerfile` and
-  `deploy.toml` with `app = "design-<client-slug>"`.
+  `deploy.toml` with `app = "design-<client-slug>"` at the workspace's
+  root, which the build's base item then replaces with the site's own.
+  The design is made and published only before the build: when the root's
+  `deploy.toml` names another app, the site is built, the team starts no
+  design or round and breaks saying so, and a change to the design is a
+  change to the build.
 - **A round.** The goal names the earlier design (title and id) and what
   the client asked to change. A page or feature outside the briefing's
-  scope is not a round, and with the rounds used up the lead starts none.
+  scope is not a round, and with the rounds used up the lead starts none,
+  unless the goal says the owner approved an extra round, which it then
+  starts.
 - **An assessment.** The goal begins `Assessment only, build nothing:`. The
   lead answers it itself, never through the workflow `design`, in writing:
   yes, no or partly, then the effort (steps in order and how large each is,
@@ -59,6 +66,14 @@ taste goes in its report as a note. When the client waived the design, the
 plan says "Design: waived by the client" and there is no `design/handoff.md`:
 it then checks each page and the whole site against the scope and the plan,
 and a missing approved design never blocks it.
+
+A project composes it into the build by naming it in the dev team's
+workflows (the [sales desk](../sales-desk/README.md#what-the-project-configures)
+shows the TOML): in `page` it replaces the copilot after the surgeon, so it
+also runs the copilot's mechanical checks (`mise run check`, `AGENTS.md`,
+secrets) and checks that `deploy.toml`'s app is the site's, not
+`design-<slug>`; in `release` it accepts the published whole between
+`publish` and `promote`.
 
 ## Importing it
 
