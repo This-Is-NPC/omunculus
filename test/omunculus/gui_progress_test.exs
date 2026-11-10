@@ -244,6 +244,8 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 50}, rootAgent: "sales", now: 60});
     check(out.state === "working" && out.focus === null && out.roots.length === 0 && out.path.length === 0, "working", out);
     check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true, state: "working"}), "now", out.now);
+    const going = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, asked: {"": [{name: "bash", args: {command: "npm run build"}}]}, rootAgent: "sales", now: 60});
+    check(going.now.doing === "Running a command", "a call asked for and not answered", going.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
     check(asking.now.doing === "Thinking · asked a teammate", "calling", asking.now);
     const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};

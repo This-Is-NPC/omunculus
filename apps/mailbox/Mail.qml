@@ -555,18 +555,9 @@ Singleton {
     return !!notes[request.id] && Requests.passedOn(request).length === 0
   }
 
-  // The names of the tools a model event asks to call: an Anthropic message's
-  // tool uses, an OpenAI message's tool calls, a Responses output's function
-  // calls, or a command model's call; code mode's script is "code".
+  // The names of the tools a model event asks to call.
   function calls(body) {
-    if (body === null || typeof body !== "object")
-      return []
-    const names = body.type === "call" ? [body.name]
-      : Array.isArray(body.content) ? body.content.filter(part => part.type === "tool_use").map(part => part.name)
-      : Array.isArray(body.tool_calls) ? body.tool_calls.map(call => call.function ? call.function.name : "")
-      : Array.isArray(body.output) ? body.output.filter(part => part.type === "function_call").map(part => part.name)
-      : []
-    return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
+    return Model.calls(body).map(call => call.name)
   }
 
   // What a request asks, as {from, text, origins}, each question once: a

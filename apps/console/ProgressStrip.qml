@@ -96,9 +96,12 @@ ColumnLayout {
       segments.push({ text: opening, keep: true })
     }
     if (focus) {
-      const took = focus.finishedIn !== null || phase === "done"
-      const open = !Progress.closed(focus.state)
-      const lasted = Progress.duration(focus.finishedIn !== null ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
+      // While anything runs, even below a work that is over, the clock counts
+      // from the work's start: what was computed at the last event is stale
+      // through a long call.
+      const took = (focus.finishedIn !== null && !working) || phase === "done"
+      const open = !Progress.closed(focus.state) || working
+      const lasted = Progress.duration(focus.finishedIn !== null && !working ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
       // Waiting on you stops the clock: it says since when, in the warning tone.
       const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
       if (focus.state === "needs-you" || focus.waitingOn === "you")

@@ -145,10 +145,11 @@ wrote to down to that one, each in its tone ("sales › seller › design-lead �
 designer"; a run of the front agent outside any work stands alone; short of
 room the first give way to "…"), "working" and its clock, the trace at the
 row's end, and under them what it does: "Thinking · wrote files", with "· no
-news for 12 minutes" after ten minutes without an event. A call is known only
-once it finished, so the line says the last one in the past, after
-"Thinking", and a run that has made no call for 15 s reads "Thinking", not
-"Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
+news for 12 minutes" after ten minutes without an event. A call is recorded
+once it finished, but the model event that asked for it is known: while it
+runs the line says it as it goes ("Running a command"), and between calls it
+says the last one in the past, after "Thinking"; a run that has made no call
+for 15 s reads "Thinking", not "Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
 and it gives way to that agent's own turn while the turn streams in the
 thread and shows something. A work's own page names the chain from its work
 down; a thread nested in a sub-work block has none, the block says it. When
@@ -256,7 +257,8 @@ lower ones of a question passed up, is not shown on its own.
 A conversation's pages share its head (`ProgressStrip`), over the tabs. First
 a 40 px header strip with its meta — the agent it is with, its dot and name
 in its tone, the stage of the work in focus and how long it has run, in
-words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
+words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR" (the clock runs from the
+work's start while anything runs, with no event needed), "TOOK 3 MINUTES"
 once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
 waits on you, also when the work asking is a sub-work; "✕ FAILED", in the
