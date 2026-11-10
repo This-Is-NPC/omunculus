@@ -75,7 +75,16 @@ defmodule Omunculus.Store.ActionsTest do
     {run, event.request_id}
   end
 
-  defp human_ctx, do: %{@ctx | author: "human", agent: nil}
+  defp human_ctx do
+    principal = Omunculus.Operations.local_principal()
+
+    Map.merge(@ctx, %{
+      author: "human",
+      agent: nil,
+      issuer: principal.issuer,
+      subject: principal.subject
+    })
+  end
 
   defp reply_emit(request_id, option, body) do
     %{

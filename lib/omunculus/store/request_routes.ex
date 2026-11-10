@@ -81,7 +81,8 @@ defmodule Omunculus.Store.RequestRoutes do
     end
   end
 
-  # Humans whose project role grants `project.own`, longest-standing first.
+  # Humans whose project role grants `project.own`, first added first: a
+  # role change keeps a member's rowid.
   defp destination(conn, "owners", ctx, _run, _work) do
     roles =
       for {name, %{capabilities: capabilities}} <- (ctx.config.access || %{roles: %{}}).roles,
@@ -94,7 +95,7 @@ defmodule Omunculus.Store.RequestRoutes do
              """
              SELECT issuer, subject FROM project_members
              WHERE role IN (#{Query.placeholders(roles)})
-             ORDER BY updated_at, issuer, subject
+             ORDER BY rowid
              """,
              roles
            ),

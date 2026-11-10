@@ -32,9 +32,7 @@ The thread shows, newest first as mail reads:
 - what each run of an agent of depth 0 said to you — the text of its model
   replies that call no tool, its comments and the files it attached — as
   the kit's `Prose`, its web addresses links that open in the browser;
-- each request whose arbiter is you. Its `route` tells an owner's decision
-  (`owner`) from a question to the client (no route, `destination` `origin`);
-  a person who is both sees both.
+- each request whose arbiter is you.
 
 An agent's message is headed by its portrait, the kit's `Portrait` of the
 picture `AgentImages` fetched for it through its project's socket, or,

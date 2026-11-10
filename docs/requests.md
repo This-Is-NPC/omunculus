@@ -95,14 +95,28 @@ The conversation's person is the **client**; the project's operator is its
 - `owners` is the humans whose project role grants the capability
   `project.own`. Roles are declared in `[access.roles.<name>]`; the
   capability is accepted only in a role with `scope = "project"`. The
-  destination resolves to the owner who has held the role longest (earliest
-  `updated_at`, then issuer and subject), skipping the requester and the
+  destination resolves to the owner added to the project first (membership
+  order, which a role change keeps), skipping the requester and the
   participants already in the linked origins.
 - A project with no owner, or with no `[access]`, has no `owners`
   destination. The route moves to its next destination, and with none left
   the action refuses with `no_route`, as for any destination that does not
   resolve. A route that must never reach the client lists `owners` alone.
   One that serves a single local user lists `["owners", "origin"]`.
+- A human answers a request only as its arbiter: the principal's issuer and
+  subject must equal the arbiter's, else the reply is refused with
+  `not_arbiter`, as for an agent. The client cannot answer an owner's
+  request, and an owner not chosen cannot answer another's. Answers
+  returned through named parts of an upstream request are checked on that
+  upstream request.
+- A role granting `project.own` must also grant `conversation.reply`, or the
+  config is refused at load with `{:access, :owner_cannot_reply, role}`: an
+  owner who could not answer would leave its requests pending. Owners of
+  `propose_config` and `propose_pack` requests also need
+  `project.manage_config` for the apply option to take effect.
+- When the harness stops a root work past `max_retries` and the `owner` route
+  resolves to nobody, no request is made: an inbox note, once, says no
+  arbiter is left on its route.
 - A person holding both roles is both: the same identity arbitrates
   either route, and `route` tells which kind of request it is.
 

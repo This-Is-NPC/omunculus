@@ -94,7 +94,7 @@ defmodule Omunculus.Store.RequestRoutesTest do
     bootstrap_role = "admin"
     [access.roles.admin]
     scope = "project"
-    capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.read"]
+    capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.read", "conversation.reply"]
     [access.roles.participant]
     scope = "conversation"
     capabilities = ["conversation.read", "conversation.manage_access"]
@@ -186,11 +186,11 @@ defmodule Omunculus.Store.RequestRoutesTest do
       assert {client.route, client.destination} == {nil, "origin"}
     end
 
-    test "the longest-standing owner takes it", %{conn: conn} do
+    test "the owner added first takes it, whatever the update times", %{conn: conn} do
       ctxs =
         owners_setup(conn, [
-          {"late", "admin", "2026-02-01"},
-          {"first", "admin", "2026-01-01"},
+          {"first", "admin", "2026-03-01"},
+          {"late", "admin", "2026-01-01"},
           {"reader", "participant", "2025-01-01"}
         ])
 
@@ -242,6 +242,86 @@ defmodule Omunculus.Store.RequestRoutesTest do
       item = Omunculus.Server.Contract.item(:requests, view)
       assert {item.route, item.destination} == {"owner", "owners"}
       assert item.origins["q"].route == nil
+    end
+
+    test "only the arbiter human answers: not the client, not another owner", %{conn: conn} do
+      ctxs =
+        owners_setup(conn, [
+          {"boss", "admin", "2026-01-01"},
+          {"other", "admin", "2026-01-02"}
+        ])
+
+      assert {:ok, owner} = ask(conn, ctxs.worker, "owner")
+
+      reply = fn subject ->
+        ctx = %{
+          run_id: nil,
+          work_id: nil,
+          author: "human",
+          agent: nil,
+          issuer: "test",
+          subject: subject,
+          config: ctxs.worker.config,
+          groups: %{},
+          conversation_id: ctxs.worker.conversation_id
+        }
+
+        body = %{"request_id" => owner.id, "body" => "Approved."}
+
+        Store.record_tools(
+          conn,
+          nil,
+          [{%{name: "reply", args: %{}}, [%{"type" => "reply", "body" => body}]}],
+          ctx
+        )
+      end
+
+      assert {:error, {:reply, :not_arbiter}} = reply.("client")
+      assert {:error, {:reply, :not_arbiter}} = reply.("other")
+      assert {:ok, [_tool, _event]} = reply.("boss")
+      assert {:ok, %{status: "closed"}} = Store.view(conn, "request", owner.id)
+    end
+
+    test "a person holding both roles answers either request", %{conn: conn} do
+      ctxs = owners_setup(conn, [{"both", "admin", "2026-01-01"}], "both")
+      assert {:ok, owner} = ask(conn, ctxs.worker, "owner")
+      assert {:ok, client} = ask(conn, ctxs.lead, nil)
+
+      for request <- [owner, client] do
+        ctx = %{
+          run_id: nil,
+          work_id: nil,
+          author: "human",
+          agent: nil,
+          issuer: "test",
+          subject: "both",
+          config: ctxs.worker.config,
+          groups: %{},
+          conversation_id: ctxs.worker.conversation_id
+        }
+
+        body = %{"request_id" => request.id, "body" => "Yes."}
+
+        assert {:ok, [_tool, _event]} =
+                 Store.record_tools(
+                   conn,
+                   nil,
+                   [{%{name: "reply", args: %{}}, [%{"type" => "reply", "body" => body}]}],
+                   ctx
+                 )
+      end
+    end
+
+    test "a role that owns but cannot reply is refused at load" do
+      dir = Path.join(System.tmp_dir!(), Id.new())
+      File.mkdir_p!(dir)
+
+      Fixtures.write_config(dir, String.replace(@owners, ~s(, "conversation.reply"]), "]"))
+
+      assert {:error, {:access, :owner_cannot_reply, "admin"}} = Fixtures.load_config(dir)
+
+      assert Omunculus.Errors.format({:access, :owner_cannot_reply, "admin"}) =~
+               "grants project.own, so it must grant conversation.reply"
     end
   end
 end

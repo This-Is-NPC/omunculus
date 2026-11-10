@@ -323,10 +323,14 @@ defmodule Omunculus.Store.Actions.Requests do
     end)
   end
 
-  defp authorize_reply(_request, %{author: "human"}), do: :ok
-
   defp authorize_reply(request, ctx) do
-    if Jason.decode!(request.arbiter) == Participant.agent(ctx.agent),
+    answerer =
+      case ctx do
+        %{author: "human"} -> Participant.from_context(ctx)
+        _agent -> {:ok, Participant.agent(ctx.agent)}
+      end
+
+    if {:ok, Jason.decode!(request.arbiter)} == answerer,
       do: :ok,
       else: {:error, {:reply, :not_arbiter}}
   end

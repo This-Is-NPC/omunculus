@@ -821,6 +821,7 @@ defmodule Omunculus.Config do
          true <- "project.manage_config" in parsed[bootstrap].capabilities do
       {:ok, %{creator_role: creator, bootstrap_role: bootstrap, roles: parsed}}
     else
+      {:error, {:access, :owner_cannot_reply, _role}} = error -> error
       _ -> {:error, {:access, :invalid}}
     end
   end
@@ -832,13 +833,19 @@ defmodule Omunculus.Config do
       case role do
         %{"scope" => scope, "capabilities" => caps} = data
         when scope in ~w(project conversation) and is_list(caps) ->
-          if Map.keys(data) -- ~w(scope capabilities) == [] and
-               Enum.all?(caps, &(&1 in @capabilities)) and
-               (scope == "project" or
-                  Enum.all?(caps, &String.starts_with?(&1, "conversation."))) do
-            {:cont, {:ok, Map.put(acc, name, %{scope: scope, capabilities: caps})}}
-          else
-            {:halt, {:error, {:access, :invalid_role, name}}}
+          cond do
+            Map.keys(data) -- ~w(scope capabilities) != [] or
+              not Enum.all?(caps, &(&1 in @capabilities)) or
+                (scope != "project" and
+                   not Enum.all?(caps, &String.starts_with?(&1, "conversation."))) ->
+              {:halt, {:error, {:access, :invalid_role, name}}}
+
+            # An owner arbitrates requests, so it must be able to answer them.
+            "project.own" in caps and "conversation.reply" not in caps ->
+              {:halt, {:error, {:access, :owner_cannot_reply, name}}}
+
+            true ->
+              {:cont, {:ok, Map.put(acc, name, %{scope: scope, capabilities: caps})}}
           end
 
         _ ->

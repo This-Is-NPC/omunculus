@@ -124,6 +124,11 @@ defmodule Omunculus.Errors do
 
   def format({:prompt, {:no_agent_at_depth, depth}}), do: "no agent has depth #{depth}"
   def format({:prompt, {:not_at_depth_0, name}}), do: "#{name} is not an agent of depth 0"
+
+  def format({:access, :owner_cannot_reply, role}),
+    do:
+      "omunculus.toml [access.roles.#{role}] grants project.own, so it must grant conversation.reply too"
+
   def format(:access_disabled), do: "omunculus.toml has no [access] table"
 
   def format({adapter, {:http, status, _body}} = reason)

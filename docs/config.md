@@ -104,7 +104,7 @@ and changes nothing. There is no implicit human fallback. Routing does not
 authorize grants; sealed capabilities and permanent scopes still need a human's
 selected option on the original request. Escalation resolves a new route from
 the receiving participant's context. Presets, Amestris and the benchmark declare
-`parent` then `origin` in TOML; eval overlays inherit those routes. The `owner` route is `["owners", "origin"]`.
+`parent` then `origin` in TOML; eval overlays inherit those routes.
 
 `[policy] last_run_output_bytes` is optional: a positive integer, how
 many bytes of each tool call's output the `## Last run` section of the

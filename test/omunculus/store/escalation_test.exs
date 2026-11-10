@@ -623,13 +623,12 @@ defmodule Omunculus.Store.EscalationTest do
     upstream = escalate(conn, reviewer, %{"deployment" => origin})
     assert is_nil(request(conn, upstream).run_id)
 
-    assert {:ok, _} =
-             reply(conn, ctx.owner, upstream, %{
-               "body" => "Not now",
-               "parts" => %{"deployment" => %{"body" => "Not now"}}
-             })
+    # The upstream request is the root agent's: the human who escalated it is
+    # not its arbiter.
+    assert {:error, {:reply, :not_arbiter}} =
+             reply(conn, ctx.owner, upstream, %{"body" => "Not now"})
 
-    assert request(conn, origin).status == "closed"
+    assert request(conn, origin).status == "escalated"
   end
 
   test "a receiver cannot route an escalation back into its linked origins",
