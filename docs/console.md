@@ -145,7 +145,7 @@ whose colours leave little room yields fewer tones, and they then repeat. The bo
 While
 an agent works for the thread, its end holds a live line (`Progress.live`):
 a dot breathing in the tone of the agent at work, the agents from the one you
-wrote to down to that one, each in its tone ("sales › seller › design-lead ›
+wrote to down to that one, each in its tone ("front-desk › project-manager › design-lead ›
 designer"; a run of the front agent outside any work stands alone; short of
 room the first give way to "…"), "working" and its clock, the trace at the
 row's end, and under them what it does: "Thinking · wrote files", with "· no
@@ -269,7 +269,7 @@ lower ones of a question passed up, is not shown on its own.
 A conversation's pages share its head (`ProgressStrip`), over the tabs. First
 a 40 px header strip with its meta — the agent it is with, its dot and name
 in its tone, the stage of the work in focus and how long it has run, in
-words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR" (the clock runs from the
+words: "● PROJECT-MANAGER · STAGE 2/4 · 18 MINUTES SO FAR" (the clock runs from the
 work's start while anything runs, with no event needed), "TOOK 3 MINUTES"
 once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
@@ -476,7 +476,7 @@ the cost page words them), and, while it is folded, what it handed down
 ("3 sub-works, 1 working, 2 done"); short of room these give way a part at
 a time. Under 520 px of room the title goes under the agent. A badge per
 request between it and others shows its climb (`⇡ surgeon › administrator
-› seller › sales › you`, in the warning tone when it is to you; `⇣ 1
+› project-manager › front-desk › you`, in the warning tone when it is to you; `⇣ 1
 question from designer`); it goes to the other end of the request, lights
 both rows and opens the request in the detail.
 
@@ -590,8 +590,8 @@ The project's level:
   a dot), DONE (every work done or cancelled), ✕ FAILED (in the error tone;
   the last run ended in an error) or IDLE. Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
-  its first work is with at its stage ("with sales › seller · design 2/6",
-  or "with sales · qualify 1/6" when they are the same; read from the
+  its first work is with at its stage ("with front-desk › project-manager · design 2/4",
+  or "with front-desk · sale 1/4" when they are the same; read from the
   project's works, which the window follows while entered), then since when
   it waits, else "began Today 21:59" ("Yesterday 21:59" or "03 Nov 21:59"). The third line quotes what the newest request asks, or, under a
   work's title, what was first said. Each row's `⋯` opens the conversation

@@ -1,6 +1,6 @@
 # The agency: the sales desk answering the client, with the dream team
-# (packs/dream-team) and the design team (packs/design-team) one depth
-# below the seller, imported by the pack tool in that order, as the design
+# (packs/dream-team) and the design team (packs/design-team) beside the
+# seller, at its depth, imported by the pack tool in that order, as the design
 # team requires the dream team's deploy_preview. What the packs leave to the
 # project is as in dream-team.toml; the workflows below compose the two
 # teams.

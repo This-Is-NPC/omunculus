@@ -115,7 +115,7 @@ The project's conversations, those needing you first, the longest waiting
 first, then the others under a rule of the day each began: its title and
 its state at the top right, what waits on you ("7 QUESTIONS", "A
 DECISION"); under it since when it waits, whom it is with and which agent
-holds its work at which stage ("sales · seller is at design (2/6)"), when
+holds its work at which stage ("front-desk · project-manager is at design (2/4)"), when
 it began and its works; then what the newest request asks. Under the
 search line, chips filter by state, ALL listing every one; a row's `⋯`
 opens it at its team or its log.
@@ -199,7 +199,7 @@ chevron while it handed works down, else its agent's dot), its agent in its
 tone (a workflow's agents, the one at work lit), its title, and its state at
 the right: what it does and a clock, whom it waits on, Needs you. Under them
 its stages, time, steps and cost, and a badge for the climb of what it waits
-on (⇡ surgeon › administrator › seller › sales › you) and what it is asked
+on (⇡ surgeon › administrator › project-manager › front-desk › you) and what it is asked
 (⇣). The paths at work or waiting are open; the done works under an open
 one fold into one line ("✓ 3 sub-works done · 30 min · toolsmith, surgeon
 ×2"), those up next into another, each unfolding on a click. Chips keep the

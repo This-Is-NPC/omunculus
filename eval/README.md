@@ -63,8 +63,8 @@ A configuration may run a team of `packs/` instead: the dream team
 | `negotiated` | the workers must ask Father for `fs.write`, `sandbox.write`, `bash`, `sandbox.network` |
 | `human-gated` | workers request them through Father, who escalates for the human decision |
 | `dream-team` | the dream team of `packs/dream-team` alone, imported by the `pack` tool |
-| `sales-desk` | the sales desk, with the dream team one depth below the seller |
-| `agency` | the sales desk, with the dream team and the design team one depth below the seller |
+| `sales-desk` | the sales desk, with the dream team beside the seller, at its depth |
+| `agency` | the sales desk, with the dream team and the design team beside the seller, at its depth |
 
 A configuration is a TOML merged into the Amestris preset: tables merge, a
 list replaces a list. `[eval] drop_agents` removes agents, and the

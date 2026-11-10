@@ -11,7 +11,7 @@ import "kit/ui"
 // title — its first work's, else what was first said in it — with its state
 // at the top right, toned only while something waits for you, agents work in
 // it or its last run failed, saying what waits: questions, a decision, a permission; under it,
-// dim, whom it is with, "with sales › seller · qualify 1/6" when another
+// dim, whom it is with, "with front-desk › project-manager · sale 1/4" when another
 // agent holds its first work, at which stage of how many, and since when it
 // waits, else when it began; then what the newest request asks, or, under a work's title, what
 // was first said. Each row's menu opens it at its team or its log. Its cells
@@ -52,8 +52,8 @@ DataTable {
   }
 
   // Whom it is with, the agent its first work is with when another, and the
-  // stage of the workflow while the work goes on: "with sales › seller ·
-  // design 2/6".
+  // stage of the workflow while the work goes on: "with front-desk › project-manager ·
+  // design 2/4".
   function whoOf(conversation, root) {
     const known = summary(conversation)
     const partner = known ? known.agent : ""

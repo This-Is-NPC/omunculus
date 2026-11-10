@@ -16,7 +16,7 @@ function capital(name) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// An agent as a mail address book lists it: "Sales <sales@agency>".
+// An agent as a mail address book lists it: "Front-desk <front-desk@agency>".
 function person(agent, project) {
   const address = agent + "@" + project;
   return { agent: agent, project: project, name: capital(agent), address: address, text: capital(agent) + " <" + address + ">" };
@@ -87,7 +87,7 @@ function re(subject) { return /^re:/i.test(subject) ? subject : "Re: " + subject
 // A subject as a forward of it reads.
 function fwd(subject) { return /^fwd?:/i.test(subject) ? subject : "Fwd: " + subject; }
 
-// A message quoted as mail does: {head: "On <when>, Sales wrote:", lines}, each
+// A message quoted as mail does: {head: "On <when>, Front-desk wrote:", lines}, each
 // line of its text behind "> ". `when` is the date as the person reads it.
 function quoted(message, when) {
   return {

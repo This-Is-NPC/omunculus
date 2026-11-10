@@ -54,7 +54,7 @@ first message of yours, cut at 90 characters. The compose window's Subject is
 sent as that first line, followed by a blank line and the message.
 
 An agent's address is `<agent>@<project>` and its display name the agent's name,
-capitalised: `Sales <sales@agency>`.
+capitalised: `Front-desk <front-desk@agency>`.
 
 ## Folders
 
@@ -69,11 +69,11 @@ The folders show their names, with the unread count on Inbox. Ctrl+B folds them
 to icons, and a window narrower than 760 px shows icons only.
 
 Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
-list. A row shows who wrote ("Sales, me (5)") and the time, then the subject
+list. A row shows who wrote ("Front-desk, me (5)") and the time, then the subject
 and the start of the last message, with the label beside them. In a list
 narrower than 380 px the snippet is left out and the label takes a line of its
 own, so the sender and the subject keep the width. Which project an agent is
-in shows only in its address (`sales@agency`); search can still match it.
+in shows only in its address (`front-desk@agency`); search can still match it.
 
 ## Labels
 
@@ -100,7 +100,7 @@ offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
 
 A reply is written in a box under the messages, outside their scrolling, so
 SEND stays in view while you type. Under your text it shows the e-mail it
-answers, quoted as mail does ("On <date>, Sales wrote:" and its lines behind
+answers, quoted as mail does ("On <date>, Front-desk wrote:" and its lines behind
 "> ", folded after four lines, MORE shows the rest). Only your own words are
 sent, never the quote. What it does:
 
