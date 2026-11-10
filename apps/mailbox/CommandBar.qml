@@ -22,6 +22,8 @@ Item {
   property bool narrow: false
   readonly property var thread: Mail.thread
   readonly property bool deciding: thread !== null && thread.waiting.length > 0
+  // The thread's panel then offers WRITE AGAIN as the screen's solid action.
+  readonly property bool stuck: thread !== null && ["failed", "stalled"].includes(thread.status.state)
   // Where the search box sits while the bar has room for it.
   readonly property alias searchSlot: slot
 
@@ -35,7 +37,7 @@ Item {
   readonly property var commands: place === "thread" ? [
     { text: "DECIDE", icon: "warning", role: "primary", tone: Theme.warning, tip: "what the thread waits on you for",
       shown: deciding, run: () => Mail.decisionRequested() },
-    { text: "REPLY", icon: "enter", role: deciding ? "" : "primary", tip: "reply to " + (thread ? thread.agent : "") + "  ctrl+r", run: () => bar.reply() },
+    { text: "REPLY", icon: "enter", role: deciding || stuck ? "" : "primary", tip: "reply to " + (thread ? thread.agent : "") + "  ctrl+r", run: () => bar.reply() },
     { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) },
     newThread
   ].filter(command => command.shown !== false) : [

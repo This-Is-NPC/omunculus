@@ -3,11 +3,11 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // StatusPanel is the open thread's state, under its subject, outlined and
-// washed in the state's tone: what it is doing in plain words — who works on
-// what and the tool it calls, what failed and why, where it stalled — what
-// happens next, and the action that is yours to take: DECIDE while a
-// decision of yours is pending, REPLY while its work waits for your word,
-// WRITE AGAIN when it failed or stalled.
+// washed in the state's tone: what it is doing in the client's words, never
+// a model, tool, stage or error, what happens next, and the action that is
+// yours to take: DECIDE while a decision of yours is pending, REPLY while its
+// work waits for your word, WRITE AGAIN, the one solid action, when it is
+// stuck or stalled.
 Rectangle {
   id: panel
 
@@ -59,9 +59,9 @@ Rectangle {
       Layout.alignment: Qt.AlignVCenter
       visible: panel.action !== ""
       dense: true
-      // Secondary, outlined as the bar's other actions: the bar's main action
-      // stays the screen's one solid.
-      role: "action"
+      // Outlined as the bar's other actions, except WRITE AGAIN, which is
+      // then the screen's one solid.
+      role: panel.action === "WRITE AGAIN" ? "primary" : "action"
       tone: badge.tone
       icon: panel.status.state === "waiting" ? "warning" : "enter"
       text: panel.action

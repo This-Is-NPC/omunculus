@@ -422,7 +422,7 @@ Singleton {
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
       waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
-      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent, notes),
+      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
       snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
@@ -431,102 +431,61 @@ Singleton {
     }
   }
 
-  // What a thread's conversation is doing, from its snapshot and events, as
-  // {state, label, brief, line, next}: "waiting" while a request of yours is
-  // pending; "working" while a run of any depth is open, saying whose, on
-  // which work and stage, the tool it calls now and, on a retry, how many
-  // and why; "failed" when nothing runs and the last run ended with an
-  // error; "held" while nothing runs and a request waits on someone else;
-  // "awaited" while nothing runs and a work you gave waits for your next
-  // message; "stalled" when nothing runs, nothing is pending and a work is
-  // not over;
-  // "done" when every work it began is done or cancelled; "idle" otherwise.
-  // `brief` is for the list, `line` and `next` for the thread's head; a
-  // request in `notes` is the harness's, not its requester's.
-  function status(snapshot, events, pending, to, notes) {
+  // What a thread's conversation is doing, as the client reads it: only the
+  // agent they write to is named, never a model, tool, stage, work or other
+  // agent. {state, label, brief, line, next}: "waiting" while a request of
+  // yours is pending; "working" while a run of any depth is open or a request
+  // waits on someone else; "failed" (STUCK) when nothing runs and the last run
+  // ended with an error, whose reason stays in the console; "awaited" while
+  // nothing runs and a work you gave waits for your next message; "stalled"
+  // when nothing runs, nothing is pending and a work is not over; "done" when
+  // every work it began is done or cancelled; "idle" otherwise. `brief` is for
+  // the list, `line` and `next` for the thread's head.
+  function status(snapshot, events, pending, to) {
     const agent = to || "the agent"
-    const works = {}
-    for (const work of snapshot.works)
-      works[work.id] = work
     const ended = {}
-    const calling = {}
-    for (const event of events) {
-      if (!event.run_id)
-        continue
-      const body = event.body || {}
-      if (event.type === "end-run")
-        ended[event.run_id] = body
-      else if (event.type === "model")
-        calling[event.run_id] = calls(body)
-      else if (event.type === "tool" && calling[event.run_id])
-        calling[event.run_id] = calling[event.run_id].filter((name, at, names) => name !== body.name || at !== names.indexOf(body.name))
-    }
+    for (const event of events)
+      if (event.type === "end-run" && event.run_id)
+        ended[event.run_id] = event.body || {}
     const runs = snapshot.runs.slice().sort((a, b) => a.started_at.localeCompare(b.started_at))
-    const on = run => {
-      const work = works[run.work_id]
-      return work ? ", on “" + work.title + "”" + (work.stage ? " at " + work.stage : "") + "," : ""
-    }
     const failure = run => run && ended[run.id] && ended[run.id].error ? String(ended[run.id].error) : ""
-    // The run before `run` on its work, and how many retries in a row lead to it.
-    const before = run => runs.filter(other => other.work_id === run.work_id && other.started_at < run.started_at).pop() || null
-    const retries = run => run && run.via === "retry" ? 1 + retries(before(run)) : 0
 
     if (pending.length > 0) {
-      const request = pending[0]
-      const question = asking(request, notes)
-      const asks = (question.note ? "note: " : question.from + " asks: ") + oneLine(question.text || "a decision")
-      return { state: "waiting", label: "WAITING FOR YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
+      const needs = agent + " needs your answer"
+      return { state: "waiting", label: "WAITING FOR YOU", brief: needs, line: needs + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
         next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
     }
 
-    const open = runs.filter(run => run.status === "open")
-    if (open.length > 0) {
-      const run = open[open.length - 1]
-      const names = calling[run.id] || []
-      const doing = names.length > 0 ? "calling " + names.join(", ") : "thinking"
-      const tries = retries(run)
-      const others = open.length > 1 ? "  (+" + (open.length - 1) + " more running)" : ""
-      const why = failure(before(run))
-      return { state: "working", label: tries > 0 ? "RETRYING (" + tries + ")" : "WORKING",
-        brief: run.agent + " " + doing,
-        line: run.agent + on(run) + " " + doing + others,
-        next: tries > 0 ? "The try before failed" + (why ? ": " + why : "") + ". Once the retries run out, "
-          + (works[run.work_id] && works[run.work_id].parent_id ? "the work goes back to whoever handed it down." : "you are asked to retry or cancel.") : "" }
-    }
+    const working = { state: "working", label: "WORKING", brief: agent + " is working on it", line: agent + " is working on it.", next: "" }
+    if (runs.some(run => run.status === "open"))
+      return working
 
     const finished = runs.filter(run => run.status !== "open").sort((a, b) => String(a.finished_at || "").localeCompare(String(b.finished_at || "")))
     const last = finished.length > 0 ? finished[finished.length - 1] : null
     const error = failure(last)
     if (error !== "")
-      return { state: "failed", label: "FAILED", brief: last.agent + ": " + oneLine(error),
-        line: last.agent + on(last) + " failed: " + error,
-        next: "Nothing runs now. Write to " + agent + " again to try once more." }
+      return { state: "failed", label: "STUCK", brief: agent + " could not go on right now",
+        line: agent + " could not go on right now.",
+        next: "Write again to try once more." }
 
-    const held = snapshot.requests.filter(request => Requests.pending(request))
-    if (held.length > 0) {
-      const who = Requests.label(held[0].arbiter)
-      return { state: "held", label: "WAITING ON " + who.toUpperCase(), brief: who + " has a question to answer",
-        line: Requests.label(held[0].requester) + " waits on " + who + ": " + oneLine(held[0].reason || ""), next: "" }
-    }
+    // A request that waits on someone else is work going on, to the client.
+    if (snapshot.requests.some(request => Requests.pending(request)))
+      return working
 
     // A work you gave that waits for your next message: only you move it on.
     const awaited = snapshot.works.find(work => !work.parent_id && work.state === "waiting" && work.waiting === "message")
     if (awaited) {
-      const by = runs.filter(run => run.work_id === awaited.id).pop()
-      const who = by ? by.agent : awaited.assignee || agent
-      return { state: "awaited", label: "WAITING FOR YOU", brief: who + " waits for your word",
-        line: who + " waits for your next message on “" + awaited.title + "”" + (awaited.stage ? " · " + awaited.stage : "") + ".",
+      return { state: "awaited", label: "WAITING FOR YOU", brief: agent + " needs your answer",
+        line: agent + " needs your answer.",
         next: "Nothing in this thread moves until you write to " + agent + ": REPLY picks it up." }
     }
 
     // With nothing running or pending, a work open, or waiting, waits on nothing.
     const stuck = snapshot.works.find(work => work.state === "open") || snapshot.works.find(work => work.state === "waiting")
     if (stuck) {
-      const by = runs.filter(run => run.work_id === stuck.id).pop()
-      const who = by ? by.agent : stuck.assignee || "its agent"
-      return { state: "stalled", label: "STALLED", brief: who + " stopped on “" + stuck.title + "”",
-        line: who + " stopped on “" + stuck.title + "”" + (stuck.stage ? " · " + stuck.stage : "") + " without finishing it, and nothing runs now.",
-        next: "Write to " + agent + " again to pick it up." }
+      return { state: "stalled", label: "STALLED", brief: agent + " stopped before finishing",
+        line: agent + " stopped before finishing, and nothing runs now.",
+        next: "Write again to pick it up." }
     }
 
     const roots = snapshot.works.filter(work => !work.parent_id)

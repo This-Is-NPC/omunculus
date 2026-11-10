@@ -83,30 +83,31 @@ different file of the same name rather than over it, and opens.
 
 ## A thread's state
 
-Each thread has a state, read from its snapshot (works with their state and
-stage, runs with their status and `via`, requests) and its events. It shows
-in its row and, with what happens next, under the open thread's subject:
+Each thread has a state, read from its snapshot (works with their state,
+runs with their status, requests) and its events. The mailbox is the
+client's view, so the state is worded for the client: it names only the
+agent the client writes to, never a model, server, tool, stage, work, other
+agent or error text. What happened between agents below that one never
+reaches it. It shows in its row and, with what happens next, under the open
+thread's subject:
 
-- WAITING FOR YOU while a request whose arbiter is you is pending, with
-  DECIDE, and, while nothing else is, when a work you gave waits for your
-  next message (a root work whose `waiting` is `message`, as `wait` leaves
-  it), naming who waits and on which work, with REPLY;
-- WORKING while a run of any depth is open, naming its agent, its work's
-  title and stage, and the tools its last model call asked for that have
-  not answered yet, and RETRYING (n) when that run is the n-th retry in a
-  row on its work, with why the try before failed;
-- FAILED when nothing runs and the last run's `end-run` carries an `error`,
-  with that reason;
-- WAITING ON another participant while nothing runs and a request waits on
-  them;
+- WAITING FOR YOU while a request whose arbiter is you is pending ("sales
+  needs your answer"), with DECIDE, and, while nothing else is, when a work
+  you gave waits for your next message (a root work whose `waiting` is
+  `message`, as `wait` leaves it), with REPLY;
+- WORKING while a run of any depth is open, or nothing runs and a request
+  waits on someone else, as "sales is working on it". A retry reads the same;
+- STUCK when nothing runs and the last run's `end-run` carries an `error`:
+  "sales could not go on right now", with "Write again to try once more."
+  The error text is not shown here; the console's log has it;
 - STALLED when nothing runs, nothing is pending and a work is still open or
-  waiting;
+  waiting, as "sales stopped before finishing";
 - DONE or CANCELLED once every root work is.
 
-Failed and stalled threads offer WRITE AGAIN, which opens the reply. The
-panel's actions are outlined in its tone, as the bar's secondary ones, so
-the bar's main action stays the one solid on screen. A thread not on screen
-that turns so is announced with `notify-send`.
+Stuck and stalled threads offer WRITE AGAIN, which opens the reply. It is
+the one solid action on screen then, and the bar's REPLY is outlined. The
+other panel actions are outlined in their tone, as the bar's secondary ones.
+A thread not on screen that turns so is announced with `notify-send`.
 
 A thread is working while a run is open and waiting for you while such a
 request is pending or its work waits for your word. The folders are all
