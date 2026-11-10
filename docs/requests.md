@@ -121,6 +121,16 @@ The conversation's person is the **client**; the project's operator is its
 - A person holding both roles is both: the same identity arbitrates
   either route, and `route` tells which kind of request it is.
 
+A project that composes a hub between the teams and the owner sends the
+owner route through it with a rule on `from`: `{ name = "owner", via =
+[{ kind = "agent", agent = "project-manager" }, "owners"] }` takes every
+agent's owner-route request to the hub first, which decides what is its own
+or escalates with `to = "owner"`; a rule before it, with `from` naming an
+agent that answers to no hub, keeps that agent's requests going to `owners`.
+The requester is skipped within a list, so the hub's own request goes on to
+`owners`. The [agency](../packs/sales-desk/README.md#what-the-project-configures)
+is composed that way.
+
 Every request records `route` and `destination`, and its view, snapshots and
 events expose them. A client reads `route = "owner"` as a decision of the
 agency (a sale's approval, a build past `max_reopens`, a project change, a
@@ -209,7 +219,7 @@ an intermediary cannot turn an upstream text answer into that grant. Already
 answered origins cannot execute an effect again through later distribution.
 
 For example, two design works ask their lead for logo and tone. The lead
-merges them as logo/tone parts and escalates to its parent. The generalist can
+merges them as logo/tone parts and escalates to its parent. The front desk can
 ask once and return the combined text for distribution, or reply with named
 parts to close each origin directly. Each worker receives its own answer.
 Later arrivals remain pending for a later turn; no batching timer runs in the
@@ -273,4 +283,4 @@ hidden/cross-conversation resources and domain refusals retain explicit 400,
 | Approval text without an option | It records content and resumes the requester; it grants nothing and records no named decision. |
 | Partial upstream answer | Only supplied valid parts close their origins. Missing parts return to pending for distribution. |
 | Late or concurrent answer | Completed/cancelled work stays so; serialized transitions prevent duplicate effects. |
-| Several clients at one generalist | Each run sees its own conversation group. Cross-client merging is refused. |
+| Several clients at one front desk | Each run sees its own conversation group. Cross-client merging is refused. |
