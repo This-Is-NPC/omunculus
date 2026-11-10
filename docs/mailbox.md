@@ -48,7 +48,14 @@ comments.
 
 ## Requests
 
-A request whose arbiter is you, while pending, takes an option or a text
+Only a request raised by the agent the thread is with (its `requester`)
+reaches the mailbox, with the questions the harness passes on to you: it is the client's view. A request another agent raised
+whose arbiter is you, as an owner's approval a seller asks or an escalation
+routed straight to you, is the operator's: no card, nothing in the thread's
+state, folders, unread marks or notices, and while it is pending the thread
+reads WORKING. The console shows it.
+
+A request of that agent whose arbiter is you, while pending, takes an option or a text
 answer through the reply endpoint. Its card is always the thread's agent's,
 whoever below asked the question; no card, origin or state names another
 agent or says who waits on whom. While it asks for words, its ANSWER sits in
@@ -72,9 +79,9 @@ options only when it is not an agent's name (the kit's `Requests.byHarness`
 and `Requests.passedOn`).
 
 One that passes on no question is a note between agents. It is not shown:
-no card, and it neither makes the thread WAITING FOR YOU nor counts as work
-going on. The thread's state says whether the work goes on, waits for you, is
-stuck, stalled or over; the console shows the note.
+no card, and it does not make the thread WAITING FOR YOU. While it is pending
+the agency is still handling it, so the thread reads WORKING, as for a request
+another agent raised; the console shows the note.
 
 A request shows each question once: its reason, or, when an origin's
 question holds it, that question, then each origin's question the text shown
@@ -99,7 +106,8 @@ agent or error text. What happened between agents below that one never
 reaches it. It shows in its row and, with what happens next, under the open
 thread's subject:
 
-- WAITING FOR YOU while a request whose arbiter is you is pending, with
+- WAITING FOR YOU while a request of the thread's agent whose arbiter is you
+  is pending, with
   ANSWER when it asks questions in words ("sales has 5 questions for you",
   counted from the numbered items the console's question form parses, else
   "sales needs your answer") and DECIDE when it offers named options or a

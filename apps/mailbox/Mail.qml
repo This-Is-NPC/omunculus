@@ -351,7 +351,8 @@ Singleton {
   // you, the question of whoever asked it when the harness passed it on, as
   // when the agent left a question unanswered, as the agent's own. A request
   // the harness opened that passes on no question is a note between agents:
-  // it is no entry and no state of the thread.
+  // it is no entry and no state of the thread; neither is a request another
+  // agent than the thread's raised, whoever its arbiter is.
   function build(projectId, id, snapshot, events) {
     const rootRuns = {}
     for (const run of snapshot.runs)
@@ -389,7 +390,7 @@ Singleton {
       }
     }
     const notes = noted(events)
-    const asked = snapshot.requests.filter(request => isMe(request.arbiter) && !isNote(request, notes))
+    const asked = snapshot.requests.filter(request => isMe(request.arbiter) && !isNote(request, notes) && (!!notes[request.id] || askedBy(request, agent)))
     for (const request of asked) {
       const question = asking(request, notes, agent)
       const reply = replies[request.id]
@@ -423,7 +424,7 @@ Singleton {
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
       waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
-      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent, notes),
+      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
       snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
@@ -442,7 +443,7 @@ Singleton {
   // when nothing runs, nothing is pending and a work is not over; "done" when
   // every work it began is done or cancelled; "idle" otherwise. `brief` is for
   // the list, `line` and `next` for the thread's head.
-  function status(snapshot, events, pending, to, notes) {
+  function status(snapshot, events, pending, to) {
     const agent = to || "the agent"
     const ended = {}
     for (const event of events)
@@ -473,7 +474,7 @@ Singleton {
         next: "Write again to try once more." }
 
     // A request that waits on someone else is work going on, to the client.
-    if (snapshot.requests.some(request => Requests.pending(request) && !isNote(request, notes)))
+    if (snapshot.requests.some(request => Requests.pending(request)))
       return working
 
     // A work you gave that waits for your next message: only you move it on.
@@ -506,6 +507,14 @@ Singleton {
       if (Requests.byHarness(event))
         notes[event.request_id] = true
     return notes
+  }
+
+  // Whether the agent the thread is with raised a request: the client's view
+  // holds those only, and the questions the harness passes on to it. What another agent raises, an owner's approval or an
+  // escalation sent straight to the person, is the operator's, and the thread
+  // reads WORKING while it waits.
+  function askedBy(request, agent) {
+    return !!request.requester && request.requester.agent === agent
   }
 
   // Whether a request is a note: one the harness opened, among `notes`, that
