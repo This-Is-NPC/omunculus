@@ -88,8 +88,8 @@ def run(call):
     elif stage == "build":
         if not [child for child in done(children, "administrator") if not (child.get("goal") or "").lower().startswith("assessment only")]:
             refuse(stage, "hand the dev team the build as a work naming its administrator, and call next_stage once it came back done")
-        if filled(data, ["delivery.address", "delivery.accepted"]):
-            refuse(stage, "the client must accept the built site at its homologation address before it goes to production: ask them, and write the address (delivery.address) and their answer (delivery.accepted) with the proposal tool")
+        if filled(data, ["delivery.address"]) or str(proposal.lookup(data, "delivery.accepted") or "").strip().lower() != "accepted":
+            refuse(stage, "the client must accept the built site at its homologation address before it goes to production: ask them, and write the address (delivery.address) and delivery.accepted as accepted with the proposal tool, once they accepted")
     elif stage == "handover":
         if filled(data, ["delivery.production"]):
             refuse(stage, "write the production address in delivery.production once the site is live")

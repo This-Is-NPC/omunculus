@@ -8,7 +8,6 @@ the proposal holds is in the language the client writes in, their words
 where they gave them; the headings below are the template's. Change this
 file in the pack to change the document the clients read. -->
 
-Status: {{status}}
 Updated: {{updated}}
 
 ## Who they are
@@ -49,7 +48,7 @@ Updated: {{updated}}
 Total: {{price.total}}
 
 ## Terms
-- The agency's owner confirms the contract, the payment and the start date.
+- The agency confirms the contract, the payment and the start date.
 
 ## Next steps
 {{next_steps}}

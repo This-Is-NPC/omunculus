@@ -13,7 +13,7 @@ required = ["report"]
 
 [parameters.properties.report]
 type = "string"
-description = "What you tell the client, in the language they write in: what was settled and what comes next."
+description = "An internal report for whoever receives this work, plain: what was settled and what comes next. Only the front desk talks with the client, and relays what concerns them."
 
 [views.work]
 source = "works"

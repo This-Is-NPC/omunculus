@@ -381,7 +381,7 @@ defmodule Omunculus.SalesDeskProposalTest do
 
       assessment = done.("administrator", "Assessment only, build nothing: pages")
       build = done.("administrator", "Build the site")
-      accepted = write(%{"delivery" => %{"address" => "http://h", "accepted" => "ok"}}, %{}, root)
+      accepted = write(%{"delivery" => %{"address" => "http://h", "accepted" => "accepted"}}, %{}, root)
       unaccepted = write(%{"client" => "Ana"}, %{}, root)
 
       assert %{"ok" => false, "output" => "stage build does not hold yet: hand the dev team" <> _} =
