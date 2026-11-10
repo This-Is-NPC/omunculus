@@ -7,7 +7,7 @@
 packs = [{ name = "dream-team" }]
 
 [execution]
-environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "OMUNCULUS_DEPLOY_PROVIDER"]
 timeout_ms = 300000
 
 [auth.homologation]

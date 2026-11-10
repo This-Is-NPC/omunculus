@@ -108,8 +108,9 @@ may be an Elixir `module` returning the same `out`.
 Inside the sandbox a tool's command reads, read-only, the whole folder of
 `[tools] paths` its own folder was found in (a pack's `tools/`), so the
 tools of one path may share what lies beside them: a folder without a
-`tool.toml`, such as the dream team's `tools/_deploy`, which its
-`deploy_preview/run` and `promote/run` run as `$(dirname "$0")/../_deploy/deploy`.
+`tool.toml`, such as the dream team's `tools/_deploy`, which the
+`run` of each deploy tool runs as `$(dirname "$0")/../_deploy/deploy <operation>`
+and which holds the providers it chooses from.
 Nothing outside that folder comes with it.
 
 A `command` tool that authenticates declares the secrets its process

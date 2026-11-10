@@ -1,0 +1,11 @@
+name = "deploy_status"
+kind = "tool"
+triggers = ["model"]
+description = "Says whether the workspace's app is deployed and running in the preview environment, and its address. The app is the one deploy.toml names."
+tags = ["deploy"]
+command = ["./run"]
+secrets = ["DEPLOY_KEY"]
+
+[parameters]
+type = "object"
+required = []

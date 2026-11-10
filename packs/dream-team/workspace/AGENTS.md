@@ -238,19 +238,24 @@ Good: `feat(filter): add priority option` then
 An app reaches people in two steps, and the second is never an agent's
 alone.
 
-- **Homologation first.** Publish the last commit with `deploy_preview`,
-  named after what the app is (lowercase letters, digits, dashes). It
-  answers at `http://<app>-<id>-hml.homologation.localhost:8080`, where the
-  person looks at it.
+- **Describe the app.** `deploy.toml` at the repository's root, committed:
+  `app` (lowercase letters, digits and dashes, starting with a letter) and
+  `port` (the port the image serves). The deploy tools take the app's name
+  from it, and read it, and the `Dockerfile`, from the commit they
+  publish: commit both first.
+- **Preview first.** Publish the last commit with `deploy_preview`. It
+  answers with the preview address, where the person looks at it.
+  `deploy_status` says whether the preview app runs, `deploy_logs` reads
+  its log and `deploy_destroy` removes it.
 - **Production only through `promote`,** which only the person grants, once
-  they have seen homologation. It publishes the very image homologation
+  they have seen the preview. It publishes the very image the preview
   built, so production is what they saw. Ask for it with what they will
-  find at the homologation address.
+  find at the preview address.
 - **Publishable from the repository as it is:** a `Dockerfile` that serves
-  the app on port 80, or a project Dokku detects by its language. No step
-  outside the repository.
-- **The image is built where it is published.** `deploy_preview` has
-  homologation build it from the repository and answers with the
+  the app on the port `deploy.toml` names, and that file. No step outside
+  the repository.
+- **The image is built where it is published.** `deploy_preview` has the
+  preview environment build it from the repository and answers with the
   build's output when it fails. A command here reaches no container
   daemon: do not build or run the image on the machine, and do not ask
   for one.

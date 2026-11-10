@@ -1,0 +1,5 @@
+# The descriptor the deploy tools read, committed at the workspace's root
+# with the Dockerfile that serves design/preview. Replace <client-slug> with
+# the client's name in lowercase letters, digits and dashes.
+app = "design-<client-slug>"
+port = 80

@@ -1,29 +1,45 @@
 #!/usr/bin/env python3
-"""The deploy tools. `deploy_preview` publishes the workspace's last commit
-to homologation as the app <app>-<id>-hml and concludes the stage that
-publishes: its answer chains a comment with the homologation address and
-the commit, and continue; `promote` publishes the image
-homologation built for it to production as <app>-<id>, the very image that
-was seen there, and concludes the release's stage promote: its answer
-chains a comment with the production address, and continue. <id> comes
-from the root's path, so each project, and each conversation working in a
-folder of its own, publishes apps of its own. Each
-reaches its Dokku through the unix socket of that instance under
-$OMUNCULUS_DEPLOY, with the key its secret DEPLOY_KEY holds, loaded into an
-ssh-agent of its own that ends with the call: no network, and no key on
-disk. Usage: deploy preview|promote, the call's JSON on stdin."""
+"""The deploy tools, provider-neutral. Each reads deploy.toml (app, port: see
+the pack's README) from a commit of the workspace and has the configured
+provider act on the app of the workspace's root. The provider is the
+executable providers/$OMUNCULUS_DEPLOY_PROVIDER beside this script; there is
+no default.
+
+`preview` publishes the commit at HEAD and records it as refs/deploy/preview;
+`promote` publishes what that commit built. `status`, `logs` and `destroy`
+act on the preview app, named by the previewed commit's deploy.toml, or
+HEAD's while nothing was previewed.
+
+Apps are named after the root: <app>-<id>-hml in the preview environment and
+<app>-<id> in production, <id> the first twelve hex digits of the root's
+SHA-256, so each project, and each conversation working in a folder of its
+own, publishes apps of its own.
+
+`preview` and `promote` conclude their stage: the answer chains a comment with
+the address and continue. Usage: deploy preview|status|logs|promote|destroy,
+the call's JSON on stdin.
+
+Provider contract: `<provider> <operation>` (deploy, promote, status, logs,
+destroy) with, on stdin, {"environment": "preview"|"production", "app",
+"source" (promote: the preview app), "root", "commit", "port", "lines"
+(logs)}; on stdout {"ok", "output", "address"}. It never writes anything else
+there, and its output never names the provider. What it writes elsewhere, or
+a failure to answer, is never shown: the tool says the provider failed."""
 
 import hashlib
 import json
 import os
+import pathlib
 import re
-import shlex
 import subprocess
 import sys
-import tempfile
-import time
+import tomllib
 
-PORTS = {"homologation": 8080, "production": 9080}
+NAME = re.compile(r"[a-z][a-z0-9-]{1,40}")
+PROVIDER = re.compile(r"[a-z][a-z0-9_-]*")
+PREVIEW_REF = "refs/deploy/preview"
+# A provider may build an image: bounded, in seconds.
+PROVIDER_TIMEOUT = 1800
 
 
 def answer(ok, output, chain=()):
@@ -32,104 +48,104 @@ def answer(ok, output, chain=()):
     sys.exit(0)
 
 
-def ssh_command(instance):
-    socket = os.path.join(os.environ.get("OMUNCULUS_DEPLOY", ""), instance + ".sock")
-    if not os.path.exists(socket):
-        answer(False, f"no deploy socket at {socket}: is the deploy environment up?")
-    if len(os.fsencode(socket)) > 107:
-        answer(False, f"the deploy socket path {socket} is longer than the 107 bytes of a unix socket address: point OMUNCULUS_DEPLOY at a shorter path")
-    return [
-        "ssh", "-F", "/dev/null",
-        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "LogLevel=ERROR", "-o", f"ProxyCommand=socat - UNIX-CONNECT:{socket}",
-    ]
+def conclude(output, report):
+    answer(True, output, [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
 
 
-def with_agent(run):
-    key = open(os.environ["DEPLOY_KEY_FILE"]).read().strip() + "\n"
-    with tempfile.TemporaryDirectory() as directory:
-        sock = os.path.join(directory, "agent")
-        agent = subprocess.Popen(
-            ["ssh-agent", "-D", "-a", sock], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        try:
-            while not os.path.exists(sock):
-                time.sleep(0.01)
-            env = dict(os.environ, SSH_AUTH_SOCK=sock)
-            subprocess.run(["ssh-add", "-q", "-"], input=key, text=True, env=env, check=True)
-            return run(env)
-        finally:
-            agent.terminate()
+def git(root, *args):
+    done = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True)
+    return done.returncode, done.stdout.strip()
 
 
-def run(command, env, cwd=None):
-    done = subprocess.run(command, env=env, cwd=cwd, capture_output=True, text=True)
-    return done.returncode, (done.stdout + done.stderr).strip()
-
-
-def tail(text, lines=15):
-    return "\n".join(text.splitlines()[-lines:])
-
-
-def preview(call, app, root):
-    status, commit = run(["git", "-C", root, "rev-parse", "--short", "HEAD"], os.environ)
+def descriptor(root, commit, dockerfile=False):
+    """deploy.toml as committed at `commit`: what is pushed is what is read."""
+    status, text = git(root, "show", f"{commit}:deploy.toml")
     if status != 0:
-        answer(False, "the workspace has no commit to publish: commit it first")
-
-    def push(env):
-        env = dict(env, GIT_SSH_COMMAND=shlex.join(ssh_command("homologation")))
-        return run(["git", "-C", root, "push", "--force", f"dokku@homologation:{app}-hml", "HEAD:refs/heads/main"], env)
-
-    status, said = with_agent(push)
-    # A push cut short leaves the app's deploy lock behind; each root
-    # publishes its own app, one release at a time, so the lock is stale.
-    if status != 0 and "deploy lock in place" in said:
-        unlock = ssh_command("homologation") + ["dokku@homologation", "apps:unlock", f"{app}-hml"]
-        with_agent(lambda env: run(unlock, env))
-        status, said = with_agent(push)
-    if status != 0:
-        answer(False, f"publishing to homologation failed:\n{tail(said)}")
-    url = f"http://{app}-hml.homologation.localhost:{PORTS['homologation']}"
-    report = f"Published to homologation at {url}: commit {commit}."
-    answer(True, f"published to homologation at {url}\n{tail(said, 5)}",
-           [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
+        answer(False, 'deploy.toml is not committed: write it at the workspace\'s root, with app = "<name>" (lowercase letters, digits and dashes) and port = <the port the image serves>, and commit it')
+    try:
+        spec = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        answer(False, f"the committed deploy.toml is not valid TOML: {error}")
+    unknown = sorted(set(spec) - {"app", "port"})
+    if unknown:
+        answer(False, "the committed deploy.toml has keys the contract does not define: " + ", ".join(unknown))
+    app, port = spec.get("app"), spec.get("port")
+    if not isinstance(app, str) or not NAME.fullmatch(app):
+        answer(False, "deploy.toml: app must be lowercase letters, digits and dashes, starting with a letter")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        answer(False, "deploy.toml: port must be an integer from 1 to 65535")
+    if dockerfile and git(root, "cat-file", "-e", f"{commit}:Dockerfile")[0] != 0:
+        answer(False, "the Dockerfile is not committed: the image is built from the Dockerfile at the workspace's root; write it and commit it")
+    return {"app": app, "port": port}
 
 
-def promote(call, app, root):
-    def deploy(env):
-        dokku = ssh_command("production") + ["dokku@production"]
-        if run(dokku + ["apps:exists", app], env)[0] != 0:
-            status, said = run(dokku + ["apps:create", app], env)
-            if status != 0:
-                return status, said
-        status, said = run(dokku + ["git:from-image", app, f"dokku/{app}-hml:latest"], env)
-        # The same image again: rebuild production from it.
-        if status != 0 and "No changes detected" in said:
-            status, said = run(dokku + ["ps:rebuild", app], env)
-        return status, said
+def provider():
+    name = os.environ.get("OMUNCULUS_DEPLOY_PROVIDER", "")
+    if not PROVIDER.fullmatch(name):
+        answer(False, "no deploy provider is configured")
+    path = pathlib.Path(__file__).resolve().parent / "providers" / name
+    if not os.access(path, os.X_OK):
+        answer(False, f"the deploy provider {name} does not exist")
+    return str(path)
 
-    status, said = with_agent(deploy)
-    if status != 0:
-        answer(False, f"promoting to production failed:\n{tail(said)}")
-    url = f"http://{app}.production.localhost:{PORTS['production']}"
-    report = f"Promoted to production at {url}: the image the person saw in homologation and approved by granting promote."
-    answer(True, f"promoted to production at {url}\n{tail(said, 5)}",
-           [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
+
+def act(operation, request):
+    try:
+        done = subprocess.run([provider(), operation], input=json.dumps(request), capture_output=True, text=True, timeout=PROVIDER_TIMEOUT)
+        result = json.loads(done.stdout)
+        return bool(result["ok"]), str(result["output"]), result.get("address")
+    except subprocess.TimeoutExpired:
+        answer(False, "the deploy provider did not answer in time")
+    except (ValueError, KeyError, TypeError, OSError):
+        answer(False, "the deploy provider failed")
 
 
 def main():
+    operation = sys.argv[1]
     call = json.load(sys.stdin)
-    app = (call.get("args") or {}).get("app", "")
-    if not re.fullmatch(r"[a-z][a-z0-9-]{1,40}", app):
-        answer(False, "app must be lowercase letters, digits and dashes, starting with a letter")
+    args = call.get("args") or {}
     root = (call.get("roots") or [None])[0]
     if not root:
         answer(False, "no workspace to publish from")
-    suffix = "-" + hashlib.sha256(root.encode()).hexdigest()[:6]
-    # The name as the tools answered it, with the project's suffix or the
-    # homologation one, is the same app.
-    app = re.sub(rf"{suffix}(-hml)?$", "", app) + suffix
-    {"preview": preview, "promote": promote}[sys.argv[1]](call, app, root)
+
+    previewed = git(root, "rev-parse", "--verify", "-q", PREVIEW_REF)[1]
+    if operation == "preview":
+        status, commit = git(root, "rev-parse", "--verify", "-q", "HEAD")
+        if status != 0:
+            answer(False, "the workspace has no commit to publish: commit it first")
+    elif operation == "promote":
+        if not previewed:
+            answer(False, "nothing was published to the preview from this workspace: run deploy_preview first")
+        commit = previewed
+    else:
+        commit = previewed or git(root, "rev-parse", "--verify", "-q", "HEAD")[1]
+    spec = descriptor(root, commit or "HEAD", dockerfile=operation == "preview")
+
+    suffix = "-" + hashlib.sha256(root.encode()).hexdigest()[:12]
+    preview, production = spec["app"] + suffix + "-hml", spec["app"] + suffix
+    request = dict(spec, root=root, commit=commit)
+
+    if operation == "preview":
+        ok, output, address = act("deploy", dict(request, environment="preview", app=preview))
+        if not ok:
+            answer(False, f"publishing to the preview failed:\n{output}")
+        git(root, "update-ref", PREVIEW_REF, commit)
+        conclude(f"published to the preview at {address}: commit {commit[:7]}", f"Published to the preview at {address}: commit {commit[:7]}.")
+    elif operation == "promote":
+        ok, output, address = act("promote", dict(request, environment="production", app=production, source=preview))
+        if not ok:
+            answer(False, f"promoting to production failed:\n{output}")
+        conclude(f"promoted to production at {address}",
+                 f"Promoted to production at {address}: the image the person saw in the preview and approved by granting promote.")
+    elif operation == "logs":
+        lines = args.get("lines", 100)
+        if isinstance(lines, bool) or not isinstance(lines, int) or not 1 <= lines <= 1000:
+            answer(False, "lines must be an integer from 1 to 1000")
+        ok, output, _ = act("logs", dict(request, environment="preview", app=preview, lines=lines))
+        answer(ok, output)
+    else:
+        ok, output, _ = act(operation, dict(request, environment="preview", app=preview))
+        answer(ok, output)
 
 
 main()
