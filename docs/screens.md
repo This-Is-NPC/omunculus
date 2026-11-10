@@ -77,9 +77,9 @@ keys.
 ### 2. Projects
 
 Every project of the server's registry, under a rule of its state (NEEDS
-YOU, WORKING, IDLE), two lines each: its id, OPEN beside the one the window
-is on, and its state at the top right — NEEDS YOU, WORKING, IDLE, NOT
-REACHABLE or READING…; under it its conversations, how many need you and
+YOU, WORKING, FAILED, IDLE), two lines each: its id, OPEN beside the one the
+window is on, and its state at the top right — NEEDS YOU, WORKING, ✕ FAILED,
+IDLE, NOT REACHABLE or READING…; under it its conversations, how many need you and
 how many agents work in and its last activity.
 Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
@@ -139,7 +139,8 @@ counts them and unfolding to one row per call, and a run that said nothing
 is that line alone, with its agent's name. A work handed down is a sub-work
 row where it was, which unfolds into its own transcript, changes and runs;
 each run of the works below leaves a row when it ends ("designer worked 4
-min · 12 steps"). A question for you
+min · 12 steps"). A run of the thread's own that fails leaves a line too,
+with its error, in the error tone and the warning icon. A question for you
 is a card in the thread; a numbered list of questions keeps SEND and I CAN'T
 ANSWER THIS on the view's bottom edge, with how many questions are below,
 until the card's end comes into view. What an agent asked another is an exchange in the
@@ -234,7 +235,9 @@ Every event of the conversation, a row each, which opens whole.
 Each row is one line: when, its kind, what the event says, who. Chips keep
 the events that need you or failed, a picker one agent's, and BEHIND THE
 SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
-names each day and each run. Opened from a work of
+names each day and each run. The count says how many rows a filter keeps out,
+and "2 BEHIND THE SCENES HIDDEN" when that is why. A failed event has the
+warning icon in the error tone. Opened from a work of
 the team, it is kept to that work.
 
 ### 9. Cost
@@ -281,39 +284,39 @@ arrows and PgUp/PgDn scroll it.
 
 `apps/kit/run mailbox --config <server.toml> [--project <id>]`. Its IPC
 (`quickshell ipc --path apps/mailbox call mailbox <function>`):
-`newThread`, `open <key>`, `search <query>`, `fold folders|threads` and
-`reply`.
+`compose`, `open <key>`, `search <query>`, `fold folders|list` and `reply`.
+How it maps a conversation to e-mail is in [the mailbox](mailbox.md).
 
-### 13. The threads
+### 13. The folders
 
-The folders — all threads, those waiting for you and those working — the
-project chips, and the threads of the folder, newest first, each with its
-state. A command bar holds NEW THREAD and MARK ALL READ.
+Inbox (with its unread count), Sent, Drafts and Archive, named, and the
+threads of the folder, newest first, each with its sender, subject, snippet, label and time;
+unread ones in bold. A command bar holds COMPOSE and MARK ALL READ.
 
 | Keys | What they do |
 | --- | --- |
-| Ctrl+N | a new thread |
-| / | search threads by subject, agent, project, message or file name |
+| Ctrl+N | compose |
+| / | search by subject, agent, project, message or file name |
 | Esc | clear the search |
 | Ctrl+B | fold the folders to a rail |
-| Ctrl+L | fold the threads to a rail of their agents' portraits |
+| Ctrl+L | fold the list to a rail of the agents' portraits |
 
 ### 14. A thread
 
-One conversation with an agent of depth 0, newest first: what you wrote,
-what the agent said to you, and each request whose decision is yours, with
-its options. Its state and what happens next head it.
+One conversation with an agent of depth 0, stacked oldest first, the latest
+message open, with its label in the head. Each open message offers REPLY,
+REPLY ALL and FORWARD; a reply is written under the messages.
 
 | Keys | What they do |
 | --- | --- |
-| Ctrl+R | reply |
+| Ctrl+R | reply to the latest message |
 | Alt+Up · Alt+Down | the thread before or after |
 | Esc | close the reply, then the thread |
 
-### 15. A new thread
+### 15. Compose
 
-A dialog: its To, an agent of depth 0 of one project, and the first
-message, with the files it carries.
+A dialog: To (one agent, as a chip, with autocomplete), Subject, the message,
+Attach and SEND, the filled action. It keeps what is written in Drafts when closed.
 
 ## The studio
 

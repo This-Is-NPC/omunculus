@@ -109,8 +109,10 @@ Item {
       Layout.fillWidth: true
       Layout.leftMargin: Theme.size.mark
       text: row.detail
-      color: Theme.foreground
+      color: row.failed ? Theme.error : Theme.foreground
       font.pixelSize: Theme.type.log.size
+      wrapMode: Text.Wrap
+      maximumLineCount: 4
       elide: Text.ElideRight
     }
   }

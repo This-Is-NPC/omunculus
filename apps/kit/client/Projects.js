@@ -15,8 +15,9 @@
 //   waiting: the requests waiting on you; asks: those by kind, {questions,
 //   decisions, permissions}, a numbered question counted by its items;
 //   since: when the oldest of them was asked, "" for none; question: what the
-//   newest asks, on one line.
-function summary(data) {
+//   newest asks, on one line; failed: nothing runs and the last run `ended`
+//   in an error, which only the events tell: its text, "" for none.
+function summary(data, ended) {
   const said = data.prompts.find(prompt => prompt.kind === "message");
   const first = data.runs.filter(run => String(run.depth) === "0" && run.agent)
     .sort((a, b) => String(a.started_at || "").localeCompare(String(b.started_at || "")))[0];
@@ -39,6 +40,7 @@ function summary(data) {
     started: data.prompts.length > 0,
     finished: data.works.length > 0 && data.works.every(work => work.state === "done" || work.state === "cancelled"),
     running: data.runs.filter(run => run.status === "open").length,
+    failed: !!ended && data.runs.every(run => run.status !== "open"),
     waiting: waiting.length,
     asks: asks,
     since: waiting.length > 0 ? waiting[0].created_at : "",
@@ -46,15 +48,30 @@ function summary(data) {
   };
 }
 
+// The last error a run of a conversation ended in, from its events, "" when
+// the last run to end did not fail.
+function ended(events) {
+  const last = events.filter(event => event.type === "end-run").pop();
+  return last && last.body && last.body.error ? String(last.body.error) : "";
+}
+
+// Whether the events tell more about a conversation: nothing runs, waits on
+// you or is over, so it may have failed.
+function unsettled(summary) {
+  return summary.started && !summary.finished && summary.running === 0 && summary.waiting === 0;
+}
+
 // The state of a conversation from its summary, null while it is not read:
 // "not-started", "needs-you" while something waits on you, "working" while
-// agents run in it, "done" once its works are, else "idle"; "" unread.
+// agents run in it, "done" once its works are, "failed" when the last run
+// ended in an error, else "idle"; "" unread.
 function state(summary) {
   if (!summary) return "";
   return !summary.started ? "not-started"
     : summary.waiting > 0 ? "needs-you"
     : summary.running > 0 ? "working"
     : summary.finished ? "done"
+    : summary.failed ? "failed"
     : "idle";
 }
 
@@ -73,7 +90,7 @@ function waitsFor(asks) {
 //   {projects: [{id, socket}], conversations: project id -> [conversation],
 //    works: project id -> [work], summaries: conversation id -> summary,
 //    unreachable: Set of project ids, current: the window's project id}
-// `needsYou` and `working` count its conversations in those states; a
+// `needsYou`, `working` and `failed` count its conversations in those states; a
 // project whose socket did not answer counts none: what was read of it may
 // be stale. One whose conversations, or any summary of them, are not read
 // yet is "reading" and counts none: a partial count would be a wrong one.
@@ -87,6 +104,7 @@ function rows(input) {
     const count = wanted => reachable && !reading ? states.filter(each => each === wanted).length : 0;
     const needsYou = count("needs-you");
     const working = count("working");
+    const failed = count("failed");
     const stamps = (conversations || []).map(conversation => conversation.created_at)
       .concat(works.map(work => work.updated_at))
       .filter(stamp => stamp);
@@ -98,20 +116,22 @@ function rows(input) {
       conversations: (conversations || []).length,
       needsYou: needsYou,
       working: working,
+      failed: failed,
       last: stamps.reduce((newest, stamp) => stamp > newest ? stamp : newest, ""),
       state: !reachable ? "unreachable"
         : reading ? "reading"
         : needsYou > 0 ? "waiting"
         : working > 0 ? "working"
+        : failed > 0 ? "failed"
         : "idle"
     };
   });
 }
 
-// Most conversations needing you first, then most working, then the latest
-// activity, then the id.
+// Most conversations needing you first, then most working, then most failed,
+// then the latest activity, then the id.
 function sort(rows) {
-  return rows.slice().sort((a, b) => b.needsYou - a.needsYou || b.working - a.working
+  return rows.slice().sort((a, b) => b.needsYou - a.needsYou || b.working - a.working || b.failed - a.failed
     || (a.last < b.last ? 1 : a.last > b.last ? -1 : 0)
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
@@ -146,12 +166,13 @@ function meta(row, last, budget, separator) {
   const named = row.conversations + (row.conversations === 1 ? " conversation" : " conversations");
   const needs = row.needsYou > 0 ? [row.needsYou + (row.needsYou === 1 ? " needs you" : " need you")] : [];
   const working = row.working > 0 ? [row.working + " working"] : [];
+  const failed = row.failed > 0 ? [row.failed + " failed"] : [];
   const stamp = last ? [last] : [];
   const candidates = [
-    [named].concat(needs, working, stamp),
-    [named].concat(needs, stamp),
-    [named].concat(needs),
-    [row.conversations + " conv."].concat(needs)
+    [named].concat(needs, working, failed, stamp),
+    [named].concat(needs, failed, stamp),
+    [named].concat(needs, failed),
+    [row.conversations + " conv."].concat(needs, failed)
   ].map(parts => parts.join(separator));
   return candidates.find(text => text.length <= budget) || candidates[candidates.length - 1];
 }

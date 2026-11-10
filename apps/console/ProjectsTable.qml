@@ -5,11 +5,11 @@ import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // ProjectsTable lists the projects of the registry in the DataTable under
-// their state — NEEDS YOU, WORKING, IDLE, NOT REACHABLE, READING — each as
+// their state — NEEDS YOU, WORKING, FAILED, IDLE, NOT REACHABLE, READING — each as
 // two lines at every width: its id, the one the window is on marked OPEN,
 // with its state at the top right, toned while something waits for you,
-// agents work in it or its socket does not answer; under it, dim, its
-// conversations, how many need you and how many agents work in, its works
+// agents work in it, a run failed in it or its socket does not answer; under
+// it, dim, its conversations, how many need you, work in it and failed, its works
 // not finished and its last activity, as many as its room allows. Its cells
 // decode into view.
 DataTable {
@@ -23,13 +23,14 @@ DataTable {
   readonly property var groups: [
     { state: "waiting", title: "NEEDS YOU" },
     { state: "working", title: "WORKING" },
+    { state: "failed", title: "FAILED" },
     { state: "idle", title: "IDLE" },
     { state: "unreachable", title: "NOT REACHABLE" },
     { state: "reading", title: "READING" }
   ]
 
   function stateOf(row) {
-    return ({ waiting: "NEEDS YOU", working: "WORKING", unreachable: "NOT REACHABLE", reading: "READING…" })[row.state] || "IDLE"
+    return ({ waiting: "NEEDS YOU", working: "WORKING", failed: "✕ FAILED", unreachable: "NOT REACHABLE", reading: "READING…" })[row.state] || "IDLE"
   }
 
   // The characters of the second line in its room, beside the state.
@@ -50,7 +51,7 @@ DataTable {
     stateOf(row)
   ]
   tone: (row, column) => column === 2
-    ? ({ waiting: Theme.warning, unreachable: Theme.warning, working: Theme.primary })[row.state] || Theme.dim
+    ? ({ waiting: Theme.warning, unreachable: Theme.warning, working: Theme.primary, failed: Theme.error })[row.state] || Theme.dim
     : ""
   dotted: row => row.state === "working"
   stacked: [[0], [1]]

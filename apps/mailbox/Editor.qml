@@ -9,6 +9,8 @@ C.ScrollView {
 
   property alias text: area.text
   property alias placeholderText: area.placeholderText
+  // The height its words take, padding included.
+  readonly property real wordsHeight: area.contentHeight + 2 * area.padding
 
   signal submitted()
 

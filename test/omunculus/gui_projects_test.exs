@@ -152,6 +152,32 @@ defmodule Omunculus.GuiProjectsTest do
     check(Projects.state(s({running: 1, finished: true})) === "working", "working");
     check(Projects.state(s({finished: true})) === "done", "done");
     check(Projects.state(s({})) === "idle", "idle");
+    check(Projects.state(s({failed: true})) === "failed", "failed");
+    check(Projects.state(s({failed: true, finished: true})) === "done", "done over failed");
+    check(Projects.state(s({failed: true, running: 1})) === "working", "working over failed");
+    """)
+  end
+
+  test "a conversation failed when nothing runs and its last run to end failed" do
+    run!("""
+    const end = error => ({type: "end-run", body: error ? {error} : {}});
+    check(Projects.ended([end("401"), {type: "model"}]) === "401", "error");
+    check(Projects.ended([end("401"), end("")]) === "", "a later run ended well");
+    check(Projects.ended([{type: "model"}]) === "", "no end");
+    const data = runs => ({prompts: [{kind: "message", body: "hi"}], runs: runs, works: [], requests: []});
+    const failed = Projects.summary(data([{status: "done"}]), "401");
+    check(failed.failed && Projects.state(failed) === "failed" && Projects.unsettled(failed), "failed " + JSON.stringify(failed));
+    check(!Projects.summary(data([{status: "open"}]), "401").failed, "running");
+    check(!Projects.unsettled(Projects.summary(data([{status: "open"}]))), "running is settled");
+    const row = Projects.rows(input({
+      projects: [place("agency")],
+      conversations: {agency: [conversation("c1", "2026-11-03T10:00:00Z")]},
+      summaries: {c1: failed}
+    }))[0];
+    check(row.failed === 1 && row.state === "failed", "row " + JSON.stringify(row));
+    check(Projects.meta(row, "", 200, " · ") === "1 conversation · 1 failed", "meta " + Projects.meta(row, "", 200, " · "));
+    const order = Projects.sort([{id: "a", needsYou: 0, working: 0, failed: 0, last: ""}, {id: "b", needsYou: 0, working: 0, failed: 1, last: ""}]).map(row => row.id).join();
+    check(order === "b,a", "failed above idle " + order);
     """)
   end
 

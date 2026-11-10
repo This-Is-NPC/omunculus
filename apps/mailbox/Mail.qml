@@ -3,61 +3,61 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
-import "kit/client/Model.js" as Model
-import "kit/client/Requests.js" as Requests
+import "kit/client/Mailbox.js" as Mailbox
 import "kit/ui"
 
-// Mail is every project of the server as the mailbox sees it. A thread is a
-// conversation with one agent of depth 0: what you write goes to that agent,
-// and what it says comes back. Its questions and approvals for you, the
-// requests whose arbiter you are, show in the thread too. Every read and
-// command goes to a project's local socket through curl.
+// Mail is every project of the server as an e-mail client shows it. A thread
+// is a conversation with one agent of depth 0; Mailbox.js makes its e-mails
+// from the snapshot and the events. Every read and command goes to a
+// project's local socket through curl. Which threads you read, archived and
+// the drafts you left are kept in Quickshell's state directory.
 Singleton {
   id: root
 
   // The socket the mailbox was opened on; it lists every project.
   readonly property string socket: Quickshell.env("OMUNCULUS_SOCKET")
+  // The project it was opened on, whose default agent a new message starts with.
+  readonly property string home: Quickshell.env("OMUNCULUS_PROJECT")
 
   property bool connected: false
   // You, as the server knows you: {issuer, subject}.
   property var me: null
-  // Every project, as {id, socket, agents}: the agents of depth 0 a thread
-  // can be with.
+  // Every project, as {id, socket, agents, defaultAgent}: the agents of
+  // depth 0 a thread can be with, and the one its config declares the default.
   property var projects: []
-  // Project id -> every agent of its config, as the config route lists them:
-  // the agents whose pictures and colours the threads show.
+  // Project id -> every agent of its config: the agents whose pictures and
+  // colours the e-mails show.
   property var rosters: ({})
-  // "project/conversation" -> its thread: {key, project, id, agent, subject,
-  // working, waiting, status, at, heard, snippet, entries}.
+  // "project/conversation" -> its thread, as Mailbox.build makes it.
   property var threads: ({})
   // A thread with nothing in it, for a view whose thread has just gone.
-  readonly property var blank: ({ key: "", project: "", id: "", agent: "", subject: "", working: false,
-    waiting: [], status: { state: "idle", label: "", brief: "", line: "", next: "" }, at: "", heard: "", snippet: "", entries: [] })
+  readonly property var blank: ({ key: "", project: "", id: "", agent: "", with: { agent: "", project: "", name: "", address: "", text: "" },
+    subject: "", label: "", messages: [], pending: [], at: "", heard: "", received: 0, sent: 0, parties: "", snippet: "" })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
-  // "all", "waiting" (a decision or a word of yours) or "working" (a run open).
-  property string folder: "all"
-  // A project id, or "" for every project.
-  property string project: ""
+  // "inbox", "sent", "drafts" or "archive".
+  property string folder: "inbox"
   // What the search box asks for, lowercased; "" finds every thread.
   property string query: ""
-  readonly property var shown: all.filter(thread => (project === "" || thread.project === project)
-    && (folder === "all" || (folder === "waiting" ? waitsOnYou(thread) : thread.working))
-    && matches(thread))
+  readonly property var shown: all.filter(thread => Mailbox.inFolder(thread, folder, archived)
+    && Mailbox.matches(thread, query))
+  readonly property var shownDrafts: drafts.filter(draft => query === ""
+    || [draft.subject, draft.body, draft.agent].some(word => String(word).toLowerCase().includes(query)))
   property string selected: ""
   readonly property var thread: threads[selected] || null
-  // Asks the window for a new thread, and the thread on screen for a reply or
-  // for the decision it waits on.
-  signal composeRequested()
-  signal replyRequested()
-  signal decisionRequested()
+  // Asks the window for a message to write, from `preset`: {to, subject, body,
+  // draft}, each optional.
+  signal composeRequested(var preset)
+  // Asks the thread on screen for a reply to the message `key`, or to its last.
+  signal replyRequested(string key)
 
-  // Thread key -> the time of the last word from its agent you read; kept
-  // across sessions.
+  // Thread key -> the time of the last mail from its agent you read.
   property var seen: ({})
-  readonly property int unread: all.filter(thread => isUnread(thread)).length
-  readonly property int waiting: all.filter(thread => waitsOnYou(thread)).length
-  readonly property int working: all.filter(thread => thread.working).length
+  // Thread key -> when you archived it.
+  property var archived: ({})
+  // Drafts, newest first: {id, project, agent, subject, body, at}.
+  property var drafts: []
+  readonly property int unread: all.filter(thread => Mailbox.inFolder(thread, "inbox", archived) && isUnread(thread)).length
 
   // What the window tells, as toasts; the server did not answer the last sweep.
   property bool unreachable: false
@@ -66,7 +66,7 @@ Singleton {
   // Thread key -> {cursor, events, snapshot}: what its thread is built from.
   property var cache: ({})
   property bool sweeping: false
-  // After the first sweep, a new word from an agent is announced on the desktop.
+  // After the first sweep, a new mail is announced on the desktop.
   property bool primed: false
 
   Component.onCompleted: {
@@ -80,16 +80,6 @@ Singleton {
 
   function tell(text, isError) { notices.tell(text, isError) }
 
-  // Whether a thread holds what the search asks for: in its subject, agent,
-  // project, any of its messages or the names of their files.
-  function matches(thread) {
-    if (query === "")
-      return true
-    const words = [thread.subject, thread.agent, thread.project]
-      .concat(thread.entries.map(entry => entry.text), thread.entries.reduce((names, entry) => names.concat(entry.files.map(file => file.name)), []))
-    return words.some(word => String(word).toLowerCase().includes(query))
-  }
-
   // The day a thread belongs to in the list: today, yesterday or its date.
   function day(at) {
     const date = new Date(at)
@@ -102,9 +92,21 @@ Singleton {
       : Qt.formatDate(date, "d MMMM yyyy")
   }
 
-  function isUnread(thread) {
-    return thread.heard !== "" && (seen[thread.key] || "") < thread.heard
+  // When something happened: the time today, else the day.
+  function when(at) {
+    const date = new Date(at)
+    if (isNaN(date))
+      return ""
+    return date.toDateString() === new Date().toDateString() ? Qt.formatTime(date, "HH:mm") : Qt.formatDate(date, "d MMM")
   }
+
+  // A full date and time, as a mail's header shows it.
+  function stamp(at) {
+    const date = new Date(at)
+    return isNaN(date) ? "" : Qt.formatDateTime(date, "d MMM yyyy, HH:mm")
+  }
+
+  function isUnread(thread) { return Mailbox.isUnread(thread, seen) }
 
   function projectOf(id) {
     return projects.find(item => item.id === id) || null
@@ -127,10 +129,12 @@ Singleton {
     open(shown[Math.max(0, Math.min(shown.length - 1, at < 0 ? 0 : at + by))].key)
   }
 
-  // Marks a thread unread, as a mail client does, and goes back to the list.
+  function keep(file, value) { file.setText(JSON.stringify(value)) }
+
+  // Marks a thread unread and goes back to the list.
   function markUnread(key) {
     seen = Object.assign({}, seen, { [key]: "" })
-    seenFile.setText(JSON.stringify(seen))
+    keep(seenFile, seen)
     if (selected === key)
       close()
   }
@@ -142,8 +146,7 @@ Singleton {
       if (thread.heard !== "")
         next[thread.key] = thread.heard
     seen = next
-    seenFile.setText(JSON.stringify(seen))
-    tell("marked " + shown.length + " threads read", false)
+    keep(seenFile, seen)
   }
 
   function markSeen(key) {
@@ -151,44 +154,81 @@ Singleton {
     if (!thread || !isUnread(thread))
       return
     seen = Object.assign({}, seen, { [key]: thread.heard })
-    seenFile.setText(JSON.stringify(seen))
+    keep(seenFile, seen)
   }
 
-  // What arrives in the thread on screen is read as it arrives.
-  onThreadsChanged: if (selected !== "") markSeen(selected)
+  // Moves a thread to the archive and goes back to the list.
+  function archive(key) {
+    archived = Object.assign({}, archived, { [key]: new Date().toISOString() })
+    keep(archiveFile, archived)
+    if (selected === key)
+      close()
+  }
 
-  function compose() {
-    composeRequested()
+  // Moves a thread back to the inbox.
+  function restore(key) {
+    const left = Object.assign({}, archived)
+    delete left[key]
+    archived = left
+    keep(archiveFile, archived)
+    if (selected === key)
+      close()
+  }
+
+  // Asks the window for a new message, or for one started from `preset`.
+  function compose(preset) {
+    composeRequested(preset || {})
+  }
+
+  // Keeps what is written as a draft; one with an `id` replaces its own.
+  function saveDraft(draft) {
+    const next = { id: draft.id || String(Date.now()), project: draft.project, agent: draft.agent, subject: draft.subject, body: draft.body, at: new Date().toISOString() }
+    drafts = [next].concat(drafts.filter(other => other.id !== next.id))
+    keep(draftsFile, drafts)
+    return next.id
+  }
+
+  function discardDraft(id) {
+    drafts = drafts.filter(draft => draft.id !== id)
+    keep(draftsFile, drafts)
   }
 
   // A new thread: a conversation in `project` and your first message to
-  // `agent` there, with the files at the paths `files` lists.
-  function send(project, agent, text, files) {
-    const value = text.trim()
+  // `agent` there, its subject its first line, with the files at the paths
+  // `files` lists. `draft` is the draft it was written from, gone once sent.
+  function send(project, agent, subject, body, files, draft) {
     const place = projectOf(project)
-    if (value === "" || !place || agent === "")
+    const text = [subject.trim(), body.trim()].filter(part => part !== "").join("\n\n")
+    if (text === "" || !place || agent === "")
       return
     http.call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
       http.post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
-        { message: value, agent: agent }, files, () => {
+        { message: text, agent: agent }, files, () => {
+          if (draft)
+            discardDraft(draft)
           selected = project + "/" + data.id
-          tell("sent to " + agent, false)
           sweep()
         })
     })
   }
 
-  // Your next message in a thread, to its agent, with the files at the paths `files` lists.
-  function reply(key, text, files) {
+  // Your reply in a thread: the answer to `request` when one is given, in
+  // words only, else your next message to the thread's agent, with the files
+  // at the paths `files` lists.
+  function reply(key, request, text, files) {
     const thread = threads[key]
     const value = text.trim()
     if (!thread || value === "")
       return
-    http.post(projectOf(thread.project).socket, "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/messages",
-      { message: value, agent: thread.agent }, files, () => {
-        tell("sent to " + thread.agent, false)
-        sweep()
-      })
+    const base = "/v1/projects/" + thread.project + "/conversations/" + thread.id
+    const socket = projectOf(thread.project).socket
+    const sent = () => {
+      sweep()
+    }
+    if (request !== "")
+      http.call(socket, "POST", base + "/requests/" + request + "/reply", Mailbox.answer(value), true, sent)
+    else
+      http.post(socket, base + "/messages", { message: value, agent: thread.agent }, files, sent)
   }
 
   // Saves a file attached in a thread to the downloads directory and opens it.
@@ -199,21 +239,6 @@ Singleton {
     http.openAttachment(projectOf(thread.project).socket,
       "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/attachments/" + file.sha256, file)
     tell("opening " + file.name, false)
-  }
-
-  // Answers a request of a thread with words, an option, or both: an option
-  // of the request itself or, by the parts of path, of the decision below it
-  // that the option is of.
-  function decide(key, requestId, option, body, path) {
-    const thread = threads[key]
-    if (!thread || (!option && body.trim() === ""))
-      return
-    http.call(projectOf(thread.project).socket, "POST",
-      "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/requests/" + requestId + "/reply",
-      Requests.answer(option, body.trim(), path), true, () => {
-        tell(option ? "answered " + option : "answered", false)
-        sweep()
-      })
   }
 
   // Reads who you are and the projects, then every project's conversations; a
@@ -257,22 +282,36 @@ Singleton {
   }
 
   // The agents of each project not yet known, from its config: those of
-  // depth 0 a thread can be with, and every one, for its picture and colour.
+  // depth 0 a thread can be with, its declared default, and every agent, for
+  // its picture and colour; and whether you may write there.
   function loadAgents(items) {
     const known = projects.filter(item => items.some(other => other.id === item.id))
-    projects = items.map(item => known.find(other => other.id === item.id) || { id: item.id, socket: item.socket, agents: [] })
+    projects = items.map(item => known.find(other => other.id === item.id) || { id: item.id, socket: item.socket, agents: [], defaultAgent: "", canWrite: false })
     if (Object.keys(rosters).some(id => !items.some(item => item.id === id)))
       rosters = Object.fromEntries(Object.entries(rosters).filter(([id]) => items.some(item => item.id === id)))
     for (const item of items) {
       if (known.some(other => other.id === item.id))
         continue
       http.setup(item.socket, item.id, setup => {
-        const roster = setup.agents
-        const agents = roster.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
-        projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { agents: agents }) : other)
-        rosters = Object.assign({}, rosters, { [item.id]: roster })
+        projects = projects.map(other => other.id === item.id
+          ? Object.assign({}, other, { agents: Mailbox.chat(setup.agents), defaultAgent: Mailbox.defaultAgent(setup) }) : other)
+        rosters = Object.assign({}, rosters, { [item.id]: setup.agents })
+      })
+      http.call(item.socket, "GET", "/v1/projects/" + item.id + "/capabilities", null, false, caps => {
+        projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { canWrite: Mailbox.canWrite(caps.items) }) : other)
       })
     }
+  }
+
+  // The agents a message can go to, those of the current project first.
+  readonly property var recipients: Mailbox.recipients(projects, home)
+
+  // The recipient a new message starts with: the default agent of the project
+  // the window was opened on; none when its
+  // config declares none.
+  function defaultRecipient() {
+    const place = projectOf(home)
+    return place && place.canWrite && place.defaultAgent !== "" ? Mailbox.person(place.defaultAgent, place.id) : null
   }
 
   function forget(key) {
@@ -295,7 +334,7 @@ Singleton {
         return rest()
       events(place.socket, base, known.cursor, known.events, (cursor, all) => {
         cache[key] = { cursor: cursor, events: all, snapshot: snapshot }
-        update(key, build(place.id, id, snapshot, all))
+        update(key, Mailbox.build(place.id, id, snapshot, all, me))
         rest()
       }, rest)
     }, rest)
@@ -316,19 +355,8 @@ Singleton {
   function update(key, thread) {
     const before = threads[key]
     threads = Object.assign({}, threads, { [key]: thread })
-    if (!primed || selected === key)
-      return
-    const broke = ["failed", "stalled"].includes(thread.status.state) && (!before || before.status.state !== thread.status.state)
-    if (broke)
-      announce(thread.agent + " · " + thread.status.label.toLowerCase(), thread.status.line)
-    else if (thread.heard !== "" && (!before || before.heard < thread.heard))
-      announce(waitsOnYou(thread) ? thread.agent + " waits for you" : thread.agent + " · " + thread.subject, thread.snippet)
-  }
-
-  // Whether nothing in a thread moves until you act: a request of yours is
-  // pending, or its work waits for your next message.
-  function waitsOnYou(thread) {
-    return thread.waiting.length > 0 || thread.status.state === "awaited"
+    if (primed && selected !== key && thread.heard !== "" && (!before || before.heard < thread.heard))
+      announce(thread.with.name + " · " + thread.subject, thread.snippet)
   }
 
   function announce(title, body) {
@@ -336,275 +364,6 @@ Singleton {
     notifier.startDetached()
   }
   Process { id: notifier }
-
-  // Whether a participant is you.
-  function isMe(participant) {
-    return !!participant && !!me && Requests.human(participant) && participant.issuer === me.issuer && participant.subject === me.subject
-  }
-
-  // The thread a conversation's snapshot and events make. Its entries, in
-  // order: each message you wrote, and each answer you gave a request of the
-  // thread, the option it chose with its words; each run of an agent of depth 0, as what it
-  // said to you: the text of its model replies that call no tool, its
-  // comments and the files it attached; and each request whose arbiter is
-  // you, the question of whoever asked it when the harness passed it on, as
-  // when the agent left a question unanswered, with the harness's sentence as
-  // its fine print.
-  function build(projectId, id, snapshot, events) {
-    const rootRuns = {}
-    for (const run of snapshot.runs)
-      if (String(run.depth) === "0")
-        rootRuns[run.id] = run
-    const entries = []
-    const spoken = {}
-    const replies = {}
-    let agent = ""
-    for (const event of events) {
-      const body = event.body || {}
-      if (event.type === "prompt" && event.actor && event.actor.kind === "human") {
-        agent = agent || body.agent || ""
-        entries.push({ kind: "you", key: event.cursor, from: "you", to: body.agent || agent, text: body.message || "", at: event.at, open: false, files: body.attachments || [] })
-      } else if (event.type === "reply" && event.request_id && isMe(event.actor)) {
-        replies[event.request_id] = event
-      } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
-        // A reply that calls a tool is the agent acting: its text narrates the
-        // call to itself, and only a reply that calls none speaks to you.
-        const words = (event.type === "model" ? (calls(body).length > 0 ? "" : Model.text(body))
-          : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim()
-        const files = event.type === "attach" ? body.attachments || [] : []
-        if (words === "" && files.length === 0)
-          continue
-        const run = rootRuns[event.run_id]
-        agent = agent || run.agent
-        if (spoken[run.id] === undefined) {
-          spoken[run.id] = entries.length
-          entries.push({ kind: "agent", key: run.id, from: run.agent, to: "you", text: words, at: event.at, open: run.status === "open", files: files })
-        } else {
-          const entry = entries[spoken[run.id]]
-          entry.text = [entry.text, words].filter(part => part !== "").join("\n\n")
-          entry.files = entry.files.concat(files)
-        }
-      }
-    }
-    const notes = noted(events)
-    const asked = snapshot.requests.filter(request => isMe(request.arbiter))
-    for (const request of asked) {
-      const question = asking(request, notes)
-      const reply = replies[request.id]
-      entries.push({
-        kind: "request", key: request.id, from: question.from, to: "you",
-        note: question.note,
-        text: question.text, fine: question.fine, at: request.created_at, open: Requests.pending(request),
-        files: [],
-        choices: Requests.choices(request),
-        origins: question.origins,
-        answered: !!reply
-      })
-      // Your answer is a message of yours: its words, and the option it chose.
-      if (reply) {
-        const option = Requests.chosen(reply.body)
-        const words = String(reply.body.body || "")
-        entries.push({ kind: "you", key: reply.cursor, from: "you", to: question.note ? agent : question.from, answering: true,
-          option: option, text: words === option ? "" : words, at: reply.at, open: false, files: [] })
-      }
-    }
-    entries.sort((a, b) => a.at.localeCompare(b.at))
-
-    const first = entries.find(entry => entry.kind === "you")
-    const subject = first ? String(first.text).trim().split("\n")[0] : ""
-    const theirs = entries.filter(entry => entry.kind !== "you")
-    const latest = entries.length > 0 ? entries[entries.length - 1] : null
-    return {
-      key: projectId + "/" + id,
-      project: projectId,
-      id: id,
-      agent: agent,
-      subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
-      working: snapshot.runs.some(run => run.status === "open"),
-      waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
-      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent, notes),
-      at: latest ? latest.at : snapshot.conversation.created_at,
-      heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
-      snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
-        + (latest.files.length > 0 ? " [" + latest.files.map(file => file.name).join(", ") + "]" : "")) : "",
-      entries: entries
-    }
-  }
-
-  // What a thread's conversation is doing, from its snapshot and events, as
-  // {state, label, brief, line, next}: "waiting" while a request of yours is
-  // pending; "working" while a run of any depth is open, saying whose, on
-  // which work and stage, the tool it calls now and, on a retry, how many
-  // and why; "failed" when nothing runs and the last run ended with an
-  // error; "held" while nothing runs and a request waits on someone else;
-  // "awaited" while nothing runs and a work you gave waits for your next
-  // message; "stalled" when nothing runs, nothing is pending and a work is
-  // not over;
-  // "done" when every work it began is done or cancelled; "idle" otherwise.
-  // `brief` is for the list, `line` and `next` for the thread's head; a
-  // request in `notes` is the harness's, not its requester's.
-  function status(snapshot, events, pending, to, notes) {
-    const agent = to || "the agent"
-    const works = {}
-    for (const work of snapshot.works)
-      works[work.id] = work
-    const ended = {}
-    const calling = {}
-    for (const event of events) {
-      if (!event.run_id)
-        continue
-      const body = event.body || {}
-      if (event.type === "end-run")
-        ended[event.run_id] = body
-      else if (event.type === "model")
-        calling[event.run_id] = calls(body)
-      else if (event.type === "tool" && calling[event.run_id])
-        calling[event.run_id] = calling[event.run_id].filter((name, at, names) => name !== body.name || at !== names.indexOf(body.name))
-    }
-    const runs = snapshot.runs.slice().sort((a, b) => a.started_at.localeCompare(b.started_at))
-    const on = run => {
-      const work = works[run.work_id]
-      return work ? ", on “" + work.title + "”" + (work.stage ? " at " + work.stage : "") + "," : ""
-    }
-    const failure = run => run && ended[run.id] && ended[run.id].error ? String(ended[run.id].error) : ""
-    // The run before `run` on its work, and how many retries in a row lead to it.
-    const before = run => runs.filter(other => other.work_id === run.work_id && other.started_at < run.started_at).pop() || null
-    const retries = run => run && run.via === "retry" ? 1 + retries(before(run)) : 0
-
-    if (pending.length > 0) {
-      const request = pending[0]
-      const question = asking(request, notes)
-      const asks = (question.note ? "note: " : question.from + " asks: ") + oneLine(question.text || "a decision")
-      return { state: "waiting", label: "WAITING FOR YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
-        next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
-    }
-
-    const open = runs.filter(run => run.status === "open")
-    if (open.length > 0) {
-      const run = open[open.length - 1]
-      const names = calling[run.id] || []
-      const doing = names.length > 0 ? "calling " + names.join(", ") : "thinking"
-      const tries = retries(run)
-      const others = open.length > 1 ? "  (+" + (open.length - 1) + " more running)" : ""
-      const why = failure(before(run))
-      return { state: "working", label: tries > 0 ? "RETRYING (" + tries + ")" : "WORKING",
-        brief: run.agent + " " + doing,
-        line: run.agent + on(run) + " " + doing + others,
-        next: tries > 0 ? "The try before failed" + (why ? ": " + why : "") + ". Once the retries run out, "
-          + (works[run.work_id] && works[run.work_id].parent_id ? "the work goes back to whoever handed it down." : "you are asked to retry or cancel.") : "" }
-    }
-
-    const finished = runs.filter(run => run.status !== "open").sort((a, b) => String(a.finished_at || "").localeCompare(String(b.finished_at || "")))
-    const last = finished.length > 0 ? finished[finished.length - 1] : null
-    const error = failure(last)
-    if (error !== "")
-      return { state: "failed", label: "FAILED", brief: last.agent + ": " + oneLine(error),
-        line: last.agent + on(last) + " failed: " + error,
-        next: "Nothing runs now. Write to " + agent + " again to try once more." }
-
-    const held = snapshot.requests.filter(request => Requests.pending(request))
-    if (held.length > 0) {
-      const who = Requests.label(held[0].arbiter)
-      return { state: "held", label: "WAITING ON " + who.toUpperCase(), brief: who + " has a question to answer",
-        line: Requests.label(held[0].requester) + " waits on " + who + ": " + oneLine(held[0].reason || ""), next: "" }
-    }
-
-    // A work you gave that waits for your next message: only you move it on.
-    const awaited = snapshot.works.find(work => !work.parent_id && work.state === "waiting" && work.waiting === "message")
-    if (awaited) {
-      const by = runs.filter(run => run.work_id === awaited.id).pop()
-      const who = by ? by.agent : awaited.assignee || agent
-      return { state: "awaited", label: "WAITING FOR YOU", brief: who + " waits for your word",
-        line: who + " waits for your next message on “" + awaited.title + "”" + (awaited.stage ? " · " + awaited.stage : "") + ".",
-        next: "Nothing in this thread moves until you write to " + agent + ": REPLY picks it up." }
-    }
-
-    // With nothing running or pending, a work open, or waiting, waits on nothing.
-    const stuck = snapshot.works.find(work => work.state === "open") || snapshot.works.find(work => work.state === "waiting")
-    if (stuck) {
-      const by = runs.filter(run => run.work_id === stuck.id).pop()
-      const who = by ? by.agent : stuck.assignee || "its agent"
-      return { state: "stalled", label: "STALLED", brief: who + " stopped on “" + stuck.title + "”",
-        line: who + " stopped on “" + stuck.title + "”" + (stuck.stage ? " · " + stuck.stage : "") + " without finishing it, and nothing runs now.",
-        next: "Write to " + agent + " again to pick it up." }
-    }
-
-    const roots = snapshot.works.filter(work => !work.parent_id)
-    if (roots.length > 0 && roots.every(work => work.state === "done" || work.state === "cancelled"))
-      return { state: "done", label: roots.every(work => work.state === "cancelled") ? "CANCELLED" : "DONE", brief: "", line: "", next: "" }
-    return { state: "idle", label: "", brief: "", line: "", next: "" }
-  }
-
-  // The requests the harness opened, by id: the events that opened them are
-  // its, whoever the request names as its requester.
-  function noted(events) {
-    const notes = {}
-    for (const event of events)
-      if (Requests.byHarness(event))
-        notes[event.request_id] = true
-    return notes
-  }
-
-  // The names of the tools a model event asks to call: an Anthropic message's
-  // tool uses, an OpenAI message's tool calls, a Responses output's function
-  // calls, or a command model's call; code mode's script is "code".
-  function calls(body) {
-    if (body === null || typeof body !== "object")
-      return []
-    const names = body.type === "call" ? [body.name]
-      : Array.isArray(body.content) ? body.content.filter(part => part.type === "tool_use").map(part => part.name)
-      : Array.isArray(body.tool_calls) ? body.tool_calls.map(call => call.function ? call.function.name : "")
-      : Array.isArray(body.output) ? body.output.filter(part => part.type === "function_call").map(part => part.name)
-      : []
-    return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
-  }
-
-  // What a request asks, as {from, text, fine, origins, note}, each question
-  // once: a reason an origin's question holds gives way to that question,
-  // and an origin's question the text shown already holds is left out. A
-  // request the harness opened, among `notes`, asks what it passes on, in
-  // the words of whoever asked it, its own sentence the fine print; passing
-  // on nothing, it is a note, its reason no one's words.
-  function asking(request, notes) {
-    const passed = notes[request.id] ? Requests.passedOn(request) : []
-    if (passed.length > 0)
-      return { from: Requests.label(passed[0].requester), text: Requests.question(request, true),
-        fine: request.reason || "", origins: [], note: false }
-    const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase()
-    const origins = Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" }))
-    const text = origins.map(origin => origin.reason)
-      .filter(reason => plain(reason).includes(plain(request.reason)))
-      .reduce((longest, reason) => reason.length > longest.length ? reason : longest, request.reason || "")
-    return { from: notes[request.id] ? "note" : Requests.label(request.requester), text: text, fine: "",
-      origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))), note: !!notes[request.id] }
-  }
-
-  // A text on one line, without its Markdown marks, cut short when long.
-  function oneLine(value) {
-    const line = String(value || "").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "").replace(/[*`|]/g, "").replace(/\s+/g, " ").trim()
-    return line.length > 140 ? line.slice(0, 137) + "..." : line
-  }
-
-  // When something happened: the time today, the day before.
-  function when(at) {
-    const date = new Date(at)
-    if (isNaN(date))
-      return ""
-    return date.toDateString() === new Date().toDateString() ? Qt.formatTime(date, "HH:mm") : Qt.formatDate(date, "d MMM")
-  }
-
-  // The tone of a thread's state: the accent while an agent works, the
-  // warning's when it waits on you or stalled, the error's when it failed,
-  // the success's when it is done.
-  function toneOfState(state) {
-    return ({ working: Theme.primary, waiting: Theme.warning, awaited: Theme.warning, stalled: Theme.warning,
-      failed: Theme.error, done: Theme.success })[state] || Theme.dim
-  }
-
-  // Whether a name is of an agent of a project, rather than a person's.
-  function isAgent(project, name) {
-    return (rosters[project] || []).some(agent => agent.name === name)
-  }
 
   // An agent's colour, by its place among its project's agents.
   function toneOf(project, name) { return Theme.agentTone(rosters[project] || [], name) }
@@ -636,6 +395,28 @@ Singleton {
     onLoaded: {
       try {
         root.seen = JSON.parse(text())
+      } catch (e) {}
+    }
+  }
+
+  FileView {
+    id: archiveFile
+    path: Quickshell.statePath("archive.json")
+    printErrors: false
+    onLoaded: {
+      try {
+        root.archived = JSON.parse(text())
+      } catch (e) {}
+    }
+  }
+
+  FileView {
+    id: draftsFile
+    path: Quickshell.statePath("drafts.json")
+    printErrors: false
+    onLoaded: {
+      try {
+        root.drafts = JSON.parse(text())
       } catch (e) {}
     }
   }

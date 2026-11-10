@@ -369,12 +369,14 @@ Item {
         visible: shown
         anchors { right: parent.right; rightMargin: Theme.space.cell + row.reserved; top: parent.top; topMargin: Theme.space.cell }
         // Not `visible`, which also follows the row's: a row torn down would loop.
-        width: shown ? implicitWidth : 0
+        // Measured apart, since a Text's own implicit width follows its width.
+        width: shown ? Math.ceil(statusMetrics.advanceWidth) + leftPadding : 0
         leftPadding: row.dot ? 11 : 0
         text: table.status >= 0 ? row.texts[table.status] : ""
         color: table.tone(row.modelData, table.status) || Theme.primary
         font.pixelSize: 9
         font.letterSpacing: 1
+        TextMetrics { id: statusMetrics; font: statusLabel.font; text: statusLabel.text }
         Dot {
           visible: row.dot
           anchors.verticalCenter: parent.verticalCenter

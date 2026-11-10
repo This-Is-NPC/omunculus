@@ -63,7 +63,10 @@ the projects the window is not on. A project whose conversations, or any
 summary of them, are not read yet is `reading` and counts none, so no count
 shows partial: `elsewhere` is 0 while another project is read. A conversation's state comes from its
 summary (`Projects.state`): NOT STARTED, NEEDS YOU while a request waits on
-you, WORKING while its agents run, DONE, or IDLE; every count of
+you, WORKING while its agents run, DONE, FAILED when nothing runs and the
+last run to end ended in an error, or IDLE; the snapshot does not say why a
+run ended, so a conversation with nothing running, waiting or done has its
+events read for that, a page at a time; every count of
 conversations on the start, PROJECTS and CONVERSATIONS is of those states,
 so they agree. The summary (`Projects.summary`) also keeps whom the
 conversation is with (the agent of its first run at depth 0), what waits
@@ -142,17 +145,26 @@ wrote to down to that one, each in its tone ("sales › seller › design-lead �
 designer"; a run of the front agent outside any work stands alone; short of
 room the first give way to "…"), "working" and its clock, the trace at the
 row's end, and under them what it does: "Thinking · wrote files", with "· no
-news for 12 minutes" after ten minutes without an event. A call is known only
-once it finished, so the line says the last one in the past, after
-"Thinking", and a run that has made no call for 15 s reads "Thinking", not
-"Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
+news for 12 minutes" after ten minutes without an event. A call is recorded
+once it finished, but the model event that asked for it is known: while it
+runs the line says it as it goes ("Running a command"), and between calls it
+says the last one in the past, after "Thinking"; a run that has made no call
+for 15 s reads "Thinking", not "Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
 and it gives way to that agent's own turn while the turn streams in the
 thread and shows something. A work's own page names the chain from its work
 down; a thread nested in a sub-work block has none, the block says it. When
 a run of a work below ends, it leaves a line of the log in the main thread at
 that moment: "✓ designer  worked 4 min · 12 steps", or "failed after 4 min"
-in the error tone, so the chat tells the team's work in order. Who works is
-the chat's to say; the header strip does not repeat it.
+in the error tone, so the chat tells the team's work in order. A run of the
+thread's own that fails leaves a line too, in the error tone with the warning
+icon: "⚠ sales  failed", and under it the error the run ended in. Who works is
+the chat's to say; the header strip does not repeat it. A conversation opens
+at its end, and while earlier entries lie above the view an EARLIER pill at
+its top counts them and leads to the start. Once the thread outgrows the view
+it keeps a free band at each end, for that pill and the NEW one, so a pill
+never covers an entry; when the question waiting on you
+is taller than the view, the thread lands at its top with the entry before it
+whole above, never cut by the view.
 Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
 thread's `openLog`).
@@ -217,18 +229,28 @@ scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
 The open glyph at its top right shows the work's thread as a page of its own
 (see [Pages](#pages)).
 
+The thread is in the order of the events' own times, which the server
+records in order: a row sits where its event happened, a run's end line at
+the time the run ended and a question at the time it was asked. An answer
+shown under its question keeps the time it was given, so it can read later
+than the lines after the question.
+
 A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time (YOU CHOSE APPROVE for a chosen option, YOU ASKED TO
 ADJUST for adjust, YOU GRANTED · THIS WORK ONLY, or the saved scope, for a grant; the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
+margin, with the time it was asked at its right, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
 kept whole) and its first line with words, cut at 120 characters; a permission reads instead "clerk asked · via seller › sales to publish the site to production"; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the
 answer comes and the keyboard was in the card, it moves to the composer. A
 reply says nothing in the bar when it succeeds; the card shows it. A
 question for you that arrives while the view follows is held by its top.
+The view follows the end until you scroll up: the live row's growing never
+ends it, and only your own scrolling, to more than a row from the end, does.
+The NEW pill counts the entries below the view, so it is gone when the end is
+in view.
 
 What an agent asks another is an exchange (`TeamRow`) in the thread it was
 asked in: a system row behind the people mark, "seller asked design-lead ·
@@ -243,10 +265,12 @@ lower ones of a question passed up, is not shown on its own.
 A conversation's pages share its head (`ProgressStrip`), over the tabs. First
 a 40 px header strip with its meta — the agent it is with, its dot and name
 in its tone, the stage of the work in focus and how long it has run, in
-words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
+words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR" (the clock runs from the
+work's start while anything runs, with no event needed), "TOOK 3 MINUTES"
 once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
-waits on you, also when the work asking is a sub-work; the clock keeps counting while any work is open; before any work, "● SALES · STARTING" while its first run goes or the person has written,
+waits on you, also when the work asking is a sub-work; "✕ FAILED", in the
+error tone, in place of the stage once the conversation failed; the clock keeps counting while any work is open; before any work, "● SALES · STARTING" while its first run goes or the person has written,
 NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
 follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
 once the provider priced a call; each opens what it counts, the team and the cost, and
@@ -395,8 +419,7 @@ every decision it gathers from below — an origin still waiting whose options
 are named, as an escalation keeps a decision's options on its origin — each
 under its part name and who asked it, a grant's scopes read for that
 origin's asker and work, an option of an origin given through the reply's
-`parts`, down to it (the kit's `Requests.choices` and `Requests.answer`, as
-in the mailbox).
+`parts`, down to it (the kit's `Requests.choices` and `Requests.answer`).
 
 Every option carries the words of its field: SEND replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
@@ -523,13 +546,14 @@ not answer, the ways in are disabled and the line says so. Entered by one of the
 The registry's level:
 
 - PROJECTS (`ProjectsView`, `ProjectsTable`), every project of the
-  registry, under a rule of its state (NEEDS YOU, WORKING, IDLE, NOT
-  REACHABLE, READING), each row two lines at every width, with no header:
-  its id, `· OPEN` after the one the window is on, and its state at the top
-  right: NEEDS YOU, WORKING (behind a dot), IDLE, NOT REACHABLE when its
+  registry, under a rule of its state (NEEDS YOU, WORKING, FAILED, IDLE,
+  NOT REACHABLE, READING), each row two lines at every width, with no
+  header: its id, `· OPEN` after the one the window is on, and its state at
+  the top right: NEEDS YOU, WORKING (behind a dot), ✕ FAILED (in the error
+  tone, while a conversation of it failed and none needs you or works), IDLE, NOT REACHABLE when its
   socket did not answer, or READING… until its conversations are read.
   Under it, dim, as much as fits, never cut: "16 conversations · 13 need
-  you · 1 working · Today 22:22", with the last activity (the newest
+  you · 1 working · 2 failed · Today 22:22", with the last activity (the newest
   conversation begun or work changed); the working goes first, then the last
   activity, then the conversations shorten to "16 conv." (`Projects.meta`).
   The search line (`/`) searches the ids; the chips ALL, NEEDS YOU and
@@ -553,7 +577,8 @@ The project's level:
   is its first work's, else what was first said, with its state at the top
   right: what waits on you ("7 QUESTIONS", "A DECISION", "A PERMISSION",
   joined when several do), NOT STARTED (nothing was said), WORKING (behind
-  a dot), DONE (every work done or cancelled) or IDLE. Under it, dim:
+  a dot), DONE (every work done or cancelled), ✕ FAILED (in the error tone;
+  the last run ended in an error) or IDLE. Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
   its first work is with at its stage ("with sales › seller · design 2/6",
   or "with sales · qualify 1/6" when they are the same; read from the
@@ -577,7 +602,9 @@ A conversation's level, in place of the project's once one is opened:
   sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED,
   RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is
-  still open), under rules naming the day and each run.
+  still open), under rules naming the day and each run. A failed event, such as a run
+  that ended in an error, shows the warning icon in the error tone, not its
+  kind's own.
   A call reads in plain words ("read design/rounds.md", "looked in design/",
   "looked at design/README.md", "ran a command on quotes/", "could not read
   design/rounds.md: permission denied"), never by its tool name; a command
@@ -591,7 +618,9 @@ A conversation's level, in place of the project's once one is opened:
   answer passed down a level on its way to the one asked, and a call whose
   result has a row of its own, such as a note, a question or a grant) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
   FAILED and BEHIND THE SCENES and an agent picker filter it; the
-  count of rows and a "more" menu with COPY, the event picked or else the
+  count of rows, "4 OF 6 EVENTS · 2 BEHIND THE SCENES HIDDEN" while a
+  filter keeps rows out and the plumbing is among those it hides, and a
+  "more" menu with COPY, the event picked or else the
   rows shown, sit at the filters' right, or under them when they do not fit
   beside it. The event opened shows in a card
   under the list, with its local time and the server's ISO stamp as UTC and

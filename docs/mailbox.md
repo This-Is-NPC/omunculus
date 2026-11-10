@@ -1,172 +1,167 @@
 # The mailbox
 
-`apps/mailbox/` is a concept client beside the window, built on the same kit
-as it. A thread is a conversation with one agent of depth 0.
+`apps/mailbox/` is the client's view of a project, drawn as an ordinary
+e-mail client, built on the same kit as the console. A thread is one
+conversation of one project, with the agent of depth 0 you first wrote to. It
+has no forms, answer buttons or state banners: the agency writes e-mails, you
+read and reply.
 
 `apps/kit/run mailbox` takes the server registry and, when it holds several
 projects, the id of the one whose socket it opens through, which it reads as
-`OMUNCULUS_SOCKET`.
+`OMUNCULUS_SOCKET` (`OMUNCULUS_PROJECT` names it).
 
 ## How it reads the projects
 
-The `Mail` singleton reads `GET /v1/projects` on the socket it was opened
-on, then each project's conversations, each one's snapshot every few seconds
-and its events when the snapshot's cursor moved, all through `curl`. Which
-messages you read is kept in Quickshell's state directory, and a word from
-an agent in a thread not on screen is announced with `notify-send`.
+The `Mail` singleton reads `GET /v1/projects` on the socket it was opened on,
+then each project's conversations, each one's snapshot every few seconds and
+its events when the snapshot's cursor moved, all through `curl`. The mapping
+from a conversation to e-mails is the plain module
+`apps/kit/client/Mailbox.js`, tested in `test/omunculus/gui_mailbox_test.exs`.
 
-## A new thread
+A mail from an agent in a thread not on screen is announced with
+`notify-send`.
 
-A new thread needs its To, one agent of depth 0 that is not workflow-only,
-of one project, as the config route gives them (`GET /v1/projects/{id}/config`). Its first
-message names that agent, and every later one names it again.
+What the mailbox keeps itself, in Quickshell's state directory: which threads
+you read (`seen.json`), which you archived (`archive.json`) and your drafts
+(`drafts.json`). None of it reaches the server.
 
 ## What a thread shows
 
-The thread shows, newest first as mail reads:
+The e-mails of a thread, oldest first, are:
 
-- what you wrote;
-- each answer you gave a request whose arbiter is you, as a message of yours
-  to whoever asked, its words and the option it chose (the `reply` events
-  whose actor is you);
-- what each run of an agent of depth 0 said to you — the text of its model
-  replies that call no tool, its comments and the files it attached — as
-  the kit's `Prose`, its web addresses links that open in the browser;
-- each request whose arbiter is you.
+- what you wrote, from you, to the agent;
+- what the thread's agent said to you: the text of its model replies that call
+  no tool, its comments and the files it attached, one e-mail per run;
+- each request whose requester is the thread's agent and whose arbiter is you,
+  as an e-mail from that agent whose body is the request's reason, in the
+  agent's own words. The questions of the request's origins are other agents'
+  text and never appear;
+- your answers to those requests, as e-mails of yours.
 
-An agent's message is headed by its portrait, the kit's `Portrait` of the
-picture `AgentImages` fetched for it through its project's socket, or,
-while it has none, its initial in its colour, by its place among the
-config's agents; yours by none.
+A model reply that calls a tool is the agent acting, and its text narrates the
+call to itself; it is not shown. Nothing of another agent is shown: not its
+words, not requests it raised, not a note the harness opened between agents
+(a request the harness opened that passes on no question). A request the
+harness opened that passes on a question shows that question as the thread's
+agent's.
 
-A model reply that calls a tool is the agent acting, and its text narrates
-the call to itself, as "the question is already out, I'll wait" or a
-request's id. It is the agent's note, not words to you, and shows only in
-the console, in that run's turn. So an agent whose every reply calls a tool,
-as the sales desk's generalist, speaks to you only through its requests and
-comments.
+A conversation has no title in the core: its subject is the first line of its
+first message of yours, cut at 90 characters. The compose window's Subject is
+sent as that first line, followed by a blank line and the message.
 
-## Requests
+An agent's address is `<agent>@<project>` and its display name the agent's name,
+capitalised: `Sales <sales@agency>`.
 
-A request whose arbiter is you, while pending, takes an option or a text
-answer through the reply endpoint. Its options are buttons, and so are those
-of every decision it gathers from below — an origin still waiting whose
-options are named, as an escalation keeps a decision's options on its
-origin — each under its part name when there are several, an option of an
-origin given through the reply's `parts`, down to it, with the words
-written. A request closed without an answer of yours says so.
+## Folders
 
-A request whose `request` event the harness wrote (its `actor.kind` is
-`harness`), as when an agent left a question unanswered and the harness
-passed it on, asks what it passes on. Its card leads with the questions of
-its origins, in their askers' own words and language, under the name of the
-first one's asker, and the harness's sentence, which says how it came to
-you, follows in small print. The thread's state says who asks and that
-question too (the kit's `Requests.byHarness` and `Requests.passedOn`).
+- **Inbox**: threads with at least one e-mail from the agent. A dot and bold
+  type mark a thread with unread mail; the count is how many.
+- **Sent**: threads with a message of yours.
+- **Drafts**: what you left unsent.
+- **Archive**: threads you archived. A thread that gets new mail after it was
+  archived returns to the inbox.
 
-One that passes on no question is a note, no one's words: its card reads
-NOTE, muted, where the requester's name would be, and the thread's state
-says `note:` before its reason rather than who asks.
+The folders show their names, with the unread count on Inbox. Ctrl+B folds them
+to icons, and a window narrower than 760 px shows icons only.
 
-A request shows each question once: its reason, or, when an origin's
-question holds it, that question, then each origin's question the text shown
-does not already hold, under its part name, whitespace and case aside.
+Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
+list. A row shows who wrote ("Sales, me (5)") and the time, then the subject
+and the start of the last message, with the label beside them. In a list
+narrower than 380 px the snippet is left out and the label takes a line of its
+own, so the sender and the subject keep the width. Which project an agent is
+in shows only in its address (`sales@agency`); search can still match it.
 
-## Files
+## Labels
 
-A message carries the files you pick with the kit's `FilePicker`, which
-`Http.post` sends through `apps/kit/client/post-with-files`, in base64 from a
-temporary file. A file a message or an agent's `attach` carries shows as the
-kit's `FileChip`, which `Http.openAttachment` saves through
-`apps/kit/client/open-attachment` to the downloads directory, beside a
-different file of the same name rather than over it, and opens.
+A thread has at most one label, on its row and in its header, a small pill
+with a still icon and a word:
 
-## A thread's state
+- **In progress**: a run of the conversation is open, a request waits on
+  someone other than you, or a work waits on its children.
+- **Stuck**: nothing runs, nothing waits for you, and the last run failed or a
+  work is still open.
+- **Cancelled**: every root work is cancelled.
 
-Each thread has a state, read from its snapshot (works with their state and
-stage, runs with their status and `via`, requests) and its events. It shows
-in its row and, with what happens next, under the open thread's subject:
+There is no label otherwise, including while the agency waits for you: that is
+an unread e-mail.
 
-- WAITING FOR YOU while a request whose arbiter is you is pending, with
-  DECIDE, and, while nothing else is, when a work you gave waits for your
-  next message (a root work whose `waiting` is `message`, as `wait` leaves
-  it), naming who waits and on which work, with REPLY;
-- WORKING while a run of any depth is open, naming its agent, its work's
-  title and stage, and the tools its last model call asked for that have
-  not answered yet, and RETRYING (n) when that run is the n-th retry in a
-  row on its work, with why the try before failed;
-- FAILED when nothing runs and the last run's `end-run` carries an `error`,
-  with that reason;
-- WAITING ON another participant while nothing runs and a request waits on
-  them;
-- STALLED when nothing runs, nothing is pending and a work is still open or
-  waiting;
-- DONE or CANCELLED once every root work is.
+## Reading and replying
 
-Failed and stalled threads offer WRITE AGAIN, which opens the reply. The
-panel's actions are outlined in its tone, as the bar's secondary ones, so
-the bar's main action stays the one solid on screen. A thread not on screen
-that turns so is announced with `notify-send`.
+Opening a thread stacks its messages, the latest open and the others folded to
+a line. Click a message to open or fold it. An open message offers REPLY,
+REPLY ALL and FORWARD. The latest message's REPLY is the screen's one filled action;
+REPLY ALL does the same as REPLY, since a thread has one agent. The command bar
+offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
 
-A thread is working while a run is open and waiting for you while such a
-request is pending or its work waits for your word. The folders are all
-threads, those waiting for you and those working, filtered by project.
+A reply is written in a box under the messages, outside their scrolling, so
+SEND stays in view while you type. Under your text it shows the e-mail it
+answers, quoted as mail does ("On <date>, Sales wrote:" and its lines behind
+"> ", folded after four lines, MORE shows the rest). Only your own words are
+sent, never the quote. What it does:
+
+- replying to an open request's e-mail sends your words as the answer to that
+  request (`POST .../requests/{id}/reply` with `{"body": text}`);
+- replying to any other e-mail while requests wait for you answers the newest
+  of them, and the quote shows which one;
+- with no request waiting, it is a message to the agent
+  (`POST .../messages`), and may carry files.
+
+An answer carries words only, never an option, and no files.
+
+FORWARD opens the compose window with `Fwd:` and the message quoted.
+
+## Composing
+
+COMPOSE (Ctrl+N) opens a dialog laid out as a mail's header: a To line and a
+Subject line, label on the left and field on the right, then the message,
+Attach, DISCARD and SEND. SEND is the filled action, enabled once there is a
+recipient and some text. A sent message gets no toast: it appears in the
+thread.
+
+- To holds one agent as a pill with its display name, its address in the tip
+  and an x on the right. A click on the pill selects it; only its x, or
+  Backspace once it is selected, removes it. The field beside it lists, under
+  it, the agents whose name or address holds what you type, case aside (all of
+  them while it is empty); Up and Down move, Enter or a click picks, Esc
+  closes the list. The agents are those of depth 0 that are not workflow-only,
+  as the config route gives them, of the projects where the capabilities route
+  grants `conversation.create` and `conversation.send`. They are ordered: the
+  project the window was opened on, its default agent first, then the rest of
+  that project, then the other projects. A second recipient is refused with a sentence saying a message
+  goes to one agent.
+- When the project's config declares a `default_agent` (the config route's
+  `default_agent`), To starts with it, for the project the window was opened on.
+  With none declared, To starts empty.
+- Closing the dialog with something written keeps it in Drafts; DISCARD drops
+  it. A draft opens in the dialog again, and is gone once sent.
+- Files are attached with the attach button (the kit's `FilePicker`) and sent
+  through `Http.post` and `apps/kit/client/post-with-files`. A file an e-mail
+  carries shows as the kit's `FileChip`, which `Http.openAttachment` saves to
+  the downloads directory and opens.
 
 ## Look and motion
 
-It follows eco's look and motion with the kit's controls:
+It follows the console's look with the kit's controls: hairline rows, no
+coloured edge bars, status as an icon and a word, one solid action per screen.
+The masthead's notch sweeps when the folder changes; arriving threads fade and
+rise in; a thread fades in. Subjects never animate.
 
-- the masthead's notch sweeps when the folder changes;
-- a row is outlined by a hairline, washed under the pointer and outlined in
-  the accent when open, a dot marking it unread, with no edge bar;
-- threads arriving fade and rise in, leaving fade out and the rest slide,
-  under day kickers;
-- subjects decode;
-- a thread slides in as a Stage does;
-- a thread opens at its newest message, its state and, once asked for, the
-  reply above its messages, and a long thread folds its middle above its
-  first message, at the bottom;
-- a message arriving drops in on top, and those arriving while the top is
-  out of view are counted on a NewPill above them, the messages in view
-  staying where they are;
-- deny and cancel arm on the first press and answer on the second.
+## Search and keys
 
-Hairlines that fade downwards part the columns. Sending uses eco's enter
-icon.
+The search box (`/`) finds threads by subject, agent, project, message or file
+name; Esc clears it.
 
-## Search and the command bar
+| Keys | What they do |
+| --- | --- |
+| Ctrl+N | compose |
+| Ctrl+R | reply to the latest message |
+| / | search |
+| Ctrl+B · Ctrl+L | fold the folders, or the list to a rail of portraits |
+| Alt+Up · Alt+Down | the thread before or after |
+| Esc | close the reply, then the thread |
 
-The search box (`/`) finds threads by subject, agent, project, message or
-file name a quarter of a second after the last key, Esc clearing it; the
-project chips filter the list.
+A narrow window shows one pane at a time; the thread's head has a way back to
+the list.
 
-A command bar under the masthead holds the actions, as mail clients do,
-ranked in the kit's `CommandRow`: the main action of where you are solid,
-the others outlined in order of importance, which slide in when the place
-changes, and the search at the end.
-
-On the list NEW THREAD leads, then MARK ALL READ. With a thread open REPLY
-leads, then MARK UNREAD and NEW THREAD, except while the thread waits on a
-decision of yours: nothing in it moves until you decide, so DECIDE leads, in
-the warning tone, before REPLY.
-
-Each action shows its name beside its icon while the names fit; otherwise
-every one but the main one shows only its icon, its name in the tip, and on
-a narrow window the search moves over the list.
-
-## Moving and the columns
-
-Moving through the threads is not in the bar: the open thread's head holds,
-beside its subject, the previous and next thread (Alt+Up, Alt+Down) and
-closing it. A new thread is written in a dialog (Ctrl+N); a thread is
-answered only after REPLY (Ctrl+R), Esc closing the reply and then the
-thread.
-
-How the columns show is not in the bar: each column is headed by its name
-and the arrow that folds it. The folders fold to a rail (Ctrl+B), and the
-threads (Ctrl+L) to a rail of their agents' portraits, the kit's
-`Portrait`, each underlined in the tone of its state, a dot at its corner
-while unread, the one open washed and outlined in the accent, its agent,
-subject and state in the tip. A click opens one, as Up and Down open the one
-before or after with the keyboard on the rail, sliding to their width. A
-narrow window shows one pane at a time.
+IPC (`quickshell ipc --path apps/mailbox call mailbox <function>`): `compose`,
+`open <key>`, `search <query>`, `fold folders|list` and `reply`.

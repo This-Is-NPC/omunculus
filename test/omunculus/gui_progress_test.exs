@@ -244,6 +244,8 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 50}, rootAgent: "sales", now: 60});
     check(out.state === "working" && out.focus === null && out.roots.length === 0 && out.path.length === 0, "working", out);
     check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true, state: "working"}), "now", out.now);
+    const going = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, asked: {"": [{name: "bash", args: {command: "npm run build"}}]}, rootAgent: "sales", now: 60});
+    check(going.now.doing === "Running a command", "a call asked for and not answered", going.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
     check(asking.now.doing === "Thinking · asked a teammate", "calling", asking.now);
     const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};
@@ -315,8 +317,8 @@ defmodule Omunculus.GuiProgressTest do
       origins: {a: {requester: agent("designer"), reason: "1. Colours?\\n2. Fonts?"}}};
     const relayed = Progress.build(Object.assign({}, base, {requests: [passed], noted: {q2: true}}));
     check(relayed.forYou[0].asker === "designer" && relayed.forYou[0].asks === 2, "passed on", relayed.forYou);
-    const answered = {id: "q0", status: "closed", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Which one?"};
-    const again = Progress.build(Object.assign({}, base, {requests: [answered, form], replies: {q0: {stamp: "09:48"}}}));
+    const answered = {id: "q0", status: "closed", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Which one?", created_at: "1"};
+    const again = Progress.build(Object.assign({}, base, {requests: [answered, Object.assign({}, form, {created_at: "2"})], replies: {q0: {stamp: "09:48"}}}));
     check(again.forYou[0].again === true && out.forYou[0].again === false, "asked again", again.forYou);
     check(Progress.given([answered], answered, {}) === 1 && Progress.given([], answered, {}) === 0, "one answer given");
     const numbered = Object.assign({}, answered, {reason: "1. A?\\n2. B?"});

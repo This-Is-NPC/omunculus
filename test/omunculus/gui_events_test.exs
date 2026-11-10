@@ -18,6 +18,17 @@ defmodule Omunculus.GuiEventsTest do
              )
   end
 
+  test "a model event's calls are read from every message shape" do
+    run!("""
+    const names = body => JSON.stringify(Model.calls(body));
+    check(names({content: [{type: "text", text: "x"}, {type: "tool_use", name: "bash", input: {command: "ls"}}]}) === '[{"name":"bash","args":{"command":"ls"}}]', "anthropic", "");
+    check(names({tool_calls: [{function: {name: "read", arguments: '{"path":"a"}'}}]}) === '[{"name":"read","args":{"path":"a"}}]', "openai", "");
+    check(names({output: [{type: "function_call", name: "ls", arguments: "{}"}]}) === '[{"name":"ls","args":{}}]', "responses", "");
+    check(names({type: "call", name: "__omunculus_execute", args: {}}) === '[{"name":"code","args":{}}]', "code", "");
+    check(names("plain") === "[]" && names({content: "words"}) === "[]", "none", "");
+    """)
+  end
+
   test "requests, escalations and replies say who asks whom what" do
     run!("""
     says("request", {reason: "Which logo?\\nThe new one?", requester: agent("sales"), arbiter: human, options: {}}, "sales", "sales asks you: Which logo?");

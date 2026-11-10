@@ -12,6 +12,13 @@ defmodule Omunculus.GuiRequestsTest do
     assert {"", 0} = GuiModules.run(modules, @fixtures <> assertions)
   end
 
+  test "a request's origin has no arbiter, which is no human" do
+    run!(["Requests"], """
+    if (Requests.human(undefined) || Requests.human(null)) throw Error("no participant is no human");
+    if (Requests.kind({status: "pending", options: {}, origins: {}}) !== "team") throw Error("a request without arbiter is the team's");
+    """)
+  end
+
   test "pending, human, answer and label use participant-neutral fields" do
     run!(["Requests"], """
     const owner = {kind: "human", issuer: "local", subject: "1000"};
@@ -122,17 +129,19 @@ defmodule Omunculus.GuiRequestsTest do
 
   test "repeated finds the answered request a new one asks again" do
     run!(["Requests"], """
-    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q"});
+    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q", created_at: {a: "1", b: "2", c: "3", d: "4", p: "1", q: "2", r: "3", s: "4"}[id] || "5"});
     const replies = {a: {stamp: "09:48"}, b: {stamp: "09:50"}};
     const list = [ask("a", "closed", "w1", "lead"), ask("b", "closed", "w1", "lead"), ask("c", "closed", "w2", "lead"),
       ask("d", "closed", "w1", "other"), ask("n", "pending", "w1", "lead")];
     if (Requests.repeated(list[4], list, replies).id !== "b") throw Error("the last answered one");
+    if (Requests.repeated(list[4], list.slice().reverse(), replies).id !== "b") throw Error("by when asked, not by order given");
+    if (Requests.repeated(ask("n", "pending", "w1", "lead"), list.slice(0, 2).concat([Object.assign({}, list[4], {id: "z", status: "closed", created_at: "9"})]), Object.assign({z: {}}, replies)).id !== "b") throw Error("one asked later is no earlier one");
     if (Requests.repeated(ask("n", "pending", "w2", "lead"), list, replies) !== null) throw Error("answered request only");
     if (Requests.repeated(ask("n", "pending", "w1", "third"), list, replies) !== null) throw Error("same asker");
     if (Requests.repeated(list[0], [list[0]], replies) !== null) throw Error("not itself");
     // The preview, then the proposal, then the owner's decision: one asker, one
     // work, other options; none repeats the one before.
-    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, {}]))});
+    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, []]))});
     const preview = decide("p", "closed", ["aprovar", "pedir-mudancas"]);
     const proposal = decide("q", "closed", ["accept", "adjust", "refuse"]);
     const owner = decide("r", "pending", ["approve", "deny"]);
@@ -141,6 +150,13 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.repeated(owner, [preview, proposal, owner], answered) !== null) throw Error("the owner's decision is no repeat");
     const again = decide("s", "pending", ["aprovar", "pedir-mudancas"]);
     if ((Requests.repeated(again, [preview, proposal, again], answered) || {}).id !== "p") throw Error("the same decision again is");
+    // A grant of another thing is no repeat of the earlier grant.
+    const grant = (id, status, name, at) => Object.assign(ask(id, status, "w1", "seller"), {created_at: at, options: {grant_once: [{name: "grant", args: {kind: "tool", name: name}}], deny: []}});
+    const deploy = grant("g1", "closed", "deploy_preview", "1");
+    const network = grant("g2", "pending", "network", "2");
+    if (Requests.repeated(network, [deploy, network], {g1: {}}) !== null) throw Error("another resource is no repeat");
+    const network2 = grant("g3", "pending", "network", "3");
+    if ((Requests.repeated(network2, [deploy, Object.assign({}, network, {status: "closed"}), network2], {g1: {}, g2: {}}) || {}).id !== "g2") throw Error("the same resource again is");
     """)
   end
 end

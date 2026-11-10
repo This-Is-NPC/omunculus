@@ -2,7 +2,7 @@
 .import "Phrases.js" as Phrases
 
 function pending(request) { return request.status === "pending"; }
-function human(participant) { return participant.kind === "human"; }
+function human(participant) { return !!participant && participant.kind === "human"; }
 function label(participant) {
   return human(participant) ? participant.issuer + ":" + participant.subject : participant.agent;
 }
@@ -132,9 +132,10 @@ function question(request, noted) {
   return passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : String(request.reason || "");
 }
 
-// The request this one repeats: the last one already answered, from the same
-// asker on the same work at the same stage, offering the same options, given
-// `replies` by request id; null when none. Another decision of that asker
+// The request this one repeats: the one asked just before it and already
+// answered, from the same asker on the same work at the same stage, offering
+// the same options and, when they grant, the same thing, given `replies` by request id; null when none, or when
+// the requests carry no time to tell them by. Another decision of that asker
 // (the proposal after the preview) is no repeat.
 function repeated(request, requests, replies) {
   const work = request.work_id || "";
@@ -142,7 +143,10 @@ function repeated(request, requests, replies) {
   const offered = each => JSON.stringify(choices(each).map(choice => choice.options.slice().sort()));
   const before = requests.filter(each => each.id !== request.id && !pending(each) && replies[each.id]
     && (each.work_id || "") === work && asker(each) === who
-    && (each.stage || "") === (request.stage || "") && offered(each) === offered(request));
+    && (each.stage || "") === (request.stage || "") && offered(each) === offered(request)
+    && JSON.stringify(granted(each)) === JSON.stringify(granted(request))
+    && !!each.created_at && !!request.created_at && each.created_at < request.created_at)
+    .sort((a, b) => a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
   return before.length > 0 ? before[before.length - 1] : null;
 }
 

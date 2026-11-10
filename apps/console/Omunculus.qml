@@ -113,6 +113,8 @@ Singleton {
   property var calling: ({})
   // Work id -> the args of that call.
   property var callArgs: ({})
+  // Work id -> the calls its model asked for that have not answered yet.
+  property var pendingCalls: ({})
   // Inbox id -> the text its notify event carried, and request id -> how it
   // was answered ({option, who, body}); the snapshot has neither.
   property var notes: ({})
@@ -151,6 +153,8 @@ Singleton {
   // it ended in an error.
   property var runStarts: ({})
   property var runErrors: ({})
+  // Why the last run to end in the open conversation failed, "" when it did not.
+  property string lastEnded: ""
   // Request id -> "sending" while its answer goes, "failed" when it did not
   // reach the server; cleared once the answer is read back.
   property var sending: ({})
@@ -283,12 +287,33 @@ Singleton {
   function summarize(place, ids) {
     if (ids.length === 0)
       return
-    http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations/" + ids[0] + "/snapshot", null, false, data => {
+    const rest = () => summarize(place, ids.slice(1))
+    const base = "/v1/projects/" + place.id + "/conversations/" + ids[0]
+    const keep = (data, ended) => {
       const next = Object.assign({}, summaries)
-      next[ids[0]] = Projects.summary(data)
+      next[ids[0]] = Projects.summary(data, ended)
       summaries = next
-      summarize(place, ids.slice(1))
-    }, () => summarize(place, ids.slice(1)))
+      rest()
+    }
+    http.call(place.socket, "GET", base + "/snapshot", null, false, data => {
+      if (Projects.unsettled(Projects.summary(data)))
+        lastEnd(place, base, "", "", ended => keep(data, ended))
+      else
+        keep(data, "")
+    }, rest)
+  }
+
+  // Reads the events of a conversation after `cursor`, a page at a time, and
+  // gives `done` why its last run to end failed, "" when it did not.
+  function lastEnd(place, base, cursor, ended, done) {
+    http.call(place.socket, "GET", base + "/events" + (cursor !== "" ? "?after=" + cursor : ""), null, false, data => {
+      const events = data.events
+      const error = events.some(event => event.type === "end-run") ? Projects.ended(events) : ended
+      if (events.length < 500)
+        done(error)
+      else
+        lastEnd(place, base, events[events.length - 1].cursor, error, done)
+    }, () => done(ended))
   }
 
   // What a conversation is called: what was first said in it, or when it began.
@@ -463,6 +488,7 @@ Singleton {
     runThread = {}
     calling = {}
     callArgs = {}
+    pendingCalls = {}
     threads = {}
     notes = {}
     replies = {}
@@ -479,6 +505,7 @@ Singleton {
     titles = {}
     runStarts = {}
     runErrors = {}
+    lastEnded = ""
     sending = {}
     lastEventAt = 0
     works = []
@@ -529,7 +556,7 @@ Singleton {
       if (unsettled.length !== Object.keys(sending).length)
         sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
       const next = Object.assign({}, summaries)
-      next[id] = Projects.summary(data)
+      next[id] = Projects.summary(data, lastEnded)
       summaries = next
     })
   }
@@ -936,6 +963,7 @@ Singleton {
       // A new run has made no call yet, on a work or the front agent's own.
       keep("calling", work, "")
       keep("callArgs", work, {})
+      keep("pendingCalls", work, [])
     }
     // Where the event shows: its run's thread, else its work's.
     const key = runThread[event.run_id] !== undefined ? runThread[event.run_id] : threadOf(work)
@@ -966,6 +994,7 @@ Singleton {
     case "model": {
       if (body.usage)
         count(who, work, body.usage)
+      keep("pendingCalls", work, Model.calls(body))
       const said = Model.text(body)
       const place = rows[event.run_id]
       if (place !== undefined)
@@ -978,6 +1007,7 @@ Singleton {
       keep("rows", event.run_id, append(key, { kind: "turn", key: event.run_id, who: body.agent, work: work, streaming: true, stamp: stamp, at: at }))
       break
     case "end-run": {
+      lastEnded = body.error ? String(body.error) : ""
       if (body.error)
         keep("runErrors", event.run_id, String(body.error))
       const place = rows[event.run_id]
@@ -991,6 +1021,9 @@ Singleton {
           const calls = JSON.parse(ran.steps).filter(line => !line.outcome && !line.hook).length
           append("", { kind: "worked", key: event.run_id, who: ran.who, text: Progress.worked(at - (runStarts[event.run_id] || at), calls, !!body.error), stamp: stamp, at: at, work: work })
         }
+        // A run of the thread's own that failed says so in it, with why.
+        else if (body.error)
+          append("", { kind: "worked", key: event.run_id + ":failed", who: entryAt(place).who, text: "failed: " + String(body.error), stamp: stamp, at: at, work: work })
       }
       break
     }
@@ -1004,6 +1037,12 @@ Singleton {
         if (!hook) {
           keep("calling", work, body.name)
           keep("callArgs", work, body.args || {})
+          // It answered: the rest of those asked for are still going on.
+          const left = (pendingCalls[work] || []).slice()
+          const at = left.findIndex(call => call.name === body.name)
+          if (at >= 0)
+            left.splice(at, 1)
+          keep("pendingCalls", work, left)
         }
       }
       break
@@ -1079,7 +1118,7 @@ Singleton {
       lanes[item.id] = laneOf(item)
     progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
-      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts,
+      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, asked: pendingCalls, runStarts: runStarts,
       journeys: journeys, rootAgent: agent || lastAgent, now: tick, usage: usage.works, calls: callsOf
     })
   }
@@ -1088,6 +1127,7 @@ Singleton {
   onRequestsChanged: progressTimer.restart()
   onNotedChanged: progressTimer.restart()
   onCallingChanged: progressTimer.restart()
+  onPendingCallsChanged: progressTimer.restart()
   onRunStartsChanged: progressTimer.restart()
   onRunErrorsChanged: progressTimer.restart()
   onSetupChanged: progressTimer.restart()

@@ -84,6 +84,8 @@ ColumnLayout {
     const segments = who !== "" ? [{ text: who.toUpperCase(), tone: Omunculus.toneOf(who), lead: true }] : []
     if (phase === "done") {
       segments.push({ text: "✓ DONE", tone: Theme.success, keep: true })
+    } else if (phase === "failed") {
+      segments.push({ text: "✕ FAILED", tone: Theme.error, keep: true })
     } else if (focus && focus.count > 0) {
       const at = Math.min(focus.at, focus.count - 1)
       // The stepper under the strip names the stage.
@@ -94,9 +96,12 @@ ColumnLayout {
       segments.push({ text: opening, keep: true })
     }
     if (focus) {
-      const took = focus.finishedIn !== null || phase === "done"
-      const open = !Progress.closed(focus.state)
-      const lasted = Progress.duration(focus.finishedIn !== null ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
+      // While anything runs, even below a work that is over, the clock counts
+      // from the work's start: what was computed at the last event is stale
+      // through a long call.
+      const took = (focus.finishedIn !== null && !working) || phase === "done"
+      const open = !Progress.closed(focus.state) || working
+      const lasted = Progress.duration(focus.finishedIn !== null && !working ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
       // Waiting on you stops the clock: it says since when, in the warning tone.
       const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
       if (focus.state === "needs-you" || focus.waitingOn === "you")

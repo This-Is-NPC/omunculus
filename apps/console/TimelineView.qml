@@ -45,11 +45,13 @@ Item {
   // Counts every change to the entries, a turn streaming included.
   property int changes: 0
 
-  // Entries that arrived while the view was not following, counted once each.
-  property int unseen: 0
-  property var seen: ({})
-  // The turns streaming, by key, so the one that finishes counts as new.
-  property var streams: ({})
+  // How many entries lie below the view: the ones the NEW pill counts.
+  readonly property int below: {
+    if (changes < 0 || timeline.contentHeight < 0)
+      return 0
+    const last = timeline.indexAt(1, timeline.contentY + timeline.height - 2)
+    return last < 0 ? 0 : Math.max(0, timeline.count - 1 - last)
+  }
   // The streaming turn whose top the view holds, and the one you jumped to
   // the end of, which it does not hold.
   property string held: ""
@@ -66,15 +68,6 @@ Item {
   signal openLog(string work)
   // The requests no other request gathers; the rest are its climb.
   readonly property var contained: Requests.contained(Omunculus.requests)
-
-  // Counts a new entry when the view is away from the end; speech has no key.
-  function arrived(key) {
-    if (timeline.following || (key !== "" && root.seen[key]))
-      return
-    if (key !== "")
-      root.seen[key] = true
-    root.unseen++
-  }
 
   function rowOf(key) {
     for (let row = 0; row < model.count; row++) {
@@ -255,27 +248,10 @@ Item {
 
   Connections {
     target: root.model
-    // A turn growing as it streams changes no one's turn, but it is new again
-    // when it finishes.
-    function onDataChanged(topLeft) {
-      root.changes++
-      const entry = root.model.get(topLeft.row)
-      if (entry.streaming)
-        root.streams[entry.key] = true
-      else if (root.streams[entry.key]) {
-        delete root.streams[entry.key]
-        root.arrived(entry.key)
-      }
-    }
-    function onRowsInserted(parent, first, last) {
+    function onDataChanged() { root.changes++ }
+    function onRowsInserted() {
       root.revision++
       root.changes++
-      for (let row = first; row <= last; row++) {
-        const entry = root.model.get(row)
-        if (entry.streaming)
-          root.streams[entry.key] = true
-        root.arrived(entry.key)
-      }
     }
     function onRowsRemoved() {
       root.revision++
@@ -303,9 +279,6 @@ Item {
   onModelChanged: {
     changes++
     timeline.following = true
-    unseen = 0
-    seen = {}
-    streams = {}
     held = ""
     released = ""
     holdingCard = false
@@ -337,13 +310,12 @@ Item {
       && previous.who === current.who && current.at - previous.at < root.pause
   }
 
-  implicitHeight: timeline.contentHeight + timeline.topMargin + timeline.bottomMargin
+  implicitHeight: timeline.contentHeight + timeline.edge
 
   ListView {
     id: timeline
 
     property bool following: true
-    onFollowingChanged: if (following) { root.unseen = 0; root.seen = {} }
 
     // Keeps the newest entry in view: its end, or the top of a turn streaming
     // taller than the view.
@@ -357,23 +329,37 @@ Item {
       const heldRow = root.held !== "" ? root.rowOf(root.held) : -1
       // A held entry that fits shows whole, its bottom with it.
       const held = heldRow >= 0 ? itemAtIndex(heldRow) : null
-      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin))
+      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin)) {
         positionViewAtIndex(heldRow, ListView.Beginning)
-      else
+        // The entry before it shows whole above it, never cut by the view.
+        const before = heldRow > 0 ? itemAtIndex(heldRow - 1) : null
+        if (before)
+          contentY = Math.max(originY - topMargin, contentY - before.height)
+      } else
         positionViewAtEnd()
     }
 
-    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-    height: Math.min(root.height, contentHeight + topMargin + bottomMargin)
+    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: newerBand }
+    height: Math.min(root.height - earlierBand - newerBand, contentHeight + edge)
     clip: true
     // An entry's outline never lies on the clip's edge, where a fractional scale
-    // would cut it.
-    topMargin: 1
-    bottomMargin: 1
+    // would cut it. Once the thread outgrows the view, each end has a band for
+    // a pill, so a pill never covers an entry; the band does not follow the
+    // pill, whose count follows the view.
+    readonly property bool scrolls: contentHeight + edge > Window.height / 2
+    // The two pixels of an entry's outline, one at each end.
+    readonly property int edge: 2
+    // The bands above and below the view hold the pills, so none covers a line.
+    readonly property real earlierBand: scrolls ? earlier.height + Theme.space.gap + Theme.space.gap : 0
+    readonly property real newerBand: scrolls ? newer.anchors.bottomMargin + newer.height + Theme.space.gap : 0
+    topMargin: edge / 2
+    bottomMargin: edge / 2
     spacing: 0
     model: root.model
     footer: workingRow
-    onMovementEnded: following = atYEnd
+    // Only the person's own scrolling ends it, and the end is within a row:
+    // the live row under the entries changes height as work goes on.
+    onMovementEnded: following = contentHeight - (contentY + height) < Theme.size.control
     onContentHeightChanged: if (following) Qt.callLater(follow)
     onCountChanged: if (following) Qt.callLater(follow)
 
@@ -385,10 +371,10 @@ Item {
     // an entry also makes the list's activeFocus true, and making an entry
     // current would take the keyboard from that field.
     onActiveFocusChanged: if (activeFocus && Window.activeFocusItem === timeline && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
-    onCurrentIndexChanged: if (!root.inEntry) following = currentIndex === count - 1
+    onCurrentIndexChanged: if (!root.inEntry && currentIndex >= 0) following = currentIndex === count - 1
     // Entries beyond the view are kept for two views each way, so a form
     // scrolled away from while written in is not rebuilt.
-    cacheBuffer: root.height * 2
+    cacheBuffer: Window.height * 2
     Keys.onPressed: event => {
       const page = { [Qt.Key_PageDown]: 5, [Qt.Key_PageUp]: -5 }[event.key]
       if (page !== undefined)
@@ -521,6 +507,7 @@ Item {
           choice: reply ? Requests.chose(reply.option, wanted !== null, asked ? { who: Requests.label(asked.requester), stage: job && job.stage ? job.stage : "", folder: place.name || "" } : undefined) : ""
           body: reply && reply.body !== reply.option ? reply.body : ""
           stamp: reply && reply.stamp ? reply.stamp : entry.stamp
+          askedAt: entry.stamp
         }
       }
 
@@ -561,7 +548,10 @@ Item {
         LogLine {
           width: entry.width
           names: [entry.who]
-          text: entry.text
+          // A run of the thread's own that failed: its error under "failed".
+          readonly property bool why: entry.text.startsWith("failed: ")
+          text: why ? "failed" : entry.text
+          detail: why ? entry.text.slice(8) : ""
           failed: entry.text.startsWith("failed")
           icon: entry.text.startsWith("failed") ? "warning" : "check"
           tone: entry.text.startsWith("failed") ? Theme.error : Theme.dim
@@ -627,14 +617,30 @@ Item {
     return top < tall && top + entry.height > tall
   }
 
+  // The entries above the view: an opened conversation lands at its end, and
+  // this says that the history goes on above, and leads to its start.
   NewPill {
+    id: earlier
+    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.space.gap }
+    above: true
+    word: "EARLIER"
+    tip: "Show the start of the conversation"
+    count: root.revision < 0 || timeline.contentY <= timeline.originY + 4 ? 0 : Math.max(0, timeline.indexAt(1, timeline.contentY + 2))
+    onClicked: {
+      timeline.following = false
+      timeline.positionViewAtBeginning()
+    }
+  }
+
+  NewPill {
+    id: newer
     anchors {
       horizontalCenter: parent.horizontalCenter
       bottom: parent.bottom
       // Over a floating form's actions: a row of them, two when narrow.
       bottomMargin: Theme.space.gap + (root.formFloats ? Theme.size.control + Theme.space.gap + (root.width < Theme.size.measureFrom ? Theme.size.control : 0) : 0)
     }
-    count: root.unseen
+    count: root.below
     onClicked: root.jump()
   }
 

@@ -210,10 +210,14 @@ function build(input) {
   const known = new Set(works.map(work => work.id));
   const runStart = run => starts[run.id] !== undefined ? starts[run.id] : seconds(run.started_at);
   const runsOf = id => runs.filter(run => (run.work_id || "") === id);
-  // What an open run on a work is doing: calls are known only once they
-  // finished, so between them it thinks, after the last one it made; a reply
+  // What an open run on a work is doing: a call is recorded once it finished,
+  // but the model event that asked for it is known, so while it runs it says
+  // that call; between calls it thinks, after the last one it made; a reply
   // says what it does, by whom it answers.
   const phrasing = id => {
+    // A call the model asked for that has not answered is what it does now.
+    const asked = (input.asked || {})[id] || [];
+    if (asked.length > 0) return Phrases.phrase(asked[0].name, asked[0].args);
     if (!calling[id]) return "Getting started";
     if (calling[id] !== "reply") {
       const last = Phrases.did(calling[id], callArgs[id]);

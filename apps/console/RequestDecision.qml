@@ -467,7 +467,7 @@ SurfaceFrame {
             Layout.fillWidth: true
             spacing: Theme.space.tight
             Repeater {
-              model: Requests.ordered(choice.options, Requests.kind(choice.request) === "permission")
+              model: Requests.ordered(choice.options || [], Requests.kind(choice.request) === "permission")
               delegate: TraceButton {
                 required property string modelData
                 dense: true
@@ -479,7 +479,7 @@ SurfaceFrame {
             }
           }
           AlwaysChips {
-            options: Requests.always(choice.options, Requests.kind(choice.request) === "permission")
+            options: Requests.always(choice.options || [], Requests.kind(choice.request) === "permission")
             labels: options.map(option => card.labelOf(option, choice.modelData.request))
             onChosen: option => choice.decide(option)
           }
