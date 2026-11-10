@@ -423,6 +423,93 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
+  describe "artifacts" do
+    setup %{conn: conn} do
+      dir = Fixtures.tmp_dir()
+      store = %{@ctx.config.store | attachments: dir, attachment_bytes: 64}
+      conversation_id = Omunculus.Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation_id,
+          created_at: "2026-01-01T00:00:00Z",
+          created_issuer: "local",
+          created_subject: "1000"
+        })
+
+      run_id = Fixtures.insert(conn, :runs, %{conversation_id: conversation_id})
+
+      %{
+        ctx: %{@ctx | config: %{@ctx.config | store: store}, run_id: run_id},
+        conversation_id: conversation_id,
+        store: store
+      }
+    end
+
+    defp artifact(name, kind, content, media_type \\ "text/plain") do
+      %{
+        "type" => "artifact",
+        "body" => %{
+          "name" => name,
+          "kind" => kind,
+          "media_type" => media_type,
+          "content" => content
+        }
+      }
+    end
+
+    test "each put is the next version of its name, kept as written",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id, store: store} do
+      emits = [
+        artifact("brief", "brief", "first"),
+        artifact("brief", "brief", "second"),
+        artifact("handoff", "handoff", "other")
+      ]
+
+      assert {:ok, [_tool_event | events]} = record_tool(conn, emits, ctx)
+      assert Enum.map(events, & &1.type) == ["artifact", "artifact", "artifact"]
+
+      assert {:ok, [v1, v2, other]} = Store.artifacts(conn, conversation_id)
+      assert [v1["version"], v2["version"], other["version"]] == [1, 2, 1]
+      assert %{"kind" => "brief", "bytes" => 5, "by" => "concierge"} = v1
+      assert {:ok, "first"} = Omunculus.Artifacts.read(store, v1)
+      assert {:ok, "second"} = Omunculus.Artifacts.read(store, v2)
+
+      # A later batch continues the numbering.
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "third")], ctx)
+      assert {:ok, [_, _, _, v3]} = Store.artifacts(conn, conversation_id)
+      assert v3["version"] == 3
+    end
+
+    test "a name keeps its kind, and a refused put writes nothing",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)
+
+      assert {:error, {:artifact, {:kind, "brief", "brief"}}} =
+               record_tool(conn, [artifact("brief", "design", "b")], ctx)
+
+      assert {:error, {:artifact, {:invalid, :kind}}} =
+               record_tool(conn, [artifact("x", "Not A Kind", "b")], ctx)
+
+      assert {:error, {:attachment, {:invalid, :name}}} =
+               record_tool(conn, [artifact("a/b", "brief", "b")], ctx)
+
+      assert {:error, {:attachment, {:too_large, 65, 64}}} =
+               record_tool(conn, [artifact("big", "brief", String.duplicate("x", 65))], ctx)
+
+      assert {:ok, [_only]} = Store.artifacts(conn, conversation_id)
+    end
+
+    test "it needs a run, and a version is no attachment",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      assert {:error, {:artifact, :no_run}} =
+               record_tool(conn, [artifact("brief", "brief", "a")], %{ctx | run_id: nil})
+
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)
+      assert {:ok, []} = Store.attachments(conn, conversation_id)
+    end
+  end
+
   test "prompt without a message is rejected and writes nothing", %{conn: conn} do
     assert {:error, {:prompt, :no_message}} =
              record_tool(conn, [%{"type" => "prompt", "body" => %{}}], @ctx)

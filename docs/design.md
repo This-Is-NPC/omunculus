@@ -107,7 +107,7 @@ The store's recursive validation and authorization of request replies: lifecycle
 
 ### `Omunculus.Store` and `Omunculus.Store.*`
 
-The only code that touches SQL. `Connection` is the one process that owns the SQLite handle; every statement and transaction runs in it, so concurrent runs apply their transactions one after another, and it announces committed events to the processes subscribed to it. `Access` checks project and conversation memberships, scopes reads, and manages idempotent command receipts. `View` reads cuts of the tables, including recursively linked request origins and their questions; the inbox source with `relation = "received"` reads pending requests addressed to the current depth-0 run's agent in its conversation, grouped by conversation and hydrated through the canonical request view. Escalated origins appear only as provenance, and reading does not resolve requests. `Actions` applies emits (`comment`, `request`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`, `continue`, `break`, `wait`, `end`, `notify`, `prompt`, `attach`, `compact`, ...); it refuses `end` on a work's own run that would leave the work open with nothing to run it again — no request of it pending, no run of it due since the run began — or with a child that broke waiting on it; a request stores JSON `requester` and `arbiter` participant identities (agent name, or authenticated human issuer/subject), with `pending`, `escalated` and `closed` statuses; it carries named options of tool calls and its arbiter is resolved in the store: an option calling a tool only a human may give remains subject to that authorization boundary, while its receiver follows the first matching TOML route; `to` is an optional logical route name; a request's view gives the option its reply chose (`answer`), nil for a text-only answer; its closed status and reply comment distinguish that from an unanswered request. `escalate` merges received pending requests in the same conversation into one linked request and preserves child waits, and never routes an origin to an agent it was already escalated to (`request_escalations`) that answered with text alone, naming no part, without escalating it further; recursive named reply parts retain the actual answerer and original grant targets, while omitted parts return to pending. `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction; `Runs.unreported` decides a retry, break or request in one; `Runs.unanswered` uses the same linked action for a pending request left unanswered by its receiver and names, in the linked request's reason, the receiver and each question it held — who asked it, the title of their work and the question, shortened, never an id — and writes the same as an inbox note when the linked request reaches a human; requester and arbiter identities remain immutable. `Schema` creates twelve tables, including append-only `request_escalations`, and refuses a store whose tables differ from them, or that lacks one, with `store_requires_recreation`.
+The only code that touches SQL. `Connection` is the one process that owns the SQLite handle; every statement and transaction runs in it, so concurrent runs apply their transactions one after another, and it announces committed events to the processes subscribed to it. `Access` checks project and conversation memberships, scopes reads, and manages idempotent command receipts. `View` reads cuts of the tables, including recursively linked request origins and their questions; the inbox source with `relation = "received"` reads pending requests addressed to the current depth-0 run's agent in its conversation, grouped by conversation and hydrated through the canonical request view. Escalated origins appear only as provenance, and reading does not resolve requests. `Actions` applies emits (`comment`, `request`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`, `continue`, `break`, `wait`, `end`, `notify`, `prompt`, `attach`, `artifact`, `compact`, ...); it refuses `end` on a work's own run that would leave the work open with nothing to run it again — no request of it pending, no run of it due since the run began — or with a child that broke waiting on it; a request stores JSON `requester` and `arbiter` participant identities (agent name, or authenticated human issuer/subject), with `pending`, `escalated` and `closed` statuses; it carries named options of tool calls and its arbiter is resolved in the store: an option calling a tool only a human may give remains subject to that authorization boundary, while its receiver follows the first matching TOML route; `to` is an optional logical route name; a request's view gives the option its reply chose (`answer`), nil for a text-only answer; its closed status and reply comment distinguish that from an unanswered request. `escalate` merges received pending requests in the same conversation into one linked request and preserves child waits, and never routes an origin to an agent it was already escalated to (`request_escalations`) that answered with text alone, naming no part, without escalating it further; recursive named reply parts retain the actual answerer and original grant targets, while omitted parts return to pending. `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction; `Runs.unreported` decides a retry, break or request in one; `Runs.unanswered` uses the same linked action for a pending request left unanswered by its receiver and names, in the linked request's reason, the receiver and each question it held — who asked it, the title of their work and the question, shortened, never an id — and writes the same as an inbox note when the linked request reaches a human; requester and arbiter identities remain immutable. `Schema` creates twelve tables, including append-only `request_escalations`, and refuses a store whose tables differ from them, or that lacks one, with `store_requires_recreation`.
 
 ### `Omunculus.ConversationRoot`
 
@@ -116,6 +116,10 @@ With `[project] conversations`, the folder each conversation works in, `<workspa
 ### `Omunculus.Attachments`
 
 Keeps the files attached to conversations in the directory `[store] attachments` names, each under its SHA-256, within `[store] attachment_bytes`, and checks a description `{name, media_type, bytes, sha256}` against the file kept for it. The event that carries a file describes it — a message's `prompt` or a run's `attach` — and the store checks each description it records; there is no table of attachments.
+
+### `Omunculus.Artifacts`
+
+The documents agents make and hand on, as typed, versioned records over the content `Omunculus.Attachments` keeps ([§10](#10-artifacts)). Names and kinds are checked here; the store assigns each version the number after the last of its name in the conversation, in the transaction that records the `artifact` event.
 
 ### `Omunculus.Operations`
 
@@ -186,7 +190,7 @@ Everything a project keeps lies where its `omunculus.toml` says
 | The local socket | `<store>.omunculus.sock`, mode 0600 | `Omunculus.Server.Socket`, while a server holds the project |
 | A run's scratch, its `/tmp` and home | `<store>.scratch/<run id>` | `Omunculus.Execution`; removed when the run ends, and on the next open with the lock |
 | The files each call changed | the bare git repository `[store] changes` names | `Omunculus.Changes` |
-| Attached files | `[store] attachments`, each under its SHA-256 | `Omunculus.Attachments` |
+| Attached files and the content of every artifact version | `[store] attachments`, each under its SHA-256 | `Omunculus.Attachments` |
 | Stored logins | the JSON file `[auth] store` names, mode 0600 | the `login` tool |
 | A work's worktree | `<workspace root>/.omunculus-worktrees/<work id>`, on the branch `work/<work id>` | `Omunculus.Worktree`; removed when the work ends, the branch kept |
 | A conversation's folder | `<workspace root>/<[project] conversations>/<conversation id>` | `Omunculus.ConversationRoot` |
@@ -297,3 +301,57 @@ open to revise the claim. Neither the skill nor the tool grants a
 permission or changes the configuration. These checks cover structured
 claims; how the steward and the front desk read free text is measured, not
 checked.
+
+## 10. Artifacts
+
+Agents make documents — a proposal, a brief, a design, a handoff, a
+preview — and today those live as files in the workspace, where an edit
+overwrites them and only a path names them. An artifact is the same
+document as a record of the conversation: named, typed, versioned and
+immutable once written. The core knows the record and its tools; what a
+kind holds and what it must satisfy is a pack's.
+
+**The record.** An artifact belongs to one conversation. It has a `name`
+(a file name without a directory, such as `proposal` or `proposal.md`),
+a `kind` (a lowercase word the pack chooses; the core keeps no list) and
+versions numbered from 1. A version is `{name, kind, version, media_type,
+bytes, sha256}` with an optional `note`, and the event's `event_id`, `at`
+and `by`. A name has one kind: a later version naming another is refused.
+A version never changes; a change is the next version.
+
+**Where it lives.** The metadata is an `artifact` event, as an
+attachment is an `attach` or `prompt` event: the store has no table of
+artifacts, so no migration, history is append-only and the operator reads
+it with the rest of the conversation. The content is a file under its
+SHA-256 in `[store] attachments`, so a version is exactly what was written
+and survives whatever the workspace does after. The workspace is not the
+home of artifacts because a path names no version, an agent edits it in
+place and a conversation may share a workspace with others. An artifact
+needs `[store] attachments`, like an attachment.
+
+**The backend contract.** A backend keeps content and answers for it:
+`put(name, media_type, content)` returns `{name, media_type, bytes,
+sha256}` within the size limit, and `path(sha256)` gives the content back.
+`Omunculus.Attachments` is the one backend. The record, the numbering, the
+tools and the routes depend on nothing else, so another backend — object
+storage, a design tool behind an MCP server — replaces those two
+functions without changing them. None is implemented.
+
+**Visibility.** A version is not an attachment. The person's conversation
+reads only the `prompt` and `attach` events, so a client receives a
+version only when an agent with the `attach` tool attaches it by
+reference: `attach` with `artifact` (and `version`, the latest when
+omitted) emits an `attach` of that version's exact file. The ceiling
+decides which agents have `attach`. The operator lists every artifact and
+version through the server ([the server](server.md#artifacts)), with
+`conversation.read`, read-only.
+
+**Structured documents.** A kind may be data: a version of media type
+`application/json`. A pack's tool holds the rules over that data (a
+proposal's price lines, total and status words) and renders the
+client-facing file from a template of the pack, putting it as an artifact
+of its own. The sales desk's `proposal` does that, and `render_proposal` renders again
+([the pack](../packs/sales-desk/README.md)). The core never reads what a
+version holds, but to hand its JSON to a tool that declares it wants it
+([tools](tools.md#artifacts)).
+

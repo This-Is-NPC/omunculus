@@ -1,0 +1,32 @@
+name = "put_artifact"
+kind = "tool"
+triggers = ["model"]
+description = "Writes the next version of an artifact of this conversation: name and kind (a lowercase word) say which, data is a JSON object, or content is text of a media_type. A version never changes; a change is the next version."
+tags = ["files", "artifacts"]
+groups = ["artifacts"]
+module = "Omunculus.Tools.PutArtifact"
+
+[parameters]
+type = "object"
+required = ["name", "kind"]
+
+[parameters.properties.name]
+type = "string"
+
+[parameters.properties.kind]
+type = "string"
+
+[parameters.properties.data]
+type = "object"
+
+[parameters.properties.content]
+type = "string"
+
+[parameters.properties.media_type]
+type = "string"
+
+[parameters.properties.note]
+type = "string"
+
+[views.artifacts]
+source = "artifacts"

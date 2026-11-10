@@ -44,6 +44,10 @@ defmodule Omunculus.Tool.Views do
     `relation = "received"`, from `run`, reads pending requests addressed
     to that depth-0 agent in its conversation, grouped by conversation,
     each with its canonical question and recursively linked origins.
+  - `artifacts`: the artifact versions of the run's conversation, oldest
+    first, each as its event describes it with `event_id`, `at` and `by`;
+    `include = ["data"]` adds `data`, the decoded content of each version
+    of media type `application/json`.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
     computed by the harness for the call, each only when a view asks for
     it, through a function of the view in `computed`. `agents` takes
@@ -72,7 +76,7 @@ defmodule Omunculus.Tool.Views do
           limit: pos_integer | nil
         }
 
-  @computed ~w(catalog workspaces agents paths grant_scopes skills)
+  @computed ~w(catalog workspaces agents paths grant_scopes skills artifacts)
   @work_states ~w(open waiting done cancelled)
   @work_includes %{"last_comment" => :last_comment, "comments" => :comments, "runs" => :runs}
   @comment_targets %{"work" => :work, "request" => :request, "inbox" => :inbox}
@@ -201,6 +205,12 @@ defmodule Omunculus.Tool.Views do
   defp source_spec("agents", table, spec) do
     with :ok <- only_keys(table, ~w(include)),
          {:ok, include} <- subset(table, "include", ["tools"]),
+         do: {:ok, %{spec | include: include || []}}
+  end
+
+  defp source_spec("artifacts", table, spec) do
+    with :ok <- only_keys(table, ~w(include)),
+         {:ok, include} <- subset(table, "include", ["data"]),
          do: {:ok, %{spec | include: include || []}}
   end
 
