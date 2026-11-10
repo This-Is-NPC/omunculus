@@ -801,7 +801,7 @@ defmodule Omunculus.Config do
   end
 
   @capabilities ~w(
-    project.manage_access project.manage_config conversation.create
+    project.manage_access project.manage_config project.own conversation.create
     conversation.read conversation.send conversation.comment
     conversation.reply conversation.manage_access conversation.manage
   )

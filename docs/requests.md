@@ -19,6 +19,7 @@ without one.
 | `requester`, `arbiter` | Authenticated participant identities: an agent name, or human issuer/subject. Clients cannot supply another participant's authorship. |
 | `run_id`, `work_id` | Optional origin. A human-origin request requires no run. |
 | Conversation, workflow, stage | Historical context in the immutable opening event, not inferred from the work's current stage. |
+| `route`, `destination` | The logical route name the request was put on (nil for the default route) and the kind of destination that produced its arbiter: `parent`, `origin`, `owners`, `agent` or `human`. Both are recorded in the opening event, so they are immutable. |
 | `status` | `pending`, `escalated` or `closed`. |
 | `answer` | The selected option, or nil for a text-only answer. Closed status and the reply comment distinguish a text answer from an unanswered question. |
 | `origins` | Canonical linked requests keyed by escalation part names, including their questions, options and original targets. |
@@ -39,7 +40,7 @@ once into `Config.request_routes`, including workspace overlays. For example:
 ```toml
 [policy]
 request_routes = [
-  { name = "owner", via = ["origin"] },
+  { name = "owner", via = ["owners", "origin"] },
   { via = ["parent", "origin"] },
 ]
 ```
@@ -50,8 +51,8 @@ requests match unnamed rules. Workflow and stage filters refer to existing
 configuration; a stage filter needs its workflow.
 
 Destinations are `parent` (the parent work's assignee), `origin` (the authenticated
-conversation creator, or the run/command origin without a conversation), or
-an explicit configured agent/human identity. A named agent must be an ancestor's
+conversation creator, or the run/command origin without a conversation),
+`owners` (the project's owners, see below), or an explicit configured agent/human identity. A named agent must be an ancestor's
 assignee or a depth-0 agent able to run without a workflow. Missing contextual
 destinations and participants already in the linked origins are skipped within
 the configured list. If no destination resolves, the action refuses with
@@ -67,9 +68,11 @@ An agent's selected grant also requires the applicable ceiling to allow it.
 Text never substitutes for a grant or impersonates an upstream answerer.
 
 The presets, Amestris and benchmark declare parent then origin in TOML. The
-sales-desk and agency eval overlays also declare the logical `owner` route
-used by sales decisions. Importing that pack requires configuring this logical
-responsibility; it can name a different participant from the conversation origin.
+presets, the sales-desk and agency eval configs and the course-recovery
+overlay also declare the logical `owner` route as `["owners", "origin"]`,
+used by sales decisions: the owner where the project has one, else the one
+local person. Importing that pack requires configuring this logical
+responsibility; it names the project's owners, not the client.
 
 A change to the project is its owner's to decide, whoever the default route
 passes through: `propose_config` and `propose_pack` send their request with
@@ -82,6 +85,34 @@ proposals reach the person directly instead of being reworded on the way.
 So does the harness's retry/cancel request for a root work its agent
 stopped on past `max_retries`, in a project with the `owner` route; in one
 without, it follows the default route.
+
+### Client and owner
+
+The conversation's person is the **client**; the project's operator is its
+**owner**. They are different roles, and a route says which it reaches:
+
+- `origin` is the client: whoever opened the conversation.
+- `owners` is the humans whose project role grants the capability
+  `project.own`. Roles are declared in `[access.roles.<name>]`; the
+  capability is accepted only in a role with `scope = "project"`. The
+  destination resolves to the owner who has held the role longest (earliest
+  `updated_at`, then issuer and subject), skipping the requester and the
+  participants already in the linked origins.
+- A project with no owner, or with no `[access]`, has no `owners`
+  destination. The route moves to its next destination, and with none left
+  the action refuses with `no_route`, as for any destination that does not
+  resolve. A route that must never reach the client lists `owners` alone.
+  One that serves a single local user lists `["owners", "origin"]`.
+- A person holding both roles is both: the same identity arbitrates
+  either route, and `route` tells which kind of request it is.
+
+Every request records `route` and `destination`, and its view, snapshots and
+events expose them. A client reads `route = "owner"` as a decision of the
+agency (a sale's approval, a build past `max_reopens`, a project change, a
+permission) and `route = null` with `destination = "origin"` as a question
+for the client. An escalation carries the route it was resolved on: the
+upstream request of an escalation on `to = "owner"` has `route = "owner"`;
+one that omits `to` follows the default route and has `route = null`.
 
 ## Forms and effects
 

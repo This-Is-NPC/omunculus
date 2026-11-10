@@ -29,7 +29,7 @@ defmodule Omunculus.Store.Actions.Requests do
          :ok <- Helpers.ensure_not_waiting_children(:request, work),
          {:ok, participant} <- Participant.from_context(ctx),
          :ok <- classify_options(conn, run, options),
-         {:ok, arbiter, arbiter_work_id} <-
+         {:ok, arbiter, arbiter_work_id, destination} <-
            RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], []) do
       create(
         conn,
@@ -41,6 +41,7 @@ defmodule Omunculus.Store.Actions.Requests do
         options,
         arbiter,
         arbiter_work_id,
+        %{route: body["to"], destination: destination},
         true
       )
     end
@@ -58,7 +59,7 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, upstream} <- held_upstream(conn, origins),
          forbidden =
            upstream ++ Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
-         {:ok, arbiter, arbiter_work_id} <-
+         {:ok, arbiter, arbiter_work_id, destination} <-
            RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], forbidden),
          {:ok, request} <-
            create(
@@ -71,6 +72,7 @@ defmodule Omunculus.Store.Actions.Requests do
              %{},
              arbiter,
              arbiter_work_id,
+             %{route: body["to"], destination: destination},
              false
            ),
          {:ok, event} <-
@@ -170,7 +172,19 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp create(conn, ctx, run, work, participant, reason, options, arbiter, arbiter_work_id, park?) do
+  defp create(
+         conn,
+         ctx,
+         run,
+         work,
+         participant,
+         reason,
+         options,
+         arbiter,
+         arbiter_work_id,
+         via,
+         park?
+       ) do
     request_id = Id.new()
     comment_id = Id.new()
 
@@ -180,6 +194,8 @@ defmodule Omunculus.Store.Actions.Requests do
       requester: participant,
       arbiter: arbiter,
       arbiter_work_id: arbiter_work_id,
+      route: via.route,
+      destination: via.destination,
       workflow: work && work.workflow,
       stage: work && work.stage
     }

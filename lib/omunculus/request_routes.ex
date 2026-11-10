@@ -5,7 +5,8 @@ defmodule Omunculus.RequestRoutes do
   @doc """
   The logical route of what is the project owner's to decide, whoever else
   the default route passes: a change to the project, and a root work its
-  agent stopped on past `[policy] max_retries`.
+  agent stopped on past `[policy] max_retries`. Its `via` names the project's
+  owners (`"owners"`), apart from the conversation's person (`"origin"`).
   """
   @spec owner() :: String.t()
   def owner, do: "owner"
@@ -35,7 +36,7 @@ defmodule Omunculus.RequestRoutes do
       (not Map.has_key?(rule, "stage") or
          (Map.has_key?(rule, "workflow") and
             Enum.any?(workflows[rule["workflow"]] || [], &(&1.name == rule["stage"])))) and
-      Enum.all?(via, &(&1 in ["parent", "origin"] or identity?(&1, agents)))
+      Enum.all?(via, &(&1 in ["parent", "origin", "owners"] or identity?(&1, agents)))
   end
 
   defp valid_rule?(_rule, _agents, _workflows), do: false

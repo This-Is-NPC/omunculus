@@ -77,7 +77,7 @@ defmodule Omunculus.Server.Contract do
   def item(:requests, row) do
     row
     |> Map.take(
-      ~w(id run_id requester work_id options arbiter status created_at reason workflow stage origins)a
+      ~w(id run_id requester work_id options arbiter status created_at reason workflow stage route destination origins)a
     )
     |> Map.update!(:options, &body/1)
     |> Map.update!(:requester, &body/1)

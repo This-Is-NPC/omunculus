@@ -46,7 +46,7 @@ defmodule Omunculus.Store.View do
            Query.one(
              conn,
              """
-             SELECT requests.*, json_extract(requester_start.body, '$.ceiling') AS requester_ceiling, json_extract(opening.body, '$.reason') AS reason, json_extract(opening.body, '$.workflow') AS workflow, json_extract(opening.body, '$.stage') AS stage, COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id,
+             SELECT requests.*, json_extract(requester_start.body, '$.ceiling') AS requester_ceiling, json_extract(opening.body, '$.reason') AS reason, json_extract(opening.body, '$.workflow') AS workflow, json_extract(opening.body, '$.stage') AS stage, json_extract(opening.body, '$.route') AS route, json_extract(opening.body, '$.destination') AS destination, COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id,
                (SELECT json_extract(body, '$.option') FROM events WHERE request_id = requests.id AND type = 'reply' ORDER BY sequence DESC LIMIT 1) AS answer
              FROM requests LEFT JOIN events opening ON opening.id = requests.event_id
              LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id

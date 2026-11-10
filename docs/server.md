@@ -11,7 +11,7 @@ bootstrap_role = "admin"
 
 [access.roles.admin]
 scope = "project"
-capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
+capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
 
 [access.roles.participant]
 scope = "conversation"
@@ -22,7 +22,7 @@ scope = "conversation"
 capabilities = ["conversation.read"]
 ```
 
-The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
+The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `project.own`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. `project.own` marks a role's members as the project's owners, the destination of the `owners` request route ([requests](requests.md#client-and-owner)). A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
 
 Before starting the server, seed the first project administrator. For the local user, the principal is issuer `local` and the numeric user ID as subject, the same principal the direct CLI acts as:
 
