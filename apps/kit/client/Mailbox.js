@@ -183,7 +183,7 @@ function build(projectId, id, snapshot, events, me) {
     }
   }
   const notes = noted(events);
-  const asked = snapshot.requests.filter(request => isMe(request.arbiter, me)
+  const asked = snapshot.requests.filter(request => isMe(request.arbiter, me) && !Requests.owned(request)
     && !(notes[request.id] && Requests.passedOn(request).length === 0)
     && (!!notes[request.id] || (!!request.requester && request.requester.agent === agent)));
   const waiting = asked.filter(request => Requests.pending(request)).map(request => request.id);

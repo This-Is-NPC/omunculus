@@ -129,6 +129,20 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
+  test "owner decisions never reach the mailbox, and only they pending read as in progress" do
+    run!("""
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];
+    const works = [{id: "w1", state: "waiting", waiting: "request", parent_id: null}];
+    const closed = [run("r1", "sales", "closed")];
+    const mails = (requests) => build(snap({runs: closed, works, requests}), events);
+    const shown = mails([request("c", {route: null, destination: "origin"}), request("o1", {route: "owner", destination: "owners"}), request("o2", {destination: "owners"}), request("o3", {route: "owner"}), request("legacy")]);
+    if (shown.pending.join() !== "c,legacy") throw Error("pending " + shown.pending);
+    if (shown.messages.some(message => message.request.startsWith("o"))) throw Error("an owner decision is no e-mail");
+    const hidden = mails([request("o1", {route: "owner", destination: "owners"})]);
+    if (hidden.pending.length !== 0 || hidden.label !== "progress") throw Error("only hidden requests: " + hidden.label);
+    """)
+  end
+
   test "labels: in progress, stuck, cancelled, or none" do
     run!("""
     const at = "2026-01-01T10:00:00Z";

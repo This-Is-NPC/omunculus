@@ -32,10 +32,14 @@ The e-mails of a thread, oldest first, are:
 - what you wrote, from you, to the agent;
 - what the thread's agent said to you: the text of its model replies that call
   no tool, its comments and the files it attached, one e-mail per run;
-- each request whose requester is the thread's agent and whose arbiter is you,
-  as an e-mail from that agent whose body is the request's reason, in the
+- each request whose requester is the thread's agent, whose arbiter is you and
+  that is not an owner's decision, as an e-mail from that agent whose body is the request's reason, in the
   agent's own words. The questions of the request's origins are other agents'
-  text and never appear;
+  text and never appear. An owner's decision (`route = "owner"` or `destination
+  = "owners"`, [requests](requests.md#client-and-owner)) is the operator's, not
+  yours, and never appears either, even when you are its arbiter. A request
+  without `route` and `destination`, as an older server records it, follows the
+  rest of the rule;
 - your answers to those requests, as e-mails of yours.
 
 A model reply that calls a tool is the agent acting, and its text narrates the
@@ -77,7 +81,8 @@ A thread has at most one label, on its row and in its header, a small pill
 with a still icon and a word:
 
 - **In progress**: a run of the conversation is open, a request waits on
-  someone other than you, or a work waits on its children.
+  someone other than you (an agent, or the owner), or a work waits on its
+  children. A thread whose only pending requests are hidden ones reads so.
 - **Stuck**: nothing runs, nothing waits for you, and the last run failed or a
   work is still open.
 - **Cancelled**: every root work is cancelled.
