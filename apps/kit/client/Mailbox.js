@@ -96,18 +96,13 @@ function quoted(message, when) {
   };
 }
 
-// What a request asks, each question once: its reason, or an origin's
-// question that holds it; then each origin's question the text does not
-// already hold. A request the harness opened (`noted`) asks what it passes on.
-// The harness's own sentence on how it came to the person is left out.
+// What a request asks, in the thread agent's own words: its reason. The
+// questions of its origins are other agents' text and are not shown. Only a
+// request the harness opened (`noted`) that passes on questions has no reason
+// of its own (its sentence says how it came to the person), so it asks what it
+// passes on.
 function asking(request, noted) {
-  const passed = noted ? Requests.passedOn(request) : [];
-  if (passed.length > 0) return Requests.question(request, true);
-  const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
-  const reasons = Object.keys(request.origins || {}).map(part => String(request.origins[part].reason || ""));
-  const text = reasons.filter(reason => plain(reason).includes(plain(request.reason)))
-    .reduce((longest, reason) => reason.length > longest.length ? reason : longest, String(request.reason || ""));
-  return [text].concat(reasons.filter(reason => plain(reason) !== "" && !plain(text).includes(plain(reason)))).join("\n\n");
+  return Requests.question(request, noted);
 }
 
 // The requests the harness opened, by id.

@@ -87,15 +87,14 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
-  test "a request shows its reason and its origins' questions once, without part names" do
+  test "a request's e-mail is only the thread agent's reason, never its origins' questions" do
     run!("""
-    const origins = {legal: {reason: "Do you have a logo?"}, price: {reason: "Which pages?"}};
+    const origins = {seller: {reason: "The status is sent, awaiting you"}, price: {reason: "Which pages?"}};
     const t = build(snap({requests: [request("q1", {origins})]}), [prompt("1", "2026-01-01T10:00:00Z", "Hi")]);
     const text = t.messages.find(m => m.request === "q1").text;
-    if (text !== "Which pages?\\n\\nDo you have a logo?") throw Error(JSON.stringify(text));
-    if (text.includes("legal") || text.includes("price")) throw Error("part names");
-    const held = build(snap({requests: [request("q1", {reason: "Which pages?", origins: {a: {reason: "Which pages? Home, Menu?"}}})]}), [prompt("1", "2026-01-01T10:00:00Z", "Hi")]);
-    if (held.messages.find(m => m.request === "q1").text !== "Which pages? Home, Menu?") throw Error("an origin that holds the reason replaces it");
+    if (text !== "Which pages?") throw Error(JSON.stringify(text));
+    const longer = build(snap({requests: [request("q1", {reason: "Proposal ready.", origins: {a: {reason: "Proposal ready. Status is sent."}}})]}), [prompt("1", "2026-01-01T10:00:00Z", "Hi")]);
+    if (longer.messages.find(m => m.request === "q1").text !== "Proposal ready.") throw Error("an origin's text is not the body");
     """)
   end
 

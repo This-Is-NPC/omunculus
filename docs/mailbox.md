@@ -33,9 +33,9 @@ The e-mails of a thread, oldest first, are:
 - what the thread's agent said to you: the text of its model replies that call
   no tool, its comments and the files it attached, one e-mail per run;
 - each request whose requester is the thread's agent and whose arbiter is you,
-  as an e-mail from that agent whose body is the request's question: its
-  reason, then each question of its origins the reason does not already hold,
-  without part names;
+  as an e-mail from that agent whose body is the request's reason, in the
+  agent's own words. The questions of the request's origins are other agents'
+  text and never appear;
 - your answers to those requests, as e-mails of yours.
 
 A model reply that calls a tool is the agent acting, and its text narrates the
