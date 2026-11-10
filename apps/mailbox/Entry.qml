@@ -10,8 +10,7 @@ import "kit/ui"
 // you is a message too: a filled card with its question and, while it waits,
 // the way to answer it; your answer is a message of yours, the option it
 // chose under its words. A request is always the thread's agent's, whoever
-// below asked it; a note the harness wrote that passes on none is no one's
-// words: it reads NOTE, muted, where a speaker's name would be. While it
+// below asked it; a note between agents is no card. While it
 // waits, its ANSWER or DECIDE sits in its head, in reach however long the
 // question is.
 SurfaceFrame {
@@ -24,9 +23,8 @@ SurfaceFrame {
 
   readonly property bool request: entry.kind === "request"
   readonly property bool mine: entry.kind === "you"
-  readonly property bool note: !!entry.note
   readonly property bool deciding: request && entry.open
-  readonly property bool agent: !mine && !note && Mail.isAgent(project, entry.from)
+  readonly property bool agent: !mine && Mail.isAgent(project, entry.from)
 
   signal toggled()
   // Its answer box took the keyboard: it is to be brought into view.
@@ -63,7 +61,7 @@ SurfaceFrame {
         }
         Label {
           text: card.mine ? "YOU" : card.entry.from.toUpperCase()
-          color: card.deciding ? Theme.warning : card.mine || card.note ? Theme.dim : Theme.primary
+          color: card.deciding ? Theme.warning : card.mine ? Theme.dim : Theme.primary
           font.pixelSize: 10
           font.letterSpacing: 3
         }
@@ -114,7 +112,7 @@ SurfaceFrame {
       visible: card.expanded && card.entry.text !== ""
       plain: card.mine
       source: card.entry.text
-      color: card.mine || card.note ? Theme.dim : Theme.foreground
+      color: card.mine ? Theme.dim : Theme.foreground
       font.pixelSize: 13
       lineHeight: 1.25
       wrapMode: Text.Wrap

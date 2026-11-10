@@ -349,8 +349,9 @@ Singleton {
   // said to you: the text of its model replies that call no tool, its
   // comments and the files it attached; and each request whose arbiter is
   // you, the question of whoever asked it when the harness passed it on, as
-  // when the agent left a question unanswered, with the harness's sentence as
-  // its fine print.
+  // when the agent left a question unanswered, as the agent's own. A request
+  // the harness opened that passes on no question is a note between agents:
+  // it is no entry and no state of the thread.
   function build(projectId, id, snapshot, events) {
     const rootRuns = {}
     for (const run of snapshot.runs)
@@ -388,13 +389,12 @@ Singleton {
       }
     }
     const notes = noted(events)
-    const asked = snapshot.requests.filter(request => isMe(request.arbiter))
+    const asked = snapshot.requests.filter(request => isMe(request.arbiter) && !isNote(request, notes))
     for (const request of asked) {
       const question = asking(request, notes, agent)
       const reply = replies[request.id]
       entries.push({
         kind: "request", key: request.id, from: question.from, to: "you",
-        note: question.note,
         text: question.text, at: request.created_at, open: Requests.pending(request),
         files: [],
         choices: Requests.choices(request),
@@ -423,7 +423,7 @@ Singleton {
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
       waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
-      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent),
+      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent, notes),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
       snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
@@ -442,7 +442,7 @@ Singleton {
   // when nothing runs, nothing is pending and a work is not over; "done" when
   // every work it began is done or cancelled; "idle" otherwise. `brief` is for
   // the list, `line` and `next` for the thread's head.
-  function status(snapshot, events, pending, to) {
+  function status(snapshot, events, pending, to, notes) {
     const agent = to || "the agent"
     const ended = {}
     for (const event of events)
@@ -473,7 +473,7 @@ Singleton {
         next: "Write again to try once more." }
 
     // A request that waits on someone else is work going on, to the client.
-    if (snapshot.requests.some(request => Requests.pending(request)))
+    if (snapshot.requests.some(request => Requests.pending(request) && !isNote(request, notes)))
       return working
 
     // A work you gave that waits for your next message: only you move it on.
@@ -508,6 +508,12 @@ Singleton {
     return notes
   }
 
+  // Whether a request is a note: one the harness opened, among `notes`, that
+  // passes on no question.
+  function isNote(request, notes) {
+    return !!notes[request.id] && Requests.passedOn(request).length === 0
+  }
+
   // The names of the tools a model event asks to call: an Anthropic message's
   // tool uses, an OpenAI message's tool calls, a Responses output's function
   // calls, or a command model's call; code mode's script is "code".
@@ -522,24 +528,23 @@ Singleton {
     return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
   }
 
-  // What a request asks, as {from, text, origins, note}, each question once:
-  // a reason an origin's question holds gives way to that question, and an
+  // What a request asks, as {from, text, origins}, each question once: a
+  // reason an origin's question holds gives way to that question, and an
   // origin's question the text shown already holds is left out. It comes from
   // `agent`, the one the thread is with, whoever below asked it: the harness's
   // own sentence on how it came to you is left out. A request the harness
-  // opened asks what it passes on; passing on nothing, it is a note, its
-  // reason no one's words.
+  // opened asks what it passes on.
   function asking(request, notes, agent) {
     const passed = notes[request.id] ? Requests.passedOn(request) : []
     if (passed.length > 0)
-      return { from: agent, text: Requests.question(request, true), origins: [], note: false }
+      return { from: agent, text: Requests.question(request, true), origins: [] }
     const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase()
     const origins = Object.keys(request.origins || {}).map(part => ({ reason: request.origins[part].reason || "" }))
     const text = origins.map(origin => origin.reason)
       .filter(reason => plain(reason).includes(plain(request.reason)))
       .reduce((longest, reason) => reason.length > longest.length ? reason : longest, request.reason || "")
-    return { from: notes[request.id] ? "note" : agent, text: text,
-      origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))), note: !!notes[request.id] }
+    return { from: agent, text: text,
+      origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))) }
   }
 
   // A text on one line, without its Markdown marks, cut short when long.

@@ -71,9 +71,10 @@ neither is the part name of an origin; a decision's part name labels its
 options only when it is not an agent's name (the kit's `Requests.byHarness`
 and `Requests.passedOn`).
 
-One that passes on no question is a note, no one's words: its card reads
-NOTE, muted, where the agent's name would be, and its text is the harness's
-reason as written.
+One that passes on no question is a note between agents. It is not shown:
+no card, and it neither makes the thread WAITING FOR YOU nor counts as work
+going on. The thread's state says whether the work goes on, waits for you, is
+stuck, stalled or over; the console shows the note.
 
 A request shows each question once: its reason, or, when an origin's
 question holds it, that question, then each origin's question the text shown
