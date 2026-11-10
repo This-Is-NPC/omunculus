@@ -8,5 +8,6 @@
   ],
   "conversation": [["person", "Deal?"], ["agent", "Not as asked."]],
   "first_run_made_work": false,
+  "proposals": [{"work": "w1", "status": "draft", "assessment": {"work": "w2", "answer": "no"}}],
   "delete": []
 }

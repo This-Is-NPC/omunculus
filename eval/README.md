@@ -150,7 +150,8 @@ holds, 2 when the workspace holds but the run ended otherwise than expected,
 and 1 when the workspace does not hold. The outcome file names the configuration, the outcome and the last
 words to the person (`report`); for a conversation, the root works (`works`),
 what was said (`conversation`) and whether the first message became a work at
-once (`first_run_made_work`), and for a task that publishes, the published
+once (`first_run_made_work`), the data of the proposals the sales desk wrote
+(`proposals`), and for a task that publishes, the published
 copy (`published`). Checks are Python and run with
 `tasks/_lib` on their `PYTHONPATH`: `from check import *` is all they import,
 wherever the task lives.

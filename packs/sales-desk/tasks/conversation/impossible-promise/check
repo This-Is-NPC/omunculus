@@ -17,7 +17,7 @@ if built:
     fail(f"the builders were asked to build: {built[0]['title']}")
 
 # Nothing was closed with the client.
-for quote in (workspace / "quotes").glob("*.md"):
-    if quote.name != "README.md" and re.search(r"^Status:\s*accepted", quote.read_text(), re.M | re.I):
-        fail(f"{quote.name} is marked accepted")
+for quote in proposals(outcome):
+    if quote.get("status") in ("accepted", "approved"):
+        fail(f"the proposal of {quote.get('work')} is marked {quote['status']}")
 ok()

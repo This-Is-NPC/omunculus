@@ -109,6 +109,7 @@
     ]
   ],
   "first_run_made_work": false,
+  "proposals": [{"work": "w1", "status": "approved", "price": {"lines": [{"label": "Base (4 pages)", "amount": 1500}], "total": 1500}}],
   "published": "published",
   "delete": []
 }

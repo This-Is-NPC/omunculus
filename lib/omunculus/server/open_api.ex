@@ -90,6 +90,16 @@ defmodule Omunculus.Server.OpenAPI do
       status: 200,
       response: :file
     },
+    list_artifacts: %{
+      summary: "List the artifacts of a conversation with their versions",
+      status: 200,
+      response: "Artifacts"
+    },
+    get_artifact_version: %{
+      summary: "Read the content of a version of an artifact",
+      status: 200,
+      response: :file
+    },
     get_agent_image: %{
       summary: "Read an agent's image",
       status: 200,
@@ -338,7 +348,7 @@ defmodule Omunculus.Server.OpenAPI do
 
         :file ->
           %{
-            description: "The file, of the media type it was attached with",
+            description: "The file, of the media type it was kept with",
             content: %{
               "application/octet-stream" => %{schema: %{type: "string", format: "binary"}}
             }
@@ -636,7 +646,26 @@ defmodule Omunculus.Server.OpenAPI do
           },
           ~w(v cursor project type at)
         ),
-      "Events" => object(%{events: array(ref("Event"))}, ["events"])
+      "Events" => object(%{events: array(ref("Event"))}, ["events"]),
+      "Artifacts" => object(%{items: array(ref("Artifact"))}, ["items"]),
+      "Artifact" =>
+        object(
+          %{name: string(), kind: string(), versions: array(ref("ArtifactVersion"))},
+          ~w(name kind versions)
+        ),
+      "ArtifactVersion" =>
+        object(
+          %{
+            version: %{type: "integer"},
+            media_type: string(),
+            bytes: %{type: "integer"},
+            sha256: string(),
+            note: string(),
+            at: string(),
+            by: string()
+          },
+          ~w(version media_type bytes sha256 at by)
+        )
     }
   end
 end

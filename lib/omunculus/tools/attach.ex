@@ -1,17 +1,49 @@
 defmodule Omunculus.Tools.Attach do
   @moduledoc """
-  Builtin `attach` tool: attaches a file under the run's roots, as it is
-  now, to the run's conversation, with an optional `note`. The file is
-  read through the same checks as `read`, kept by `Omunculus.Attachments`
-  with the media type its name suggests, and emitted as an `attach`.
+  Builtin `attach` tool: attaches a file to the run's conversation, with an
+  optional `note`: a file under the run's roots as it is now, read through
+  the same checks as `read` and kept by `Omunculus.Attachments` with the
+  media type its name suggests, or by reference a version of an artifact
+  (the `artifacts` view), the latest unless `version` names one, which is
+  exactly that file. Either is emitted as an `attach`.
   """
 
-  alias Omunculus.{Attachments, Config}
+  alias Omunculus.{Artifacts, Attachments, Config}
   alias Omunculus.Execution.Policy
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map, Policy.t()) :: map
-  def run(%{args: args, roots: roots, config_path: config_path} = input, %Policy{} = policy) do
+  def run(%{args: args} = input, %Policy{} = policy) do
+    with {:ok, meta, default_note} <- file(input, policy) do
+      body =
+        %{"attachments" => [meta]}
+        |> Map.put("note", Args.present(args, "note") || default_note)
+        |> Map.reject(fn {_key, value} -> is_nil(value) end)
+
+      Out.ok("attached #{meta["name"]} (#{meta["bytes"]} bytes)", [
+        %{"type" => "attach", "body" => body}
+      ])
+    else
+      {:error, message} when is_binary(message) -> Out.fail(message)
+      {:error, reason} -> Out.fail(Out.failure(reason))
+    end
+  end
+
+  defp file(%{args: %{"path" => _, "artifact" => _}}, _policy),
+    do: {:error, "give path or artifact, not both"}
+
+  defp file(%{args: %{"artifact" => name} = args, view: view}, _policy) do
+    with {:ok, number} <- Args.count(args, "version"),
+         %{} = version <- Artifacts.find(view["artifacts"] || [], name, number) || :unknown do
+      {:ok, Map.take(version, ~w(name media_type bytes sha256)),
+       "#{name} version #{version["version"]}"}
+    else
+      :unknown -> {:error, "no such version of #{name} in this conversation"}
+      error -> error
+    end
+  end
+
+  defp file(%{args: args, roots: roots, config_path: config_path} = input, policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
 
     with nil <- Args.missing(args, ~w(path)),
@@ -21,12 +53,10 @@ defmodule Omunculus.Tools.Attach do
          {:ok, config} <- Config.load(config_path),
          name = Path.basename(absolute),
          {:ok, meta} <- Attachments.put(config.store, name, MIME.from_path(name), content) do
-      body = %{"attachments" => [meta]} |> Args.put_present("note", args)
-      Out.ok("attached #{name} (#{meta["bytes"]} bytes)", [%{"type" => "attach", "body" => body}])
+      {:ok, meta, nil}
     else
-      message when is_binary(message) -> Out.fail(message)
-      {:error, message} when is_binary(message) -> Out.fail(message)
-      {:error, reason} -> Out.fail(Out.failure(reason))
+      "path required" -> {:error, "give path, or artifact"}
+      other -> other
     end
   end
 

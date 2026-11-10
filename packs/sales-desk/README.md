@@ -26,7 +26,7 @@ it hands down start at depth 2. The
 seller asks the client through requests — a choice, as accepting the price,
 with named options the client gets as buttons — records progress with comments and moves it on with
 the pack's tool `next_stage`, in place of `done`: it refuses the move
-until the proposal in `quotes/` that names the work has what the
+until the proposal artifact of the work has what the
 stage asks — the client's content after qualify, an approved preview or
 "not wanted" after design, the builders' answer after assess, the
 client's acceptance after propose — and, after owner, until the run was
@@ -67,14 +67,41 @@ omunculus pack --path packs/dream-team --models team=<model> \
 
 The client talks with it by name: `omunculus send --agent sales "…"`.
 
-The proposal follows `workspace/templates/proposal.md`, from the
-client's problem in their words to the next steps. It is the client's
-document, which they receive attached. Its headings, its labels and its
-Status words (`accepted, awaiting the owner`, `approved`, ...) are the
-template's, in English, which `next_stage` and the eval checks read as
-they are written there; what the seller writes under them, as every
-message to the client, is in the language the client writes in. Change the template in the project to change the
-proposal, keeping the headings and labels the stages check. With the
+The proposal is data, not a file: one artifact per work,
+`proposal-<work id>`, of kind `proposal`, whose versions are JSON
+([artifacts](../../docs/tools.md#artifacts)). The seller writes it with the
+pack's tool `proposal`, which lays `fields` over the latest version and keeps
+the rest: business, city, audience, who decides, budget and timing, the
+problem, the content, the scope's pages, features and exclusions, the design
+(`state` `approved` or `waived`, and the preview's `address`), the builders'
+assessment, what is pending, the timing, the next steps and the status. Types
+are checked and a field the proposal does not have is refused. The status is
+one of `draft`, `sent`, `accepted`, `refused` and `approved`, the last being
+the owner's. What the seller writes in the fields, as every message to the
+client, is in the language the client writes in.
+
+`next_stage` and the tools read only versions the `proposal` tool wrote: a
+version another tool puts under that name, with `put_artifact` or by hand,
+counts for nothing, and one work's proposal never stands in for another's.
+A write that builds on a version another call has since replaced is refused.
+
+The desk's price rules live in the tool, not in the core: the price is worked
+out from the scope's pages, so the seller cannot misadd it. A `discount`
+(percent) past 10% is refused as the owner's decision; one given before the
+pages exist is kept and applied once they do.
+
+Each version `proposal` writes is rendered, in the same call, to the client's
+document: the artifact `proposal-<work id>.md`, of kind `document`, from
+`tools/_proposal/template.md` in the pack, which no run can write. Its
+`{{path}}` placeholders name the data (`{{scope.pages}}`, `{{price.total}}`;
+a list becomes bullets, a missing value is empty, comments are dropped). The
+headings are the template's, in English; change the template in the pack to
+change the document, and `render_proposal` renders the latest data again as
+the next version of the document. The client receives only what the seller
+attaches by reference, `attach` with `artifact` set to the document, which
+hands over exactly the version named or the latest. The data artifact holds
+internal fields and is not for the client: the seller attaches the document
+alone. With the
 design team (`packs/design-team`) below it too, a client who wants to see
 the site first gets a preview in homologation, and the approved design's
 `design/handoff.md` goes to the builders.
@@ -121,10 +148,10 @@ than up through the builders' administrator:
 ```
 
 The client reads the proposal as a file: at stage propose, once the
-price, the Total and the Status are written, the seller attaches
-`quotes/<client-slug>.md` to the message that asks them to accept it, and
-only then. The project must keep attachments
-([config](../../docs/config.md)), or `attach` is refused:
+price is worked out and the status is `sent`, the seller attaches the
+artifact `proposal-<work id>.md` to the message that asks them to accept it, and only
+then. The project must keep attachments
+([config](../../docs/config.md)), or `attach` and the artifacts are refused:
 
 ```toml
 [store]
@@ -142,8 +169,7 @@ workspace's files — the proposal template among them — when it starts
 conversations = "clients"
 ```
 
-Without it every conversation shares the workspace: a seller listing
-`quotes/` reads the proposals of earlier clients, and the builders find
+Without it every conversation shares the workspace: the builders find
 another client's design and site where they build, and it reaches the
 client as theirs. The eval overlays need none: each task runs in a
 project of its own, which has no `[access]`, so its messages open no

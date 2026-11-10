@@ -17,12 +17,11 @@ if built:
     fail(f"the builders were asked to build: {built[0]['title']}")
 
 # The quote, from the table, written down and told.
-quotes = list((workspace / "quotes").glob("*.md"))
-quotes = [q for q in quotes if q.name != "README.md"]
+quotes = proposals(outcome)
 if not quotes:
-    fail("no quote was written in quotes/")
-if not any(re.search(r"1[.,]?500", q.read_text()) for q in quotes):
-    fail("the quote does not price four pages at R$ 1,500")
+    fail("no proposal was written with the proposal tool")
+if not any((q.get("price") or {}).get("total") == 1500 for q in quotes):
+    fail("the proposal does not price four pages at R$ 1,500")
 if not any(re.search(r"1[.,]?500", text) for who, text in outcome.get("conversation", []) if who == "agent"):
     fail("the client was not told the price")
 ok()

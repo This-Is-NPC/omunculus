@@ -12,7 +12,7 @@ defmodule Omunculus.Store.View do
   many of a work's latest closed runs in a row lack `end`, the depth of a
   work by walking `parent_id`, whether a work descends from another, and
   replay of `events` for a project, run, work, request, inbox or
-  conversation scope, and the files attached in a conversation. Never executes anything against the store.
+  conversation scope, the files attached in a conversation and its artifact versions. Never executes anything against the store.
   """
 
   alias Omunculus.Store.Query
@@ -351,13 +351,28 @@ defmodule Omunculus.Store.View do
   """
   @spec attachments(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def attachments(conn, conversation_id) do
+    carried(conn, conversation_id, "'prompt', 'attach'", fn body ->
+      Map.fetch!(body, "attachments")
+    end)
+  end
+
+  @doc """
+  The artifact versions of a conversation, oldest first: each as its
+  `artifact` event describes it, with that event's `event_id`, its `at` and
+  `by`.
+  """
+  @spec artifacts(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  def artifacts(conn, conversation_id),
+    do: carried(conn, conversation_id, "'artifact'", fn body -> [body] end)
+
+  defp carried(conn, conversation_id, types, files) do
     with {:ok, events} <-
            Query.all(
              conn,
              """
              SELECT id, at, actor_kind, actor_id, body FROM events
-             WHERE conversation_id = ? AND type IN ('prompt', 'attach')
-               AND json_extract(body, '$.attachments') IS NOT NULL
+             WHERE conversation_id = ? AND type IN (#{types})
+               AND (type = 'artifact' OR json_extract(body, '$.attachments') IS NOT NULL)
              ORDER BY sequence
              """,
              [conversation_id]
@@ -368,7 +383,7 @@ defmodule Omunculus.Store.View do
 
          event.body
          |> Jason.decode!()
-         |> Map.fetch!("attachments")
+         |> files.()
          |> Enum.map(&Map.merge(&1, %{"event_id" => event.id, "at" => event.at, "by" => by}))
        end)}
     end
