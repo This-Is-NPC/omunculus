@@ -643,8 +643,29 @@ defmodule EquivalentExchange.Runner do
       team: team(facts),
       conversation: execution.conversation,
       first_run_made_work: first_run_made_work(facts),
+      proposals: proposals(facts, Path.join(execution.dir, "project")),
       published: if(task.deploy, do: published)
     })
+  end
+
+  # The proposals the sales desk's `proposal` tool wrote, the latest version of
+  # each, as their JSON data: what the person was priced and told, for a check.
+  defp proposals(facts, project) do
+    with {:ok, config} <- Omunculus.Config.load(Path.join(project, "omunculus.toml")) do
+      facts.events
+      |> Enum.filter(&(&1.type == "artifact" and &1.body["tool"] == "proposal"))
+      |> Enum.filter(&(&1.body["kind"] == "proposal"))
+      |> Enum.reverse()
+      |> Enum.uniq_by(& &1.body["name"])
+      |> Enum.flat_map(fn event ->
+        with {:ok, content} <- Omunculus.Artifacts.read(config.store, event.body),
+             {:ok, data} <- Jason.decode(content),
+             do: [data],
+             else: (_ -> [])
+      end)
+    else
+      _error -> []
+    end
   end
 
   # Whether the person's first message became a work at once.
