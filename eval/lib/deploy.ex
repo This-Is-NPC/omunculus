@@ -33,6 +33,7 @@ defmodule EquivalentExchange.Deploy do
 
     if Enum.all?(~w(homologation production), &File.exists?(Path.join(sockets, &1 <> ".sock"))) do
       System.put_env("OMUNCULUS_DEPLOY", sockets)
+      System.put_env("OMUNCULUS_DEPLOY_PROVIDER", "dokku")
       System.put_env("OMUNCULUS_HOMOLOGATION_KEY", File.read!(Path.join(keys, "homologation")))
       System.put_env("OMUNCULUS_PRODUCTION_KEY", File.read!(Path.join(keys, "production")))
       :ok

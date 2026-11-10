@@ -13,6 +13,7 @@ sockets=packs/dream-team/environment/.state/sockets
 if [[ -L $sockets ]]; then
   export OMUNCULUS_DEPLOY
   OMUNCULUS_DEPLOY=$(readlink -f "$sockets")
+  export OMUNCULUS_DEPLOY_PROVIDER="${OMUNCULUS_DEPLOY_PROVIDER:-dokku}"
 fi
 # Its logins, homologation's and production's, from the keys its
 # environment made, unless .env gives them.

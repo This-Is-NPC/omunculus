@@ -5,7 +5,7 @@
 packs = [{ name = "sales-desk" }, { name = "dream-team", depth = 2 }]
 
 [execution]
-environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "OMUNCULUS_DEPLOY_PROVIDER"]
 timeout_ms = 300000
 
 # The seller attaches the proposal it gives the client.
