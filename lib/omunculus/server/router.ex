@@ -287,6 +287,36 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/artifacts",
+                :list_artifacts do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, artifacts} <- Project.artifacts(project_id, principal, conversation_id) do
+      reply(conn, 200, %{items: Contract.artifacts(artifacts)})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/artifacts/:name/versions/:version",
+                :get_artifact_version do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, number} <- version_number(version),
+         {:ok, meta, path} <-
+           Project.artifact(project_id, principal, conversation_id, name, number) do
+      conn
+      |> put_resp_content_type(meta["media_type"], nil)
+      |> put_resp_header(
+        "content-disposition",
+        "attachment; filename*=UTF-8''" <> URI.encode(meta["name"], &URI.char_unreserved?/1)
+      )
+      |> send_file(200, path)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :get, "/v1/projects/:project_id/agents/:agent/image", :get_agent_image do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, path} <- Project.agent_image(project_id, principal, agent) do
@@ -693,6 +723,13 @@ defmodule Omunculus.Server.Router do
     if conn |> get_req_header("upgrade") |> Enum.any?(&(String.downcase(&1) =~ "websocket")),
       do: :ok,
       else: {:error, :invalid}
+  end
+
+  defp version_number(text) do
+    case Integer.parse(text) do
+      {number, ""} when number > 0 -> {:ok, number}
+      _invalid -> {:error, :invalid}
+    end
   end
 
   defp error_reply(conn, {:error, :unauthorized}), do: reply(conn, 401, %{error: "unauthorized"})
