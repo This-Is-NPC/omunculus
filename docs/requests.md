@@ -83,8 +83,9 @@ the routes there are; there is no fallback to the default route. In the
 agency, whose default route passes the front desk, the system team's
 proposals reach the person directly instead of being reworded on the way.
 So does the harness's retry/cancel request for a root work its agent
-stopped on past `max_retries`, in a project with the `owner` route; in one
-without, it follows the default route.
+stopped on past `max_retries`, and the request a `reopen` past
+`max_reopens` opens, in a project with the `owner` route; in one without,
+they follow the default route.
 
 ### Client and owner
 

@@ -1214,9 +1214,37 @@ defmodule Omunculus.Store.ActionsTest do
                record_tool(conn, [delegate], ctx)
     end
 
+    test "past [policy] max_reopens the decision goes to the owner route when the project has one",
+         %{conn: conn} do
+      config = Fixtures.config(arbiter_toml() <> "\n[policy]\nmax_reopens = 0\n")
+      root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      emit = put_in(reopen_emit(child_id), ["body", "past_limit"], "it keeps breaking")
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
+
+      assert {:ok, [_tool_event, %{type: "request"} = asked]} =
+               record_tool(conn, [emit], request_ctx(run, parent_id, config))
+
+      assert {:ok, %{arbiter: @human, status: "pending"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [asked.request_id])
+    end
+
     test "past [policy] max_reopens the parent asks its route instead, until an answer comes",
          %{conn: conn} do
-      config = Fixtures.config(arbiter_toml() <> "\n[policy]\nmax_reopens = 1\n")
+      config =
+        Fixtures.config(
+          arbiter_toml() <>
+            "\n[policy]\nmax_reopens = 1\nrequest_routes = [{ via = [\"parent\", \"origin\"] }]\n"
+        )
+
       root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
 

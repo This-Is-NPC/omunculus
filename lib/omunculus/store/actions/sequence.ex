@@ -19,7 +19,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   agent lacks and the parent could grant it on a request; once the child
   went back `[policy] max_reopens` times in a row, since an answer to a
   request of the parent's work last came, the parent opens a request with
-  the `past_limit` reason instead, along its route; `delegate` is refused while a child that broke waits on
+  the `past_limit` reason instead, on the `owner` route where the project
+  names one, else along its route; `delegate` is refused while a child that broke waits on
   the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
@@ -39,7 +40,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   broken child gone it may delegate.
   """
 
-  alias Omunculus.{Ceiling, Config}
+  alias Omunculus.{Ceiling, Config, RequestRoutes}
   alias Omunculus.Id
   alias Omunculus.Store.Actions.{Helpers, Requests}
   alias Omunculus.Store.{Events, Query, View}
@@ -161,13 +162,23 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp past_limit?(max_reopens, rounds), do: rounds >= max_reopens
 
   # Past `[policy] max_reopens` the work does not go back once more: the
-  # parent asks along its route instead, with the reason its tool wrote,
-  # and waits on the request, the broken child still waiting on it.
+  # parent asks instead, with the reason its tool wrote, and waits on the
+  # request, the broken child still waiting on it. It is the project's
+  # decision, so it goes to its owners where the project names the `owner`
+  # route, else along the parent's route.
   defp ask_instead(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:reopen, body, "past_limit"),
-         {:ok, event} <-
-           Requests.request(conn, %{"reason" => body["past_limit"], "options" => %{}}, ctx),
+         {:ok, event} <- Requests.request(conn, ask(body["past_limit"], ctx.config), ctx),
          do: {:ok, [event]}
+  end
+
+  defp ask(reason, config) do
+    ask = %{"reason" => reason, "options" => %{}}
+    owner = RequestRoutes.owner()
+
+    if RequestRoutes.named?(config.request_routes, owner),
+      do: Map.put(ask, "to", owner),
+      else: ask
   end
 
   # What the parent gives with the reopen: names the agent lacks on the work
