@@ -6,8 +6,8 @@ import "kit/ui"
 // ThreadList is the threads of the folder, grouped by day under kickers. It
 // keeps a model of its own, of the threads' keys, in step with `Mail.shown`, so a thread that
 // arrives fades and rises in, one that leaves fades out, and the others slide
-// to their places; a thread that arrives while the list is on screen decodes
-// its subject. Empty, it says why, and offers to clear the search.
+// to their places.
+// Empty, it says why, and offers to clear the search.
 Item {
   id: list
 
@@ -20,7 +20,7 @@ Item {
       view.currentIndex = 0
   }
 
-  // Whether the model was filled once; what comes after is fresh.
+  // Whether the model was filled once; what arrives after animates in.
   property bool filled: false
 
   ListModel { id: model }
@@ -38,7 +38,7 @@ Item {
         if (model.get(i).key === thread.key) { at = i; break }
       const day = Mail.day(thread.at)
       if (at < 0)
-        model.insert(index, { key: thread.key, day: day, fresh: list.filled })
+        model.insert(index, { key: thread.key, day: day })
       else {
         if (at !== index)
           model.move(at, index, 1)
@@ -76,7 +76,6 @@ Item {
 
     delegate: ThreadRow {
       required property string key
-      required property bool fresh
       required property int index
       thread: Mail.threads[key] || Mail.blank
       width: view.width

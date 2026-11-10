@@ -61,7 +61,7 @@ capitalised: `Sales <sales@agency>`.
 - **Archive**: threads you archived. A thread that gets new mail after it was
   archived returns to the inbox.
 
-Reading a thread marks it read; MARK UNREAD marks it unread and goes back to the
+Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
 list. A row shows who wrote ("Sales, me (5)"), the subject, the start of the
 last message, its label, the project and the time.
 
@@ -86,8 +86,11 @@ REPLY ALL and FORWARD. The latest message's REPLY is the screen's solid action;
 REPLY ALL does the same as REPLY, since a thread has one agent. The command bar
 offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
 
-A reply is written under the messages and quotes the e-mail it answers. What
-it does:
+A reply is written in a box under the messages, outside their scrolling, so
+SEND stays in view while you type. Under your text it shows the e-mail it
+answers, quoted as mail does ("On <date>, Sales wrote:" and its lines behind
+"> ", folded after four lines, MORE shows the rest). Only your own words are
+sent, never the quote. What it does:
 
 - replying to an open request's e-mail sends your words as the answer to that
   request (`POST .../requests/{id}/reply` with `{"body": text}`);
@@ -104,10 +107,16 @@ FORWARD opens the compose window with `Fwd:` and the message quoted.
 
 COMPOSE (Ctrl+N) opens a dialog: To, Subject, the message, Attach, SEND.
 
-- To holds one agent as a chip. Typing a name or an address lists the agents
-  you may write to, of every project: agents of depth 0 that are not
-  workflow-only, as the config route gives them. A second recipient is
-  refused with a sentence saying a message goes to one agent.
+- To holds one agent as a chip. A click on the chip selects it; only its x, or
+  Backspace once it is selected, removes it. The field beside it lists, under
+  it, the agents whose name or address holds what you type, case aside (all of
+  them while it is empty); Up and Down move, Enter or a click picks, Esc
+  closes the list. The agents are those of depth 0 that are not workflow-only,
+  as the config route gives them, of the projects where the capabilities route
+  grants `conversation.create` and `conversation.send`. They are ordered: the
+  current project's default agent, the rest of that project, then the other
+  projects. A second recipient is refused with a sentence saying a message
+  goes to one agent.
 - When the project's config declares a `default_agent` (the config route's
   `default_agent`), To starts with it: the project being filtered on, else the
   one the window was opened on. With none declared, To starts empty.
@@ -123,7 +132,7 @@ COMPOSE (Ctrl+N) opens a dialog: To, Subject, the message, Attach, SEND.
 It follows the console's look with the kit's controls: hairline rows, no
 coloured edge bars, status as an icon and a word, one solid action per screen.
 The masthead's notch sweeps when the folder changes; arriving threads fade and
-rise in; subjects decode; a thread slides in as a Stage does.
+rise in; a thread fades in. Subjects never animate.
 
 ## Search and keys
 

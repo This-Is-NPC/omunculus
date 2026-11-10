@@ -31,6 +31,9 @@ Item {
   readonly property var messages: thread.messages
   readonly property bool replying: replyKey !== ""
   readonly property var target: replying ? Mailbox.replyTarget(thread, replyKey) : null
+  // The message it answers, quoted as {head, lines}, or null.
+  readonly property var quote: target && target.quoted ? Mailbox.quoted(target.quoted, Mail.stamp(target.quoted.at)) : null
+  property bool quoteAll: false
 
   function isOpen(message, index) {
     if (message.pending)
@@ -49,6 +52,7 @@ Item {
     if (messages.length === 0)
       return
     replyKey = key || messages[messages.length - 1].key
+    quoteAll = false
     Qt.callLater(() => { editor.focusEntry(); toEnd() })
   }
 
@@ -85,13 +89,15 @@ Item {
       IconButton { visible: view.back; name: "chevron-left"; tip: "back to the list  esc"; onClicked: Mail.close() }
       ColumnLayout {
         Layout.fillWidth: true
+        Layout.minimumWidth: 0
         spacing: 6
         RowLayout {
           Layout.fillWidth: true
+          Layout.minimumWidth: 0
           spacing: 12
-          DecodeLabel {
+          Label {
             Layout.fillWidth: true
-            value: view.thread.subject
+            text: view.thread.subject
             font.pixelSize: 16
             font.bold: true
             elide: Text.ElideRight
@@ -99,8 +105,9 @@ Item {
           MailLabel { kind: view.thread.label }
         }
         RowLayout {
+          Layout.fillWidth: true
           spacing: 10
-          Label { text: view.thread.with.text; color: Theme.dim; font.pixelSize: 11 }
+          Label { Layout.fillWidth: true; text: view.thread.with.text; color: Theme.dim; font.pixelSize: 11; elide: Text.ElideRight }
           ProjectTag { name: "· " + view.thread.project }
         }
       }
@@ -143,69 +150,78 @@ Item {
             onForwardIt: Mail.compose(Mailbox.forward(view.thread, modelData))
           }
         }
+      }
+    }
 
-        // The reply, quoting what it answers.
-        SurfaceFrame {
+    // The reply, under the messages and outside their scrolling, so its
+    // actions stay in view while you type. It quotes what it answers, as mail
+    // does; only your own words are sent.
+    SurfaceFrame {
+      Layout.fillWidth: true
+      visible: view.replying
+      Layout.preferredHeight: writing.implicitHeight + 28
+      variant: "outline"
+      active: true
+
+      ColumnLayout {
+        id: writing
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
+        spacing: 10
+
+        Label {
           Layout.fillWidth: true
-          visible: view.replying
-          implicitHeight: writing.implicitHeight + 28
-          variant: "outline"
-          active: true
-
-          ColumnLayout {
-            id: writing
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
-            spacing: 10
-
-            Label {
-              Layout.fillWidth: true
-              text: "To: " + view.thread.with.text + "   ·   " + Mailbox.re(view.thread.subject)
-              color: Theme.dim
-              font.pixelSize: 11
-              elide: Text.ElideRight
-            }
-            Editor {
-              id: editor
-              Layout.fillWidth: true
-              Layout.preferredHeight: 110
-              placeholderText: "your reply"
-              onSubmitted: view.send()
-            }
-            Rectangle {
-              Layout.fillWidth: true
-              visible: view.target !== null && view.target.quoted !== null
-              implicitHeight: quoted.implicitHeight + 20
-              color: "transparent"
-              border.color: Theme.line
-              Label {
-                id: quoted
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-                text: view.target && view.target.quoted
-                  ? view.target.quoted.from.name + " wrote, " + Mail.stamp(view.target.quoted.at) + ":\n" + Mailbox.quote(view.target.quoted.text)
-                  : ""
-                color: Theme.dim
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-                maximumLineCount: 8
-                elide: Text.ElideRight
-              }
-            }
-            DialogFooter {
-              IconButton {
-                visible: view.target !== null && view.target.request === ""
-                name: "attach"
-                tip: "files to send with the message"
-                onClicked: files.pick()
-              }
-              FilePicker { id: files; Layout.fillWidth: true }
-              primaryText: "SEND"
-              primaryIcon: "enter"
-              primaryEnabled: editor.text.trim() !== ""
-              cancelText: "DISCARD"
-              onCancelled: view.replyKey = ""
-              onAccepted: view.send()
-            }
+          text: "To: " + view.thread.with.text + "   ·   " + Mailbox.re(view.thread.subject)
+          color: Theme.dim
+          font.pixelSize: 11
+          elide: Text.ElideRight
+        }
+        Editor {
+          id: editor
+          Layout.fillWidth: true
+          Layout.preferredHeight: 96
+          placeholderText: "your reply"
+          onSubmitted: view.send()
+        }
+        // The quoted original, folded after a few lines.
+        ColumnLayout {
+          Layout.fillWidth: true
+          visible: view.quote !== null
+          spacing: 4
+          Label {
+            Layout.fillWidth: true
+            text: view.quote ? view.quote.head : ""
+            color: Theme.dim
+            font.pixelSize: 11
+            elide: Text.ElideRight
           }
+          Label {
+            Layout.fillWidth: true
+            text: view.quote ? (view.quoteAll ? view.quote.lines : view.quote.lines.slice(0, 4)).join("\n") : ""
+            color: Theme.dim
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+          }
+          Chip {
+            visible: view.quote !== null && view.quote.lines.length > 4
+            icon: "more"
+            text: view.quoteAll ? "LESS" : "MORE"
+            onClicked: view.quoteAll = !view.quoteAll
+          }
+        }
+        DialogFooter {
+          IconButton {
+            visible: view.target !== null && view.target.request === ""
+            name: "attach"
+            tip: "files to send with the message"
+            onClicked: files.pick()
+          }
+          FilePicker { id: files; Layout.fillWidth: true }
+          primaryText: "SEND"
+          primaryIcon: "enter"
+          primaryEnabled: editor.text.trim() !== ""
+          cancelText: "DISCARD"
+          onCancelled: view.replyKey = ""
+          onAccepted: view.send()
         }
       }
     }

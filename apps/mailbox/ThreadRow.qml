@@ -10,20 +10,17 @@ Rectangle {
   id: row
 
   property var thread
-  // Whether it arrived after the list was first filled.
-  property bool fresh: false
   readonly property bool current: Mail.selected === thread.key
   readonly property bool unread: Mail.isUnread(thread)
 
   signal chosen()
 
   implicitHeight: 62
-  color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
+  color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : unread ? Qt.alpha(Theme.foreground, 0.05) : "transparent"
   border.color: current ? Theme.primary : Theme.line
   Behavior on color { ColorAnimation { duration: 120 } }
   Behavior on border.color { ColorAnimation { duration: 120 } }
 
-  Component.onCompleted: if (fresh) subject.replay()
 
   ColumnLayout {
     anchors { fill: parent; leftMargin: 14; rightMargin: 14; topMargin: 8; bottomMargin: 8 }
@@ -32,7 +29,7 @@ Rectangle {
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      Dot { tone: Theme.primary; opacity: row.unread ? 1 : 0; Behavior on opacity { NumberAnimation { duration: 140 } } }
+      Dot { size: 8; tone: Theme.primary; opacity: row.unread ? 1 : 0 }
       Label {
         Layout.fillWidth: true
         text: row.thread.parties
@@ -48,12 +45,10 @@ Rectangle {
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      DecodeLabel {
-        id: subject
+      Label {
         Layout.maximumWidth: row.width * 0.55
-        value: row.thread.subject
-        soft: true
-        revealOnStage: false
+        text: row.thread.subject
+        color: row.unread ? Theme.foreground : Theme.dim
         font.pixelSize: 13
         font.bold: row.unread
         elide: Text.ElideRight

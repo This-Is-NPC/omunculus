@@ -203,13 +203,8 @@ ShellRoot {
                 required property string modelData
                 anchors.fill: parent
                 opacity: 0
-                transform: Translate { id: slide; x: 28 }
                 Component.onCompleted: enter.start()
-                ParallelAnimation {
-                  id: enter
-                  NumberAnimation { target: page; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
-                  NumberAnimation { target: slide; property: "x"; to: 0; duration: 280; easing.type: Easing.OutCubic }
-                }
+                NumberAnimation { id: enter; target: page; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
                 ThreadView {
                   anchors { fill: parent; leftMargin: window.narrow ? 0 : 20 }
                   thread: Mail.threads[page.modelData] || Mail.blank
