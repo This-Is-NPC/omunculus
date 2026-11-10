@@ -239,10 +239,10 @@ An app reaches people in two steps, and the second is never an agent's
 alone.
 
 - **Describe the app.** `deploy.toml` at the repository's root, committed:
-  `app` (lowercase letters, digits and dashes, starting with a letter),
-  `port` (the port the image serves) and, when the app reads any,
-  `env` (the names of its variables, never their values). The deploy tools
-  take the app's name from it.
+  `app` (lowercase letters, digits and dashes, starting with a letter) and
+  `port` (the port the image serves). The deploy tools take the app's name
+  from it, and read it, and the `Dockerfile`, from the commit they
+  publish: commit both first.
 - **Preview first.** Publish the last commit with `deploy_preview`. It
   answers with the preview address, where the person looks at it.
   `deploy_status` says whether the preview app runs, `deploy_logs` reads

@@ -17,7 +17,10 @@ and the owner approve, the builders work from its `design/handoff.md`.
 Every design goes through the workflow `design`: design (designer), review
 (design-reviewer), publish (publisher), which `deploy_preview` concludes,
 commenting the homologation address and the commit, as the stage denies
-`done`. The pack requires it at the
+`done`. It publishes the commit at HEAD, so the workspace's root holds,
+committed, a `Dockerfile` that serves `design/preview` and a `deploy.toml`
+(`templates/deploy.toml`) naming the app and its port, as the dream team's
+[deploy contract](../dream-team/README.md#the-deploy-contract) says. The pack requires it at the
 designer's depth and the design lead names it, so another team's workflow
 at that depth sits beside it. A briefing comes before any design, the
 moodboard and wireframes before the mockup, and the rounds of revision

@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
-"""The deploy tools, provider-neutral. Each reads the workspace's deploy.toml
-(app, port, env: see the pack's README) and has the configured provider act on
-the app of the workspace's root. The provider is the executable
-providers/$OMUNCULUS_DEPLOY_PROVIDER beside this script; there is no default.
+"""The deploy tools, provider-neutral. Each reads deploy.toml (app, port: see
+the pack's README) from a commit of the workspace and has the configured
+provider act on the app of the workspace's root. The provider is the
+executable providers/$OMUNCULUS_DEPLOY_PROVIDER beside this script; there is
+no default.
+
+`preview` publishes the commit at HEAD and records it as refs/deploy/preview;
+`promote` publishes what that commit built. `status`, `logs` and `destroy`
+act on the preview app, named by the previewed commit's deploy.toml, or
+HEAD's while nothing was previewed.
 
 Apps are named after the root: <app>-<id>-hml in the preview environment and
-<app>-<id> in production, <id> the first six hex digits of the root's SHA-256,
-so each project, and each conversation working in a folder of its own,
-publishes apps of its own.
+<app>-<id> in production, <id> the first twelve hex digits of the root's
+SHA-256, so each project, and each conversation working in a folder of its
+own, publishes apps of its own.
 
 `preview` and `promote` conclude their stage: the answer chains a comment with
-the address and continue. `status`, `logs` and `destroy` act on the preview.
-Usage: deploy preview|status|logs|promote|destroy, the call's JSON on stdin.
+the address and continue. Usage: deploy preview|status|logs|promote|destroy,
+the call's JSON on stdin.
 
 Provider contract: `<provider> <operation>` (deploy, promote, status, logs,
 destroy) with, on stdin, {"environment": "preview"|"production", "app",
-"source" (promote: the preview app), "root", "port", "env", "lines" (logs)};
-on stdout {"ok", "output", "address"}. Its output never names the provider."""
+"source" (promote: the preview app), "root", "commit", "port", "lines"
+(logs)}; on stdout {"ok", "output", "address"}. It never writes anything else
+there, and its output never names the provider. What it writes elsewhere, or
+a failure to answer, is never shown: the tool says the provider failed."""
 
 import hashlib
 import json
@@ -28,8 +36,10 @@ import sys
 import tomllib
 
 NAME = re.compile(r"[a-z][a-z0-9-]{1,40}")
-VARIABLE = re.compile(r"[A-Z_][A-Z0-9_]*")
 PROVIDER = re.compile(r"[a-z][a-z0-9_-]*")
+PREVIEW_REF = "refs/deploy/preview"
+# A provider may build an image: bounded, in seconds.
+PROVIDER_TIMEOUT = 1800
 
 
 def answer(ok, output, chain=()):
@@ -42,25 +52,31 @@ def conclude(output, report):
     answer(True, output, [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
 
 
-def descriptor(root):
-    path = pathlib.Path(root, "deploy.toml")
-    if not path.is_file():
-        answer(False, 'deploy.toml is missing from the workspace: write it, with app = "<name>" (lowercase letters, digits and dashes), port = <the port the image serves> and, optionally, env = ["<NAME>", ...] (the variables the app reads), and commit it')
+def git(root, *args):
+    done = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True)
+    return done.returncode, done.stdout.strip()
+
+
+def descriptor(root, commit, dockerfile=False):
+    """deploy.toml as committed at `commit`: what is pushed is what is read."""
+    status, text = git(root, "show", f"{commit}:deploy.toml")
+    if status != 0:
+        answer(False, 'deploy.toml is not committed: write it at the workspace\'s root, with app = "<name>" (lowercase letters, digits and dashes) and port = <the port the image serves>, and commit it')
     try:
-        spec = tomllib.loads(path.read_text())
+        spec = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
-        answer(False, f"deploy.toml is not valid TOML: {error}")
-    unknown = sorted(set(spec) - {"app", "port", "env"})
+        answer(False, f"the committed deploy.toml is not valid TOML: {error}")
+    unknown = sorted(set(spec) - {"app", "port"})
     if unknown:
-        answer(False, "deploy.toml has keys the contract does not define: " + ", ".join(unknown))
-    app, port, env = spec.get("app"), spec.get("port"), spec.get("env", [])
+        answer(False, "the committed deploy.toml has keys the contract does not define: " + ", ".join(unknown))
+    app, port = spec.get("app"), spec.get("port")
     if not isinstance(app, str) or not NAME.fullmatch(app):
         answer(False, "deploy.toml: app must be lowercase letters, digits and dashes, starting with a letter")
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         answer(False, "deploy.toml: port must be an integer from 1 to 65535")
-    if not isinstance(env, list) or not all(isinstance(n, str) and VARIABLE.fullmatch(n) for n in env):
-        answer(False, "deploy.toml: env must be a list of variable names in capitals, digits and underscores")
-    return {"app": app, "port": port, "env": env}
+    if dockerfile and git(root, "cat-file", "-e", f"{commit}:Dockerfile")[0] != 0:
+        answer(False, "the Dockerfile is not committed: the image is built from the Dockerfile at the workspace's root; write it and commit it")
+    return {"app": app, "port": port}
 
 
 def provider():
@@ -74,19 +90,14 @@ def provider():
 
 
 def act(operation, request):
-    done = subprocess.run([provider(), operation], input=json.dumps(request), capture_output=True, text=True)
     try:
+        done = subprocess.run([provider(), operation], input=json.dumps(request), capture_output=True, text=True, timeout=PROVIDER_TIMEOUT)
         result = json.loads(done.stdout)
-        return result["ok"], result["output"], result.get("address")
-    except (ValueError, KeyError):
-        answer(False, "the deploy provider failed: " + (done.stderr.strip() or "it gave no answer"))
-
-
-def commit_of(root):
-    done = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"], capture_output=True, text=True)
-    if done.returncode != 0:
-        answer(False, "the workspace has no commit to publish: commit it first")
-    return done.stdout.strip()
+        return bool(result["ok"]), str(result["output"]), result.get("address")
+    except subprocess.TimeoutExpired:
+        answer(False, "the deploy provider did not answer in time")
+    except (ValueError, KeyError, TypeError, OSError):
+        answer(False, "the deploy provider failed")
 
 
 def main():
@@ -96,26 +107,36 @@ def main():
     root = (call.get("roots") or [None])[0]
     if not root:
         answer(False, "no workspace to publish from")
-    spec = descriptor(root)
-    suffix = "-" + hashlib.sha256(root.encode()).hexdigest()[:6]
+
+    previewed = git(root, "rev-parse", "--verify", "-q", PREVIEW_REF)[1]
+    if operation == "preview":
+        status, commit = git(root, "rev-parse", "--verify", "-q", "HEAD")
+        if status != 0:
+            answer(False, "the workspace has no commit to publish: commit it first")
+    elif operation == "promote":
+        if not previewed:
+            answer(False, "nothing was published to the preview from this workspace: run deploy_preview first")
+        commit = previewed
+    else:
+        commit = previewed or git(root, "rev-parse", "--verify", "-q", "HEAD")[1]
+    spec = descriptor(root, commit or "HEAD", dockerfile=operation == "preview")
+
+    suffix = "-" + hashlib.sha256(root.encode()).hexdigest()[:12]
     preview, production = spec["app"] + suffix + "-hml", spec["app"] + suffix
-    request = dict(spec, root=root)
+    request = dict(spec, root=root, commit=commit)
 
     if operation == "preview":
-        commit = commit_of(root)
         ok, output, address = act("deploy", dict(request, environment="preview", app=preview))
         if not ok:
             answer(False, f"publishing to the preview failed:\n{output}")
-        conclude(f"published to the preview at {address}\n{output}", f"Published to the preview at {address}: commit {commit}.")
+        git(root, "update-ref", PREVIEW_REF, commit)
+        conclude(f"published to the preview at {address}\n{output}", f"Published to the preview at {address}: commit {commit[:7]}.")
     elif operation == "promote":
         ok, output, address = act("promote", dict(request, environment="production", app=production, source=preview))
         if not ok:
             answer(False, f"promoting to production failed:\n{output}")
         conclude(f"promoted to production at {address}\n{output}",
                  f"Promoted to production at {address}: the image the person saw in the preview and approved by granting promote.")
-    elif operation == "status":
-        ok, output, _ = act("status", dict(request, environment="preview", app=preview))
-        answer(ok, output)
     elif operation == "logs":
         lines = args.get("lines", 100)
         if isinstance(lines, bool) or not isinstance(lines, int) or not 1 <= lines <= 1000:
@@ -123,7 +144,7 @@ def main():
         ok, output, _ = act("logs", dict(request, environment="preview", app=preview, lines=lines))
         answer(ok, output)
     else:
-        ok, output, _ = act("destroy", dict(request, environment="preview", app=preview))
+        ok, output, _ = act(operation, dict(request, environment="preview", app=preview))
         answer(ok, output)
 
 

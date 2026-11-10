@@ -61,52 +61,64 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
 The deploy tools know no hosting provider. What the build hands them, and
 what they answer, is the same whichever provider publishes it.
 
-**What the build produces.** A repository whose root holds:
+**What the build produces.** A repository whose root holds, both committed:
 
 - a `Dockerfile`: the image is built from it, where it is published;
-- `deploy.toml`, the descriptor, committed:
+- `deploy.toml`, the descriptor:
 
 ```toml
 app = "bakery"        # lowercase letters, digits and dashes, starting with a letter
 port = 3000           # the port the image serves; the address answers on it
-env = ["API_URL"]     # optional: the variables the app reads, by name
 ```
 
-`env` lists names, never values: the values are set in the environment by
-whoever runs it, and a deploy that finds one missing fails naming it. A key
-outside these three, or a value that does not fit, is refused with what to
-fix; a workspace without `deploy.toml` is refused with what to write.
+The tools read the descriptor and the Dockerfile from the commit they
+publish (`git show HEAD:deploy.toml`), never from the working tree, so what
+is pushed is what was read. A key outside these two, a value that does not
+fit, or a file that is not committed is refused with what to fix. The
+descriptor holds no variable of the app: values the app needs are the
+environment's, not the repository's, and no tool sets them.
 
 **What the tools offer.** None takes the app: it is the descriptor's.
 
 | Tool | Does |
 |---|---|
-| `deploy_preview` | publishes the last commit to the preview environment and concludes the stage: comments the preview address and the commit, and continues |
-| `deploy_status` | says whether the preview app is deployed and running, and its address |
-| `deploy_logs` | reads the last `lines` (1 to 1000, 100 when left out) of the preview app's log |
-| `deploy_destroy` | removes the preview app |
-| `promote` | publishes the image the preview built to production and concludes the release; the person's grant, as below |
+| `deploy_preview` | publishes the commit at HEAD to the preview environment, records it as `refs/deploy/preview` in the workspace, and concludes the stage: comments the preview address and the commit, and continues |
+| `deploy_status` | says whether the preview app is deployed and running, and its address; "not deployed" and "environment not reachable" are different answers |
+| `deploy_logs` | reads the last `lines` (1 to 1000, 100 when left out) of the preview app's log, as the app wrote it |
+| `deploy_destroy` | removes the preview app; an app that is already gone is not an error |
+| `promote` | publishes to production the image the previewed commit built, with that commit's descriptor, and concludes the release; the person's grant, as below. Without a preview it refuses |
+
+`deploy_status`, `deploy_logs` and `deploy_destroy` take the app's name from
+the previewed commit's descriptor, so a descriptor edited or broken since
+does not strand the preview app; before any preview they read HEAD's.
 
 The preview app is `<app>-<id>-hml` and the production app `<app>-<id>`,
-`<id>` the first six hex digits of the SHA-256 of the root it is published from. Agents hold the
-preview's credentials only, so status, logs and destroy never reach
-production. No tool answer, manifest or error names the provider, how it is
-reached or its credentials.
+`<id>` the first twelve hex digits of the SHA-256 of the root it is
+published from. Agents hold the preview's credentials only, so status, logs
+and destroy never reach production. No manifest or message of the tools
+names the provider, how it is reached or its credentials; a provider that
+crashes or answers nothing is reported as "the deploy provider failed",
+without what it printed.
 
 **What a provider is.** An executable in `tools/_deploy/providers/`, named
 for it, that the tools run as `<provider> <operation>` for `deploy`,
 `promote`, `status`, `logs` or `destroy`. It reads on stdin
-`{"environment": "preview" | "production", "app", "source", "root", "port",
-"env", "lines"}` (`source` is the preview app, for `promote`; `lines`, for
-`logs`) and writes on stdout `{"ok", "output", "address"}`, its output with
-nothing that names the provider. The provider is chosen by configuration,
-`OMUNCULUS_DEPLOY_PROVIDER` in `[execution] environment`; with it unset the
-tools answer that no provider is configured. Each tool's secret
-`DEPLOY_KEY` is bound to the login `homologation` or `production`, whatever
-a provider makes of it. `dokku` is the one the pack has: it reaches the
-two instances of `environment/` through the unix sockets under
-`OMUNCULUS_DEPLOY`, creates the app, maps port 80 to the descriptor's port
-and builds the image from the repository.
+`{"environment": "preview" | "production", "app", "source", "root",
+"commit", "port", "lines"}` (`source` is the preview app, for `promote`;
+`lines`, for `logs`) and writes on stdout `{"ok", "output", "address"}`,
+its own messages with nothing that names the provider. The provider is
+chosen by configuration, `OMUNCULUS_DEPLOY_PROVIDER` in `[execution]
+environment`; with it unset the tools answer that no provider is
+configured. Each tool's secret `DEPLOY_KEY` is bound to the login
+`homologation` or `production`, whatever a provider makes of it.
+
+`dokku` is the one the pack has: it reaches the two instances of
+`environment/` through the unix sockets under `OMUNCULUS_DEPLOY`, creates
+the app, maps port 80 to the descriptor's port and builds the image from
+the repository. A connection that fails is never taken for an absent app.
+Its waits are constants in the script, in seconds: 5 for its credentials'
+agent, 60 for a command, 600 for a build or a port change; the tool's
+own `[execution] timeout_ms` still bounds the whole call.
 
 The contract test, `test/omunculus/deploy_contract_test.exs`, runs the tools
 against that provider with a stub that records its calls, and checks each
