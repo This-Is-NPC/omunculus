@@ -13,7 +13,8 @@ defmodule Omunculus.Config do
   project root), optionally the `client` and a `summary` that say what it
   is for, plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries` and `request_routes`, the
-  optional `[policy] max_reopens` (how many times in a row a parent may
+  optional `[policy] default_agent` (the agent of depth 0 that receives a
+  new conversation when the person names none), the optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
   conversation_bytes` (how much of its conversation's works and exchanges
@@ -55,6 +56,7 @@ defmodule Omunculus.Config do
     :max_retries,
     :max_reopens,
     :request_routes,
+    :default_agent,
     :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
@@ -139,6 +141,7 @@ defmodule Omunculus.Config do
           max_retries: non_neg_integer,
           max_reopens: non_neg_integer | nil,
           request_routes: [map],
+          default_agent: String.t() | nil,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
           conversation_bytes: pos_integer | nil,
@@ -189,7 +192,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes default_agent)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -748,6 +751,7 @@ defmodule Omunculus.Config do
                  agents,
                  workflows
                ),
+             {:ok, default_agent} <- fetch_default_agent(data, agents),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -771,6 +775,7 @@ defmodule Omunculus.Config do
               max_retries: max_retries,
               max_reopens: max_reopens,
               request_routes: request_routes,
+              default_agent: default_agent,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,
@@ -1372,6 +1377,23 @@ defmodule Omunculus.Config do
       nil -> {:ok, nil}
       n when is_integer(n) and n >= 0 -> {:ok, n}
       _invalid -> {:error, {:policy, {:invalid, :max_reopens}}}
+    end
+  end
+
+  # Absent, clients name the agent of every conversation themselves.
+  defp fetch_default_agent(data, agents) do
+    case get_in(data, ["policy", "default_agent"]) do
+      nil ->
+        {:ok, nil}
+
+      name when is_binary(name) ->
+        case agents do
+          %{^name => %{depth: 0, workflow_only: false}} -> {:ok, name}
+          _unusable -> {:error, {:policy, {:invalid, :default_agent}}}
+        end
+
+      _invalid ->
+        {:error, {:policy, {:invalid, :default_agent}}}
     end
   end
 

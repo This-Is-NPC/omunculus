@@ -47,6 +47,10 @@ defmodule Omunculus.Errors do
   def format({:policy, {:invalid, :request_routes}}),
     do: "omunculus.toml [policy] request_routes must be a nonempty list of valid routes"
 
+  def format({:policy, {:invalid, :default_agent}}) do
+    "omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only"
+  end
+
   def format({:policy, {:invalid, :max_retries}}) do
     "omunculus.toml [policy] max_retries is required, a non-negative integer"
   end

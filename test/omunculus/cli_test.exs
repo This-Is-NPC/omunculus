@@ -454,6 +454,7 @@ defmodule Omunculus.CLITest do
     assert Errors.format({:execution, {:sandbox, :missing}}) =~ "[execution.sandbox]"
     assert Errors.format({:policy, {:invalid, :max_retries}}) =~ "[policy] max_retries"
     assert Errors.format({:policy, {:invalid, :max_reopens}}) =~ "[policy] max_reopens"
+    assert Errors.format({:policy, {:invalid, :default_agent}}) =~ "[policy] default_agent"
 
     assert Errors.format({:policy, {:invalid, :last_run_output_bytes}}) =~
              "[policy] last_run_output_bytes"

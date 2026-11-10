@@ -156,11 +156,15 @@ defmodule Omunculus.Tools.Config do
       "auth" => tables(file, "auth", fn name -> %{literal_key: name in whole.literal_keys} end),
       "secrets" => tables(file, "secrets", fn _name -> %{} end),
       "packs" => Map.new(whole.packs, &{&1.name, Map.delete(&1, :name)}),
-      "policy" => %{file: file["policy"]},
+      "policy" => policy(file, whole.default_agent),
       "access" => %{file: file["access"]},
       "names" => whole.names
     }
   end
+
+  # The agent a new conversation goes to sits beside the file's table; absent when not set.
+  defp policy(file, nil), do: %{file: file["policy"]}
+  defp policy(file, default_agent), do: %{file: file["policy"], default_agent: default_agent}
 
   defp tables(file, section, facts) do
     file
@@ -181,6 +185,7 @@ defmodule Omunculus.Tools.Config do
         |> Enum.sort()
         |> Enum.map(fn {name, workspace} -> %{name: name, root: workspace.root} end),
       workspace: config.policy_workspace,
+      default_agent: config.default_agent,
       workflows: config.workflows |> Enum.sort() |> Enum.map(&workflow/1)
     }
   end

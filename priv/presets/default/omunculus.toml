@@ -88,6 +88,7 @@ steps = [
 # The system team proposes changes to the project on the owner route: the
 # project is the person's to change.
 [policy]
+default_agent = "concierge"
 request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
