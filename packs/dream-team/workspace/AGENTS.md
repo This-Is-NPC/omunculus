@@ -43,12 +43,15 @@ add a parallel runner (Make, npm scripts, ad-hoc shell wrappers)
 that duplicates a mise task.
 
 A command may run without network, where `mise install` cannot
-download. Pin a tool the machine already holds at the version it holds
-(`which node`, `node --version`) and register that install as the
-pinned version before `mise install`, which then downloads nothing:
-`mise link --force node@22.23.2 /usr` for `/usr/bin/node` 22.23.2. The
-pin stays a version, never `system`. A tool the machine lacks needs the
-network: say so as what is missing.
+download. The person's mise installs are readable (`ls
+~/.local/share/mise/installs/<tool>`): pin a version that folder already
+holds, and `mise install` downloads nothing. If only a system folder
+holds the tool (`/usr/bin/node`, `node --version`), register it in the
+same command that uses it: `mise link --force node@22.23.2 /usr && mise
+install && mise run check`. The pin stays a version, never `system`. A
+tool the machine lacks needs `sandbox.network`: request it from your
+parent with `request_access`, saying what for. It is not a question for
+the owner.
 
 ### Tasks
 
@@ -238,7 +241,8 @@ Good: `feat(filter): add priority option` then
 An app reaches people in two steps, and the second is never an agent's
 alone.
 
-- **Describe the app.** `deploy.toml` at the repository's root, committed:
+- **Describe the app.** The base item's builder writes `deploy.toml` at the
+  repository's root, committed, beside the `Dockerfile`. It has two keys:
   `app` (lowercase letters, digits and dashes, starting with a letter) and
   `port` (the port the image serves). The deploy tools take the app's name
   from it, and read it, and the `Dockerfile`, from the commit they
