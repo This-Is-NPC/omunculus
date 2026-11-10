@@ -1,59 +1,55 @@
-# Proposal: <client name> (<business>)
+# Proposal: {{client}} ({{business}})
 
-<!-- The proposal the seller writes for each client, in
-quotes/<client-slug>.md, and attaches for them to read. Each stage of the
-sale checks its part of it, by the headings, labels and Status words
-below, before the work moves on, so they stay as written here; what goes
-under them is in the language the client writes in, their words where
-they gave them. Work is the work's id. Status is one of: discovery; to
-confirm; sent, awaiting the client; accepted, awaiting the owner;
-approved; lost. Under Content, what the client gave, or "pending: " and
-what they said; under Design, the homologation address and "approved",
-or "not wanted". Change this file to change the proposal. -->
+<!-- The client's document, rendered from the proposal artifact each time the
+proposal tool writes a version, and handed to them with attach. A
+double-braced path is replaced by what the proposal holds there; a list becomes
+bullets, and what the proposal does not hold becomes empty. What the
+proposal holds is in the language the client writes in, their words where
+they gave them; the headings below are the template's. Change this file to
+change the document the clients read. -->
 
-Work:
-Status: discovery
-Updated: YYYY-MM-DD
+Status: {{status}}
+Updated: {{updated}}
 
-## 1. Who they are
-- Business, city and who the site is for:
-- Who decides, and the budget and timing they gave:
+## Who they are
+- Business and city: {{business}}, {{city}}
+- Who the site is for: {{audience}}
+- Who decides, and the budget and timing they gave: {{decider}}; {{budget_timing}}
 
-## 2. The problem, in their words
-- What does not work today, and what it costs:
+## The problem, in their words
+{{problem}}
 
 ## Content
-- Texts:
-- Products and prices:
-- Contacts:
+- Texts: {{content.texts}}
+- Products and prices: {{content.products}}
+- Contacts: {{content.contacts}}
 
 ## Design
-- Preview:
+- Preview: {{design.preview}}
 
-## 3. What we propose
-- The site and what it does for the business:
+## What we propose
+### Pages
+{{scope.pages}}
 
-## 4. Scope
-- Pages, one per line:
-- Features, one per line:
-- Not included:
+### Features
+{{scope.features}}
 
-## 5. Timing
-- Promised only once the agency's owner confirms the start date.
+### Not included
+{{scope.excluded}}
 
-## 6. Price
-- Base (4 pages): R$ 1,500
-- Extra pages: N x R$ 300
-- Discount (up to 10% from the desk; beyond that, the owner's decision):
-- Total:
+## Pending
+{{pending}}
 
-## 7. Terms
+## Timing
+{{timing}}
+
+## Price
+{{price.lines}}
+
+Total: {{price.total}}
+
+## Terms
 - The agency's owner confirms the contract, the payment and the start date.
 
-## 8. Next steps
-- What you do next, and what we do:
-
-## Builders' assessment
-- Assessment work:
-- Answer:
-- Conditions or alternative:
+## Next steps
+{{next_steps}}

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """The seller's way to move a client's request to the next stage of the
 workflow sale: refused until the stage the work is in holds, then the
-report as a comment on the work and continue. The proposal is the file of
-quotes/ with the line "Work: <id>" of the call's work: the stages check its
-headings, labels and Status words as templates/proposal.md writes them,
-whatever language the client reads under them."""
+report as a comment on the work and continue. The proposal is the artifact
+`proposal` of the conversation, written by the proposal tool, whose `work`
+is the call's work: the stages check its data and its status words, whatever
+language the client reads them in."""
 
 import json
-import pathlib
-import re
+import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "_proposal"))
+import proposal  # noqa: E402
 
 
 def answer(ok, output, chain=()):
@@ -22,26 +24,9 @@ def refuse(stage, missing):
     answer(False, f"stage {stage} does not hold yet: {missing}. Do that first, then call next_stage again.")
 
 
-def proposal(root, work_id):
-    for path in sorted(pathlib.Path(root, "quotes").glob("*.md")):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if re.search(rf"^Work:\s*{re.escape(work_id)}\s*$", text, re.M):
-            return path, text
-    return None, None
-
-
-def section(text, title):
-    match = re.search(rf"^##\s+{re.escape(title)}\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
-    return match.group(1) if match else ""
-
-
-def value(block, label):
-    match = re.search(rf"^-\s*{re.escape(label)}:[ \t]*(.*)$", block, re.M)
-    return match.group(1).strip() if match else ""
-
-
-def filled(block, labels):
-    return [label for label in labels if not value(block, label)]
+def filled(data, paths):
+    """The paths of `data`, dotted, that hold nothing yet."""
+    return [path for path in paths if not str(proposal.lookup(data, path) or "").strip()]
 
 
 def body(event):
@@ -59,36 +44,33 @@ def main():
     view = call.get("view") or {}
     work = view.get("work") or {}
     stage = work.get("stage")
-    root = (call.get("roots") or [None])[0]
     report = ((call.get("args") or {}).get("report") or "").strip()
     if not report:
         answer(False, "report required")
-    if not stage or not root:
+    if not stage:
         answer(False, "next_stage moves a request of the workflow sale; this run has none")
 
-    path, text = proposal(root, work["id"])
-    if not text:
-        refuse(stage, f"write the proposal in quotes/<client-slug>.md from templates/proposal.md, with the line Work: {work['id']}")
+    data = proposal.latest(view, work["id"])
+    if data is None:
+        refuse(stage, "write the proposal with the proposal tool")
 
     if stage == "qualify":
-        missing = filled(section(text, "1. Who they are"), ["Business, city and who the site is for", "Who decides, and the budget and timing they gave"])
-        missing += filled(section(text, "2. The problem, in their words"), ["What does not work today, and what it costs"])
-        missing += filled(section(text, "Content"), ["Texts", "Products and prices", "Contacts"])
-        missing += filled(section(text, "4. Scope"), ["Pages, one per line"])
+        missing = filled(data, ["business", "city", "audience", "decider", "budget_timing", "problem",
+                                "content.texts", "content.products", "content.contacts"])
+        if not (data.get("scope") or {}).get("pages"):
+            missing.append("scope.pages")
         if missing:
-            refuse(stage, f"ask the client and write in {path.name} what they said — that they left it to us, or do not have it, is an answer too: " + "; ".join(missing))
+            refuse(stage, "ask the client and write with the proposal tool what they said — that they left it to us, or do not have it, is an answer too: " + ", ".join(missing))
     elif stage == "design":
-        preview = value(section(text, "Design"), "Preview").lower()
+        preview = str(proposal.lookup(data, "design.preview") or "").lower()
         if "approved" not in preview and "not wanted" not in preview:
-            refuse(stage, f"the Preview line of ## Design in {path.name} says the address and approved, once the client approved it, or not wanted")
+            refuse(stage, "design.preview says the address and approved, once the client approved it, or not wanted")
     elif stage == "assess":
-        block = section(text, "Builders' assessment")
-        if not value(block, "Assessment work") or not value(block, "Answer"):
-            refuse(stage, f"ask the builders for an assessment and write its work id (Assessment work) and their answer (Answer) under ## Builders' assessment in {path.name}")
+        if filled(data, ["assessment.work", "assessment.answer"]):
+            refuse(stage, "ask the builders for an assessment and write its work id (assessment.work) and their answer (assessment.answer) with the proposal tool")
     elif stage == "propose":
-        status = re.search(r"^Status:\s*(.*)$", text, re.M)
-        if not value(section(text, "6. Price"), "Total") or not status or not status.group(1).lower().startswith("accepted"):
-            refuse(stage, f"give the client the price, write the Total, and mark Status accepted, awaiting the owner in {path.name} once they accept; the owner's approval is asked at stage owner, after this one")
+        if "price" not in data or data.get("status") != "accepted":
+            refuse(stage, "give the client the price, and set the status accepted once they accept; the owner's approval is asked at stage owner, after this one")
     elif stage == "owner":
         cause = view.get("cause") or {}
         if cause.get("type") != "reply" or body(cause).get("option") != "approve":

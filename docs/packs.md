@@ -54,8 +54,9 @@ leads and administrators answer known facts and escalate the remaining
 named origins while preserving child waits ([requests](requests.md)).
 
 Each of the sales desk's conversations is one client's: the project
-importing it sets `[project] conversations`, so no client's proposal,
-design or site is in another's reach, and the dream team's deploy tools
+importing it sets `[project] conversations`, so no client's
+design or site is in another's reach (its proposal is an artifact of the
+conversation), and the dream team's deploy tools
 name each conversation's apps apart. Its depth layer requires the
 workflow `sale` at depth 1, below the generalist, so every work there is
 a client's request the seller works through it: a work the generalist
