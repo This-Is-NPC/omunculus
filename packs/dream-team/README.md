@@ -101,6 +101,12 @@ app = "bakery"        # lowercase letters, digits and dashes, starting with a le
 port = 3000           # the port the image serves; the address answers on it
 ```
 
+When the workspace's root already holds a design preview's two files (app
+`design-<slug>`, serving `design/preview`, from the design team), the base
+item replaces both with the site's own, the client's slug as the app, and the
+review and the clerk's `publish` refuse a `design-<slug>` app, so the
+release never publishes the design preview.
+
 The tools read the descriptor and the Dockerfile from the commit they
 publish (`git show HEAD:deploy.toml`), never from the working tree, so what
 is pushed is what was read. A key outside these two, a value that does not
@@ -207,7 +213,7 @@ handoff, naming the item to fix; wording and taste are notes. When the
 same item comes back from review twice with the same defect, the
 administrator asks the owner (`to = "owner"`) rather than reopening it
 again. Operational and internal decisions that must reach a human (a
-waiver, a build that will not converge, a tool or login the machine lacks)
+build that will not converge, a tool or login the machine lacks)
 use that route; the default route ends at the client.
 
 The names come from the root, so two projects publish apps of their
