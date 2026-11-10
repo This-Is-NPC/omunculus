@@ -257,7 +257,7 @@ To mix models, give the coordinators one model and the workers another.
 `<coordinator-model>` is a placeholder for a model alias:
 
 ```sh
-mise run eval:run -- --model <model-b> --agent-model sales=<coordinator-model> --agent-model seller=<coordinator-model> --agent-model administrator=<coordinator-model> --agent-model design-lead=<coordinator-model> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-mixed
+mise run eval:run -- --model <model-b> --agent-model front-desk=<coordinator-model> --agent-model project-manager=<coordinator-model> --agent-model seller=<coordinator-model> --agent-model administrator=<coordinator-model> --agent-model design-lead=<coordinator-model> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-mixed
 ```
 
 Design, implementation, review and publication agents keep the `--model`

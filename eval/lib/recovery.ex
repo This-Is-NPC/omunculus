@@ -96,7 +96,7 @@ defmodule EquivalentExchange.Recovery do
           "",
           "The response budget bounds this diagnostic probe by recorded model responses, not elapsed time. Exhaustion is a censored observation, not a model latency failure. The original quality task and production checks are not scored by this experiment.",
           "",
-          "Provider costs exclude local hardware. Models are stochastic; finite repetitions do not establish general quality. The new client request must be authored by sales and retain the original permission origins. No grant may be emitted."
+          "Provider costs exclude local hardware. Models are stochastic; finite repetitions do not establish general quality. The new client request must be authored by front-desk and retain the original permission origins. No grant may be emitted."
         ]
 
     File.write!(Path.join(folder, "report.md"), Enum.join(text, "\n") <> "\n")
@@ -264,7 +264,7 @@ defmodule EquivalentExchange.Recovery do
 
   defp client_request(conn, events, targets) do
     Enum.find(events, fn e ->
-      if e.type == "request" and e.actor_id == "sales" and e.body["arbiter"]["kind"] == "human" do
+      if e.type == "request" and e.actor_id == "front-desk" and e.body["arbiter"]["kind"] == "human" do
         {:ok, request} = Store.view(conn, "request", e.request_id)
         MapSet.subset?(targets, MapSet.new(leaves(request), & &1.id))
       else
