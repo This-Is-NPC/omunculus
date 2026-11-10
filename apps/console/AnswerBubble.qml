@@ -24,7 +24,9 @@ Item {
   // The heading when an option was chosen, as YOU CHOSE APPROVE.
   property string choice
   property string body
+  // When your answer was given, and when the question was asked.
   property string stamp
+  property string askedAt
   property bool open: false
 
   readonly property real widest: Math.min(620, bubble.width < Theme.size.measureFrom ? bubble.width : bubble.width * Theme.size.measure)
@@ -86,12 +88,20 @@ Item {
         Label { id: who; text: bubble.asker; color: Omunculus.toneOf(bubble.asker); font.pixelSize: Theme.type.log.size }
         Label { id: by; text: bubble.lead; color: line.ink; font.pixelSize: Theme.type.log.size }
         Label {
-          width: Math.max(0, line.width - by.width - who.width)
+          width: Math.max(0, line.width - by.width - who.width - when.width)
           text: bubble.unlock !== "" ? "" : ": " + bubble.first
           color: line.ink
           font.pixelSize: Theme.type.log.size
           maximumLineCount: 1
           elide: Text.ElideRight
+        }
+        Label {
+          id: when
+          anchors.verticalCenter: parent.verticalCenter
+          text: bubble.askedAt
+          color: Theme.faint
+          font.pixelSize: Theme.type.stamp.size
+          font.letterSpacing: Theme.type.stamp.tracking
         }
       }
       Prose {

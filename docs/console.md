@@ -229,12 +229,18 @@ scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
 The open glyph at its top right shows the work's thread as a page of its own
 (see [Pages](#pages)).
 
+The thread is in the order of the events' own times, which the server
+records in order: a row sits where its event happened, a run's end line at
+the time the run ended and a question at the time it was asked. An answer
+shown under its question keeps the time it was given, so it can read later
+than the lines after the question.
+
 A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time (YOU CHOSE APPROVE for a chosen option, YOU ASKED TO
 ADJUST for adjust, YOU GRANTED · THIS WORK ONLY, or the saved scope, for a grant; the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
+margin, with the time it was asked at its right, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
 kept whole) and its first line with words, cut at 120 characters; a permission reads instead "clerk asked · via seller › sales to publish the site to production"; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the

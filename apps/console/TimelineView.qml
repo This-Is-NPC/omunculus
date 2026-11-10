@@ -339,9 +339,8 @@ Item {
         positionViewAtEnd()
     }
 
-    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-    // The view's own size does not follow the margins, which a pill sets.
-    height: Math.min(root.height, contentHeight + edge)
+    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: newerBand }
+    height: Math.min(root.height - earlierBand - newerBand, contentHeight + edge)
     clip: true
     // An entry's outline never lies on the clip's edge, where a fractional scale
     // would cut it. Once the thread outgrows the view, each end has a band for
@@ -350,8 +349,11 @@ Item {
     readonly property bool scrolls: contentHeight + edge > Window.height / 2
     // The two pixels of an entry's outline, one at each end.
     readonly property int edge: 2
-    topMargin: scrolls ? earlier.height + Theme.space.gap + Theme.space.gap : edge / 2
-    bottomMargin: scrolls ? newer.anchors.bottomMargin + newer.height + Theme.space.gap : edge / 2
+    // The bands above and below the view hold the pills, so none covers a line.
+    readonly property real earlierBand: scrolls ? earlier.height + Theme.space.gap + Theme.space.gap : 0
+    readonly property real newerBand: scrolls ? newer.anchors.bottomMargin + newer.height + Theme.space.gap : 0
+    topMargin: edge / 2
+    bottomMargin: edge / 2
     spacing: 0
     model: root.model
     footer: workingRow
@@ -505,6 +507,7 @@ Item {
           choice: reply ? Requests.chose(reply.option, wanted !== null, asked ? { who: Requests.label(asked.requester), stage: job && job.stage ? job.stage : "", folder: place.name || "" } : undefined) : ""
           body: reply && reply.body !== reply.option ? reply.body : ""
           stamp: reply && reply.stamp ? reply.stamp : entry.stamp
+          askedAt: entry.stamp
         }
       }
 

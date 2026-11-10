@@ -134,7 +134,7 @@ function question(request, noted) {
 
 // The request this one repeats: the one asked just before it and already
 // answered, from the same asker on the same work at the same stage, offering
-// the same options, given `replies` by request id; null when none, or when
+// the same options and, when they grant, the same thing, given `replies` by request id; null when none, or when
 // the requests carry no time to tell them by. Another decision of that asker
 // (the proposal after the preview) is no repeat.
 function repeated(request, requests, replies) {
@@ -144,6 +144,7 @@ function repeated(request, requests, replies) {
   const before = requests.filter(each => each.id !== request.id && !pending(each) && replies[each.id]
     && (each.work_id || "") === work && asker(each) === who
     && (each.stage || "") === (request.stage || "") && offered(each) === offered(request)
+    && JSON.stringify(granted(each)) === JSON.stringify(granted(request))
     && !!each.created_at && !!request.created_at && each.created_at < request.created_at)
     .sort((a, b) => a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
   return before.length > 0 ? before[before.length - 1] : null;

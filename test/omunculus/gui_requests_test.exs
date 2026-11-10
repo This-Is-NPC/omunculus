@@ -141,7 +141,7 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.repeated(list[0], [list[0]], replies) !== null) throw Error("not itself");
     // The preview, then the proposal, then the owner's decision: one asker, one
     // work, other options; none repeats the one before.
-    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, {}]))});
+    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, []]))});
     const preview = decide("p", "closed", ["aprovar", "pedir-mudancas"]);
     const proposal = decide("q", "closed", ["accept", "adjust", "refuse"]);
     const owner = decide("r", "pending", ["approve", "deny"]);
@@ -150,6 +150,13 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.repeated(owner, [preview, proposal, owner], answered) !== null) throw Error("the owner's decision is no repeat");
     const again = decide("s", "pending", ["aprovar", "pedir-mudancas"]);
     if ((Requests.repeated(again, [preview, proposal, again], answered) || {}).id !== "p") throw Error("the same decision again is");
+    // A grant of another thing is no repeat of the earlier grant.
+    const grant = (id, status, name, at) => Object.assign(ask(id, status, "w1", "seller"), {created_at: at, options: {grant_once: [{name: "grant", args: {kind: "tool", name: name}}], deny: []}});
+    const deploy = grant("g1", "closed", "deploy_preview", "1");
+    const network = grant("g2", "pending", "network", "2");
+    if (Requests.repeated(network, [deploy, network], {g1: {}}) !== null) throw Error("another resource is no repeat");
+    const network2 = grant("g3", "pending", "network", "3");
+    if ((Requests.repeated(network2, [deploy, Object.assign({}, network, {status: "closed"}), network2], {g1: {}, g2: {}}) || {}).id !== "g2") throw Error("the same resource again is");
     """)
   end
 end
