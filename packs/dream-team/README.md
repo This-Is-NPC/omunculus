@@ -11,15 +11,45 @@ whole to homologation, then to production once the person grants `promote`.
 |---|---|---|
 | administrator | 0 | talks with the person until the work is ready, plans it and hands down each item |
 | surgeon | 1 | builds each item of the plan, writing the code that matters |
-| copilot | 1, workflow only | reviews each item against its goal, the plan's checks and AGENTS.md |
+| copilot | 1, workflow only | reviews each item, independently of the surgeon, against its goal, the plan's checks and AGENTS.md; with a design, against its handoff; without one, against the scope |
 | clerk | 1, workflow only | publishes the whole to homologation, then to production once the person grants promote |
 | toolsmith | 2 | mise, scripts, the means to check and publish |
 | tester | 2 | writes and runs the tests |
 | editor | 2 | README.md and docs/ |
 | language_lawyer | 2 | how a language, library or version is meant to be used |
 
-The administrator first writes `docs/plan.md`: a `## base` item, the
-structure every page shares, then a `## page: <name>` item per page, each
+## Receiving work
+
+The administrator takes a work from whoever asks, the person or the
+agent of a team above. Its goal is all that was agreed, in full, in the
+person's own words for names, prices and contacts, since the team has not
+seen the conversation, and it says that the workspace's `AGENTS.md` is the
+rule for how the work is built. Three kinds of goal are understood:
+
+- **A build.** The goal gives what the site or app is for, what it must do
+  and contain, and who it is for, and states the design: either it names
+  `design/handoff.md`, the approved design the builders build from, or it
+  says the client waived the design, and the team builds from the scope in
+  the goal. A goal that says neither is asked about, not assumed.
+- **An assessment.** The goal begins `Assessment only, build nothing:` and
+  gives the scope as the client asked it (pages, features, content, what is
+  pending, the timing hoped for, and `design/handoff.md` when there is an
+  approved design). The administrator answers it itself, never through the
+  workflow `page`, and delivers a written answer that opens with yes, no or
+  partly, then the effort (the items and how large each is, never a date),
+  what blocks it and what could be built instead.
+- **A change to an earlier work.** The goal names it (title and id) and
+  says what changes.
+
+Missing information is asked with `ask` before anything is handed down.
+
+## How it builds
+
+The administrator first writes `docs/plan.md`: a line saying "Design:
+approved (design/handoff.md)" or "Design: waived by the client", a
+`## base` item, the structure every page shares (the layout, the
+navigation, the styles, the `Dockerfile`, `deploy.toml` and the tooling),
+then a `## page: <name>` item per page, each
 with what it shows and how to check it. Each item is a work of the
 workflow `page` — build (surgeon), review (copilot). Base is handed down
 first and alone. Once it is done, page items are handed down together,
@@ -61,7 +91,7 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
 The deploy tools know no hosting provider. What the build hands them, and
 what they answer, is the same whichever provider publishes it.
 
-**What the build produces.** A repository whose root holds, both committed:
+**What the build produces.** A repository whose root holds, both committed, written by the base item's builder (the surgeon, or the toolsmith it asks) and checked by the review:
 
 - a `Dockerfile`: the image is built from it, where it is published;
 - `deploy.toml`, the descriptor:
@@ -171,6 +201,14 @@ read-only ([config](../../docs/config.md#required-tables)).
 holds, at the version it holds, and register an install of the runtimes
 with `mise link` (`mise link --force node@<version> /usr` for the
 `/usr/bin/node` the runtimes give), so `mise install` downloads nothing.
+
+A review sends back only a defect against the goal, the plan or the
+handoff, naming the item to fix; wording and taste are notes. When the
+same item comes back from review twice with the same defect, the
+administrator asks the owner (`to = "owner"`) rather than reopening it
+again. Operational and internal decisions that must reach a human (a
+waiver, a build that will not converge, a tool or login the machine lacks)
+use that route; the default route ends at the client.
 
 The names come from the root, so two projects publish apps of their
 own, and, with `[project] conversations`, so do two conversations of one
