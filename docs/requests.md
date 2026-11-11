@@ -133,6 +133,14 @@ The requester is skipped within a list, so the hub's own request goes on to
 `owners`. The [agency](../packs/sales-desk/README.md#what-the-project-configures)
 is composed that way.
 
+An escalation matches the rules' `workflow` and `stage` against the work its
+origins were requested in, when they all come from one workflow and stage,
+and not against the escalator's own work. A release's `promote` request that
+an intermediary escalates without `to` therefore still takes the
+`{ workflow = "release", stage = "promote" }` rule, whose `via` can end at
+`owners` so that it never reaches the client. The requester is skipped, so
+the intermediary listed first passes it on to the next destination.
+
 Every request records `route` and `destination`, and its view, snapshots and
 events expose them. A client reads `destination = "owners"` as a decision of the
 project's owners (a sale's approval, a build past `max_reopens`, a project

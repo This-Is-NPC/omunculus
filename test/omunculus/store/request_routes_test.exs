@@ -81,6 +81,79 @@ defmodule Omunculus.Store.RequestRoutesTest do
     assert Jason.decode!(row.arbiter) == Participant.human("test", "owner")
   end
 
+  describe "escalation scope" do
+    @scoped """
+    [agents.lead]
+    depth = 0
+    text = "lead"
+    [agents.worker]
+    depth = 1
+    text = "worker"
+    [access]
+    creator_role = "participant"
+    bootstrap_role = "admin"
+    [access.roles.admin]
+    scope = "project"
+    capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.read", "conversation.reply"]
+    [access.roles.participant]
+    scope = "conversation"
+    capabilities = ["conversation.read", "conversation.manage_access"]
+    [workflows.release]
+    steps = [{ name = "promote", agent = "worker" }]
+    [policy]
+    request_routes = [
+      { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "lead" }, "owners"] },
+      { via = [{ kind = "agent", agent = "lead" }, "origin"] }
+    ]
+    """
+
+    setup %{conn: conn} do
+      conversation = Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation,
+          created_issuer: "test",
+          created_subject: "client",
+          created_at: "2026-01-01"
+        })
+
+      :ok =
+        Query.insert(conn, :project_members, %{
+          issuer: "test",
+          subject: "boss",
+          role: "admin",
+          updated_at: "2026-01-01"
+        })
+
+      ctx = %{config: Fixtures.config(@scoped), conversation_id: conversation}
+      %{ctx: ctx}
+    end
+
+    defp route(conn, ctx, opts) do
+      Omunculus.Store.RequestRoutes.resolve(
+        conn,
+        ctx,
+        nil,
+        nil,
+        Participant.agent("lead"),
+        nil,
+        [],
+        opts
+      )
+    end
+
+    test "an escalation matches the rules of its origins' workflow and stage", %{
+      conn: conn,
+      ctx: ctx
+    } do
+      assert {:ok, %{"kind" => "human", "subject" => "boss"}, nil, "owners"} =
+               route(conn, ctx, scope: {"release", "promote"})
+
+      assert {:ok, %{"subject" => "client"}, nil, "origin"} = route(conn, ctx, [])
+    end
+  end
+
   describe "client and owner" do
     @owners """
     [agents.lead]

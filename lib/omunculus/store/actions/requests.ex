@@ -60,7 +60,9 @@ defmodule Omunculus.Store.Actions.Requests do
          forbidden =
            upstream ++ Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
          {:ok, arbiter, arbiter_work_id, destination} <-
-           RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], forbidden),
+           RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], forbidden,
+             scope: origin_scope(origins)
+           ),
          {:ok, request} <-
            create(
              conn,
@@ -266,6 +268,20 @@ defmodule Omunculus.Store.Actions.Requests do
 
   defp origins(_conn, _raw, _participant, _conversation),
     do: {:error, {:escalate, :invalid_origins}}
+
+  # The workflow and stage the origins were requested in, when they agree:
+  # an escalation follows the routes of the work it carries up.
+  defp origin_scope(origins) do
+    case origins |> Enum.flat_map(fn {_part, origin} -> leaf_scopes(origin) end) |> Enum.uniq() do
+      [{workflow, _stage} = scope] when not is_nil(workflow) -> scope
+      _none_or_mixed -> nil
+    end
+  end
+
+  defp leaf_scopes(%{origins: origins}) when map_size(origins) > 0,
+    do: Enum.flat_map(origins, fn {_part, origin} -> leaf_scopes(origin) end)
+
+  defp leaf_scopes(request), do: [{request.workflow, request.stage}]
 
   defp requesters(request),
     do: [

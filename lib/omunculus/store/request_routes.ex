@@ -2,11 +2,14 @@ defmodule Omunculus.Store.RequestRoutes do
   @moduledoc """
   Resolves TOML request destinations from authenticated origins, work ancestry
   and project owners. Returns the arbiter, its work and the destination kind.
+
+  Options: `scope: {workflow, stage}` is matched against rules instead of the
+  requester's work: an escalation follows the rules of its origins' work.
   """
   alias Omunculus.Participant
   alias Omunculus.Store.{Query, View}
 
-  def resolve(conn, ctx, run, work, participant, name, forbidden) do
+  def resolve(conn, ctx, run, work, participant, name, forbidden, opts \\ []) do
     routes = Enum.filter(ctx.config.request_routes, &(&1["name"] == name))
 
     if not is_nil(name) and routes == [] do
@@ -19,16 +22,18 @@ defmodule Omunculus.Store.RequestRoutes do
 
       {:error, {:request, {:unknown_route, name, names}}}
     else
-      resolve_routes(conn, ctx, run, work, participant, forbidden, routes)
+      resolve_routes(conn, ctx, run, work, participant, forbidden, routes, opts)
     end
   end
 
-  defp resolve_routes(conn, ctx, run, work, participant, forbidden, routes) do
+  defp resolve_routes(conn, ctx, run, work, participant, forbidden, routes, opts) do
+    {workflow, stage} = Keyword.get(opts, :scope) || {work && work.workflow, work && work.stage}
+
     rule =
       Enum.find(routes, fn rule ->
         (is_nil(rule["from"]) or rule["from"] == participant) and
-          (is_nil(rule["workflow"]) or (work && work.workflow) == rule["workflow"]) and
-          (is_nil(rule["stage"]) or (work && work.stage) == rule["stage"])
+          (is_nil(rule["workflow"]) or workflow == rule["workflow"]) and
+          (is_nil(rule["stage"]) or stage == rule["stage"])
       end)
 
     destinations = if rule, do: rule["via"], else: []
