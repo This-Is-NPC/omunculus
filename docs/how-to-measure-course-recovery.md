@@ -22,6 +22,8 @@ acceptance or deployment. What the steward overlay changes is in
   `executions/design-team__conversation__design-to-build/agency/1/project`,
   and `run-context/coordination-loop-at-cancellation.sqlite3`. That path is
   fixed in `eval/lib/recovery.ex`.
+- The store copy must be taken under the current schema: a store from before
+  accounts replaced request routes is refused when the project opens.
 - No code writes `coordination-loop-at-cancellation.sqlite3`. It is a copy of
   the execution's store, taken by hand while the run was stalled in the
   cycle seen before escalation skipped agents that had answered the origin with text,
@@ -31,14 +33,12 @@ acceptance or deployment. What the steward overlay changes is in
 
 ## Steps
 
-1. Check the routing and isolation contracts:
+1. Check the correction and isolation contracts:
 
    ```console
    $ mise run eval:recovery:check
    [eval:recovery:check] $ scripts/check-course-recovery
-   running 12 tests from ./packs/course-recovery/tools/_recovery/recovery_test.js
-   normal requests use named routes while front-desk questions use the client route ... ok (507µs)
-   routing reuses builtin steps and preserves every original tool argument ... ok (62µs)
+   running 10 tests from ./packs/course-recovery/tools/_recovery/recovery_test.js
    a correction is an internal linked escalation, never a grant or client prompt ... ok (317µs)
    the supervisor must hold the pending canonical request ... ok (56µs)
    cross-conversation requests, other callers and resolved origins are refused ... ok (106µs)
@@ -50,7 +50,7 @@ acceptance or deployment. What the steward overlay changes is in
    closed, foreign, unrelated and non-front-desk receipts are refused ... ok (2ms)
    corrections require a successful evidence read and canonical origin citations ... ok (213µs)
 
-   ok | 12 passed | 0 failed (19ms)
+   ok | 10 passed | 0 failed (19ms)
    ```
 
 2. Replay isolated copies of the checkpoint, with and without the overlay:

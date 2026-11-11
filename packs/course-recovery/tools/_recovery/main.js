@@ -1,8 +1,8 @@
-import { correct, inspectCase, routed } from "./recovery.js";
+import { correct, inspectCase } from "./recovery.js";
 
 const input = JSON.parse(await new Response(Deno.stdin.readable).text());
 const [mode, ...args] = Deno.args;
-const handlers = { correct, route: routed, inspect: inspectCase };
+const handlers = { correct, inspect: inspectCase };
 try {
   console.log(JSON.stringify(handlers[mode](input, ...args)));
 } catch (error) {

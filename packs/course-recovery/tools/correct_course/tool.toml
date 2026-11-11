@@ -2,7 +2,7 @@ name = "correct_course"
 kind = "tool"
 triggers = ["model"]
 description = "Returns an internal correction to the agent responsible for an unresolved request. It grants nothing and sends no question to the client."
-command = ["./run", "steward", "questions", "front-desk"]
+command = ["./run", "steward", "front-desk"]
 chains = ["end"]
 then = ["end"]
 

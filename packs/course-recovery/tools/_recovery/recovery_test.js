@@ -1,4 +1,4 @@
-import { correct, inspectCase, routed } from "./recovery.js";
+import { correct, inspectCase } from "./recovery.js";
 const equal = (actual, expected) => {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(`${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
@@ -40,71 +40,35 @@ const input = () => ({
     }],
   },
 });
-Deno.test("normal requests use named routes while front-desk questions use the client route", () => {
-  const i = input();
-  equal(
-    routed(i, "sales", "step", "questions", "client").chain[0].args.to,
-    "questions",
-  );
-  i.view.events[0].body = '{"agent":"sales"}';
-  equal(
-    routed(i, "sales", "step", "questions", "client").chain[0].args.to,
-    "client",
-  );
-  i.args.to = "owner";
-  equal(
-    routed(i, "sales", "step", "questions", "client").chain[0].args.to,
-    "owner",
-  );
-});
-Deno.test("routing reuses builtin steps and preserves every original tool argument", () => {
-  const i = input();
-  i.args = {
-    reason: "Need tools",
-    access: [{ kind: "tool", name: "promote" }],
-    report: "Built",
-  };
-  const out = routed(
-    i,
-    "sales",
-    "route_request_access_step",
-    "questions",
-    "client",
-  );
-  equal(out.emit, []);
-  equal(out.chain[0].name, "route_request_access_step");
-  equal(out.chain[0].args.access, i.args.access);
-  equal(out.chain[0].args.report, "Built");
-});
 Deno.test("a correction is an internal linked escalation, never a grant or client prompt", () => {
   const i = input();
   const before = JSON.stringify(i.view.request);
-  const out = correct(i, "steward", "questions", "sales");
+  const out = correct(i, "steward", "sales");
   equal(out.ok, true);
   equal(out.emit.map((e) => e.type), ["escalate"]);
-  equal(out.emit[0].body.to, "questions");
+  equal(out.emit[0].body.to, "sales");
   equal(out.emit[0].body.origins, { recovery: "envelope" });
   equal(JSON.stringify(i.view.request), before);
 });
 Deno.test("the supervisor must hold the pending canonical request", () => {
   const i = input();
   i.view.request.arbiter = '{"kind":"agent","agent":"sales"}';
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
   i.view.request.arbiter = '{"kind":"agent","agent":"steward"}';
   i.view.request.status = "closed";
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
 });
 Deno.test("cross-conversation requests, other callers and resolved origins are refused", () => {
   const i = input();
   i.view.request.conversation_id = "foreign";
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
   equal(inspectCase(i, "sales").ok, false);
   i.view.request.conversation_id = "c";
   i.view.events[0].body = '{"agent":"sales"}';
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
   i.view.events[0].body = '{"agent":"steward"}';
   i.view.request.origins.permission.status = "closed";
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
 });
 Deno.test("evidence includes only events from the current conversation", () => {
   const i = input();
@@ -119,9 +83,9 @@ Deno.test("direct CLI projects without a conversation ID retain project-local re
   const i = input();
   i.view.events[0].conversation_id = null;
   i.view.request.conversation_id = null;
-  equal(correct(i, "steward", "questions", "sales").ok, true);
+  equal(correct(i, "steward", "sales").ok, true);
   i.view.request.conversation_id = "foreign";
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
 });
 
 Deno.test("routing facts, agent claims and delivery receipts are separate", () => {
@@ -168,18 +132,18 @@ const claimPending = (i) => {
 Deno.test("unsupported pending-client claims are refused without effects and can be revised", () => {
   const i = input();
   claimPending(i);
-  let out = correct(i, "steward", "questions", "sales");
+  let out = correct(i, "steward", "sales");
   equal(out.ok, false);
   equal(out.emit, []);
   i.view.delivery = {
     ...receipt(),
     arbiter: '{"kind":"agent","agent":"sales"}',
   };
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
   i.args.client_delivery = "unverified";
   delete i.args.client_request_id;
   delete i.args.client_event_id;
-  out = correct(i, "steward", "questions", "sales");
+  out = correct(i, "steward", "sales");
   equal(out.ok, true);
   equal(
     out.emit[0].body.reason.includes("Client delivery is unverified"),
@@ -195,7 +159,7 @@ Deno.test("canonical client receipts outside the recent window are accepted", ()
     JSON.parse(inspectCase(i, "sales").output).client_delivery.state,
     "pending",
   );
-  const out = correct(i, "steward", "questions", "sales");
+  const out = correct(i, "steward", "sales");
   equal(out.ok, true);
   equal(
     out.emit[0].body.reason.includes(
@@ -217,21 +181,21 @@ Deno.test("closed, foreign, unrelated and non-front-desk receipts are refused", 
     const i = input();
     claimPending(i);
     i.view.delivery = { ...receipt(), ...update };
-    equal(correct(i, "steward", "questions", "sales").ok, false);
+    equal(correct(i, "steward", "sales").ok, false);
   }
   const i = input();
   claimPending(i);
   i.view.delivery = receipt();
   i.args.client_event_id = "invented";
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
 });
 Deno.test("corrections require a successful evidence read and canonical origin citations", () => {
   const i = input();
   i.view.events.pop();
-  equal(correct(i, "steward", "questions", "sales").ok, false);
+  equal(correct(i, "steward", "sales").ok, false);
   const j = input();
   j.args.evidence_event_ids = ["invented"];
-  equal(correct(j, "steward", "questions", "sales").ok, false);
+  equal(correct(j, "steward", "sales").ok, false);
   j.args.evidence_event_ids = [];
-  equal(correct(j, "steward", "questions", "sales").ok, false);
+  equal(correct(j, "steward", "sales").ok, false);
 });

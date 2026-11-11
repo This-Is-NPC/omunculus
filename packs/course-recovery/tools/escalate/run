@@ -1,2 +1,0 @@
-#!/usr/bin/env sh
-exec deno run --no-config --no-lock --no-prompt "$(dirname "$0")/../_recovery/main.js" route "$@"

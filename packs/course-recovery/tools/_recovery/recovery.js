@@ -104,7 +104,7 @@ export function inspectCase(input, frontDesk) {
   }));
 }
 
-export function correct(input, supervisor, route, frontDesk) {
+export function correct(input, supervisor, frontDesk) {
   if (actorName(input) !== supervisor) {
     return fail("Only the configured supervisor may correct course.");
   }
@@ -184,14 +184,8 @@ export function correct(input, supervisor, route, frontDesk) {
             evidence.join(", ")
           }.\n${facts}\nSupervisor instructions: ${instructions}`,
         origins: { recovery: request.id },
-        to: route,
+        to: frontDesk,
       },
     }],
   );
-}
-
-export function routed(input, frontDesk, step, questions, client) {
-  const to = input.args.to ||
-    (actorName(input) === frontDesk ? client : questions);
-  return { ...ok(), chain: [{ name: step, args: { ...input.args, to } }] };
 }

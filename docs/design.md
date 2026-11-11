@@ -280,12 +280,12 @@ its tasks are on [the development environment](development.md).
 The steward overlay, `eval/overlays/course-recovery.toml`, adds the
 [course-recovery](../packs/course-recovery/README.md) pack and changes no
 core module. It limits the steward's tools to the course-correction skill,
-`recovery_case`, `correct_course` and `end`. Its policy gives `ask`,
-`request_access` and `escalate` named question routes, which run the
-original builtin steps with their argument checks, grants and ends. A
-front-desk escalation takes the client route; the unnamed route the
-harness falls back to goes to the steward, which cannot deliver a raw
-fallback to the client.
+`recovery_case`, `correct_course` and `end`. A request reaches the steward
+when an agent addresses it with `to = "steward"`, which a depth-0 agent that
+is not `workflow_only` accepts; `correct_course` escalates the correction
+to the front desk by name, so the steward never delivers to the client.
+The saved checkpoint of the measurement above predates accounts: a replay
+needs a copy of a stalled store taken under the current schema.
 
 `recovery_case` keeps apart the canonical origin map, the recorded routing
 events and the agents' claims; its recent window is not the whole history.
