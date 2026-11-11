@@ -157,9 +157,10 @@ has made no call for 15 s reads "Thinking", not "Getting started"; "· round N"
 follows the clock once a work is sent back. It updates in place, and it gives
 way to that agent's own turn while the turn streams in the thread and shows
 something. A thread nested in a sub-work block has none, the block says it.
-In the chat only the agent you write to has it: the works below have their
-cards, and a run that ends leaves no line, so the chat does not tell the
-team's work run by run; the work's thread, the tree and the log do. A run of
+In the chat it shows whoever works, down the team, at every width, with the
+chain from the agent you write to; a run that ends leaves no line, so the chat
+does not tell the team's work run by run; the work's thread, the tree and the
+log do. A run of
 the agent you write to that fails shows in the header strip (FAILED) and the
 log. A conversation opens
 at its end, and while earlier entries lie above the view an EARLIER pill at
@@ -206,12 +207,11 @@ text and no files are not added to the thread.
 A work handed down is one card in the chat (`WorkCard`), where it was: the
 kicker WORK, its title, its state as an icon and a word (WORKING, WAITING FOR
 SURGEON, WAITING FOR YOU, DONE, FAILED, CANCELLED, as the tree says it) and how
-long, a NOW line with who works for it now and what they do (the deepest work
-under it that works), a WAITS line when it waits on others ("seller is waiting
-for surgeon"), the stages of its workflow (the stepper; under 520 px a bar of
-one segment per stage under "STAGE 6/6 · BUILD") and OPEN IN TREE, which opens
-the team page with that work picked. A card has no runs and no steps; they
-are in the tree. Its data is the progress node (`Pending.workCard`). In a
+long, a WAITS line when it waits on others ("seller is waiting for surgeon")
+and OPEN IN TREE, which opens the team page with that work picked. A card has
+no stages, no one at work, no runs and no steps: where the work stands is the
+progress strip's alone, what the agent at work does is the live line's, and
+the runs are in the tree. Its data is the progress node (`Pending.workCard`). In a
 work's own thread the same entry is a block (`SubWorkBlock`), where the run
 handed it down; so is a root work a run opened. A system row
 behind the branch mark, "sub-work" with its agent, title and time, it says on
@@ -260,8 +260,9 @@ sentence, which ends with the time. Sending an answer, like sending a
 message, takes the view to the end, so it never counts as news; a reply says
 nothing in the bar when it succeeds. The view follows the end until you scroll
 up: the live row's growing never ends it, and only your own scrolling, to more
-than a row from the end, does. The NEW pill counts the entries below the view,
-so it is gone when the end is in view.
+than a row from the end, does. The NEW pill counts the entries below the view
+that draw something, so it is gone when the end is in view; it sits in a band
+of its own above the composer, so it never covers an entry.
 
 What an agent asks another is an exchange (`TeamRow`) in a work's thread, not
 in the chat: a system row behind the people mark, "seller asked design-lead ·
@@ -293,15 +294,17 @@ call; each opens what it counts, the tree and the cost, and the agents' tip
 names them. At its right the chevron, which opens the full view, and ANSWER,
 in the warning tone and with the count when more than one waits, while a
 question waits on you, which opens the pending queue. Under it, unframed, the stages of the work in focus, the newest open
-root work (`Stepper`: "✓ qualify › ● design · round 2 › ○ assess …", shorter
+root work, at 14 px, the largest line of the head (`Stepper`: "✓ qualify › ● design · round 2 › ○ assess …", shorter
 forms as the width shrinks, down to one dot per stage and the current name), or
 its title when it has no stages and the masthead does not already say it; and,
 while the conversation works or waits, the line of who: what it is doing — AT
 WORK, WAITING FOR YOU, or WAITING FOR the agents it waits for — and the chain
 of agents from the one you talk with down to the one at work or waited for,
 each in its tone and the last in bold, "front-desk › project-manager ›
-administrator › design-reviewer", with how long the agent at work has been on
-it. The hierarchy reads there before the tree is opened. Once you have written,
+administrator › design-reviewer", then, while it works, a plain verb ("· running
+a command") and how long it has been on it. This head is the one place that says
+where the work stands: the work cards in the chat repeat neither the stages nor
+the chain. The hierarchy reads there before the tree is opened. Once you have written,
 the stages' line keeps its room, blank until there is something to say, so the
 tabs below hold their place from the first message. A finished conversation
 says "✓ DONE · … · TOOK 1 HOUR 20 MINUTES" in the success tone in the strip's
@@ -377,8 +380,11 @@ order. Each one names what it unblocks.", and lists the requests waiting on
 you, oldest first, one item each (`Pending.queue`; a request another gathers
 from below is not a second item). The counter is hidden while nothing waits.
 Acting on an item removes it and leaves its sentence in the chat; the panel
-stays open on the rest and says NOTHING WAITS ON YOU when it is empty. Esc,
-the close button and a click outside close it. The items are held by value
+stays open on the rest, and closes by itself when the last one is answered:
+it never opens, or stays, empty (ANSWER and the counter do nothing while
+nothing waits). Esc, the close button and a click outside close it. The
+keyboard starts in the first item's first field, or on its recommended
+action, and the item shows from its top. The items are held by value
 (`pendingJson` of `PagesView`), so a refresh that changes none of them never
 rebuilds the boxes being written in.
 
@@ -391,11 +397,11 @@ question. Its heading is one line: the kind, the time and the item's tools
 you, and close where the item opened in place of another, DECIDE INSTEAD), so
 nothing overlaps the title at any width. Under it, wrapped inside the item
 whatever the width: the request in a sentence (a permission "Surgeon asks to
-use the network"; a numbered list "Clerk asks 3 questions"; else the first line
-of the question, the rest under it), then the lines ASKS (the asker in their
+use the network"; a numbered list "Clerk asks 3 questions"; else the first
+sentence of the question, in bold, the rest under it in the regular weight), then the lines ASKS (the asker in their
 tone), PATH (the agents from the front desk down to the asker: "front-desk ›
 seller › surgeon", from the works the question climbed from), WORK, UNBLOCKS
-("surgeon resumes Build: Doce Ana · front-desk and seller wait on it"), GRANTS
+("surgeon resumes Build: Doce Ana · front-desk and seller are waiting for it"), GRANTS
 (a permission: what it lets the agent do, "use the network · this work only")
 and, for a request that went to the project's owners, FOR "the project's
 owner" (`Pending.describe`). Its question shows once, as its asker wrote it;
@@ -443,7 +449,11 @@ kept in `Omunculus.drafts` by request, so a form rebuilt takes both back. A line
 after a blank one ends the list, and the closing paragraph shows after the
 last box and is not sent.
 
-While it is pending it has its options as buttons, and so are those of
+While it is pending it has its options as buttons, the recommended one filled
+and the rest outlined: GRANT · THIS WORK ONLY for a permission, APPROVE or
+ACCEPT for a decision that offers one (`Pending.actions`, its `primary`); a
+decision with none of them has no filled option, and DENY or REFUSE stay
+outlined. So are those of
 every decision it gathers from below — an origin still waiting whose options
 are named, as an escalation keeps a decision's options on its origin — each
 under its part name and who asked it, a grant's scopes read for that
@@ -478,7 +488,7 @@ From 640 px of room beside its indent, a row is four columns:
 WORK                                         STAGE            STATE                    ELAPSED
 ● front-desk  Conversation with you                           ⧖ WAITING FOR PROJECT-MANAGER  47 min
 └─▾ project-manager  Website for Doce Ana    ●─●─●─◉─○        ⧖ WAITING FOR ADMINISTRATOR   47 min
-    │  44 steps · 10.5M read · 264k written  4/5 build
+    │  44 steps · US$ 1.20  4/5 build
     ├─ seller  Website for Doce Ana: sale    ●─●─●─●          ✓ DONE                         6 min
     └─▾ administrator  Build website         …                ⧖ WAITING FOR DESIGN-REVIEWER  31 min
         └─ design-reviewer  page: contact    ●─◉              ✦ WORKING                      29 min
@@ -486,9 +496,9 @@ WORK                                         STAGE            STATE             
 
 Its WORK holds the mark — a chevron while it handed works down, else a dot
 in its agent's tone — the agent in that tone, the title, and under them its
-own steps (tool calls) and its branch's cost (tokens as "40k read · 2k
-written", as the cost page words them), and, while it is folded, what it
-handed down ("3 sub-works, 1 working, 2 done"); short of room these give way
+what it does now while it works, its own steps (tool calls) and its branch's
+cost once the provider priced it (tokens are the cost page's, not the
+tree's), and, while it is folded, what it handed down ("3 sub-works, 1 working, 2 done"); short of room these give way
 a part at a time. Its STAGE is a track (`StageTrack`) of its workflow's
 stages, one dot each: done filled in the success tone, the current one in the
 accent with a ring, those to come hollow, with "4/5 build", the step and the
@@ -506,9 +516,11 @@ warning tone when it is to you; `⇣ 1 question from designer`); it goes to the
 other end of the request, lights both rows and opens the request in the
 detail.
 
-A click on a work, or Enter, opens its runs and their steps inside it (the
-runs `WorkRuns` lists, newest first, each opening call by call), with DETAIL
-and LOG under them; a second Enter, or DETAIL, opens the work in full.
+A click on a work, or Enter, opens its runs inside it (the runs `WorkRuns`
+lists, newest first, one line each: the local time it started, the agent, how it
+ended and how long, DETAIL at the right), with DETAIL and LOG under them; the
+picked or opened row is washed, never framed, and the tree's rail of its mark
+ends at the mark; a second Enter, or DETAIL, opens the work in full.
 What shows opens itself by what is going on: a work with a work still open
 below it shows its works, and so does a root, the rest folded behind their
 chevron. A click on a chevron, or → and ←, unfold and fold; what you unfolded
@@ -539,10 +551,11 @@ it is asked, each with the way it climbed, to answer in place), CHANGES,
 RUNS and LOG; `[` and `]`, or ← and → on the tabs, move between them.
 
 - RUNS, the work's runs as `runs` sums up the project's last closed ones,
-  matched by id with the snapshot's — how each ended, its calls, those that
-  failed and what its model used and cost, a run still open saying so —
-  with the runs, failed calls and cost in all above them, each opening call
-  by call (`runs --run`, Esc back), and the prompt each run was given
+  matched by id with the snapshot's, one line each — when it started, how it
+  ended (RUNNING, ENDED, STOPPED WITHOUT END, with its failed calls counted) and
+  how long — with the runs, failed calls and cost in all above them; DETAIL on
+  a line shows the run call by call, with its calls, failures and what its
+  model used (`runs --run`, Esc back), and the prompt each run was given
   (`prompt --run`);
 - CHANGES, the files its calls changed (`changes --work_id`) or, with DIFF,
   their unified diff, added and removed lines coloured, or why there is
@@ -579,7 +592,7 @@ The registry's level:
   registry, under a rule of its state (NEEDS YOU, WORKING, FAILED, IDLE,
   NOT REACHABLE, READING), each row two lines at every width, with no
   header: its id, `· OPEN` after the one the window is on, and its state at
-  the top right: NEEDS YOU, WORKING (behind a dot), ✕ FAILED (in the error
+  the top right: NEEDS YOU, WORKING (behind a spark icon), ✕ FAILED (in the error
   tone, while a conversation of it failed and none needs you or works), IDLE, NOT REACHABLE when its
   socket did not answer, or READING… until its conversations are read.
   Under it, dim, as much as fits, never cut: "16 conversations · 13 need
@@ -606,9 +619,9 @@ The project's level:
   Each row is two or three lines at every width, with no header. Its title
   is its first work's, else what was first said, with its state at the top
   right: whom it waits on you for (OWNER DECISION, CLIENT QUESTION), then what
-  ("7 QUESTIONS", "A DECISION", "A PERMISSION", joined when several do), NOT STARTED (nothing was said), WORKING (behind
-  a dot), DONE (every work done or cancelled), ✕ FAILED (in the error tone;
-  the last run ended in an error) or IDLE. Under it, dim:
+  ("7 QUESTIONS", "A DECISION", "A PERMISSION", joined when several do), NOT STARTED (nothing was said), WORKING, DONE (every work done or cancelled),
+  ✕ FAILED (in the error tone; the last run ended in an error) or IDLE; each
+  state has its icon before the word (a warning sign, a spark, a check, a cross). Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
   its first work is with at its stage ("with front-desk › project-manager · design 2/4",
   or "with front-desk · sale 1/4" when they are the same; read from the
@@ -654,7 +667,10 @@ A conversation's level, in place of the project's once one is opened:
   filter keeps rows out and the plumbing is among those it hides, and a
   "more" menu with COPY, the event picked or else the rows shown. Under
   560 px a row is two lines instead of columns: its time, kind, who and
-  status, then what it says, in up to three lines. The event opened shows in a card
+  status, then what it says, in up to three lines. The kind column holds the
+  longest kind whole, and a line names what it is about: an artifact by its
+  title ("saved Proposal, version 3"), a work by its title ("Doce Ana: design
+  preview is now done"), a call as a verb and its object, never a command. The event opened shows in a card
   under the list, with its local time and the server's ISO stamp as UTC and
   its copy and close tools at the top right;
 - COST, what the conversation used (`CostView`): a header strip with the
@@ -663,11 +679,14 @@ A conversation's level, in place of the project's once one is opened:
   busiest first, its replies, tokens read and tokens written in columns, or,
   under 700 px, on lines of their own so none is cut, and its cost at the top
   right, "-" when its provider reported none. When the provider sends no
-  price, one note says so and the cost column and figure are left out;
+  price, one kicker, NO PRICE REPORTED, says so and the cost column and figure
+  are left out;
 - ARTIFACTS, the documents agents made in the conversation (`ArtifactsView`),
   read from `GET .../artifacts` each time the page opens: a rule per artifact
-  with its name and kind, and a row per version under it, oldest first, with its
-  note and, dim, its size, media type, when and by whom it was written.
+  headed by its title, the artifact's name without its id and extension, and
+  what it is ("Proposal · document"), and a row per version under it, oldest
+  first, with its size, by whom and when it was written; the media type is in a
+  row's tooltip.
   Enter on a version saves it to the downloads directory through the versions
   route and opens it, as an attachment is. A conversation without one says so.
 
@@ -690,7 +709,7 @@ Each column opens with a rule of its state and how many works it holds,
 what the state means on hover.
 
 Each card (`BoardCard`) is framed as a list row: the work's title, and at
-the top right its age, or RUNNING behind a dot while an agent runs on it
+the top right its age, or RUNNING behind a spark icon while an agent runs on it
 (its border lit then); under it, behind a dot in its agent's colour, the
 agent, the project, in a workflow the stage it is at of how many, and
 waiting what on; then its conversation and the work it came from. A work
@@ -814,9 +833,10 @@ from; the tabs are not levels. On the tree page BACK first lets go of the detail
 for the picker it began on, or for the list; a page of a conversation is
 never shown without one.
 
-A tooltip shows below its control after 450 ms of pointer or Tab focus. A
-press, Esc on the control, or the control being hidden or disabled closes it,
-and it stays closed until the pointer leaves and comes back. One shows at a
+A tooltip shows below its control after 450 ms of the pointer over it, and
+never because the keyboard or the program put the focus there. A press, Esc on
+the control, or the control being hidden or disabled closes it, and it stays
+closed until the pointer leaves and comes back. One shows at a
 time.
 
 With `OMUNCULUS_TEXT_AUDIT=1` the window loads the kit's `TextAudit`, which

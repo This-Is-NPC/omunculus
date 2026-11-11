@@ -138,20 +138,21 @@ agent says is a bubble on the left tinted with its colour, under its name and
 time. A note an agent of the team left is an outlined card headed NOTE FROM
 SELLER. Each work handed down is one work card: WORK and its title, its state
 as an icon and a word (WORKING, WAITING FOR SURGEON, WAITING FOR YOU, DONE),
-how long, who works for it now and what they do, who it waits for, the stages
-of its workflow and OPEN IN TREE, which opens the tree on that work;
-narrow, the stages are a bar of one segment each and the button has its own
-line. What you answered, chose or granted is one sentence with its icon and
+how long, who it waits for and OPEN IN TREE, which opens the tree on that work;
+the card has no stages and no one at work, which the header strip says once.
+What you answered, chose or granted is one sentence with its icon and
 word (ANSWERED, CHOSE, GRANTED, DENIED) and the time. There are no run rows,
 tool calls or exchanges between agents here: they are in the tree and the
-log. While the agent you write to works, a live line at the end of the thread
-says what it does and for how long. Over the tabs of every page of the
+log. While any agent of the team works, a live line at the end of the thread,
+at every width, says who, down from the agent you write to, what it does in a
+plain verb and for how long. The "N NEW" pill, when the thread runs past the
+view, sits above the composer and never over an entry. Over the tabs of every page of the
 conversation, a header strip says whom it is with, the stage, or that the
 conversation is starting, the step of how many, how long, and how many agents and replies, each
 count opening the tree or the cost, with the chevron and ANSWER while
-something waits on you; under it one line says the stages of the work in
-focus, and the chain of agents from the one you talk with down to the one at
-work; the tabs are on one line, without their digits on a narrow window; at their right, "⚠ 3 PENDING" opens
+something waits on you; under it the stages of the work in focus, in large type, and the chain
+of agents from the one you talk with down to the one at work, with a plain verb
+for what it does; the tabs are on one line, without their digits on a narrow window; at their right, "⚠ 3 PENDING" opens
 the [pending queue](#6-the-pending-queue). The chevron or Alt+P open the
 progress: the works nested by stage and level, beside the thread from 1100 px,
 a card over it from 700 px, a sheet over the chat below. The composer is a
@@ -180,12 +181,15 @@ OPEN IN TREE (Alt+O) shows it on the tree page.
 
 Everything that waits on you, over any page of the conversation: a panel on
 the right, the whole page when narrow, headed "PENDING · 3" with a close
-button, the requests oldest first. An item is one of three kinds, each with
+button, the requests oldest first, from the top. It opens only while something
+waits and closes when you answer the last one. The keyboard starts in the first
+field, or on the recommended action. An item is one of three kinds, each with
 its icon and word: QUESTION, DECISION or PERMISSION. It says what it asks in a
 sentence, then who asks, the way down from the front desk, the work, what it
 unblocks and, for a permission, what it grants; every text wraps inside it. Its
 actions are one group at its bottom: a box and ANSWER for a question; a button
-per option for a decision; GRANT · THIS WORK ONLY, DENY and an ALWAYS… menu of
+per option for a decision, the recommended one (APPROVE or ACCEPT) filled and
+the others outlined; GRANT · THIS WORK ONLY, filled, DENY and an ALWAYS… menu of
 the wider scopes (for the agent, the stage, the folder or the project, saved
 in the project settings) for a permission. A note, or the reason of a no, is
 behind ADD A NOTE, and the item's "more" menu holds ESCALATE. Acting on an
@@ -212,7 +216,7 @@ waits on (⇡ surgeon › administrator › project-manager › front-desk › y
 what it is asked (⇣). On a narrow window the stage track and the state go
 under the title. The paths at work or waiting are open; the rest fold behind
 their chevron. Chips keep the works that need you or work, with the works
-above them. A click on a work opens its runs and their steps inside it, and
+above them. A click on a work opens its runs inside it, one line each, and
 DETAIL opens it in full, as a page over the tree, under a header strip with
 ANSWER or OPEN THREAD, in the tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS
 and LOG.
@@ -221,7 +225,7 @@ and LOG.
 | --- | --- |
 | ↑ · ↓ | move from row to row |
 | → · ← | unfold, or the first row under it; fold, or its parent |
-| Enter | show its runs and steps inside it; again, open it in full |
+| Enter | show its runs inside it; again, open it in full |
 | / | filter the works |
 | Alt+R | answer what waits on you nearest the work picked |
 | Alt+E | open the decision of what it asked you, to escalate (the detail's `⋯` ESCALATE) |
@@ -254,7 +258,7 @@ the tree, it is kept to that work.
 What the conversation used: model replies, tokens and cost in all in a
 header strip, then a row per agent, its figures in columns or, on a narrow
 window, on lines of their own; with no price from the provider, no cost
-column, only a note. It has no keys of its own.
+column, only the kicker NO PRICE REPORTED. It has no keys of its own.
 
 ### 10. Board
 
