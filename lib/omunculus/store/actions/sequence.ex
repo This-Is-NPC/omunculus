@@ -498,12 +498,14 @@ defmodule Omunculus.Store.Actions.Sequence do
   end
 
   # A child that closes or is cancelled wakes its waiting parent once no
-  # sibling is left undone; a child that breaks wakes it at once.
+  # sibling is left undone, or once the last child a finished run of the
+  # parent opened to answer its pending request is closed; a child that
+  # breaks wakes it at once.
   defp reopen_waiting_parent(_conn, %{parent_id: nil}, _when_to), do: {:ok, nil}
 
-  defp reopen_waiting_parent(conn, %{parent_id: parent_id}, when_to) do
+  defp reopen_waiting_parent(conn, %{parent_id: parent_id} = child, when_to) do
     with {:ok, parent} <- Helpers.fetch_work(conn, parent_id),
-         {:ok, wake?} <- wake_parent?(conn, parent, when_to) do
+         {:ok, wake?} <- wake_parent?(conn, parent, when_to, child) do
       if wake? do
         with :ok <- Helpers.reopen_work(conn, parent_id), do: {:ok, parent_id}
       else
@@ -512,20 +514,20 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  defp wake_parent?(_conn, %{waiting: "child"}, :now), do: {:ok, true}
+  defp wake_parent?(_conn, %{waiting: "child"}, :now, _child), do: {:ok, true}
 
-  defp wake_parent?(conn, %{waiting: "child", id: parent_id}, :all_done) do
+  defp wake_parent?(conn, %{waiting: "child", id: parent_id}, :all_done, child) do
     with {:ok, row} <-
            Query.one(
              conn,
              "SELECT COUNT(*) AS undone FROM works WHERE parent_id = ? AND state NOT IN ('done', 'cancelled')",
              [parent_id]
            ) do
-      {:ok, row.undone == 0}
+      if row.undone == 0, do: {:ok, true}, else: Omunculus.Store.Runs.answerable?(conn, child)
     end
   end
 
-  defp wake_parent?(_conn, _parent, _when_to), do: {:ok, false}
+  defp wake_parent?(_conn, _parent, _when_to, _child), do: {:ok, false}
 
   defp apply_break(conn, ctx, body, work) do
     comment_id = Id.new()
