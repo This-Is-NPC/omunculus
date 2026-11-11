@@ -5,6 +5,7 @@ import "kit/client/Progress.js" as Progress
 import "kit/client/Events.js" as Events
 import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
+import "kit/client/Time.js" as Time
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
@@ -19,7 +20,8 @@ import "kit/ui"
 // Like a chat, it sits on the bottom and grows upwards, and it follows new
 // entries unless you scrolled up to read; then a pill counts what arrived out
 // of view and leads back to it. A turn streaming taller than the view is held
-// by its top, so its first words stay readable. From the keyboard, Tab reaches
+// by its top, so its first words stay readable. The dialogue opens, above its
+// first entry, on a mark that says where the conversation starts. From the keyboard, Tab reaches
 // it on the newest entry: ↑/↓ and PgUp/PgDn move, Home goes to the first and
 // End back to the newest, and Tab moves into the tools of the entry it is on.
 // While an agent works for the thread, a live line at its end says who, from
@@ -264,6 +266,7 @@ Item {
     bottomMargin: edge / 2
     spacing: 0
     model: root.model
+    header: root.dialogue ? startMark : null
     footer: workingRow
     // Only the person's own scrolling ends it, and the end is within a row:
     // the live row under the entries changes height as work goes on.
@@ -460,6 +463,23 @@ Item {
           selected: entry.selected
           onLogged: work => root.openLog(work)
         }
+      }
+    }
+  }
+
+  // The start of the dialogue, as the first thing in it once the view is
+  // scrolled up to it.
+  Component {
+    id: startMark
+    Item {
+      readonly property string began: Omunculus.conversation ? Time.began(Omunculus.conversation.created_at, Date.now()) : ""
+      width: timeline.width
+      height: timeline.count > 0 ? mark.implicitHeight + Theme.space.gap : 0
+      visible: timeline.count > 0
+      Kicker {
+        id: mark
+        width: parent.width
+        text: "Start of the conversation" + (began !== "" ? Theme.type.meta.separator + began : "")
       }
     }
   }

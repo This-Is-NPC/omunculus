@@ -13,6 +13,10 @@ Item {
   // Stroke weight in screen pixels, the same at every size.
   property real weight: 1.25
 
+  // Drawn in a layer: a curve-rendered shape escapes the clip of a list that
+  // holds it, and an icon of an entry scrolled out of view showed above it.
+  layer.enabled: true
+
   readonly property var paths: ({
     play: "M5 3.5v9l7.5-4.5z",
     list: "M3 4.5h10 M3 8h10 M3 11.5h10",

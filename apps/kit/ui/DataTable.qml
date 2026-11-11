@@ -326,6 +326,7 @@ Item {
             // Apart from the next column, so a cut text does not run into it.
             rightPadding: Theme.space.cell
             value: modelData
+            byWords: true
             soft: true
             revealOnStage: table.decode && !table.compact
             // The row is gone while its cells are torn down.
@@ -359,6 +360,7 @@ Item {
             value: modelData.map(column => row.texts[column]).filter(text => text).join(table.separator)
             // A line with nothing to say takes no room, but the title's.
             visible: index === 0 || value !== ""
+            byWords: true
             soft: true
             revealOnStage: table.decode && table.compact
             color: row ? row.color(modelData[0]) : Theme.dim

@@ -1,7 +1,9 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Events.js" as Events
 import "kit/client/Time.js" as Time
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // LogView is the open conversation as a log: every event, oldest first, a
@@ -9,10 +11,10 @@ import "kit/ui"
 // or NEEDS YOU at the right — under a rule naming the day, and one naming each
 // run where it begins. Plumbing (run starts and ends, hooks, empty replies)
 // is dimmer and hidden until BEHIND THE SCENES is on. The search line keeps
-// the rows whose text holds it; chips keep the ones that need you or failed,
-// and a picker one agent's; they wrap onto lines rather than run past the
-// edge. The count of rows sits under them with "more", which copies the event
-// picked, else the rows shown. Under 560 px a row is two lines — when, kind,
+// the rows whose text holds it; chips, each with its count, keep the ones
+// that need you or failed, and a picker one agent's; they stay on one line
+// that scrolls sideways. The count of rows sits under them, on one line, with
+// "more", which copies the event picked, else the rows shown. Under 560 px a row is two lines — when, kind,
 // who and status, then what it says in up to three lines — instead of columns. A
 // row picked shows its event in a card below, as the server sent it, the
 // first 20 KB unless all is asked, its raw type in the card's title. The list follows the newest row while it
@@ -48,11 +50,19 @@ Item {
   property int seen: 0
   // How many rows only BEHIND THE SCENES being off keeps out.
   property int hidden: 0
+  // What the chips count over every row: {asks, failed, minor}.
+  property var counts: ({ asks: 0, failed: 0, minor: 0 })
   signal leave()
 
   // Whether the line is a question that still waits on the person.
   function waits(line) {
     return line.request !== "" && Omunculus.waiting.some(request => request.id === line.request)
+  }
+
+  // Counts again, once however many rows or answers changed together.
+  function recount() {
+    const rows = Omunculus.eventLog.rows
+    counts = Events.tally(rows.count, index => rows.get(index), line => waits(line))
   }
 
   function matches(line, minor) {
@@ -119,12 +129,19 @@ Item {
       leave()
   }
 
-  Component.onCompleted: refilter()
+  Component.onCompleted: {
+    refilter()
+    recount()
+  }
   onFilterChanged: refilter()
   onAsksOnlyChanged: refilter()
   Connections {
     target: Omunculus
-    function onWaitingChanged() { if (view.asksOnly) view.refilter() }
+    function onWaitingChanged() {
+      if (view.asksOnly)
+        view.refilter()
+      Qt.callLater(view.recount)
+    }
   }
   onFailedOnlyChanged: refilter()
   onAgentChanged: refilter()
@@ -139,11 +156,13 @@ Item {
         view.refilter()
       else
         view.extend()
+      Qt.callLater(view.recount)
     }
     // A failure settled as retried leaves the FAILED rows.
     function onDataChanged() {
       if (view.failedOnly)
         view.refilter()
+      Qt.callLater(view.recount)
     }
   }
 
@@ -168,13 +187,12 @@ Item {
       onLeave: list.forceActiveFocus()
     }
 
-    // The filters, which wrap onto lines, then the count and the rare actions.
-    Flow {
+    // The filters, on one line that scrolls, then the count and the rare actions.
+    ChipStrip {
       Layout.fillWidth: true
-      spacing: Theme.space.tight
-      Chip { text: "NEEDS YOU"; checked: view.asksOnly; accent: Theme.warning; tip: "the questions waiting on you"; onClicked: view.asksOnly = !view.asksOnly }
-      Chip { text: "FAILED"; checked: view.failedOnly; accent: Theme.error; onClicked: view.failedOnly = !view.failedOnly }
-      Chip { text: "BEHIND THE SCENES"; checked: view.showMinor; tip: "run starts and ends, hooks, empty replies"; onClicked: view.showMinor = !view.showMinor }
+      Chip { text: "NEEDS YOU  " + view.counts.asks; checked: view.asksOnly; accent: Theme.warning; tip: "the questions waiting on you"; onClicked: view.asksOnly = !view.asksOnly }
+      Chip { text: "FAILED  " + view.counts.failed; checked: view.failedOnly; accent: Theme.error; onClicked: view.failedOnly = !view.failedOnly }
+      Chip { text: "BEHIND THE SCENES  " + view.counts.minor; checked: view.showMinor; tip: "run starts and ends, hooks, empty replies"; onClicked: view.showMinor = !view.showMinor }
       Dropdown {
         options: [""].concat(Omunculus.eventLog.agents)
         current: view.agent
@@ -191,11 +209,11 @@ Item {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events"
-          + (view.hidden > 0 ? " · " + view.hidden + " behind the scenes hidden" : "")).toUpperCase()
+          + (view.hidden > 0 ? " · " + view.hidden + (Breakpoints.tight(view.width) ? " hidden" : " behind the scenes hidden") : "")).toUpperCase()
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: Theme.type.meta.tracking
-        wrapMode: Text.Wrap
+        elide: Text.ElideRight
       }
       ActionMenu {
         items: [{ id: "copy", icon: "copy", text: view.picked !== null ? "COPY EVENT" : "COPY LOG" }]

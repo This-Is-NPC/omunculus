@@ -1,11 +1,13 @@
 import QtQuick
+import "Words.js" as Words
 
 // DecodeLabel reveals a label's changed text from left to right, using the
 // selected glyph set until each character resolves. Spacing and punctuation are
 // never scrambled, so the text keeps its shape. Labels and short state text
 // only: text a reader follows as it grows is drawn as it is. With reduced
 // motion the text appears at once. Assistive technology reads the value, never
-// the glyphs in between.
+// the glyphs in between. With `byWords`, a text that does not fit is cut at a
+// word, not mid-word.
 Label {
   id: label
 
@@ -19,14 +21,25 @@ Label {
   property bool autoPlay: !soft
   property int elapsed: 0
   property bool ready: false
+  property bool byWords: false
+  // What is drawn once the text has settled: the value, cut at a word when it does not fit.
+  readonly property string settled: byWords && width > 0 ? Words.atWord(value, fit.elidedText) : value
 
-  text: value
+  TextMetrics {
+    id: fit
+    font: label.font
+    elide: Text.ElideRight
+    elideWidth: Math.max(0, label.width - label.leftPadding - label.rightPadding)
+    text: label.byWords ? label.value : ""
+  }
+
+  text: settled
   Accessible.name: value
-  onValueChanged: {
+  onSettledChanged: {
     if (ready && autoPlay)
       replay()
     else
-      text = value
+      text = settled
   }
   Component.onCompleted: {
     ready = true
@@ -40,10 +53,10 @@ Label {
   function replay() {
     if (Theme.reducedMotion) {
       scramble.stop()
-      text = value
+      text = settled
       return
     }
-    if (!value.length) {
+    if (!settled.length) {
       scramble.stop()
       text = ""
       return
@@ -56,10 +69,10 @@ Label {
   }
 
   function updateText() {
-    const resolved = Math.floor(value.length * Math.min(1, elapsed / Math.max(1, duration)))
-    let output = value.slice(0, resolved)
-    for (let i = resolved; i < value.length; i++) {
-      const character = value[i]
+    const resolved = Math.floor(settled.length * Math.min(1, elapsed / Math.max(1, duration)))
+    let output = settled.slice(0, resolved)
+    for (let i = resolved; i < settled.length; i++) {
+      const character = settled[i]
       output += /[\s.,!?·:*_#`>\-\[\]()|]/.test(character) ? character : glyphs[Math.floor(Math.random() * glyphs.length)]
     }
     text = output
@@ -74,7 +87,7 @@ Label {
       label.updateText()
       if (label.elapsed >= label.duration) {
         stop()
-        label.text = label.value
+        label.text = label.settled
       }
     }
   }

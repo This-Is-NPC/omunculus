@@ -218,6 +218,20 @@ function minor(type, body) {
   }
 }
 
+// What the log's chips count among `count` rows, read with `at(index)`:
+// {asks, failed, minor}. A row asks while `waits(row)`; it failed unless it
+// is ok or retried; plumbing is minor, but a run's first row is always shown.
+function tally(count, at, waits) {
+  const found = { asks: 0, failed: 0, minor: 0 };
+  for (let index = 0; index < count; index++) {
+    const line = at(index);
+    if (waits(line)) found.asks++;
+    if (!line.ok && !line.retried) found.failed++;
+    if (line.minor && line.head === "") found.minor++;
+  }
+  return found;
+}
+
 // An event's kind as the person reads it.
 function kind(type, body) {
   switch (type) {
