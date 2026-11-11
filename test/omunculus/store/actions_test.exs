@@ -3036,5 +3036,95 @@ defmodule Omunculus.Store.ActionsTest do
       assert Enum.sort(events, :desc) == [parent_id, nil]
       assert {:ok, %{state: "open"}} = Store.view(conn, "work", parent_id)
     end
+
+    # The parent waits on S, which asked it; its run opened A1 and A2 to answer.
+    defp answering_children(conn, request_attrs) do
+      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+
+      Fixtures.insert(conn, :works, %{
+        parent_id: parent_id,
+        state: "waiting",
+        waiting: "request",
+        workflow: "delivery",
+        stage: "review",
+        assignee: "worker"
+      })
+
+      request_id =
+        Fixtures.insert(
+          conn,
+          :requests,
+          Map.merge(
+            %{arbiter: Jason.encode!(Omunculus.Participant.agent("concierge"))},
+            request_attrs
+          )
+        )
+
+      run_id =
+        Fixtures.insert(conn, :runs, %{
+          work_id: parent_id,
+          request_id: request_id,
+          status: "done"
+        })
+
+      children =
+        for sequence <- 1..2 do
+          event_id =
+            Fixtures.insert(conn, :events, %{run_id: run_id, type: "delegate", sequence: sequence})
+
+          Fixtures.insert(conn, :works, %{
+            parent_id: parent_id,
+            event_id: event_id,
+            workflow: "delivery",
+            stage: "review",
+            assignee: "worker"
+          })
+        end
+
+      {parent_id, children}
+    end
+
+    defp close_child(conn, child_id) do
+      run_id = Fixtures.insert(conn, :runs)
+      config = Fixtures.config(delivery_toml())
+      ctx = %{@ctx | run_id: run_id, work_id: child_id, config: config}
+      {:ok, [_tool, continue]} = record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+      Jason.decode!(continue.body)["parent_id"]
+    end
+
+    test "wakes on the last child opened to answer a pending request, an open sibling left",
+         %{conn: conn} do
+      {parent_id, [first, second]} = answering_children(conn, %{})
+
+      assert close_child(conn, first) == nil
+      assert {:ok, %{state: "waiting", waiting: "child"}} = Store.view(conn, "work", parent_id)
+      assert close_child(conn, second) == parent_id
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", parent_id)
+    end
+
+    test "does not wake for children opened for no pending request", %{conn: conn} do
+      {parent_id, [first, second]} = answering_children(conn, %{status: "closed"})
+
+      assert close_child(conn, first) == nil
+      assert close_child(conn, second) == nil
+      assert {:ok, %{state: "waiting", waiting: "child"}} = Store.view(conn, "work", parent_id)
+    end
+
+    test "still wakes when every child is closed", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+
+      [first, second] =
+        for _ <- 1..2,
+            do:
+              Fixtures.insert(conn, :works, %{
+                parent_id: parent_id,
+                workflow: "delivery",
+                stage: "review",
+                assignee: "worker"
+              })
+
+      assert close_child(conn, first) == nil
+      assert close_child(conn, second) == parent_id
+    end
   end
 end

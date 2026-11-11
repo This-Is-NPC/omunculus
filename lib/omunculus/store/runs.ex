@@ -308,6 +308,39 @@ defmodule Omunculus.Store.Runs do
     end)
   end
 
+  @doc """
+  Whether the closed `child` was opened by a finished run of its parent that
+  still holds a pending request and has no other child of that run left
+  unfinished: the parent has the answer to give.
+  """
+  @spec answerable?(Connection.t(), map) :: {:ok, boolean} | {:error, term}
+  def answerable?(conn, child) do
+    with {:ok, run} <-
+           Query.one(
+             conn,
+             """
+             SELECT runs.* FROM works
+             JOIN events ON events.id = works.event_id
+             JOIN runs ON runs.id = events.run_id
+             WHERE works.id = ?
+             """,
+             [child.id]
+           ) do
+      case run do
+        %{status: status, work_id: work_id, request_id: request_id}
+        when status != "open" and work_id == child.parent_id and request_id != nil ->
+          with {:ok, request} <- View.view(conn, "request", request_id),
+               {:ok, delegated?} <- delegated?(conn, run),
+               do:
+                 {:ok,
+                  not delegated? and left(request, Omunculus.Participant.agent(run.agent)) != []}
+
+        _other ->
+          {:ok, false}
+      end
+    end
+  end
+
   # Whether the run opened a child of its work that is still unfinished.
   defp delegated?(_conn, %{work_id: nil}), do: {:ok, false}
 

@@ -319,7 +319,7 @@ of calling hooks are not recovered.
 ```text
 open:     action work (root) or delegate (child); stage = first of the TOML
 open → waiting:  break, request (waiting = request, waiting_for = the request), delegate (waiting = child), or wait on a root (waiting = message)
-waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
+waiting → open:    reply to the request it waits on, all its children done or cancelled, the last child a finished run opened to answer its pending request done or cancelled, or a child on break — same stage
 waiting → open:    send / prompt on a work waiting on a request, parked by break or waiting on a message — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or on a work in no workflow
@@ -334,7 +334,14 @@ which nothing else brings.
 `continue` that closes a work, `cancel` and `break` hand it back to a
 parent waiting on its children: a `break` reopens the parent at once, a
 closing `continue` or a `cancel` once each of the parent's children is
-done or cancelled. The event that reopened the parent carries its
+done or cancelled. It also reopens when the closed child was opened by a
+finished run of the parent that was opened for a request still pending with
+the parent's agent, and no other child of that run is left open or waiting:
+the run ended without answering, waiting on those children (see
+[requests](requests.md)), and other children of the parent, such as the work
+that asked, may stay open. One close batch wakes the parent once; a child
+of a run with nothing pending wakes nothing early. The resumed run sees the
+closed children's results and the pending request. The event that reopened the parent carries its
 `parent_id`, and the parent's next run opens. A child that broke waits
 on that run to `reopen` it, `retire` it or `break` the parent: until one does, the
 store refuses the parent's `continue` (so `done`, or a move to the next
