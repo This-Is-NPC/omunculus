@@ -86,34 +86,38 @@ comes back when it opens again.
 
 ## A new conversation
 
-A new conversation starts, on a screen of CONVERSATIONS, by choosing whom it
-is with: a card for each agent of depth 0 not only in workflows, with its
-portrait (fetched by `apps/kit/client`'s `AgentImages`, which the studio
-shares). Choosing a card makes nothing on the server: the chat opens empty
-with that agent, and the first message makes the conversation and then
-sends. If making it fails, the words stay in the box and a toast
-says so; BACK after a choice returns to the cards having made nothing. The
-conversation keeps the agent its first message named, and every message
-names it again.
+A new conversation opens, from CONVERSATIONS or the start, on a screen of its
+own: the composer addressed to the project's default agent, the one its
+`omunculus.toml` names in `[policy] default_agent`, read from the setup
+(`Omunculus.startAgent`, through the kit's `Mailbox.defaultAgent`, as the
+mailbox reads it). Over the box, "TO" and a folded control with the agent's
+tone and name. Without a default agent, and with several agents of depth 0
+not only in workflows, TO starts empty, its list is open and SEND says "choose
+who it goes to" until one is picked; with a single such agent, TO names it.
 
-A conversation opened from CONVERSATIONS that has no message yet names no
-agent. When several agents of depth 0 may take it, its chat shows the same
-cards in place of the timeline and the composer, and the card chosen is the
-agent its first message names; Esc goes back. With one, the server names it.
+Opening the control (a click, or Enter, Space or Down on it) lists the other
+agents of depth 0 (`Recipient`), opt-in: the project's own first, a line each
+with its tone, its name and its role, the first sentence of its text without a
+leading "You are the", then, under FOR THE PROJECT ITSELF, the agents of the
+system pack (the setup's pack named `system`), which change how the project's
+agents work, each change only once you approve it; a line's tooltip gives the
+model it runs on. Up and Down move along the list, Enter or a click picks and
+puts the keyboard in the box, and Esc folds the list before it goes back.
+Picking another agent replaces the recipient. Nothing is made on the server by
+a pick: the first message makes the conversation and then sends, and the chat
+opens on it. If making it fails, the words stay in the box and a toast says
+so; BACK returns where the screen was opened from. The conversation keeps the
+agent its first message named, and every message names it again.
 
-The page asks "Who do you want to talk with?" and groups the agents. FOR
-YOUR WORK, the project's own agents, a card each filling the width, as many
-a row as 200 px allow: the portrait, the name and the role, the first
-sentence of its text without a leading "You are the". FOR THE PROJECT
-ITSELF, smaller, a line each with the portrait, the name and the role under
-it: the agents of
-the system pack (the setup's pack named `system`), which change how the
-project's agents work, each change only once you approve it. A card's tooltip also gives the model it runs on and the
-number that picks it; no number is drawn on the cards. The agent last
-talked to in the window comes first in its group, marked LAST USED; the
-others follow in the order of the setup. The keyboard starts on it, else
-on the first card, its focus ring showing which one Enter picks; the arrows
-move along a group's rows and between the groups.
+The start card says the same, derived from the setup: "Say what you need; it
+goes to front-desk unless you choose another", with the default agent's name
+(or "Say what you need and choose who gets it" without one).
+
+A conversation opened from CONVERSATIONS that has no message yet names no agent
+until its first message; its chat shows the same TO control over the composer
+while several agents of depth 0 may take it, addressed to the default agent
+when there is one, with the list open when there is none. With one agent, the
+server names it.
 
 ## Threads
 
@@ -135,7 +139,7 @@ work's own thread: system rows (`LogLine`, `ToolCalls`, `SubWorkBlock`, the
 exchange's line), unframed, at the log's smaller size (`Theme.type.log`), dim,
 each with its icon in a mark column of their own (`Theme.size.mark`) and its
 time at the right, so they read as secondary to what was said. The chat shows no portraits; they
-stay in the agent picker and in a work's detail. A turn's heading says how
+stay in a work's detail. A turn's heading says how
 long the run has worked, in the short form used everywhere: "Working 12 s"
 while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
 it is named: the turns, the header strip, its lines and the cards. Tones go
@@ -164,7 +168,8 @@ log do. A run of
 the agent you write to that fails shows in the header strip (FAILED) and the
 log. A conversation opens
 at its end, and while earlier entries lie above the view an EARLIER pill at
-its top counts them and leads to the start. Once the thread outgrows the view
+its top counts them and leads to the start, where the dialogue opens on a mark,
+"START OF THE CONVERSATION" with when it began. Once the thread outgrows the view
 it keeps a free band at each end, for that pill and the NEW one, so a pill
 never covers an entry; when the question waiting on you
 is taller than the view, the thread lands at its top with the entry before it
@@ -573,8 +578,9 @@ The window opens on its start, clean: the project's name and "What now?", then
 the ways in as cards, centred, with the masthead's ⓘ opening the keys dialog.
 Each card (`StartCard`) has the way's name, one line of what is there, its
 number and a chevron; the first is filled in the accent, the one filled action
-of the screen. On a project: 01 NEW CONVERSATION ("Choose whom to talk with
-and say what you need"), 02 CONVERSATIONS ("16 conversations · 13 need you ·
+of the screen. On a project: 01 NEW CONVERSATION ("Say what you need; it goes
+to front-desk unless you choose another", the default agent's name, or "Say what
+you need and choose who gets it" without one), 02 CONVERSATIONS ("16 conversations · 13 need you ·
 1 working", as `Projects.meta` words it), 03 BOARD and 04 PROJECTS. The digits
 open them, as a click does, and Enter opens the first; they are keys of this
 screen only. On the registry alone, the masthead says READY, or READING while
@@ -616,7 +622,9 @@ The project's level:
   others under a rule of the day each began, newest first; filtered by
   their state (chips NEEDS YOU, WORKING, NOT STARTED; ALL lists every one)
   and by their titles and what was first said in them, which it opens from.
-  Each row is two or three lines at every width, with no header. Its title
+  Each row is two or three lines at every width, with no header; a line too
+  long for its room ends at a word, with an ellipsis, never mid-word
+  (`DecodeLabel`'s `byWords`, on every table). Its title
   is its first work's, else what was first said, with its state at the top
   right: whom it waits on you for (OWNER DECISION, CLIENT QUESTION), then what
   ("7 QUESTIONS", "A DECISION", "A PERMISSION", joined when several do), NOT STARTED (nothing was said), WORKING, DONE (every work done or cancelled),
@@ -661,9 +669,10 @@ A conversation's level, in place of the project's once one is opened:
   echoed. Plumbing (a run's start and end, hooks, replies without text, an
   answer passed down a level on its way to the one asked, and a call whose
   result has a row of its own, such as a note, a question or a grant) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
-  FAILED and BEHIND THE SCENES and an agent picker filter it, wrapping onto
-  lines rather than running past the edge; under them the
-  count of rows, "4 OF 6 EVENTS · 2 BEHIND THE SCENES HIDDEN" while a
+  FAILED and BEHIND THE SCENES, each with its count over every row ("NEEDS YOU
+  1"), and an agent picker filter it, on one line that scrolls sideways
+  (`ChipStrip`); under them, on one line (shorter under 420 px: "30 OF 44
+  EVENTS · 14 HIDDEN"), the count of rows, "4 OF 6 EVENTS · 2 BEHIND THE SCENES HIDDEN" while a
   filter keeps rows out and the plumbing is among those it hides, and a
   "more" menu with COPY, the event picked or else the rows shown. Under
   560 px a row is two lines instead of columns: its time, kind, who and
@@ -781,7 +790,7 @@ failed, and the tabs show once there is more than the chat; the digits and
 Ctrl with them choose them as they choose the rail's pages. The masthead's
 right has, after the notices, `⋯` and × (up one level, as BACK and Esc do: to
 the list the conversation was opened from; on a conversation that has said
-nothing, back to the picker it began on). The menu `⋯` holds the page's rarer
+nothing, back to where it began). The menu `⋯` holds the page's rarer
 actions that the page does not show itself, and NEW CONVERSATION: on TREE,
 WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
 TREE and ITS LOG. The masthead's OMUNCULUS, while the pages are entered, goes
@@ -829,9 +838,10 @@ on. The levels are three — projects, a project's conversations, a conversation
 of its pages it went through, so BACK from the list reaches the start. Only a
 move down into a conversation's page — a work's thread, a log kept to a work —
 is remembered inside it, and BACK returns from it to the page it was opened
-from; the tabs are not levels. On the tree page BACK first lets go of the detail page. A conversation that has no message yet, or is not made yet, is left
-for the picker it began on, or for the list; a page of a conversation is
-never shown without one.
+from; the tabs are not levels. On the tree page BACK first lets go of the detail page. A conversation that has no message yet is left for where it was opened
+from; a page of a conversation is never shown without one. A new
+conversation is not a conversation until its first message makes it, so BACK
+from its screen returns to where it was opened from, making nothing.
 
 A tooltip shows below its control after 450 ms of the pointer over it, and
 never because the keyboard or the program put the focus there. A press, Esc on
@@ -879,16 +889,15 @@ logs each text drawn out of its box, the window or a clipping item as a
 ## Keys and IPC
 
 Typed text never runs a command. The keys are in tiers, one table,
-`apps/kit/client/Shortcuts.js`, read by the shell, the pages' commands, the
-picker and the keys dialog:
+`apps/kit/client/Shortcuts.js`, read by the shell, the pages' commands and
+the keys dialog:
 
 - No key of its own: anything that creates, sends, answers, grants, denies,
   escalates, reverts, deletes or cancels is pressed or clicked. Enter in the
   composer and in a request's words send what is written there; no other key
   does.
 - Bare keys, for navigation without effect: the digit of a page, `/`, `[`
-  and `]` on the tree page, `?`, F1 and Esc, the digits of the cards of the
-  picker, and 1 to 4 on the start screen. They act only while an item to navigate has the keyboard and
+  and `]` on the tree page, `?`, F1 and Esc, and 1 to 4 on the start screen. They act only while an item to navigate has the keyboard and
   no text field saw a key in the last second (`Typing`, marked by every
   `TextArea` and `TextBox`), so text that lost its field is not taken for
   commands. With nothing holding the keyboard, a printable key does nothing

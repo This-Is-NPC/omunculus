@@ -37,7 +37,7 @@ These keys work on every screen of the console:
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
 | 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, tree, log, cost and artifacts; only while you navigate, not a second after typing |
-| Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
+| Ctrl+1 · Ctrl+2 · … | the same, from a field being written |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Ctrl+P | the projects, also from a field being written |
 | Esc · BACK | let go of what the page holds, then up one level — a conversation, its list, the start; the masthead's OMUNCULUS goes straight to the start |
@@ -100,17 +100,21 @@ picked out.
 
 ### 3. A new conversation
 
-"Who do you want to talk with?": a card for each of the project's agents a
-conversation can be with, its portrait, its name and its role; under FOR
-THE PROJECT ITSELF, a smaller line with the role too for each agent that changes how the
-project works, each change only once you approve it. The keyboard is on the
-first card, its ring showing it; a card's tooltip gives its number. The
-conversation keeps the agent its first message names.
+The composer, addressed to the project's default agent: "TO", a folded control
+with its name, and the box. The start card's line says whom it goes to. Opening
+TO lists the other agents of depth 0 (opt-in), each with its role, and under
+FOR THE PROJECT ITSELF the agents that change how the project works, each
+change only once you approve it; picking one replaces the recipient. Without
+a default agent TO starts empty, the list is open and SEND waits for a pick.
+The conversation is made by the first message, not by the pick, and keeps the
+agent that message names.
 
 | Keys | What they do |
 | --- | --- |
-| ← · → · ↑ · ↓ | choose whom it is with |
-| 1 … 9 · Enter | choose them; the conversation is made by the first message, not by the choice |
+| Enter · Space · ↓ on TO | open the list |
+| ↑ · ↓ | move along the list |
+| Enter | on a name, address the message to it |
+| Esc | fold the list, then back |
 
 ### 4. Conversations
 
@@ -158,9 +162,9 @@ progress: the works nested by stage and level, beside the thread from 1100 px,
 a card over it from 700 px, a sheet over the chat below. The composer is a
 line with a clip that attaches files and SEND; it has no options of a request
 above it. A conversation with no message yet, opened from the conversations,
-first asks whom it is with, on the cards of
-[a new conversation](#3-a-new-conversation) when several agents of depth 0
-may take it.
+shows the TO control of
+[a new conversation](#3-a-new-conversation) over the composer when several
+agents of depth 0 may take it.
 
 A sub-work's open glyph (an arrow out of a box), or OPEN in the progress, shows that work's thread as a
 page of its own, under the way down to it, with a composer to its agent;
@@ -245,11 +249,13 @@ Every event of the conversation, a row each, which opens whole.
 | Esc | empty the filter, then back to the rows |
 
 Each row is one line: when, its kind, what the event says, who; under 560 px
-two lines, the sentence under the rest. Chips, which wrap onto lines, keep
+two lines, the sentence under the rest. Chips, on one line that
+scrolls sideways, each with its count, keep
 the events that need you or failed, a picker one agent's, and BEHIND THE
 SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
-names each day and each run. The count says how many rows a filter keeps out,
-and "2 BEHIND THE SCENES HIDDEN" when that is why. A failed event has the
+names each day and each run. The count, on one line, says how many rows a
+filter keeps out, and "2 BEHIND THE SCENES HIDDEN" ("2 HIDDEN" on a narrow
+window) when that is why. A failed event has the
 warning icon in the error tone. Opened from a work of
 the tree, it is kept to that work.
 
