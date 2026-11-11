@@ -154,6 +154,170 @@ defmodule Omunculus.Store.RequestRoutesTest do
     end
   end
 
+  describe "escalation route" do
+    @hub """
+    [agents.lead]
+    depth = 0
+    text = "lead"
+    [agents.hub]
+    depth = 0
+    text = "hub"
+    [agents.worker]
+    depth = 1
+    text = "worker"
+    [access]
+    creator_role = "participant"
+    bootstrap_role = "admin"
+    [access.roles.admin]
+    scope = "project"
+    capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.read", "conversation.reply"]
+    [access.roles.participant]
+    scope = "conversation"
+    capabilities = ["conversation.read", "conversation.manage_access"]
+    [policy]
+    request_routes = [
+      { name = "owner", via = [{ kind = "agent", agent = "hub" }, "owners"] },
+      { name = "client", via = ["origin"] },
+      { via = [{ kind = "agent", agent = "hub" }, "origin"] }
+    ]
+    """
+
+    setup %{conn: conn} do
+      config = Fixtures.config(@hub)
+      conversation = Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation,
+          created_issuer: "test",
+          created_subject: "client",
+          created_at: "2026-01-01"
+        })
+
+      :ok =
+        Query.insert(conn, :project_members, %{
+          issuer: "test",
+          subject: "boss",
+          role: "admin",
+          updated_at: "2026-01-01"
+        })
+
+      ctx = fn agent, parent ->
+        work =
+          Fixtures.insert(conn, :works, %{
+            assignee: agent,
+            parent_id: parent,
+            conversation_id: conversation
+          })
+
+        run =
+          Fixtures.open_run(conn, %{
+            agent: agent,
+            depth: 0,
+            work_id: work,
+            conversation_id: conversation
+          })
+
+        %{
+          run_id: run.id,
+          work_id: work,
+          author: "agent",
+          agent: agent,
+          config: config,
+          groups: %{},
+          conversation_id: conversation
+        }
+      end
+
+      %{hub: ctx.("hub", nil), worker: ctx.("worker", nil), conversation: conversation}
+    end
+
+    defp put(conn, ctx, type, body) do
+      with {:ok, events} <-
+             Store.record_tools(
+               conn,
+               ctx.run_id,
+               [{%{name: type, args: %{}}, [%{"type" => type, "body" => body}]}],
+               ctx
+             ) do
+        Store.view(conn, "request", Enum.find(events, &(&1.type == "request")).request_id)
+      end
+    end
+
+    defp ask_on(conn, ctx, route) do
+      body = %{"reason" => "Approve?", "options" => %{}}
+      put(conn, ctx, "request", if(route, do: Map.put(body, "to", route), else: body))
+    end
+
+    defp pass_up(conn, ctx, origin, route) do
+      body = %{"reason" => "Decide?", "origins" => %{"q" => origin.id}}
+      put(conn, ctx, "escalate", if(route, do: Map.put(body, "to", route), else: body))
+    end
+
+    test "an owner-route request escalated without to goes on to the owners", %{
+      conn: conn,
+      hub: hub,
+      worker: worker
+    } do
+      assert {:ok, asked} = ask_on(conn, worker, "owner")
+      assert Jason.decode!(asked.arbiter) == Participant.agent("hub")
+
+      assert {:ok, up} = pass_up(conn, hub, asked, nil)
+      assert Jason.decode!(up.arbiter) == Participant.human("test", "boss")
+      assert {up.route, up.destination} == {"owner", "owners"}
+    end
+
+    test "a default-route request escalated without to follows the default route", %{
+      conn: conn,
+      hub: hub,
+      worker: worker
+    } do
+      assert {:ok, asked} = ask_on(conn, worker, nil)
+      assert {:ok, up} = pass_up(conn, hub, asked, nil)
+      assert Jason.decode!(up.arbiter) == Participant.human("test", "client")
+      assert {up.route, up.destination} == {nil, "origin"}
+    end
+
+    test "an explicit to wins over the route of the origins", %{
+      conn: conn,
+      hub: hub,
+      worker: worker
+    } do
+      assert {:ok, asked} = ask_on(conn, worker, "owner")
+      assert {:ok, up} = pass_up(conn, hub, asked, "client")
+      assert Jason.decode!(up.arbiter) == Participant.human("test", "client")
+      assert {up.route, up.destination} == {"client", "origin"}
+    end
+
+    test "an unanswered receiver passes a named-route request along its route", %{
+      conn: conn,
+      hub: hub,
+      worker: worker
+    } do
+      assert {:ok, asked} = ask_on(conn, worker, "owner")
+
+      run =
+        Fixtures.open_run(conn, %{
+          agent: "hub",
+          work_id: hub.work_id,
+          depth: 0,
+          conversation_id: hub.conversation_id,
+          request_id: asked.id
+        })
+
+      {:ok, _} = Store.close_run(conn, run.id)
+      {:ok, closed} = Store.view(conn, "run", run.id)
+
+      assert {:ok, events} =
+               Store.unanswered(conn, closed, hub.config, &Omunculus.Tools.Out.unanswered/3)
+
+      upstream = Enum.find(events, &(&1.type == "request")).request_id
+      assert {:ok, up} = Store.view(conn, "request", upstream)
+      assert Jason.decode!(up.arbiter) == Participant.human("test", "boss")
+      assert {up.route, up.destination} == {"owner", "owners"}
+    end
+  end
+
   describe "client and owner" do
     @owners """
     [agents.lead]
