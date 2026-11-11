@@ -261,7 +261,7 @@ keeps no list.
 
 | Tool | Does |
 | --- | --- |
-| `put_artifact` | Writes the next version. `name` (a file name without a directory) and `kind`, then `data`, a JSON object kept as `application/json`, or `content` with its `media_type`; an optional `note`; an optional `base`, the number of the version it builds on (0 for none), which refuses the write when another version came since. A kind, name, size or `base` the store would refuse fails the call. The output names the version. |
+| `put_artifact` | Writes the next version. `name` (a file name without a directory) and `kind`, then `data`, a JSON object kept as `application/json`, or `content` with its `media_type`; an optional `note`; an optional `base`, the number of the version it builds on (0 for none), which refuses the write when another version came since. Content equal to the latest version's (same SHA-256 and media type) makes no new version: the call succeeds and the output names the version that stands. A kind, name, size or `base` the store would refuse fails the call. The output names the version. |
 | `get_artifact` | Reads a version as text: `name`, and `version`, the latest when omitted. A version that is not text is refused with its size. |
 | `list_artifacts` | Lists each artifact with its kind and versions, newest last; `kind` keeps those of one kind. |
 | `attach` | With `artifact`, gives the person that version ([attachments](#attachments)). |
@@ -276,7 +276,9 @@ conversation does not show it, and the operator lists every version
 through the server ([server](server.md#artifacts)). A tool that makes
 documents, such as a pack's, emits the `artifact` action: `name`, `kind`,
 `media_type`, `content` and an optional `note`. The store keeps the
-content, numbers the version and records an `artifact` event; it refuses a
+content, numbers the version and records an `artifact` event, unless the content
+equals the latest version's (same SHA-256 and media type), which then
+stands and records nothing; it refuses a
 kind that differs from the name's, a run with no conversation, and a
 content past `[store] attachment_bytes`, and a `base` (an integer, 0 for
 none) that is not the number of the name's latest version. The event

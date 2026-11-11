@@ -77,6 +77,21 @@ defmodule Omunculus.Artifacts do
   @spec next(String.t(), [version]) :: pos_integer
   def next(name, versions), do: 1 + Enum.count(versions, &(&1["name"] == name))
 
+  @doc """
+  The latest version of `name` when it already holds `content` of
+  `media_type` (the same SHA-256 and media type), else nil. Such a write
+  makes no new version. The kind is the name's own, which `check/7` keeps.
+  """
+  @spec unchanged([version], String.t(), term, binary) :: version | nil
+  def unchanged(versions, name, media_type, content) do
+    sha256 = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+
+    case find(versions, name, nil) do
+      %{"sha256" => ^sha256, "media_type" => ^media_type} = latest -> latest
+      _other -> nil
+    end
+  end
+
   @doc "The version of `name` numbered `number`, the latest when it is nil."
   @spec find([version], String.t(), integer | nil) :: version | nil
   def find(versions, name, number) do

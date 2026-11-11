@@ -223,7 +223,8 @@ document: the artifact `proposal-<work id>.md`, of kind `document`, from
 a list becomes bullets, a missing value is empty, comments are dropped). The
 headings are the template's, in English; change the template in the pack to
 change the document, and `render_proposal` renders the latest data again as
-the next version of the document. The data artifact holds internal fields and
+the next version of the document, or none when it is unchanged (the core
+keeps one version of equal content). The data artifact holds internal fields and
 is not for the client. When the seller asks the client to accept the price it
 ends the message with "Attach: proposal-<work id>.md"; the front desk
 attaches that artifact, which hands over the latest version, under a

@@ -5,7 +5,8 @@ defmodule Omunculus.Tools.PutArtifact do
   JSON object kept as `application/json`, or `content` text of a
   `media_type`. With `base`, the number of the version it builds on (0 for
   none), the write is refused when another version came since. The store
-  keeps it and numbers the version.
+  keeps it and numbers the version, unless the content equals the latest
+  version's, which then stands.
   """
 
   alias Omunculus.{Artifacts, Config}
@@ -35,8 +36,17 @@ defmodule Omunculus.Tools.PutArtifact do
         |> Args.put_present("note", args)
         |> then(&if base, do: Map.put(&1, "base", base), else: &1)
 
-      version = Artifacts.next(args["name"], versions)
-      Out.ok("put #{args["name"]} version #{version}", [%{"type" => "artifact", "body" => body}])
+      case Artifacts.unchanged(versions, args["name"], media_type, content) do
+        %{"version" => version} ->
+          Out.ok("#{args["name"]} version #{version} already holds this content", [])
+
+        nil ->
+          version = Artifacts.next(args["name"], versions)
+
+          Out.ok("put #{args["name"]} version #{version}", [
+            %{"type" => "artifact", "body" => body}
+          ])
+      end
     else
       message when is_binary(message) -> Out.fail(message)
       {:error, message} when is_binary(message) -> Out.fail(message)

@@ -318,8 +318,11 @@ a `kind` (a lowercase word the pack chooses; the core keeps no list) and
 versions numbered from 1. A version is `{name, kind, version, media_type,
 bytes, sha256}` with an optional `note`, and the event's `event_id`, `at`
 and `by`. A name has one kind: a later version naming another is refused.
-A version never changes; a change is the next version. A write may name
-the `base` it builds on and is refused when another version came since,
+A version never changes; a change is the next version, and a write whose
+content equals the latest version's (same SHA-256 and media type) makes
+none: that version stands and no event is recorded. A write may name
+the `base` it builds on and is refused when another version came since
+(also when its content is equal),
 and the event records the `tool` that wrote the version, so a pack can
 trust only what its own tool wrote.
 

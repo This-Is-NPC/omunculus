@@ -177,7 +177,8 @@ defmodule Omunculus.Store.Actions do
   end
 
   # The next version of a run's artifact: its content kept by
-  # `Omunculus.Artifacts`, numbered after the last of its name.
+  # `Omunculus.Artifacts`, numbered after the last of its name. Content
+  # equal to the latest version makes none.
   defp artifact(conn, body, %{run_id: run_id} = ctx) when not is_nil(run_id) do
     with :ok <- Helpers.ensure_text(:artifact, body, "name"),
          :ok <- Helpers.ensure_text(:artifact, body, "kind"),
@@ -197,6 +198,7 @@ defmodule Omunculus.Store.Actions do
              byte_size(body["content"]),
              body["base"]
            ),
+         nil <- Artifacts.unchanged(versions, body["name"], body["media_type"], body["content"]),
          {:ok, meta} <-
            Artifacts.put(
              ctx.config.store,
@@ -215,6 +217,10 @@ defmodule Omunculus.Store.Actions do
         |> put_note(body)
 
       Events.append(conn, %{type: "artifact", run_id: run_id, body: Jason.encode!(record)})
+    else
+      # Content equal to the latest version: that version stands, no event.
+      %{"version" => _latest} -> {:ok, nil}
+      other -> other
     end
   end
 

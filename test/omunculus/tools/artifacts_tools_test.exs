@@ -59,6 +59,51 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
       assert %{"content" => "# Brief", "media_type" => "text/markdown", "note" => "second"} = body
     end
 
+    test "emits nothing for content equal to the latest version", ctx do
+      content = "# Brief"
+      sha256 = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+
+      view = %{
+        "artifacts" => [
+          %{
+            "name" => "brief",
+            "kind" => "brief",
+            "version" => 1,
+            "media_type" => "text/markdown",
+            "sha256" => sha256
+          }
+        ]
+      }
+
+      args = %{
+        "name" => "brief",
+        "kind" => "brief",
+        "content" => content,
+        "media_type" => "text/markdown"
+      }
+
+      assert %{
+               "ok" => true,
+               "output" => "brief version 1 already holds this content",
+               "emit" => []
+             } =
+               PutArtifact.run(%{args: args, view: view, config_path: ctx.config_path})
+
+      assert %{"ok" => false} =
+               PutArtifact.run(%{
+                 args: Map.put(args, "base", 0),
+                 view: view,
+                 config_path: ctx.config_path
+               })
+
+      assert %{"ok" => true, "output" => "put brief version 2", "emit" => [_]} =
+               PutArtifact.run(%{
+                 args: %{args | "content" => "# Other"},
+                 view: view,
+                 config_path: ctx.config_path
+               })
+    end
+
     test "fails what the store would refuse, instead of reporting a version", ctx do
       view = %{"artifacts" => [%{"name" => "brief", "kind" => "brief", "version" => 1}]}
       put = &PutArtifact.run(%{args: &1, view: view, config_path: ctx.config_path})
@@ -331,8 +376,8 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
     test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      for name <- ["p-a", "p-a", "other"] do
-        {:ok, _} = call.("put_artifact", %{"name" => name, "kind" => "k", "data" => %{"n" => 1}})
+      for {name, n} <- [{"p-a", 1}, {"p-a", 2}, {"other", 1}] do
+        {:ok, _} = call.("put_artifact", %{"name" => name, "kind" => "k", "data" => %{"n" => n}})
       end
 
       {:ok, counted} = call.("counter", %{})

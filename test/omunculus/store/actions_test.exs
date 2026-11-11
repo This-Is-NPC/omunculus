@@ -524,6 +524,30 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_, %{"version" => 2}]} = Store.artifacts(conn, conversation_id)
     end
 
+    test "equal content makes no version, other content does, and a stale base is still refused",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)
+
+      # Same content at the latest version, with or without the base: a no-op.
+      same = put_in(artifact("brief", "brief", "a"), ["body", "base"], 1)
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a"), same], ctx)
+      assert {:ok, [%{"version" => 1}]} = Store.artifacts(conn, conversation_id)
+
+      # A stale base is refused even when the content is equal.
+      stale = put_in(artifact("brief", "brief", "a"), ["body", "base"], 0)
+      assert {:error, {:artifact, {:conflict, "brief", 0, 1}}} = record_tool(conn, [stale], ctx)
+
+      # Another media type is another version.
+      assert {:ok, _events} =
+               record_tool(conn, [artifact("brief", "brief", "a", "text/markdown")], ctx)
+
+      assert {:ok, [_, %{"version" => 2}]} = Store.artifacts(conn, conversation_id)
+
+      # Equal to an older version but not the latest: a new version.
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)
+      assert {:ok, [_, _, %{"version" => 3}]} = Store.artifacts(conn, conversation_id)
+    end
+
     test "it needs a run, and a version is no attachment",
          %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
       assert {:error, {:artifact, :no_run}} =
