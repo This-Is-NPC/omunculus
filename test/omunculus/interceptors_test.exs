@@ -155,7 +155,7 @@ defmodule Omunculus.InterceptorsTest do
       }
 
       assert {:ok, out, events} = Harness.dispatch(project, "promote", %{"to" => "prod"}, actor)
-      assert out.output =~ "not done yet: it would run the tool promote"
+      assert out.output =~ "not done yet: concierge wants to run promote"
       assert out.output =~ "sent to local:owner for review"
       assert ["tool", "request" | _hooks] = Enum.map(events, & &1.type)
 

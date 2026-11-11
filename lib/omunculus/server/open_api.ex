@@ -584,10 +584,15 @@ defmodule Omunculus.Server.OpenAPI do
                   %{
                     action: %{type: "string", enum: ~w(ask comment attach grant tool)},
                     summary: string(),
+                    target: nullable_string(),
+                    args: %{
+                      type: "array",
+                      items: object(%{name: string(), value: string()}, ~w(name value))
+                    },
                     step: %{type: "integer"},
                     of: %{type: "integer"}
                   },
-                  ~w(action summary step of)
+                  ~w(action summary target args step of)
                 ),
                 %{type: "null"}
               ]

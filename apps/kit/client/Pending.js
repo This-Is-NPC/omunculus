@@ -111,7 +111,7 @@ function describe(request, input) {
   return {
     id: request.id, kind: kind, word: look.word, icon: look.icon,
     asker: asker, line: Requests.line(request, input.me), path: route, work: work,
-    title: held ? capital(asker) + " would " + held.summary : wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
+    title: held ? capital(held.summary) : wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
     body: lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",
     unblocks: held ? asker + " waits for your review" : unblocks,
     grants: wanted && Object.keys(request.options || {}).includes("grant") ? unlocks + " · this work only" : unlocks,
@@ -140,7 +140,7 @@ function resolved(request, reply, input) {
   const wanted = Requests.granted(request);
   if (Requests.review(request)) {
     const words = { approve: ["check", "APPROVED", "approved"], edit: ["edit", "EDITED", "edited and approved"], deny: ["close", "DENIED", "denied"] }[option] || ["diamond", "ANSWERED", "answered"];
-    return { icon: words[0], word: words[1], sentence: "You " + words[2] + " " + possessive(asker) + " request to " + request.interception.summary + where };
+    return { icon: words[0], word: words[1], sentence: "You " + words[2] + ": " + request.interception.summary + where };
   }
   if (wanted) {
     const unlocks = Requests.unlocks(wanted, input.folder);

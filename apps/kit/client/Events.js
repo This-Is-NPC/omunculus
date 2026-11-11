@@ -141,7 +141,7 @@ function what(type, body, who, asked, requestId, askers, titled, me) {
     const arbiter = party(given.arbiter, me);
     if (given.interception) {
       const held = given.interception;
-      return "review of " + flat(held.summary) + " by " + asker + " for " + (arbiter || "the team") + (held.of > 1 ? " \u00b7 step " + held.step + " of " + held.of : "");
+      return flat(held.summary) + " \u00b7 for " + (arbiter || "the team") + (held.of > 1 ? " \u00b7 step " + held.step + " of " + held.of : "");
     }
     const count = questions(given.reason);
     const how = count > 1 ? " " + plural(count, "question", "questions") : "";

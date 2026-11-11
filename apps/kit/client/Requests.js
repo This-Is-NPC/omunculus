@@ -217,12 +217,12 @@ function mark(request) { return review(request) ? marks.review : marks.question;
 function party(participant, me) { return isMe(participant, me) ? "you" : label(participant); }
 
 // What a request is, as a line: "from seller for you", "from seller to
-// sales"; a review "of <what it would do> by seller for you · step 2 of 3".
+// sales"; a review adds "· step 2 of 3".
 function line(request, me) {
   const to = isMe(request.arbiter, me) ? "for you" : "for " + label(request.arbiter);
-  if (!review(request)) return "from " + label(request.requester) + " " + (to === "for you" ? to : "to " + label(request.arbiter));
   const held = request.interception;
-  return "of " + held.summary + " by " + label(request.requester) + " " + to + (held.of > 1 ? " \u00b7 step " + held.step + " of " + held.of : "");
+  const from = "from " + label(request.requester) + " " + (to === "for you" ? to : "to " + label(request.arbiter));
+  return from + (held && held.of > 1 ? " \u00b7 step " + held.step + " of " + held.of : "");
 }
 
 // The text an edit replaces: the quoted words of a review's summary, which

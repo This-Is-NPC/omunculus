@@ -2,7 +2,7 @@ defmodule Omunculus.Store.InterceptionTest do
   use Omunculus.StoreCase, async: true
 
   alias Omunculus.{Attachments, Fixtures, Id, Participant, Store}
-  alias Omunculus.Store.{Query, View}
+  alias Omunculus.Store.{Interception, Query, View}
 
   @config """
   [agents.root]
@@ -124,6 +124,32 @@ defmodule Omunculus.Store.InterceptionTest do
   accounts = ["owner"]
   """
 
+  test "the arguments of a held tool read as name: value lines, never JSON" do
+    emit = %{
+      "type" => "tool",
+      "body" => %{
+        "name" => "promote",
+        "args" => %{
+          "to" => "prod",
+          "notes" => "a long line, kept whole " <> String.duplicate("x", 200),
+          "opts" => %{"dry" => true, "deep" => %{"a" => 1}},
+          "ids" => ["a", "b"],
+          "count" => 3
+        }
+      }
+    }
+
+    assert [
+             %{"name" => "count", "value" => "3"},
+             %{"name" => "ids", "value" => "a, b"},
+             %{"name" => "notes", "value" => "a long line, kept whole " <> _},
+             %{"name" => "opts", "value" => ~s(deep: {"a":1}, dry: true)},
+             %{"name" => "to", "value" => "prod"}
+           ] = Interception.lines(emit)
+
+    assert Interception.lines(%{"type" => "comment", "body" => %{"body" => "x"}}) == []
+  end
+
   test "an ask to the requester becomes a review request to the first reviewer",
        %{conn: conn} = ctx do
     {_config, _root, review} = ask_review(conn, ctx, @ask_owner)
@@ -131,12 +157,17 @@ defmodule Omunculus.Store.InterceptionTest do
 
     assert Jason.decode!(request.arbiter) == Participant.human("test", "owner")
     assert Jason.decode!(request.requester) == Participant.agent("root")
-    assert request.reason =~ ~s(root would ask test:client: "Can we ship on Friday?")
+    assert request.reason =~ ~s(root wants to ask test:client: "Can we ship on Friday?")
 
     assert request.options |> Jason.decode!() |> Map.keys() |> Enum.sort() ==
              ~w(approve deny edit)
 
     assert request.interception.action == "ask"
+
+    assert request.interception.summary ==
+             ~s(root wants to ask test:client: "Can we ship on Friday?")
+
+    refute request.reason =~ "{"
     assert request.interception.step == 0
     assert request.interception.reviewers == ["owner"]
 

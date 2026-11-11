@@ -112,6 +112,8 @@ defmodule Omunculus.Server.Contract do
     do: %{
       action: review.action,
       summary: review.summary,
+      target: Omunculus.Store.Interception.target_label(review.target),
+      args: Omunculus.Store.Interception.lines(review.emit),
       step: review.step + 1,
       of: length(review.reviewers)
     }

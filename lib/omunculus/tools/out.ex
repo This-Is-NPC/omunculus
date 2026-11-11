@@ -529,7 +529,7 @@ defmodule Omunculus.Tools.Out do
   @spec held(String.t(), String.t()) :: String.t()
   def held(summary, reviewer),
     do:
-      "not done yet: it would #{summary}. It was sent to #{reviewer} for review, and their answer comes back to you; do not do it again"
+      "not done yet: #{summary}. It was sent to #{reviewer} for review, and their answer comes back to you; do not do it again"
 
   @doc "What a model reads first in the run that follows the review that released its tool call."
   @spec released(String.t(), boolean, String.t()) :: String.t()

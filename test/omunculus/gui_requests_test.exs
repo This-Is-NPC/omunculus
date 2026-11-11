@@ -41,16 +41,16 @@ defmodule Omunculus.GuiRequestsTest do
     run!(["Requests"], """
     const ask = over => Object.assign({status: "pending", arbiter: human, requester: agent("seller"), options: {}, origins: {}}, over);
     if (Requests.mark(ask({})).text !== "QUESTION" || Requests.mark(ask({})).icon !== "help") throw Error("question mark");
-    const held = {action: "ask", summary: 'ask test:client: "Ready?"', step: 1, of: 1};
+    const held = {action: "ask", summary: 'seller wants to ask test:client: "Ready?"', step: 1, of: 1};
     const review = ask({interception: held, options: {approve: [], edit: [], deny: []}});
     if (Requests.mark(review).text !== "REVIEW" || !Requests.review(review) || Requests.review(ask({}))) throw Error("review mark");
     if (Requests.line(ask({}), human) !== "from seller for you") throw Error(Requests.line(ask({}), human));
     if (Requests.line(ask({arbiter: agent("sales")}), human) !== "from seller to sales") throw Error("to another account");
-    if (Requests.line(review, human) !== 'of ask test:client: "Ready?" by seller for you') throw Error(Requests.line(review, human));
+    if (Requests.line(review, human) !== 'from seller for you') throw Error(Requests.line(review, human));
     const second = ask({interception: Object.assign({}, held, {step: 2, of: 3}), arbiter: agent("sales")});
-    if (Requests.line(second, human) !== 'of ask test:client: "Ready?" by seller for sales \\u00b7 step 2 of 3') throw Error(Requests.line(second, human));
+    if (Requests.line(second, human) !== 'from seller to sales \\u00b7 step 2 of 3') throw Error(Requests.line(second, human));
     if (Requests.kind(review, human) !== "review" || Requests.kind(ask({}), human) !== "needs-you" || Requests.kind(review, {issuer: "local", subject: "2000"}) !== "team") throw Error("kinds");
-    if (Requests.editable(review) !== "Ready?" || Requests.editable(ask({interception: {summary: "run the tool promote with {}"}})) !== "") throw Error("editable text");
+    if (Requests.editable(review) !== "Ready?" || Requests.editable(ask({interception: {summary: "seller wants to run promote"}})) !== "") throw Error("editable text");
     if (Requests.party(human, human) !== "you" || Requests.party(agent("sales"), human) !== "sales" || Requests.party(human, null) !== "local:1000") throw Error("party");
     """)
   end

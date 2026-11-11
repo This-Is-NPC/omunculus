@@ -106,16 +106,21 @@ An action is held when it matches a rule, before it is performed:
 | `tool` | The execution of the tool named by `tool`, before it runs, as a model call or as a step of a chain. | A tool has no target. |
 
 The harness then opens a request from the acting account to the first
-reviewer. Its reason says what would be done, quoting the text, for example
-`seller would ask test:client: "Can we ship on Friday?"`. Its options are
+reviewer. Its reason says what would be done in a sentence, quoting the text,
+for example `seller wants to ask test:client: "Can we ship on Friday?"`. A
+tool reads `seller wants to run promote`, followed by one `name: value` line
+per argument. Its options are
 `approve`, `edit` and `deny`. The acting run waits on it as on any request it
 raised: the work waits on the request, and an agent reviewer finds it in its
 inbox like any other. The model that made the call is told it is not done yet
 and who reviews it. A reviewer who is the acting agent itself is left out; a
 rule with no other reviewer does not apply.
 
-A review request has an `interception` in the API: `action`, the `summary` of
-what would be done, `step` and `of` for its place among the reviewers. Its
+A review request has an `interception` in the API: `action`, the `summary` sentence
+of what would be done, its `target` (who the action reaches, or null), `args`
+(a list of `{name, value}` lines: a tool's arguments, strings as they are, a
+nested value flattened one level; empty for other actions, whose text is in
+the summary), `step` and `of` for its place among the reviewers. Its
 `requester` is the actor and its `options` are the three above. The reply
 must name one:
 

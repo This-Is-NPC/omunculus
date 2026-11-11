@@ -38,7 +38,7 @@ defmodule Omunculus.GuiPendingTest do
     run!("""
     const agentAsks = asked("a1", {arbiter: agent("seller")});
     const gathering = asked("g1", {created_at: iso(1700), origins: {ask: asked("o1", {status: "escalated", created_at: iso(1100)})}});
-    const review = asked("v1", {requester: agent("seller"), options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'ask local:1000: "Ready?"', step: 1, of: 2}, created_at: iso(1650)});
+    const review = asked("v1", {requester: agent("seller"), options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'seller wants to ask local:1000: "Ready?"', step: 1, of: 2}, created_at: iso(1650)});
     const theirs = asked("t1", {arbiter: {kind: "human", issuer: "local", subject: "2000"}});
     const ids = Pending.queue([permission, agentAsks, decision, question, gathering, review, theirs], human).map(request => request.id).join();
     check(ids === "q1,p1,d1,v1,g1", "order, the viewer's requests, reviews included, origins hidden", ids);
@@ -69,10 +69,10 @@ defmodule Omunculus.GuiPendingTest do
     check(Pending.describe(Object.assign({}, decision, {arbiter: agent("seller")}), input(decision)).kind === "decision", "an agent's decision has its shape too", "");
     check(item.line === "from surgeon for you", "from whom, for whom", item.line);
     check(Pending.describe(Object.assign({}, question, {arbiter: agent("sales")}), input(question)).line === "from surgeon to sales", "to another account", "");
-    const held = Object.assign({}, decision, {options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'ask local:1000: "Ready?"', step: 2, of: 3}});
+    const held = Object.assign({}, decision, {options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'seller wants to ask local:1000: "Ready?"', step: 2, of: 3}});
     const review = Pending.describe(held, input(held));
-    check(review.kind === "review" && review.word === "REVIEW" && review.title === 'Seller would ask local:1000: "Ready?"', "review", review);
-    check(review.line === 'of ask local:1000: "Ready?" by seller for you \u00b7 step 2 of 3' && review.unblocks === "seller waits for your review", "review line", review.line);
+    check(review.kind === "review" && review.word === "REVIEW" && review.title === 'Seller wants to ask local:1000: "Ready?"', "review", review);
+    check(review.line === 'from seller for you \u00b7 step 2 of 3' && review.unblocks === "seller waits for your review", "review line", review.line);
     const parts = Pending.actions(Object.keys(held.options), false);
     check(parts.primary === "approve" && parts.once.join() === "approve,edit" && parts.denies.join() === "deny", "approve, edit, deny", parts);
     check(choose.unblocks === "seller resumes Doce Ana: site \\u00b7 sales is waiting for it", "single waiter", choose.unblocks);
@@ -117,8 +117,8 @@ defmodule Omunculus.GuiPendingTest do
     check(denied.word === "DENIED" && denied.icon === "close" && denied.sentence.startsWith("You denied surgeon permission"), "denied", denied);
     const chose = said(decision, {option: "accept"});
     check(chose.word === "CHOSE" && chose.icon === "diamond" && chose.sentence === "You chose accept on seller's decision (Doce Ana: site)", "chose", chose);
-    const held = Object.assign({}, decision, {options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'ask local:1000: "Ready?"', step: 1, of: 1}});
-    check(said(held, {option: "approve"}).sentence === "You approved seller's request to ask local:1000: \\"Ready?\\" (Doce Ana: site)" && said(held, {option: "edit"}).word === "EDITED" && said(held, {option: "deny"}).word === "DENIED", "review", said(held, {option: "edit"}));
+    const held = Object.assign({}, decision, {options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'seller wants to ask local:1000: "Ready?"', step: 1, of: 1}});
+    check(said(held, {option: "approve"}).sentence === "You approved: seller wants to ask local:1000: \\"Ready?\\" (Doce Ana: site)" && said(held, {option: "edit"}).word === "EDITED" && said(held, {option: "deny"}).word === "DENIED", "review", said(held, {option: "edit"}));
     check(said(decision, {option: "adjust"}).sentence === "You asked seller to adjust (Doce Ana: site)", "adjust", "");
     const answered = said(question, {option: "", body: "5511"});
     check(answered.word === "ANSWERED" && answered.icon === "help" && answered.sentence === "You answered surgeon's question (Build: Doce Ana)", "answered", answered);

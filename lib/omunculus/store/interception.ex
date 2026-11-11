@@ -89,7 +89,8 @@ defmodule Omunculus.Store.Interception do
       step: 0,
       passed: passed,
       target: facts.target,
-      summary: summary(emit, facts.target)
+      summary: summary(emit, facts.target, ctx.agent),
+      lines: lines(emit)
     }
 
     with {:ok, event} <- open(conn, ctx, emit, meta), do: {:held, event}
@@ -111,7 +112,7 @@ defmodule Omunculus.Store.Interception do
              run,
              work,
              participant,
-             reason(participant, meta.summary),
+             reason(meta.summary, Map.fetch!(meta, :lines)),
              @options,
              arbiter,
              arbiter_work_id,
@@ -120,6 +121,8 @@ defmodule Omunculus.Store.Interception do
                interception: %{
                  action: meta.action,
                  summary: meta.summary,
+                 target: target_label(meta.target),
+                 args: meta.lines,
                  step: meta.step + 1,
                  of: length(meta.reviewers)
                }
@@ -146,39 +149,75 @@ defmodule Omunculus.Store.Interception do
   defp reviewer({:error, _reason}, name), do: {:error, {:interception, {:reviewer, name}}}
   defp reviewer(ok, _name), do: ok
 
-  defp reason(participant, summary) do
-    "#{Participant.label(participant)} would #{summary}. It waits for your review.\n\n" <>
+  defp reason(summary, lines) do
+    held = Enum.map_join(lines, "", &"\n#{&1["name"]}: #{&1["value"]}")
+
+    "#{summary}.#{held}\n\nIt waits for your review.\n\n" <>
       "approve lets it go ahead as written. edit lets it go ahead with your reply in " <>
       "place of its text; for a tool or a grant, which have none, edit approves with your " <>
       "note. deny stops it, and your reply goes back as the answer."
   end
 
-  defp summary(%{"type" => "request", "body" => body}, target),
-    do: ~s(ask #{label(target)}: "#{body["reason"]}")
+  defp summary(%{"type" => "request", "body" => body}, target, who),
+    do: ~s(#{who} wants to ask #{label(target)}: "#{body["reason"]}")
 
-  defp summary(%{"type" => "comment", "body" => body}, nil), do: ~s(comment: "#{body["body"]}")
+  defp summary(%{"type" => "comment", "body" => body}, nil, who),
+    do: ~s(#{who} wants to comment: "#{body["body"]}")
 
-  defp summary(%{"type" => "comment", "body" => body}, target),
-    do: ~s(comment for #{label(target)}: "#{body["body"]}")
+  defp summary(%{"type" => "comment", "body" => body}, target, who),
+    do: ~s(#{who} wants to comment for #{label(target)}: "#{body["body"]}")
 
-  defp summary(%{"type" => "attach", "body" => body}, _target) do
+  defp summary(%{"type" => "attach", "body" => body}, _target, who) do
     names = Enum.map_join(body["attachments"], ", ", & &1["name"])
-    if body["note"], do: ~s(attach #{names}: "#{body["note"]}"), else: "attach #{names}"
+
+    if body["note"],
+      do: ~s(#{who} wants to attach #{names}: "#{body["note"]}"),
+      else: "#{who} wants to attach #{names}"
   end
 
-  defp summary(%{"type" => "grant", "body" => body}, target),
-    do: "grant #{body["name"]} (#{body["kind"]}) to #{label(target)}"
+  defp summary(%{"type" => "grant", "body" => body}, target, who),
+    do: "#{who} wants to grant #{body["name"]} (#{body["kind"]}) to #{label(target)}"
 
-  defp summary(%{"type" => "reopen", "body" => body}, target) do
+  defp summary(%{"type" => "reopen", "body" => body}, target, who) do
     names = Enum.map_join(body["grant"], ", ", & &1["name"])
-    "reopen a work for #{label(target)} and give it #{names}"
+    "#{who} wants to reopen a work for #{label(target)} and give it #{names}"
   end
 
-  defp summary(%{"type" => "tool", "body" => body}, _target),
-    do: "run the tool #{body["name"]} with #{Jason.encode!(body["args"])}"
+  defp summary(%{"type" => "tool", "body" => body}, _target, who),
+    do: "#{who} wants to run #{body["name"]}"
 
   defp label(nil), do: "someone"
   defp label(identity), do: Participant.label(identity)
+
+  @doc """
+  The arguments of a held tool as `%{"name", "value"}` lines for a reader:
+  strings as they are, a nested map or list flattened one level into one
+  line, any other value as text. Other actions have none: their text is in
+  the summary.
+  """
+  @spec lines(map) :: [%{String.t() => String.t()}]
+  def lines(%{"type" => "tool", "body" => %{"args" => args}}) when is_map(args),
+    do: for({name, value} <- Enum.sort(args), do: %{"name" => name, "value" => readable(value)})
+
+  def lines(_emit), do: []
+
+  defp readable(value) when is_binary(value), do: value
+  defp readable(nil), do: "none"
+
+  defp readable(value) when is_map(value),
+    do: Enum.map_join(Enum.sort(value), ", ", fn {k, v} -> "#{k}: #{scalar(v)}" end)
+
+  defp readable(value) when is_list(value), do: Enum.map_join(value, ", ", &scalar/1)
+  defp readable(value), do: to_string(value)
+
+  defp scalar(value) when is_binary(value), do: value
+  defp scalar(value) when is_map(value) or is_list(value), do: Jason.encode!(value)
+  defp scalar(value), do: readable(value)
+
+  @doc "The identity an action reaches, as a reader names it; nil when none."
+  @spec target_label(map | nil) :: String.t() | nil
+  def target_label(nil), do: nil
+  def target_label(identity), do: Participant.label(identity)
 
   @doc "The reply of a review names one of its options."
   @spec validate_reply(map, map) :: :ok | {:error, term}
@@ -217,7 +256,8 @@ defmodule Omunculus.Store.Interception do
       step: review.step + 1,
       passed: review.passed,
       target: review.target,
-      summary: summary(emit, review.target)
+      summary: summary(emit, review.target, review.actor.agent),
+      lines: lines(emit)
     }
 
     Events.with_actor(conn, actor, fn ->
