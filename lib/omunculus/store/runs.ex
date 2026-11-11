@@ -296,13 +296,35 @@ defmodule Omunculus.Store.Runs do
 
   def unanswered(conn, run, config, reason_text) do
     Query.transaction(conn, fn ->
-      with {:ok, request} <- View.view(conn, "request", run.request_id) do
+      with {:ok, request} <- View.view(conn, "request", run.request_id),
+           {:ok, delegated?} <- delegated?(conn, run) do
         case left(request, Omunculus.Participant.agent(run.agent)) do
           [] -> {:ok, []}
+          # The run opened works to answer it and waits on them: not unanswered.
+          _parts when delegated? -> {:ok, []}
           parts -> pass_on(conn, run, config, reason_text, parts)
         end
       end
     end)
+  end
+
+  # Whether the run opened a child of its work that is still unfinished.
+  defp delegated?(_conn, %{work_id: nil}), do: {:ok, false}
+
+  defp delegated?(conn, run) do
+    with {:ok, rows} <-
+           Query.all(
+             conn,
+             """
+             SELECT 1 FROM works
+             JOIN events ON events.id = works.event_id
+             WHERE works.parent_id = ? AND works.state IN ('open', 'waiting')
+               AND events.run_id = ?
+             LIMIT 1
+             """,
+             [run.work_id, run.id]
+           ),
+         do: {:ok, rows != []}
   end
 
   # What a run of `receiver` leaves pending: the request it was opened
