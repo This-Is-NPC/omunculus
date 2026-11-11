@@ -880,11 +880,17 @@ defmodule Omunculus.Harness do
     Enum.find_value(events, out, fn
       %{type: "request", run_id: ^run_id, body: body} ->
         case Jason.decode!(body) do
-          %{"interception" => %{"summary" => summary}, "arbiter" => arbiter} ->
+          %{"interception" => %{"summary" => summary} = held, "arbiter" => arbiter} ->
+            lines =
+              for %{"name" => name, "value" => value} <- held["args"] || [],
+                  do: "#{name}: #{value}"
+
             %{
               out
               | output:
-                  String.trim(out.output <> "\n" <> Out.held(summary, Participant.label(arbiter)))
+                  String.trim(
+                    out.output <> "\n" <> Out.held(summary, lines, Participant.label(arbiter))
+                  )
             }
 
           _plain ->

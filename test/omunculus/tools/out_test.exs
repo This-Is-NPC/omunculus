@@ -155,8 +155,13 @@ defmodule Omunculus.Tools.OutTest do
   end
 
   test "a held action says what waits and who reviews it" do
-    assert Out.held(~s(root wants to ask test:client: "Ship?"), "owner") ==
+    assert Out.held(~s(root wants to ask test:client: "Ship?"), [], "owner") ==
              ~s(not done yet: root wants to ask test:client: "Ship?". It was sent to owner for review, and their answer comes back to you; do not do it again)
+  end
+
+  test "a held tool call shows its arguments to the model" do
+    assert Out.held("root wants to run promote", ["to: prod", "url: http://x"], "owner") =~
+             "root wants to run promote (to: prod; url: http://x). It was sent to owner"
   end
 
   test "a value the agent gave is quoted" do

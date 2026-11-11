@@ -526,10 +526,12 @@ defmodule Omunculus.Tools.Out do
   def refused(reason), do: "refused: #{inspect(reason)}"
 
   @doc "What a model reads when an action of its own waits for a review."
-  @spec held(String.t(), String.t()) :: String.t()
-  def held(summary, reviewer),
-    do:
-      "not done yet: #{summary}. It was sent to #{reviewer} for review, and their answer comes back to you; do not do it again"
+  @spec held(String.t(), [String.t()], String.t()) :: String.t()
+  def held(summary, lines, reviewer) do
+    with_args = if lines == [], do: summary, else: "#{summary} (#{Enum.join(lines, "; ")})"
+
+    "not done yet: #{with_args}. It was sent to #{reviewer} for review, and their answer comes back to you; do not do it again"
+  end
 
   @doc "What a model reads first in the run that follows the review that released its tool call."
   @spec released(String.t(), boolean, String.t()) :: String.t()
