@@ -88,11 +88,11 @@ function re(subject) { return /^re:/i.test(subject) ? subject : "Re: " + subject
 function fwd(subject) { return /^fwd?:/i.test(subject) ? subject : "Fwd: " + subject; }
 
 // A message quoted as mail does: {head: "On <when>, Front-desk wrote:", lines}, each
-// line of its text behind "> ". `when` is the date as the person reads it.
+// line of its text behind "> " (no trimEnd: the QML engine lacks it). `when` is the date as the person reads it.
 function quoted(message, when) {
   return {
     head: "On " + when + ", " + message.from.name + " wrote:",
-    lines: String(message.text || "").split("\n").map(line => ("> " + line).trimEnd())
+    lines: String(message.text || "").split("\n").map(line => ("> " + line).replace(/\s+$/, ""))
   };
 }
 
