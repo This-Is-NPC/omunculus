@@ -18,8 +18,7 @@ ModalDialog {
   // [group, [[keys, what they do]…]]; keys are written as they are pressed.
   // Those with a key of the table are read from it; the others are the keys
   // of the controls themselves. Nothing that sends, answers, grants, denies,
-  // escalates, reverts, deletes or cancels has a key of its own; a quick chip
-  // over the composer that decides is chosen by its chord.
+  // escalates, reverts, deletes or cancels has a key of its own.
   readonly property var groups: [
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],

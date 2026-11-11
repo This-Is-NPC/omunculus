@@ -49,18 +49,6 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
-  test "chose heads an answer by the option, apart from asking to adjust" do
-    run!(["Requests"], """
-    if (Requests.chose("approve") !== "YOU CHOSE APPROVE") throw Error("approve");
-    if (Requests.chose("grant_agent") !== "YOU CHOSE GRANT AGENT") throw Error("underscore");
-    if (Requests.chose("adjust") !== "YOU ASKED TO ADJUST") throw Error("adjust");
-    if (Requests.chose("") !== "") throw Error("words only");
-    if (Requests.chose("grant") !== "YOU GRANTED  \u00b7  THIS WORK ONLY") throw Error("grant keeps its scope");
-    if (Requests.chose("grant_agent", true, {who: "clerk"}) !== "YOU GRANTED  \u00b7  FOR CLERK") throw Error("saved scope");
-    if (Requests.chose("grant_network", false) !== "YOU CHOSE GRANT NETWORK") throw Error("a decision's own option");
-    """)
-  end
-
   test "unlocks says what a granted name lets the agent do" do
     run!(["Phrases", "Requests"], """
     if (Requests.unlocks(null, "") !== "") throw Error("nothing");
@@ -72,20 +60,19 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
-  test "options read and order the same on the card and its chips" do
+  test "options read and group as the card shows them" do
     run!(["Requests"], """
     const all = ["deny", "grant_agent", "grant_depth", "grant", "grant_workspace"];
-    if (Requests.ordered(all, true).join() !== "grant,deny") throw Error("order " + Requests.ordered(all, true));
+    if (Requests.once(all, true).join() !== "grant") throw Error("once " + Requests.once(all, true));
     if (Requests.always(all, true).join() !== "grant_agent,grant_workspace") throw Error("always");
     // A decision that names an option grant_* offers it once, like any other.
     const decision = ["confirm_by_hand", "grant_network"];
-    if (Requests.ordered(decision, false).join() !== "confirm_by_hand,grant_network") throw Error("decision order " + Requests.ordered(decision, false));
+    if (Requests.once(decision, false).join() !== "confirm_by_hand,grant_network") throw Error("decision once " + Requests.once(decision, false));
     if (Requests.always(decision, false).length !== 0) throw Error("a decision has no saved scopes");
     if (Requests.optionLabel("grant") !== "GRANT\u00a0\u00b7\u00a0THIS WORK ONLY") throw Error("grant label");
     if (Requests.optionLabel("grant_agent", {who: "clerk"}) !== "FOR CLERK") throw Error("agent label");
     if (Requests.optionLabel("approve") !== "APPROVE") throw Error("plain label");
     if (Requests.optionLabel("pedir-mudancas") !== "PEDIR MUDANCAS") throw Error("hyphen label");
-    if (Requests.chose("pedir-mudancas") !== "YOU CHOSE PEDIR MUDANCAS") throw Error("hyphen chose");
     """)
   end
 

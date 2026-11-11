@@ -1,0 +1,141 @@
+defmodule Omunculus.GuiPendingTest do
+  use ExUnit.Case, async: true
+
+  alias Omunculus.GuiModules
+
+  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Pending"]
+
+  # A sale (w1, seller) handing a design down to a designer (w2), the front
+  # agent being sales; times in seconds, stamps as the server's.
+  @fixtures """
+  const iso = t => new Date(t * 1000).toISOString();
+  const human = {kind: "human", issuer: "local", subject: "1000"};
+  const agent = name => ({kind: "agent", agent: name});
+  const check = (ok, what, value) => { if (!ok) throw Error(what + " " + JSON.stringify(value)); };
+  const sale = {name: "sale", steps: ["qualify", "design", "build"].map(name => ({name, agent: "seller"}))};
+  const works = [
+    {id: "w1", title: "Doce Ana: site", state: "waiting", waiting: "child", workflow: "sale", stage: "build", assignee: "seller", created_at: iso(1000), updated_at: iso(1200)},
+    {id: "w2", title: "Build: Doce Ana", state: "open", parent_id: "w1", assignee: "surgeon", created_at: iso(1300), updated_at: iso(1400)}
+  ];
+  const lanes = {w1: Object.assign({at: 2}, sale), w2: null};
+  const asked = (id, extra) => Object.assign({id, status: "pending", requester: agent("surgeon"), arbiter: human, work_id: "w2", reason: "", options: {}, origins: {}, created_at: iso(1500)}, extra);
+  const grant = name => [{name: "grant", args: {kind: "resource", name}}];
+  const permission = asked("p1", {reason: "I need to fetch fonts.", options: {grant: grant("sandbox.network"), grant_agent: grant("sandbox.network"), grant_stage: grant("sandbox.network"), grant_depth: grant("sandbox.network"), deny: [{name: "deny"}]}});
+  const question = asked("q1", {reason: "Which WhatsApp number should the order button use?\\nIt goes on every page.", created_at: iso(1400)});
+  const questions = asked("q2", {reason: "Before I start:\\n1. Which colours?\\n2. Which fonts?\\n3. Which number?", created_at: iso(1450)});
+  const decision = asked("d1", {requester: agent("seller"), work_id: "w1", reason: "Ana asks for a fifth page.", options: {accept: [], keep: []}, created_at: iso(1600)});
+  const run = (id, name, work) => ({id, agent: name, depth: 1, work_id: work, status: "open"});
+  const build = (requests, runs, now) => Progress.build({works, lanes, journeys: {}, runs: runs || [], runStarts: {r1: 1900}, requests: requests || [], calling: {}, callArgs: {}, rootAgent: "sales", now: now || 2000});
+  const out = build([permission, question, questions, decision], [run("r1", "surgeon", "w2")]);
+  const input = request => ({flat: out.flat, front: "sales", noted: {}, folder: "/work/site", text: request.reason});
+  """
+
+  defp run!(assertions) do
+    assert {"", 0} = GuiModules.run(@modules, @fixtures <> assertions)
+  end
+
+  test "the queue is what waits on you, oldest first, each climbing question once" do
+    run!("""
+    const agentAsks = asked("a1", {arbiter: agent("seller")});
+    const gathering = asked("g1", {created_at: iso(1700), origins: {ask: asked("o1", {status: "escalated", created_at: iso(1100)})}});
+    const ids = Pending.queue([permission, agentAsks, decision, question, gathering]).map(request => request.id).join();
+    check(ids === "q1,p1,d1,g1", "order, humans only, origins hidden", ids);
+    check(Pending.queue([]).length === 0, "empty", "");
+    """)
+  end
+
+  test "an item says who asks, the path down from the front desk, the work and what it unblocks" do
+    run!("""
+    const item = Pending.describe(permission, input(permission));
+    check(item.kind === "permission" && item.word === "PERMISSION" && item.icon === "shield", "kind", item);
+    check(item.asker === "surgeon" && item.path.join(" > ") === "sales > seller > surgeon", "path", item.path);
+    check(item.work === "Build: Doce Ana", "work", item.work);
+    check(item.title === "Surgeon asks to use the network", "title", item.title);
+    check(item.grants === "use the network \\u00b7 this work only", "grants", item.grants);
+    check(item.unblocks === "surgeon resumes Build: Doce Ana \\u00b7 sales and seller wait on it", "unblocks", item.unblocks);
+    check(item.since === iso(1500), "since", item.since);
+    const asks = Pending.describe(question, input(question));
+    check(asks.kind === "needs-you" && asks.word === "QUESTION" && asks.icon === "help", "question kind", asks);
+    check(asks.title === "Which WhatsApp number should the order button use?" && asks.body === "It goes on every page.", "title and body", asks);
+    const list = Pending.describe(questions, input(questions));
+    check(list.title === "Surgeon asks 3 questions" && list.body === "" && list.asks === 3, "numbered list", list);
+    const choose = Pending.describe(decision, input(decision));
+    check(choose.word === "DECISION" && choose.icon === "diamond" && choose.path.join(" > ") === "sales > seller", "decision", choose);
+    check(Pending.describe(Object.assign({}, decision, {arbiter: agent("seller")}), input(decision)).kind === "decision", "an agent's decision has its shape too", "");
+    check(item.audience === "client" && Pending.describe(Object.assign({}, question, {destination: "owners"}), input(question)).audience === "owner", "audience", item.audience);
+    check(choose.unblocks === "seller resumes Doce Ana: site \\u00b7 sales waits on it", "single waiter", choose.unblocks);
+    """)
+  end
+
+  test "a request from an unknown work falls back on the route it was passed along" do
+    run!("""
+    const lost = asked("x1", {work_id: "gone", reason: "Still there?"});
+    const item = Pending.describe(lost, {flat: out.flat, front: "sales", noted: {}, folder: "", text: lost.reason});
+    check(item.path.join(" > ") === "sales > surgeon" && item.work === "" && item.unblocks === "surgeon resumes its work \\u00b7 sales waits on it", "fallback", item);
+    """)
+  end
+
+  test "actions group the options: given once, the no, and the scopes behind Always" do
+    run!("""
+    const all = Pending.actions(Object.keys(permission.options), true);
+    check(all.once.join() === "grant" && all.denies.join() === "deny" && all.always.join() === "grant_agent,grant_stage", "permission", all);
+    const pick = Pending.actions(["accept", "keep", "cancel"], false);
+    check(pick.once.join() === "accept,keep" && pick.denies.join() === "cancel" && pick.always.length === 0, "decision", pick);
+    """)
+  end
+
+  test "an option reads whole even when its scope names nothing" do
+    run!("""
+    const labels = ["grant", "grant_agent", "grant_stage", "grant_depth", "grant_workspace", "deny"].map(option => Requests.optionLabel(option));
+    check(labels.join("|") === "GRANT\\u00a0\\u00b7\\u00a0THIS WORK ONLY|FOR THIS AGENT|IN THIS STAGE|AT THIS DEPTH|IN THE PROJECT|DENY", "bare", labels);
+    check(Requests.optionLabel("grant_stage", {stage: "build"}) === "IN THE BUILD STAGE", "stage", "");
+    check(Requests.optionLabel("grant_workspace", {folder: "site"}) === "IN FOLDER site", "folder", "");
+    """)
+  end
+
+  test "what you did to a request is one sentence with its kind's icon and word" do
+    run!("""
+    const said = (request, reply) => Pending.resolved(request, reply, input(request));
+    const granted = said(permission, {option: "grant"});
+    check(granted.word === "GRANTED" && granted.icon === "shield" && granted.sentence === "You granted surgeon permission to use the network (Build: Doce Ana)", "granted", granted);
+    check(said(permission, {option: "grant_agent"}).sentence.includes("\\u00b7 for surgeon (Build"), "scope", said(permission, {option: "grant_agent"}));
+    const denied = said(permission, {option: "deny"});
+    check(denied.word === "DENIED" && denied.icon === "close" && denied.sentence.startsWith("You denied surgeon permission"), "denied", denied);
+    const chose = said(decision, {option: "accept"});
+    check(chose.word === "CHOSE" && chose.icon === "diamond" && chose.sentence === "You chose accept on seller's decision (Doce Ana: site)", "chose", chose);
+    check(said(decision, {option: "adjust"}).sentence === "You asked seller to adjust (Doce Ana: site)", "adjust", "");
+    const answered = said(question, {option: "", body: "5511"});
+    check(answered.word === "ANSWERED" && answered.icon === "help" && answered.sentence === "You answered surgeon's question (Build: Doce Ana)", "answered", answered);
+    check(said(questions, {body: "1. a"}).sentence === "You answered surgeon's 3 questions (Build: Doce Ana)", "list", "");
+    const sales = asked("s1", {requester: agent("sales"), work_id: "", reason: "Colours?"});
+    check(Pending.resolved(sales, {body: "x"}, {flat: out.flat, text: "Colours?"}).sentence === "You answered sales' question", "possessive of a name in s", "");
+    """)
+  end
+
+  test "a work card says its state in the tree's words, who works now and its stage" do
+    run!("""
+    const working = build([], [run("r1", "surgeon", "w2")]);
+    const card = Pending.workCard(working.flat.find(node => node.work === "w1"), 2000);
+    check(card.title === "Doce Ana: site" && card.state === "waiting" && card.word === "WAITING FOR SURGEON", "word", card);
+    check(card.now.agent === "surgeon" && card.now.doing === "thinking", "who works", card.now);
+    check(card.waits === "seller is waiting for surgeon", "waits", card.waits);
+    check(card.stage.at === 3 && card.stage.count === 3 && card.stage.name === "build" && card.steps.length === 3, "stage", card.stage);
+    check(card.elapsed === "16 min", "elapsed", card.elapsed);
+    const leaf = Pending.workCard(working.flat.find(node => node.work === "w2"), 2000);
+    check(leaf.word === "WORKING" && leaf.now.agent === "surgeon" && leaf.waits === "" && leaf.stage === null, "leaf", leaf);
+    const asking = build([question]);
+    check(Pending.workCard(asking.flat.find(node => node.work === "w2"), 2000).word === "WAITING FOR YOU", "needs you", "");
+    const idle = Pending.workCard(build([]).flat.find(node => node.work === "w2"), 2000);
+    check(idle.now === null, "no one works", idle);
+    """)
+  end
+
+  test "a closed work card keeps the time it took" do
+    run!("""
+    const finished = works.map(work => work.id === "w2" ? Object.assign({}, work, {state: "done", updated_at: iso(1900)}) : work);
+    const done = Progress.build({works: finished, lanes, journeys: {}, runs: [], requests: [], now: 5000, rootAgent: "sales"});
+    const card = Pending.workCard(done.flat.find(node => node.work === "w2"), 5000);
+    check(card.word === "DONE" && card.elapsed === "10 min", "done", card);
+    """)
+  end
+end

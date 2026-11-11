@@ -3,28 +3,31 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/client/Questions.js" as Questions
 import "kit/client/Events.js" as Events
+import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
-// RequestDecision is one request, wherever it shows, as a card of one of
-// three kinds: NEEDS YOU, a question for an answer in words (a numbered list
-// of questions has a box for each); YOUR DECISION, with a button for each
-// option and an optional note; or PERMISSION, with the scopes that grant it
-// and a no with a reason. Its heading says the kind, who asks and on which
-// work, and when, with its tools at the right: copy the question, the "more"
-// menu that holds ESCALATE, and close where the card can close; under 520 px
-// who asks and on which work take a line of their own. The question is shown
-// once, as its asker wrote it; when it was passed up, a chip says through
-// whom, in order, and opens the wordings of each level and the harness's own
-// sentence. Who decides, you or an agent you can overrule, and each decision
-// it gathers from below, under its part, are shown as before. The card's
-// actions sit at its bottom left: its options, SEND while words are written,
-// "I can't answer this", and DENY last; a numbered list's form holds its
-// own, which float on the view's bottom edge while the form's end is out of
-// view, and the heading counts its answers. Sending shows the answer dimmed at
-// once, answered it collapses to the question and your answer, and a failure
-// reopens it with the words kept.
+// RequestDecision is one request, wherever it shows, as an item of one of
+// three kinds, each with its icon and word: QUESTION, answered in words (a
+// numbered list of questions has a box for each); DECISION, with a button for
+// each option; and PERMISSION, with GRANT for this work only, DENY, and an
+// "Always…" menu of the wider scopes. Its heading is the kind, the time and
+// the item's tools (copy the question, the "more" menu that holds ESCALATE,
+// close where the item can close), all on one line; under it the request
+// in a sentence, and who asks, the way down from the front desk, the work,
+// what it unblocks and, for a permission, what it grants. Every text wraps
+// inside the item. The question is shown once, as its asker wrote it; when it
+// was passed up, a chip says through whom and opens the wordings of each
+// level and the harness's own sentence. Who decides, you or an agent you can
+// overrule, and each decision it gathers from below, under its part, are
+// shown as before. The actions are one group at the bottom: the options, SEND
+// while words are written, "I can't answer this", DENY last and "Always…"
+// after it; a numbered list's form holds its own, which float on the view's
+// bottom edge while the form's end is out of view, and the heading counts its
+// answers. A note, or the reason of a no, is behind ADD A NOTE. Sending shows
+// the answer dimmed at once, answered it collapses to the question and your
+// answer, and a failure reopens it with the words kept.
 SurfaceFrame {
   id: card
 
@@ -42,30 +45,24 @@ SurfaceFrame {
   // The questions it passes on when the harness opened it, each its asker's;
   // its own reason is then only how it came here.
   readonly property var passed: request && Omunculus.noted[key] ? Requests.passedOn(request) : []
-  readonly property string asker: passed.length > 0 ? Requests.label(passed[0].requester) : request ? Requests.asker(request) : ""
-  // The work it concerns: the origin's when the harness passed it up, else the
-  // conversation's own subject.
-  readonly property var origin: passed.length > 0 ? Omunculus.work(passed[0].work_id || "") : null
-  readonly property string subject: origin ? origin.title : work ? work.title : Omunculus.subject
-  // The subject when it is not the conversation's own, which the masthead has.
-  readonly property string about: subject !== Omunculus.subject ? subject : ""
+  // The climb of its asker's works, the way down, the title and what it asks.
+  readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
+  readonly property string question: request ? Requests.question(request, Omunculus.noted[key]) : ""
+  readonly property var facts: request ? Pending.describe(request, {
+    flat: Omunculus.progress ? Omunculus.progress.flat : [], front: Omunculus.agent || Omunculus.lastAgent,
+    noted: Omunculus.noted, folder: place.root || "", text: Events.readable(question)
+  }) : null
+  readonly property string asker: facts ? facts.asker : ""
   // Who passed it up, from the asker up, and how each level worded it.
   readonly property var climb: request ? Requests.chain(request).reverse() : []
   // The answered request this one repeats, and what you said to it.
   readonly property var earlier: open ? Requests.repeated(request, Omunculus.requests, Omunculus.replies) : null
   readonly property var earlierReply: earlier ? Omunculus.replies[earlier.id] : null
-  // The asker first, then who passed it on toward you: design-lead, seller, sales.
-  readonly property var askers: {
-    const unique = request ? Requests.route(request, Omunculus.noted[key]) : []
-    return unique.length > 0 ? unique : asker !== "" ? [asker] : []
-  }
   // Which of its own buttons the card offers, from its state and not from
   // their visibility, which follows the column that holds them.
   // A decision is sent by one of its options, which carry the words; SEND
   // would send them with none chosen.
-  readonly property bool sends: open && !formLoader.active && (escalating || (kind !== "permission" && kind !== "decision" && hasWords))
-  // The column of its options, for the thread to tell when they are in view.
-  readonly property alias choicesRow: decisions
+  readonly property bool sends: open && !formLoader.active && (escalating || kind === "needs-you")
   readonly property bool cannotShown: open && kind === "needs-you" && !formLoader.active && !escalating
   readonly property bool denies: open && options.includes("deny") && !escalating
   readonly property var options: request ? Object.keys(request.options || {}) : []
@@ -75,15 +72,12 @@ SurfaceFrame {
   readonly property var choices: request ? Requests.choices(request) : []
   readonly property var own: choices.find(choice => choice.path.length === 0) || null
   readonly property var gathered: choices.filter(choice => choice.path.length > 0)
-  // The first name a grant among its decisions gives, as {kind, name}.
-  readonly property var wanted: request ? Requests.granted(request) : null
-  readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
+  // The scopes behind "Always…", and the options a grant is made of.
+  readonly property var ownActions: own && !escalating ? Pending.actions(own.options, kind === "permission") : { once: [], denies: [], always: [] }
 
   // The dim tone, kept readable on the card's own fill.
   readonly property color dim: Theme.readableOn(fill)
-  readonly property string kind: request ? Requests.kind(request) : ""
-  // The question as its asker wrote it.
-  readonly property string question: request ? Requests.question(request, Omunculus.noted[key]) : ""
+  readonly property string kind: facts ? facts.kind : ""
   // The question as a numbered list, when it is one a person answers. Its
   // model is held by value: it changes only when the words of the question do,
   // so the boxes being written in are never rebuilt by a refresh.
@@ -94,27 +88,35 @@ SurfaceFrame {
   readonly property bool busy: delivery === "sending"
   // Answered by you or on your behalf, and no longer waiting.
   readonly property bool settled: !open && answer !== null
-  // Whom it is for, then what it asks: "OWNER DECISION  ·  PERMISSION".
-  readonly property var badge: {
-    const whom = request ? Requests.audiences[Requests.audience(request)] : { text: "", icon: "warning" }
-    const what = ({ "needs-you": "NEEDS YOU", decision: "YOUR DECISION", permission: "PERMISSION" })[kind]
-    return { icon: whom.icon, text: what ? whom.text + "  \u00b7  " + what : whom.text }
-  }
+  // The lines under the title: who and where, as [{name, value, tone}].
+  readonly property var fields: !facts ? [] : [
+    { name: "ASKS", value: facts.asker, tone: Omunculus.toneOf(facts.asker) },
+    { name: "PATH", value: facts.path.join(" › ") },
+    { name: "WORK", value: facts.work },
+    { name: "UNBLOCKS", value: facts.unblocks },
+    { name: "GRANTS", value: kind === "permission" ? facts.grants : "", tone: Theme.warning },
+    { name: "FOR", value: facts.audience === "owner" ? "the project's owner" : "" }
+  ].filter(field => field.value !== "")
 
   // Whether the words written escalate it rather than answer it.
   property bool escalating: false
   // What was sent, shown while it goes.
   property string sentText: ""
   property bool wording: false
+  // Whether the words of a decision or a permission are open.
+  property bool noting: false
   readonly property string note: words.text.trim()
   readonly property bool hasWords: note !== ""
+  // The box for words shows for a question and an escalation, and for a
+  // decision or a permission once a note is asked for.
+  readonly property bool wordsShown: open && !formLoader.active && (escalating || kind === "needs-you" || noting)
 
   // Put the keyboard in the words, or on the first way to decide.
   function focusWords() {
     const form = formLoader.item as QuestionForm
     if (form && formLoader.active)
       form.focusBox()
-    else if (!formLoader.active)
+    else if (!formLoader.active && wordsShown)
       words.forceActiveFocus()
   }
 
@@ -179,9 +181,6 @@ SurfaceFrame {
   // How many of a numbered list are answered, for the heading.
   readonly property string counted: formLoader.active && formLoader.item ? (formLoader.item as QuestionForm).answered + " OF " + form.items.length + " ANSWERED" : ""
 
-  // Narrow, the header takes two lines.
-  readonly property bool stacked: width < Theme.size.measureFrom
-
   implicitHeight: content.implicitHeight + Theme.space.insetTop + Theme.space.inset
   variant: yours ? "filled" : "outline"
   tone: Theme.warning
@@ -192,50 +191,21 @@ SurfaceFrame {
     anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
     spacing: Theme.space.gap
 
-    // The kind, who asks and on what, how many of a numbered list are
-    // answered, and when, beside the tools; under 520 px, who asks, on what
-    // and the count go on a line of their own.
+    // The kind, the time and the tools, on one line.
     RowLayout {
       Layout.fillWidth: true
-      Layout.rightMargin: tools.width + Theme.space.gap
-      Layout.minimumHeight: tools.height
       spacing: Theme.space.gap
-      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open ? card.badge.icon : "check"; size: 11; color: card.open ? Theme.warning : card.dim }
+      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open && card.facts ? card.facts.icon : "check"; size: 14; color: card.open ? Theme.warning : card.dim }
       Label {
         Layout.alignment: Qt.AlignVCenter
-        text: card.open ? card.badge.text : card.answer ? "ANSWERED" : "CLOSED"
+        Layout.minimumWidth: 0
+        text: card.open ? (card.facts ? card.facts.word : "") : card.answer ? "ANSWERED" : "CLOSED"
         color: card.open && card.yours ? Theme.warning : card.dim
         font.pixelSize: Theme.type.kicker.size
         font.letterSpacing: Theme.type.kicker.tracking
-      }
-      Asks {
-        visible: !card.stacked
-        Layout.alignment: Qt.AlignVCenter
-        Layout.maximumWidth: content.width * 0.5
-        names: card.askers
-        dim: card.dim
-      }
-      Label {
-        visible: !card.stacked && card.about !== ""
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        Layout.alignment: Qt.AlignVCenter
-        text: "·  " + card.about
-        color: card.dim
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: 1
         elide: Text.ElideRight
       }
-      Item {
-        visible: card.stacked || card.about === ""
-        Layout.fillWidth: true
-      }
-      Counted {
-        visible: !card.stacked && text !== ""
-        Layout.alignment: Qt.AlignVCenter
-        text: card.counted
-        color: card.dim
-      }
+      Item { Layout.fillWidth: true }
       Label {
         Layout.alignment: Qt.AlignVCenter
         text: card.stamp
@@ -243,69 +213,72 @@ SurfaceFrame {
         font.pixelSize: Theme.type.stamp.size
         font.letterSpacing: Theme.type.stamp.tracking
       }
-    }
-    RowLayout {
-      visible: card.stacked
-      Layout.fillWidth: true
-      spacing: Theme.space.tight
-      Asks {
-        Layout.maximumWidth: content.width
-        names: card.askers
-        dim: card.dim
+      IconButton {
+        visible: card.question !== ""
+        name: "copy"
+        tip: "copy the question"
+        onClicked: Omunculus.copy(card.question)
       }
-      Label {
-        visible: card.about !== ""
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        text: "·  " + card.about
-        color: card.dim
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: 1
-        elide: Text.ElideRight
+      ActionMenu {
+        visible: card.yours
+        tip: "more"
+        items: [card.escalating
+          ? { id: "answer", icon: "enter", text: "ANSWER INSTEAD" }
+          : { id: "escalate", icon: "chevron-up", text: "ESCALATE" }]
+        onChosen: id => {
+          card.escalating = id === "escalate"
+          card.focusWords()
+        }
       }
-      Counted {
-        visible: text !== ""
-        text: card.counted
-        color: card.dim
+      IconButton {
+        visible: card.closable
+        name: "close"
+        tip: "close"
+        onClicked: card.closed()
       }
     }
 
+    // What it asks, in a sentence, wrapped inside the item.
     Label {
       Layout.fillWidth: true
-      Layout.maximumWidth: 620
-      visible: card.earlierReply !== null
-      text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.option && card.earlierReply.body === card.earlierReply.option ? Requests.optionText(card.earlierReply.option) : card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
-      color: card.dim
-      font.pixelSize: Theme.type.meta.size
-      maximumLineCount: 1
-      elide: Text.ElideRight
-    }
-
-    Label {
-      Layout.fillWidth: true
-      visible: card.wanted !== null && !card.settled
-      text: card.asker + " wants to " + Requests.unlocks(card.wanted, card.place.root)
+      Layout.minimumWidth: 0
+      visible: card.open && !!card.facts && card.facts.title !== ""
+      text: card.facts ? card.facts.title : ""
       color: Theme.foreground
       font.pixelSize: Theme.type.cardBody.size
+      font.bold: true
       lineHeight: Theme.type.cardBody.lineHeight
       wrapMode: Text.Wrap
     }
-
-    // What the person is asked, in full contrast and at a readable measure;
-    // answered, only its first lines stay, dim.
+    Counted {
+      visible: text !== ""
+      text: card.counted
+      color: card.dim
+    }
     Prose {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
-      visible: !!card.request && card.question !== "" && !card.settled && card.form === null
-      source: Omunculus.inline(Events.readable(card.question))
+      visible: card.open && !!card.facts && card.facts.body !== ""
+      source: card.facts ? Omunculus.inline(card.facts.body) : ""
       color: Theme.foreground
-      font.pixelSize: Theme.type.cardBody.size
-      lineHeight: Theme.type.cardBody.lineHeight
+      font.pixelSize: Theme.type.body.size
+      lineHeight: Theme.type.body.lineHeight
       wrapMode: Text.Wrap
     }
-    Label {
+    // A permission's own words: why it is asked.
+    Prose {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
+      visible: card.open && card.kind === "permission" && card.question.trim() !== ""
+      source: Omunculus.inline(Events.readable(card.question))
+      color: card.dim
+      font.pixelSize: Theme.type.body.size
+      wrapMode: Text.Wrap
+    }
+
+    Label {
+      Layout.fillWidth: true
+      Layout.minimumWidth: 0
       visible: card.settled
       text: Events.readable(card.question).replace(/\s+/g, " ")
       color: card.dim
@@ -313,6 +286,44 @@ SurfaceFrame {
       maximumLineCount: 2
       elide: Text.ElideRight
       wrapMode: Text.Wrap
+    }
+
+    // Who asks, the way down, the work and what it unblocks.
+    ColumnLayout {
+      Layout.fillWidth: true
+      visible: card.open && card.fields.length > 0
+      spacing: Theme.space.line
+      Repeater {
+        model: card.open ? card.fields : []
+        delegate: RowLayout {
+          id: field
+          required property var modelData
+          Layout.fillWidth: true
+          spacing: Theme.space.gap
+          Caption { Layout.preferredWidth: 80; Layout.alignment: Qt.AlignTop; text: field.modelData.name }
+          Label {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            text: field.modelData.value
+            color: field.modelData.tone !== undefined ? field.modelData.tone : Theme.foreground
+            font.pixelSize: Theme.type.body.size
+            font.bold: field.modelData.name === "ASKS"
+            wrapMode: Text.Wrap
+          }
+        }
+      }
+    }
+
+    Label {
+      Layout.fillWidth: true
+      Layout.minimumWidth: 0
+      Layout.maximumWidth: 620
+      visible: card.earlierReply !== null
+      text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.option && card.earlierReply.body === card.earlierReply.option ? Requests.optionText(card.earlierReply.option) : card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
+      color: card.dim
+      font.pixelSize: Theme.type.meta.size
+      maximumLineCount: 1
+      elide: Text.ElideRight
     }
 
     Chip {
@@ -327,6 +338,7 @@ SurfaceFrame {
     // How each level above the asker worded it, then the harness's sentence.
     Label {
       Layout.fillWidth: true
+      Layout.minimumWidth: 0
       Layout.maximumWidth: 620
       visible: (card.passed.length > 0 || card.climb.length > 1) && card.wording && !card.settled
       text: card.climb.slice(1).map(level => Requests.label(level.requester) + ": " + String(level.reason || "")).concat(card.request ? [String(card.request.reason || "")] : [])
@@ -412,14 +424,26 @@ SurfaceFrame {
       }
     }
 
+    // A note to a decision or a permission is asked for.
+    Chip {
+      visible: card.open && !formLoader.active && !card.escalating && card.kind !== "needs-you" && !card.noting
+      icon: "plus"
+      text: card.kind === "permission" ? "ADD A REASON OR A NOTE" : "ADD A NOTE"
+      onClicked: {
+        card.noting = true
+        Qt.callLater(card.focusWords)
+      }
+    }
+
     // In words: an answer that chooses no option, the reason of a no, a note
     // to a choice or, escalating, why it goes up.
     ColumnLayout {
       Layout.fillWidth: true
-      visible: card.open && !formLoader.active
+      visible: card.wordsShown
       spacing: Theme.space.tight
       Caption {
-        text: card.escalating ? "WHY IT GOES UP" : card.kind === "permission" ? (card.wanted && card.wanted.kind === "tool" ? "IF NOT, WHAT TO CHANGE (OPTIONAL)" : "REASON FOR A NO (OPTIONAL)")
+        Layout.fillWidth: true
+        text: card.escalating ? "WHY IT GOES UP" : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
           : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
       }
       TextBlock {
@@ -429,7 +453,7 @@ SurfaceFrame {
         implicitHeight: contentHeight + topPadding + bottomPadding
         readOnly: card.busy
         opacity: readOnly ? 0.5 : 1
-        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "an answer in words" : card.kind === "decision" ? "answer its questions or add a note" : ""
+        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
         Accessible.name: card.escalating ? "why it goes up" : "your words"
         Keys.onPressed: Typing.mark()
         submits: card.kind !== "decision"
@@ -437,230 +461,125 @@ SurfaceFrame {
       }
     }
 
-    // The card's actions: the decisions it gathers from below, each under its
-    // part and who asked it, then its own options, the answer in words, and
-    // the no last.
-    ColumnLayout {
-      id: decisions
-      Layout.fillWidth: true
-      visible: card.open && (card.gathered.length > 0 || actions.shown || (!!card.own && Requests.always(card.own.options, card.kind === "permission").length > 0))
-      enabled: !card.busy
-      spacing: Theme.space.gap
+    // The decisions it gathers from below, each under its part and who asked
+    // it, as a group of its own.
+    Repeater {
+      model: card.open && !card.escalating ? card.gathered : []
+      delegate: ColumnLayout {
+        id: choice
+        required property var modelData
+        readonly property var parts: Pending.actions(modelData.options, Requests.kind(modelData.request) === "permission")
+        function decide(option) { card.decide(option, card.note, modelData.path) }
+        Layout.fillWidth: true
+        enabled: !card.busy
+        spacing: Theme.space.tight
 
-      Repeater {
-        model: card.open && !card.escalating ? card.gathered : []
-        delegate: ColumnLayout {
-          id: choice
-          required property var modelData
-          readonly property var options: modelData.options
-          function decide(option) { card.decide(option, card.note, modelData.path) }
+        Caption {
           Layout.fillWidth: true
-          spacing: Theme.space.tight
-
-          Caption {
-            Layout.fillWidth: true
-            visible: card.gathered.length > 1
-            wrapMode: Text.Wrap
-            text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + Theme.type.meta.separator + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
-          }
-          Flow {
-            Layout.fillWidth: true
-            spacing: Theme.space.tight
-            Repeater {
-              model: Requests.ordered(choice.options || [], Requests.kind(choice.request) === "permission")
-              delegate: TraceButton {
-                required property string modelData
-                dense: true
-                role: Requests.guarded(modelData) ? "guarded" : "progress"
-                icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : ""
-                text: card.labelOf(modelData, choice.modelData.request)
-                onClicked: choice.decide(modelData)
-              }
+          visible: card.gathered.length > 1
+          wrapMode: Text.Wrap
+          text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + Theme.type.meta.separator + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
+        }
+        ActionGroup {
+          label: "options of " + Requests.label(choice.modelData.request.requester)
+          Repeater {
+            model: choice.parts.once.concat(choice.parts.denies)
+            delegate: TraceButton {
+              required property string modelData
+              dense: true
+              role: Requests.guarded(modelData) ? "guarded" : "progress"
+              icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : "diamond"
+              text: card.labelOf(modelData, choice.modelData.request)
+              onClicked: choice.decide(modelData)
             }
           }
-          AlwaysChips {
-            options: Requests.always(choice.options || [], Requests.kind(choice.request) === "permission")
+          AlwaysMenu {
+            options: choice.parts.always
             labels: options.map(option => card.labelOf(option, choice.modelData.request))
             onChosen: option => choice.decide(option)
           }
         }
       }
+    }
 
-      Flow {
-        id: actions
-        readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || card.sends || card.cannotShown || card.denies
-        Layout.fillWidth: true
-        spacing: Theme.space.tight
-        Repeater {
-          id: ownOptions
-          model: card.open && card.own && !card.escalating ? Requests.once(card.own.options, card.kind === "permission") : []
-          delegate: TraceButton {
-            required property string modelData
-            dense: true
-            role: "progress"
-            icon: modelData === "grant" ? "check" : ""
-            text: card.labelOf(modelData)
-            onClicked: card.decide(modelData, card.note, [])
-          }
-        }
-        TraceButton {
-          id: send
-          visible: card.sends
+    // The card's own actions, as one group: its options, the answer in words,
+    // and the no last, then the wider scopes of a grant.
+    ActionGroup {
+      id: actions
+      readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || card.sends || card.cannotShown || card.denies || card.ownActions.always.length > 0
+      label: "actions"
+      visible: card.open && actions.shown
+      enabled: !card.busy
+
+      Repeater {
+        id: ownOptions
+        model: card.open && !card.escalating ? card.ownActions.once : []
+        delegate: TraceButton {
+          required property string modelData
           dense: true
           role: "progress"
-          filled: card.hasWords
-          icon: card.escalating ? "chevron-up" : "enter"
-          text: card.escalating ? "ESCALATE" : "SEND"
-          tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : "answer in your words, choosing no option"
-          busy: card.busy
-          reason: card.escalating && !card.hasWords ? "say why it goes up first" : ""
-          onClicked: card.submitWords()
-        }
-        TraceButton {
-          id: cannot
-          visible: card.cannotShown
-          dense: true
-          role: "progress"
-          text: "I CAN'T ANSWER THIS"
-          tip: "tell the team you can't answer, so they sort it out"
-          onClicked: card.cannotAnswer()
-        }
-        Repeater {
-          id: ownGuarded
-          model: card.open && card.own && !card.escalating ? card.own.options.filter(option => option === "cancel") : []
-          delegate: TraceButton {
-            required property string modelData
-            dense: true
-            role: "guarded"
-            text: card.labelOf(modelData)
-            onClicked: card.decide(modelData, card.note, [])
-          }
-        }
-        TraceButton {
-          id: deny
-          visible: card.denies
-          dense: true
-          role: "guarded"
-          icon: "close"
-          text: "DENY"
-          tip: "say no, with your words as the reason"
-          onClicked: card.decide("deny", card.note)
+          filled: modelData === "grant" && card.yours
+          icon: modelData === "grant" ? "check" : "diamond"
+          text: card.labelOf(modelData)
+          onClicked: card.decide(modelData, card.note, [])
         }
       }
-
-      AlwaysChips {
-        options: card.open && card.own && !card.escalating ? Requests.always(card.own.options, card.kind === "permission") : []
+      TraceButton {
+        id: send
+        visible: card.sends
+        dense: true
+        role: "progress"
+        filled: card.hasWords
+        icon: card.escalating ? "chevron-up" : "enter"
+        text: card.escalating ? "ESCALATE" : "ANSWER"
+        tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : "answer in your words, choosing no option"
+        busy: card.busy
+        reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : "type your answer first"
+        onClicked: card.submitWords()
+      }
+      TraceButton {
+        id: cannot
+        visible: card.cannotShown
+        dense: true
+        role: "progress"
+        text: "I CAN'T ANSWER THIS"
+        tip: "tell the team you can't answer, so they sort it out"
+        onClicked: card.cannotAnswer()
+      }
+      Repeater {
+        id: ownGuarded
+        model: card.open && card.own && !card.escalating ? card.own.options.filter(option => option === "cancel") : []
+        delegate: TraceButton {
+          required property string modelData
+          dense: true
+          role: "guarded"
+          text: card.labelOf(modelData)
+          onClicked: card.decide(modelData, card.note, [])
+        }
+      }
+      TraceButton {
+        id: deny
+        visible: card.denies
+        dense: true
+        role: "guarded"
+        icon: "close"
+        text: "DENY"
+        tip: "say no, with your words as the reason"
+        onClicked: card.decide("deny", card.note)
+      }
+      AlwaysMenu {
+        options: card.ownActions.always
         labels: options.map(option => card.labelOf(option))
         onChosen: option => card.decide(option, card.note, [])
       }
     }
   }
 
-  // The card's tools, at its top right: copy the question, the rare actions,
-  // and close where it can.
-  Row {
-    id: tools
-    anchors { right: parent.right; top: parent.top; rightMargin: Theme.space.inset; topMargin: Theme.space.insetTop }
-    spacing: Theme.space.tight
-
-    IconButton {
-      visible: card.question !== ""
-      name: "copy"
-      tip: "copy the question"
-      onClicked: Omunculus.copy(card.question)
-    }
-    ActionMenu {
-      visible: card.yours
-      tip: "more"
-      items: [card.escalating
-        ? { id: "answer", icon: "enter", text: "ANSWER INSTEAD" }
-        : { id: "escalate", icon: "chevron-up", text: "ESCALATE" }]
-      onChosen: id => {
-        card.escalating = id === "escalate"
-        card.focusWords()
-      }
-    }
-    IconButton {
-      visible: card.closable
-      name: "close"
-      tip: "close"
-      onClicked: card.closed()
-    }
-  }
-
   // The count of a numbered list's answers, in the heading's readout type.
   component Counted: Label {
+    Layout.fillWidth: true
+    Layout.minimumWidth: 0
     font.pixelSize: Theme.type.header.size
     font.letterSpacing: Theme.type.meta.tracking
-  }
-
-  // Who asks in their tone, then "asks", then how it came to you ("· via
-  // seller › sales"); the way elides first.
-  component Asks: RowLayout {
-    id: asks
-    property var names: []
-    property color dim
-    Layout.fillWidth: false
-    spacing: 0
-    Label {
-      text: asks.names[0] || ""
-      color: Omunculus.toneOf(text)
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: 1
-    }
-    Label {
-      text: " asks"
-      color: asks.dim
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: 1
-    }
-    Label {
-      visible: asks.names.length > 1
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      text: "  ·  via " + asks.names.slice(1).join(" › ")
-      color: asks.dim
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: 1
-      elide: Text.ElideRight
-    }
-  }
-
-  // Always: each scope a grant is saved for in the project settings, as chips
-  // behind a quiet disclosure, so that one click cannot save a standing grant.
-  component AlwaysChips: ColumnLayout {
-    id: always
-    property var options: []
-    // How each option reads on its chip.
-    property var labels: []
-    property bool opened: false
-    signal chosen(string option)
-    Layout.fillWidth: true
-    visible: options.length > 0
-    spacing: Theme.space.tight
-    Chip {
-      text: always.opened ? "ALWAYS ALLOW" + Theme.type.meta.separator + "HIDE" : "ALWAYS ALLOW…"
-      onClicked: always.opened = !always.opened
-    }
-    Caption {
-      Layout.fillWidth: true
-      visible: always.opened
-      wrapMode: Text.Wrap
-      text: "SAVED IN THE PROJECT SETTINGS"
-    }
-    Flow {
-      Layout.fillWidth: true
-      visible: always.opened
-      spacing: Theme.space.tight
-      Repeater {
-        model: always.options
-        delegate: Chip {
-          required property string modelData
-          required property int index
-          text: always.labels[index] || ""
-          onClicked: always.chosen(modelData)
-        }
-      }
-    }
   }
 }

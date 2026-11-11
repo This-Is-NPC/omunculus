@@ -43,20 +43,21 @@ function chosen(answer) {
 // An option as a button reads it: its words in capitals.
 function optionText(option) { return option.replace(/[-_]/g, " ").toUpperCase(); }
 
-// An option as its card button and quick chip read it. `of` names where a
-// scope applies: {who, stage, folder}.
+// An option as its button reads it, whole even when what it names is not
+// known. `of` names where a scope applies: {who, stage, folder}.
 function optionLabel(option, of) {
   const at = of || {};
   return ({
     grant: "GRANT" + "\u00a0\u00b7\u00a0THIS WORK ONLY",
-    grant_agent: "FOR " + String(at.who || "").toUpperCase(),
-    grant_stage: "IN THE " + String(at.stage || "").toUpperCase() + " STAGE",
+    grant_agent: at.who ? "FOR " + String(at.who).toUpperCase() : "FOR THIS AGENT",
+    grant_depth: "AT THIS DEPTH",
+    grant_stage: at.stage ? "IN THE " + String(at.stage).toUpperCase() + " STAGE" : "IN THIS STAGE",
     grant_workspace: at.folder ? "IN FOLDER " + at.folder : "IN THE PROJECT",
     deny: "DENY"
   })[option] || optionText(option);
 }
 
-// A no or a cancel: given last and never as a quick first choice.
+// A no or a cancel: given last, apart from the choices that go ahead.
 function guarded(option) { return option === "deny" || option === "cancel"; }
 
 // Whether an option is a scope a grant is saved for: only a permission's
@@ -72,20 +73,6 @@ function always(options, permission) { return options.filter(option => scoped(op
 function once(options, permission) {
   const rest = options.filter(option => option !== "grant" && !scoped(option, permission) && !guarded(option));
   return (options.includes("grant") ? ["grant"] : []).concat(rest);
-}
-
-// Every option in the card's order: those given once, then a no or a cancel.
-function ordered(options, permission) { return once(options, permission).concat(options.filter(guarded)); }
-
-// What the heading of your answer says of the option you chose; "" for an
-// answer in words. Adjusting is asking for changes, not choosing. A grant
-// keeps its scope: `of` ({who, stage, folder}) says where a saved one applies.
-function chose(option, permission, of) {
-  if (!option) return "";
-  if (option === "adjust") return "YOU ASKED TO ADJUST";
-  if (option === "grant") return "YOU GRANTED  \u00b7  THIS WORK ONLY";
-  if (scoped(option, permission)) return "YOU GRANTED  \u00b7  " + optionLabel(option, of);
-  return "YOU CHOSE " + optionText(option);
 }
 
 // What a granted name, as {kind, name}, lets the agent do; `root` is its

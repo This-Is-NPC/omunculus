@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
@@ -19,17 +20,18 @@ import "kit/ui"
 // under its head: the header strip, with the conversation's meta, whose
 // counts open the team and the cost, ANSWER while something waits on you
 // and its progress on two lines, and its tabs.
-// The chat, yours with the root agent, where each question for you is a
-// card, the quick chips of the newest decision over the composer, and,
-// opened, the progress beside the thread (a card over it on a medium window,
-// a sheet over the page on a narrow one); the team, the outline of the works
+// The chat, the dialogue with the root agent, where each work handed down is
+// one card and what you answered a sentence, and, opened, the progress beside
+// the thread (a card over it on a medium window, a sheet over the page on a
+// narrow one); the team, the outline of the works
 // and the work picked in full (TeamView); the log, every event a row; and
 // what it cost. A work's thread also opens as a page of its own, under the
 // way down to it. The log, the team and the cost are loaded when first on
 // screen. A conversation's pages have no bar: their rarer actions are the
-// items of the masthead's menu (`more`), and their keys are chords. On the
-// chat a request is answered in its card; elsewhere in its decision, opened
-// over the page. Every move into another level, conversation or project is
+// items of the masthead's menu (`more`), and their keys are chords. What
+// waits on you is answered in the pending queue, opened from a counter under
+// the head over any page; on the team and a work's page a request also has
+// its decision, opened over the page. Every move into another level, conversation or project is
 // remembered, so BACK, and Esc once the page has let go of what it holds,
 // return to exactly where it was: the page, its level, its project, its
 // conversation and the node picked; back from the first page entered is
@@ -104,6 +106,12 @@ Item {
   property string pickedNode: ""
   // The work whose thread is on the thread page.
   property string threadWork: ""
+  // What waits on you, oldest first, as [{id, at}], held by value so the
+  // queue's items are not rebuilt by a refresh that changes none of them, and
+  // whether the queue is open over the page.
+  readonly property string pendingJson: JSON.stringify(Pending.queue(Omunculus.requests).map(request => ({ id: request.id, at: request.created_at || "" })))
+  readonly property var pending: JSON.parse(pendingJson)
+  property bool queueOpen: false
 
   // Whether the conversation has said nothing yet, or is not made.
   readonly property bool fresh: Omunculus.drafting || (open && Omunculus.thread("").count === 0)
@@ -311,17 +319,17 @@ Item {
     return chain
   }
 
-  // Puts the keyboard in the words of the newest question for you; the
-  // sheet of the progress, over the chat, closes first.
-  function replyNow() {
+  // Opens the pending queue over the page; the progress sheet over a narrow
+  // chat closes first.
+  function openQueue() {
     if (progressShown && chat.progressMode === "sheet")
       progressChoice = false
-    timeline.focusCard()
+    queueOpen = true
   }
 
   // Answers what waits on you: on the team, nearest the work picked; on a
-  // work's page, what it asked; elsewhere in the conversation, the newest
-  // question for you, on the chat.
+  // work's page, what it asked; elsewhere in the conversation, in the pending
+  // queue.
   function answer() {
     if (page === "map") {
       if (replyTo !== "")
@@ -329,10 +337,8 @@ Item {
     } else if (page === "work") {
       if (workAsks.length > 0)
         decision.show(workAsks[0].id, false)
-    } else {
-      go("chat")
-      Qt.callLater(replyNow)
-    }
+    } else
+      openQueue()
   }
 
   // Takes the chat to the delivered result.
@@ -448,29 +454,8 @@ Item {
     return items
   }
 
-  // The quick chips over the chat's composer: the options of the newest
-  // decision waiting on you, which decide it with the card's note — a grant
-  // saved for good is chosen on its card — while its buttons are out of view,
-  // then PROGRESS; none while no decision waits.
-  readonly property var quick: {
-    const request = Omunculus.deciding
-    if (!request)
-      return []
-    const progress = { text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }
-    // The card's own buttons decide it; the strip opens the progress.
-    if (timeline.decidingShown)
-      return []
-    const options = [].concat(...Requests.choices(request).map(choice => Requests.ordered(choice.options, Requests.kind(choice.request) === "permission")
-      .map(option => ({
-        text: Requests.optionLabel(option),
-        tip: option.replace(/_/g, " ") + ", to what " + Requests.label(choice.request.requester) + " asks",
-        run: () => timeline.decide(request.id, option, choice.path)
-      }))))
-    return options.concat([progress])
-  }
-
   // The chords of the page that no command of its bar has: those of a work's
-  // page, of a conversation's pages, its menu's and the quick chips', which a
+  // page, of a conversation's pages and its menu's, which a
   // field being written leaves to them. None is a bare key.
   readonly property var chords: {
     const chord = (id, run) => ({ key: Shortcuts.chord(id), run: run })
@@ -481,8 +466,6 @@ Item {
     const all = [chord("reply", () => view.answer()), chord("progress", () => view.toggleProgress(true))]
     if (page === "chat" && Omunculus.unread.length > 0)
       all.push(chord("mark-read", () => view.readNote()))
-    if (page === "chat" && !asking)
-      quick.slice(0, Shortcuts.keys("quick").length).forEach((chip, index) => all.push({ key: Shortcuts.keys("quick")[index], run: chip.run }))
     if (page === "map" && team) {
       all.push(chord("team-log", () => view.team.showTab("log")), chord("team-changes", () => view.team.showTab("changes")))
       more.filter(item => ["write", "comment"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
@@ -502,11 +485,14 @@ Item {
   readonly property real bottomRoom: page === "chat" && !asking ? mainComposer.height + gap
     : page === "thread" ? threadComposer.height + gap : 0
 
-  // Whether the decision of a request is open over the page.
-  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible
+  // Whether the decision of a request, the pending queue or a new project is
+  // open over the page.
+  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible || queueOpen
 
   function focusEntry() {
-    if (page === "projects")
+    if (queueOpen)
+      queue.focusFirst()
+    else if (page === "projects")
       projectsList.focusEntry()
     else if (page === "conversations")
       conversations.focusEntry()
@@ -528,8 +514,6 @@ Item {
       threadComposer.focusEntry()
     else if (asking)
       whom.forceActiveFocus()
-    else if (mainComposer.answerWaits && mainComposer.empty)
-      timeline.focusCard()
     else
       mainComposer.focusEntry()
   }
@@ -540,12 +524,17 @@ Item {
     if (active)
       focusEntry()
   }
-  // Esc in a question's card or in the progress returns to the composer;
-  // the progress sheet over a narrow chat closes first.
+  // Esc closes the pending queue; in the progress it returns to the composer,
+  // the progress sheet over a narrow chat closing first.
   Keys.onEscapePressed: {
+    if (queueOpen) {
+      queueOpen = false
+      focusEntry()
+      return
+    }
     if (page === "chat") {
       const sheet = progressShown && chat.progressMode === "sheet"
-      if (sheet || timeline.cardFocused() || Focus.within(Window.activeFocusItem, chat.progressArea())) {
+      if (sheet || Focus.within(Window.activeFocusItem, chat.progressArea())) {
         if (sheet)
           progressChoice = false
         mainComposer.focusEntry()
@@ -568,14 +557,6 @@ Item {
     Qt.callLater(focusEntry)
   }
   onAskingChanged: Qt.callLater(focusEntry)
-  // A question that arrives takes the keyboard from an empty box.
-  Connections {
-    target: mainComposer
-    function onAnswerWaitsChanged() {
-      if (mainComposer.answerWaits && mainComposer.empty && view.page === "chat")
-        Qt.callLater(view.focusEntry)
-    }
-  }
   Connections {
     target: Omunculus
     function onLoadedChanged() {
@@ -583,6 +564,7 @@ Item {
         Qt.callLater(view.focusEntry)
     }
     function onConversationIdChanged() {
+      view.queueOpen = false
       // The conversation's pages go with it.
       if (!view.open && view.ofConversation.includes(view.page))
         view.show("conversations")
@@ -617,23 +599,49 @@ Item {
       onOpenCost: view.go("cost")
     }
 
-    // Before there is more than the chat, a lone tab gives no choice.
-    Flow {
+    // Before there is more than the chat, a lone tab gives no choice. The
+    // pending counter, on every page of the conversation, is beside the tabs,
+    // over them when narrow.
+    GridLayout {
       Layout.fillWidth: true
-      visible: view.pages.length > 1
-      spacing: Theme.space.section
-      Repeater {
-        model: view.inside ? view.pages : []
-        delegate: Tab {
-          required property string modelData
-          required property int index
-          label: view.nameOf(modelData)
-          digit: String(index + 1).padStart(2, "0")
-          current: view.tabIndex === index
-          // The log says when a work failed.
-          alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
-          onChosen: view.choose(index)
+      visible: view.pages.length > 1 || view.pending.length > 0
+      columns: Breakpoints.size(Window.width) === "narrow" ? 1 : 2
+      columnSpacing: Theme.space.section
+      rowSpacing: Theme.space.gap
+
+      Flow {
+        Layout.fillWidth: true
+        Layout.row: parent.columns === 1 ? 1 : 0
+        visible: view.pages.length > 1
+        spacing: Theme.space.section
+        Repeater {
+          model: view.inside ? view.pages : []
+          delegate: Tab {
+            required property string modelData
+            required property int index
+            label: view.nameOf(modelData)
+            digit: String(index + 1).padStart(2, "0")
+            current: view.tabIndex === index
+            // The log says when a work failed.
+            alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
+            onChosen: view.choose(index)
+          }
         }
+      }
+
+      TraceButton {
+        Layout.row: 0
+        Layout.column: parent.columns === 1 ? 0 : 1
+        Layout.fillWidth: parent.columns === 1
+        Layout.alignment: Qt.AlignRight | Qt.AlignTop
+        visible: view.inside && view.pending.length > 0
+        dense: true
+        role: "progress"
+        tone: Theme.warning
+        icon: "warning"
+        text: view.pending.length + " PENDING"
+        tip: "everything that waits on you  " + Shortcuts.label("reply")
+        onClicked: view.openQueue()
       }
     }
   }
@@ -713,10 +721,6 @@ Item {
             Layout.fillHeight: true
             thread: ""
             emptyText: Omunculus.agent ? "WITH " + Omunculus.agent.toUpperCase() : ""
-            onAnswered: mainComposer.focusEntry()
-            // Every form that arrives takes the keyboard from an empty box,
-            // not only the first.
-            onCardArrived: if (mainComposer.empty && view.page === "chat") Qt.callLater(timeline.focusCard)
             onOpenWork: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)
           }
@@ -731,13 +735,10 @@ Item {
             onBack: view.back()
           }
 
-          // The quick chips keep their room on a short window, not their keys.
           Composer {
             id: mainComposer
             visible: !view.asking
             Layout.fillWidth: true
-            quick: view.quick
-            chipsShown: !view.short
           }
         }
 
@@ -766,7 +767,7 @@ Item {
               mainComposer.focusEntry()
             }
             onEscaped: mainComposer.focusEntry()
-            onAnswer: view.replyNow()
+            onAnswer: view.openQueue()
             onOpenThread: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)
             onOpenTeam: work => view.openInTeam(work)
@@ -947,6 +948,19 @@ Item {
   }
 
   RequestDialog { id: decision }
+
+  // Everything that waits on you, over the page.
+  PendingQueue {
+    id: queue
+    anchors.fill: parent
+    z: 10
+    items: view.pending
+    shown: view.queueOpen
+    onClosed: {
+      view.queueOpen = false
+      view.focusEntry()
+    }
+  }
 
   // Once a project is registered, the projects are read again and its row
   // is picked.

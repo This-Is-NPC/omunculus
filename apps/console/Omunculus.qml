@@ -203,12 +203,6 @@ Singleton {
   readonly property var running: runs.filter(run => run.status === "open")
   readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
   readonly property var unread: inbox.filter(item => !item.read_at && !cardNotes[item.id])
-  // The newest request waiting on you that offers options, none gathering
-  // it from below; null for none.
-  readonly property var deciding: {
-    const gathered = Requests.contained(requests)
-    return waiting.filter(request => !gathered.has(request.id) && Requests.choices(request).length > 0).pop() || null
-  }
   // What waits on you: requests to decide and notes to read.
   readonly property int pending: waiting.length + unread.length
   // Requests still waiting, on you or on an agent.
@@ -1025,16 +1019,6 @@ Singleton {
       if (place !== undefined) {
         update(place, "streaming", false)
         update(place, "partial", "")
-        // A run below leaves a line in the main thread, so it tells the
-        // team's work in order: who worked, how long and how many steps.
-        if (place.thread !== "") {
-          const ran = entryAt(place)
-          const calls = JSON.parse(ran.steps).filter(line => !line.outcome && !line.hook).length
-          append("", { kind: "worked", key: event.run_id, who: ran.who, text: Progress.worked(at - (runStarts[event.run_id] || at), calls, !!body.error), stamp: stamp, at: at, work: work })
-        }
-        // A run of the thread's own that failed says so in it, with why.
-        else if (body.error)
-          append("", { kind: "worked", key: event.run_id + ":failed", who: entryAt(place).who, text: "failed: " + String(body.error), stamp: stamp, at: at, work: work })
       }
       break
     }

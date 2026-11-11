@@ -81,13 +81,6 @@ function live(progress, thread, front) {
     ? { chain: [], agent: node.agent, doing: node.doing, since: node.since, round: node.round || 0 } : null;
 }
 
-// What a run of a work below left in the main thread once it ended: "worked
-// 4 min · 12 steps", or "failed after 4 min" when it ended in an error.
-function worked(seconds, steps, failed) {
-  const lasted = (failed ? "failed after " : "worked ") + span(seconds);
-  return steps > 0 ? lasted + " · " + steps + (steps === 1 ? " step" : " steps") : lasted;
-}
-
 // A running clock: "0:42", "12:05", "1:02:03".
 function clock(total) {
   const s = Math.max(0, Math.floor(total));

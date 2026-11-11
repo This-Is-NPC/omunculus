@@ -432,13 +432,4 @@ defmodule Omunculus.GuiProgressTest do
     check(Progress.live(loose, "w9", "sales") === null, "another work's thread", "");
     """)
   end
-
-  test "a run below leaves how long it worked and its steps" do
-    run!("""
-    check(Progress.worked(240, 12, false) === "worked 4 min · 12 steps", "worked", Progress.worked(240, 12, false));
-    check(Progress.worked(8, 1, false) === "worked 8 s · 1 step", "one step", Progress.worked(8, 1, false));
-    check(Progress.worked(8, 0, false) === "worked 8 s", "no step", Progress.worked(8, 0, false));
-    check(Progress.worked(90, 3, true) === "failed after 1 min · 3 steps", "failed", Progress.worked(90, 3, true));
-    """)
-  end
 end

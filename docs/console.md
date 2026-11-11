@@ -117,9 +117,9 @@ move along a group's rows and between the groups.
 
 ## Threads
 
-The console folds the events into threads: the main one, yours with the root
-agent, and one per work drawn as a block in a thread (handed down, or a root work a
-run opened), where its agent's runs show. A run on any other work, or none,
+The console folds the events into threads: the main one, the dialogue between
+you and the root agent, and one per work (handed down, or a root work a run
+opened), where its agent's runs show. A run on any other work, or none,
 belongs to the main thread.
 
 Every kind of entry has its own form, the same across the thread. Messages are
@@ -129,11 +129,12 @@ time, as in eco: yours on the right, filled with the text's ink at a low
 alpha; an agent's on the left, filled with a tint of its colour
 (`Theme.bubble`); a line that continues the same speaker's turn drops the
 heading. Body text in every bubble and card reads at more than 10:1 on its
-fill. Everything else an agent did is the log: system rows (`LogLine`,
-`ToolCalls`, `SubWorkBlock`, the exchange's line), unframed, at the log's
-smaller size (`Theme.type.log`), dim, each with its icon in a mark column of
-their own (`Theme.size.mark`) and its time at the right, so they read as
-secondary to what was said. The chat shows no portraits; they
+fill. The main thread, the chat, holds only the dialogue, the work cards and what
+you answered (below). Everything else an agent did is the log, and shows in a
+work's own thread: system rows (`LogLine`, `ToolCalls`, `SubWorkBlock`, the
+exchange's line), unframed, at the log's smaller size (`Theme.type.log`), dim,
+each with its icon in a mark column of their own (`Theme.size.mark`) and its
+time at the right, so they read as secondary to what was said. The chat shows no portraits; they
 stay in the agent picker and on the team page. A turn's heading says how
 long the run has worked, in the short form used everywhere: "Working 12 s"
 while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
@@ -143,26 +144,24 @@ agent you wrote to, and stay while it is open; no two are within 30° of
 hue, and none within 30° of the accent, success, warning or error. A theme
 whose colours leave little room yields fewer tones, and they then repeat. The board's agents have their own, in the order the window meets them.
 While
-an agent works for the thread, its end holds a live line (`Progress.live`):
+an agent works for a work's thread, its end holds a live line (`Progress.live`):
 a dot breathing in the tone of the agent at work, the agents from the one you
-wrote to down to that one, each in its tone ("front-desk › project-manager › design-lead ›
-designer"; a run of the front agent outside any work stands alone; short of
-room the first give way to "…"), "working" and its clock, the trace at the
-row's end, and under them what it does: "Thinking · wrote files", with "· no
-news for 12 minutes" after ten minutes without an event. A call is recorded
-once it finished, but the model event that asked for it is known: while it
-runs the line says it as it goes ("Running a command"), and between calls it
-says the last one in the past, after "Thinking"; a run that has made no call
-for 15 s reads "Thinking", not "Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
-and it gives way to that agent's own turn while the turn streams in the
-thread and shows something. A work's own page names the chain from its work
-down; a thread nested in a sub-work block has none, the block says it. When
-a run of a work below ends, it leaves a line of the log in the main thread at
-that moment: "✓ designer  worked 4 min · 12 steps", or "failed after 4 min"
-in the error tone, so the chat tells the team's work in order. A run of the
-thread's own that fails leaves a line too, in the error tone with the warning
-icon: "⚠ sales  failed", and under it the error the run ended in. Who works is
-the chat's to say; the header strip does not repeat it. A conversation opens
+wrote to down to that one, each in its tone ("project-manager › design-lead ›
+designer"; short of room the first give way to "…"), "working" and its clock,
+the trace at the row's end, and under them what it does: "Thinking · wrote
+files", with "· no news for 12 minutes" after ten minutes without an event. A
+call is recorded once it finished, but the model event that asked for it is
+known: while it runs the line says it as it goes ("Running a command"), and
+between calls it says the last one in the past, after "Thinking"; a run that
+has made no call for 15 s reads "Thinking", not "Getting started"; "· round N"
+follows the clock once a work is sent back. It updates in place, and it gives
+way to that agent's own turn while the turn streams in the thread and shows
+something. A thread nested in a sub-work block has none, the block says it.
+In the chat only the agent you write to has it: the works below have their
+cards, and a run that ends leaves no line, so the chat does not tell the
+team's work run by run; the work's thread, the tree and the log do. A run of
+the agent you write to that fails shows in the header strip (FAILED) and the
+log. A conversation opens
 at its end, and while earlier entries lie above the view an EARLIER pill at
 its top counts them and leads to the start. Once the thread outgrows the view
 it keeps a free band at each end, for that pill and the NEW one, so a pill
@@ -185,7 +184,8 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`), system rows behind the step mark ("›_"), its chevron
-after the words. A turn that said nothing is that line alone, with no
+after the words; in the chat a turn is its words alone, and one that only
+acted is not drawn: its steps are the work's. A turn that said nothing is that line alone, with no
 heading: its agent in its tone leads it and how long it worked ends it,
 "sales  Passed your answers to seller · worked 3 s", the time at the right.
 Folded, one line counts them, how many failed and the
@@ -203,8 +203,17 @@ turn that has said and done nothing yet is not drawn. An entry that draws
 nothing takes no room, not even the gap between entries, and words with no
 text and no files are not added to the thread.
 
-A work handed down is a block (`SubWorkBlock`) in the thread of the run that
-handed it down, where it did; so is a root work a run opened. A system row
+A work handed down is one card in the chat (`WorkCard`), where it was: the
+kicker WORK, its title, its state as an icon and a word (WORKING, WAITING FOR
+SURGEON, WAITING FOR YOU, DONE, FAILED, CANCELLED, as the tree says it) and how
+long, a NOW line with who works for it now and what they do (the deepest work
+under it that works), a WAITS line when it waits on others ("seller is waiting
+for surgeon"), the stages of its workflow (the stepper; under 520 px a bar of
+one segment per stage under "STAGE 6/6 · BUILD") and OPEN IN TREE, which opens
+the team page with that work picked. A card has no runs and no steps; they
+are in the tree. Its data is the progress node (`Pending.workCard`). In a
+work's own thread the same entry is a block (`SubWorkBlock`), where the run
+handed it down; so is a root work a run opened. A system row
 behind the branch mark, "sub-work" with its agent, title and time, it says on
 a second line its state, for how long and
 how many steps (tool calls; hook runs are not steps, here and in the turn):
@@ -239,25 +248,23 @@ the time the run ended and a question at the time it was asked. An answer
 shown under its question keeps the time it was given, so it can read later
 than the lines after the question.
 
-A request is a card only while it waits on you, and it is in the main
-thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
-YOU ANSWERED and the time (YOU CHOSE APPROVE for a chosen option, YOU ASKED TO
-ADJUST for adjust, YOU GRANTED · THIS WORK ONLY, or the saved scope, for a grant; the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
-and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, with the time it was asked at its right, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
-kept whole) and its first line with words, cut at 120 characters; a permission reads instead "clerk asked · via seller › sales to publish the site to production"; Enter, Space or
-a click opens it in place to its full text. Sending an answer, like sending
-a message, takes the view to the end, so it never counts as news; when the
-answer comes and the keyboard was in the card, it moves to the composer. A
-reply says nothing in the bar when it succeeds; the card shows it. A
-question for you that arrives while the view follows is held by its top.
-The view follows the end until you scroll up: the live row's growing never
-ends it, and only your own scrolling, to more than a row from the end, does.
-The NEW pill counts the entries below the view, so it is gone when the end is
-in view.
+A request waiting on you is not in the thread: it is in the pending queue (see
+[Requests](#requests)). What you did to one is a sentence in the chat
+(`ResolvedLine`), with its kind's icon and word and the time at the right: "?
+ANSWERED  You answered sales' 5 questions (Doce Ana: sale)", "◇ CHOSE  You
+chose approve on seller's decision (Doce Ana: sale)", "⛨ GRANTED  You granted
+surgeon permission to use the network (Build: Doce Ana)", DENIED for a no
+(`Pending.resolved`); a saved scope adds it ("· for surgeon"), and adjust
+reads "You asked seller to adjust". Under 520 px the word is over the
+sentence, which ends with the time. Sending an answer, like sending a
+message, takes the view to the end, so it never counts as news; a reply says
+nothing in the bar when it succeeds. The view follows the end until you scroll
+up: the live row's growing never ends it, and only your own scrolling, to more
+than a row from the end, does. The NEW pill counts the entries below the view,
+so it is gone when the end is in view.
 
-What an agent asks another is an exchange (`TeamRow`) in the thread it was
-asked in: a system row behind the people mark, "seller asked design-lead ·
+What an agent asks another is an exchange (`TeamRow`) in a work's thread, not
+in the chat: a system row behind the people mark, "seller asked design-lead ·
 design-lead decides", each agent in its tone, and under it, in an outlined
 frame at the body size, the question in its first three lines and, once
 answered, who answered and what. It is open while it waits, and DECIDE INSTEAD opens the request's
@@ -280,8 +287,7 @@ follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
 once the provider priced a call; each opens what it counts, the team and the cost, and
 the agents' tip names them. At its right the chevron, which opens the full
 view, and ANSWER, in the warning tone and with the count when more than one
-waits, while a question waits on you, which puts the keyboard in the newest
-question's card on the chat. This is the overview; who works and on what is
+waits, while a question waits on you, which opens the pending queue. This is the overview; who works and on what is
 the chat's live line, and on the team, log and cost pages their own views say
 how the work stands. Under it, unframed, one line: the stages of
 the work in focus, the newest open root work (`Stepper`: "✓ qualify › ●
@@ -328,19 +334,10 @@ scrolling inside; under 700 px it is a sheet over the whole chat, headed
 ‹ CHAT, PROGRESS and a close button, which Esc closes. Below 1100 px it starts
 closed.
 
-Alt+R, as ANSWER, puts the keyboard in the words of the newest question
-waiting on you, from any page of the conversation. Esc in a question's card
-or in the progress returns to the composer.
-
-While a decision waits on you, numbered quick chips sit over the composer:
-the options of the newest one (`Omunculus.deciding`, from
-`Requests.choices`, without the grants saved for good, which are chosen on
-its card), then PROGRESS: "1 ADJUST  2 APPROVE  3 PROGRESS". Pressing an
-option, or Alt and its number, decides it with the note written in the card,
-through that card, which comes into view and shows the option chosen while it
-goes. While the card's own buttons are in view there are no chips. On a
-window under
-560 px tall the chips are hidden; their chords still answer.
+Alt+R, as ANSWER and the counter under the head, opens the pending queue, from
+any page of the conversation. Esc closes it, or, in the progress, returns to
+the composer. The composer has no options of a request above it: they are
+answered in the queue.
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that
 grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
@@ -350,10 +347,7 @@ tip says "sales is working; SEND still sends", and it still sends. SEND is
 dim while the box is empty. A sent message empties the box at once and shows
 in the thread as your bubble, dim, with SENDING… where the time goes, until the
 server's copy replaces it in place; if the server refuses it, the bubble goes
-and the words come back to the box. While a question waits on you, form or not, the keyboard
-goes to its card (a form's first unanswered field), not the box, for every question that arrives while the box is empty, and the box says "or
-say something else to sales"; the count of what
-arrived out of view rises above the form's floating actions. Under 420 px its
+and the words come back to the box. Under 420 px its
 buttons show their icons only.
 
 The clip in the composer's frame picks files for the message, which show
@@ -365,45 +359,65 @@ mailbox.
 
 ## Requests
 
-A request's card (`RequestDecision`) is built as eco's answer card. Its
-heading names whom it is for, with an icon, then its kind: OWNER DECISION
-when the request took the `owner` route or went to the project's owners, CLIENT
-QUESTION when it went to the conversation's person ("CLIENT QUESTION · YOUR
-DECISION"). A request of a server that records neither `route` nor
-`destination` reads as the client's. The heading names the kind, who asks (the asker in their tone, then how it came to you when it
-climbed: "design-lead asks · via seller › sales") and on which work, and the time, on two lines when
-the card is under 520 px, with its tools at the top right: copy
-the question, the "more" menu that holds ESCALATE while it waits on you, and
-close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
-NEEDS YOU (an answer in words; a numbered list of questions has a box
-for each, `QuestionForm`), YOUR DECISION (a button per option and an optional
-note) and PERMISSION (what the asker wants to do in plain words, GRANT · THIS WORK
-ONLY as its main action, and a no with a reason; behind "ALWAYS ALLOW…" are
-the scopes saved in the project settings — FOR <AGENT>, IN THE <STAGE> STAGE,
-IN FOLDER <name> or IN THE PROJECT). The quick chips under a card use its
-order and words, and the answer heads YOU GRANTED. Its question shows once,
-as its asker wrote it, in full contrast; one passed up has a chip naming
-through whom, in order, that opens the wordings of each level and the
-harness's own sentence. Its actions sit at its bottom left: its options,
-SEND while words are written (not on a decision, whose options carry the
-words), "I can't answer this", which tells the team so
-in a plain reply, and DENY last. ESCALATE, from the menu, turns the words
-into the reason it goes up and the action into ESCALATE; ANSWER INSTEAD
-turns it back. Sending shows your answer dimmed under SENDING…; answered,
-the card shrinks to the question and your answer; a failure reopens it with
-your words kept and an error line. The words are written in the kit's
-`TextBlock`, one line tall and growing with its text; on a decision it is
-captioned YOUR NOTE OR ANSWERS (OPTIONAL), Enter breaks the line there (a
-button decides), and the keyboard arrives in it. Under a decision that gathers
-only one, the buttons carry no caption of their own.
+Everything that waits on you is one queue (`PendingQueue`), reachable from every
+page of the conversation: a counter under the head, "⚠ 3 PENDING" (on its own
+line above the tabs under 700 px, beside them otherwise), and ANSWER (Alt+R)
+open it as a panel over the right of the page, over all of it under 560 px. It
+is headed "PENDING · 3" with a close button, says "Oldest first, answer in any
+order. Each one names what it unblocks.", and lists the requests waiting on
+you, oldest first, one item each (`Pending.queue`; a request another gathers
+from below is not a second item). The counter is hidden while nothing waits.
+Acting on an item removes it and leaves its sentence in the chat; the panel
+stays open on the rest and says NOTHING WAITS ON YOU when it is empty. Esc,
+the close button and a click outside close it. The items are held by value
+(`pendingJson` of `PagesView`), so a refresh that changes none of them never
+rebuilds the boxes being written in.
 
-The header's title is the conversation's subject (`Omunculus.subject`, as in
-the masthead: the first root work's title, else the first message), or the
-work of the question's origin when the harness passed it up.
+An item (`RequestDecision`) has three kinds, each with its own icon and
+word: QUESTION (a circled question mark), DECISION (a diamond) and PERMISSION
+(a shield). The kind is the request's shape, whoever decides it: a permission
+when one of its options grants, a decision when it offers options, else a
+question. Its heading is one line: the kind, the time and the item's tools
+(copy the question, the "more" menu that holds ESCALATE while it waits on
+you, and close where the item opened in place of another, DECIDE INSTEAD), so
+nothing overlaps the title at any width. Under it, wrapped inside the item
+whatever the width: the request in a sentence (a permission "Surgeon asks to
+use the network"; a numbered list "Clerk asks 3 questions"; else the first line
+of the question, the rest under it), then the lines ASKS (the asker in their
+tone), PATH (the agents from the front desk down to the asker: "front-desk ›
+seller › surgeon", from the works the question climbed from), WORK, UNBLOCKS
+("surgeon resumes Build: Doce Ana · front-desk and seller wait on it"), GRANTS
+(a permission: what it lets the agent do, "use the network · this work only")
+and, for a request that went to the project's owners, FOR "the project's
+owner" (`Pending.describe`). Its question shows once, as its asker wrote it;
+one passed up has a chip naming through whom, in order, that opens the
+wordings of each level and the harness's own sentence.
 
-`QuestionForm` puts "N OF M ANSWERED" in the card's heading (on its second
-line under 520 px), and SEND (off with "answer at least one to send" beside it; solid once one is answered) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. The
-form grows in the thread; the view starts at the card's top. While
+The actions are one group (`ActionGroup`) under a hairline at the item's
+bottom, wrapping inside the item, never loose chips above the composer: for a
+question, a box for the answer and ANSWER (dim until there are words) beside
+"I CAN'T ANSWER THIS", which tells the team so in a plain reply; for a
+decision, one button per option, with a cancel last; for a permission,
+GRANT · THIS WORK ONLY as the main action (solid), DENY, and ALWAYS…, a menu
+(`AlwaysMenu`) of the scopes saved in the project settings — FOR <AGENT>, IN
+THE <STAGE> STAGE, IN FOLDER <name> or IN THE PROJECT — under the heading
+SAVED IN THE PROJECT SETTINGS; one pick saves it. An option's label is whole
+even when what it names is unknown (`Requests.optionLabel`: "FOR THIS AGENT",
+"IN THIS STAGE"). A note to a decision, or the reason of a no, is behind ADD A
+NOTE (or ADD A REASON OR A NOTE) and goes with the option chosen; DENY gives
+it as the reason. ESCALATE, from the menu, shows the box, captioned WHY IT GOES
+UP, and turns the action into ESCALATE; ANSWER INSTEAD turns it back. Sending
+shows your answer dimmed under SENDING…; answered, the item shrinks to the
+question and your answer; a failure reopens it with your words kept and an
+error line. The words are written in the kit's `TextBlock`, one line tall and
+growing with its text, and Enter sends them on a question. Under a decision
+that gathers only one, the buttons carry no caption of their own.
+
+The title of an item is its own sentence; the work it concerns is the
+origin's when the harness passed it up.
+
+`QuestionForm` puts "N OF M ANSWERED" under the item's title, and SEND (off with "answer at least one to send" beside it; solid once one is answered) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. The
+form grows in the queue. While
 that end is below the view, the two float on the view's bottom edge over the
 card's fill and a hairline, with what passes under them fading out above, with "N MORE QUESTIONS BELOW" at the right
 (above them under 520 px) while items start under them; the chip brings the
@@ -414,11 +428,9 @@ KNOW YET" under it, which fills the box and, switched off, restores what was
 typed. Enter moves to the next box that can take the keyboard (it stays in
 the box when none can), Enter in the last and Ctrl+Enter in any send, and the
 item whose box takes the keyboard scrolls into view above the floating
-actions without changing whether the thread follows its end. The form's model is held by value (`formJson` of
+actions. The form's model is held by value (`formJson` of
 `RequestDecision`), and what was typed, with the box the keyboard was in, is
-kept in `Omunculus.drafts` by request, so a form rebuilt takes both back; the
-thread keeps two views of entries each way, and a box taking the keyboard
-never makes its entry the thread's current one. A line continues its item when no blank line precedes it or it is indented; an unindented line
+kept in `Omunculus.drafts` by request, so a form rebuilt takes both back. A line continues its item when no blank line precedes it or it is indented; an unindented line
 after a blank one ends the list, and the closing paragraph shows after the
 last box and is not sent.
 
@@ -429,9 +441,9 @@ under its part name and who asked it, a grant's scopes read for that
 origin's asker and work, an option of an origin given through the reply's
 `parts`, down to it (the kit's `Requests.choices` and `Requests.answer`).
 
-Every option carries the words of its field: SEND replies with them
+Every option carries the words of its field: ANSWER replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
-it waits on you, ESCALATE (from the card's menu) raises it with them as the
+it waits on you, ESCALATE (from the item's menu) raises it with them as the
 reason through
 `POST …/requests/escalate`, as one part named after its asker.
 
@@ -798,14 +810,13 @@ logs each text drawn out of its box, the window or a clipping item as a
   is read again with the new row picked. It has no key. FILTER (`/`).
 - On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered on a
   project).
-- In a conversation, from any of its pages: ANSWER (Alt+R) in the header
-  strip, which brings the newest question into view on the chat and puts the
-  keyboard in its card; the strip's chevron (Alt+P), which opens or closes
+- In a conversation, from any of its pages: the pending counter and ANSWER
+  (Alt+R) in the header strip, which open the pending queue; the strip's chevron (Alt+P), which opens or closes
   the progress on the chat and puts the keyboard in it; its counts, which
   open TEAM and COST; the `1 NOTE` notice
-  (Alt+M on the chat); the quick chips (Alt+1 … Alt+9) on the chat; and NEW
-  CONVERSATION (Ctrl+N) in `⋯`. Elsewhere than on the chat a request is
-  answered in its decision (`RequestDialog`, the card over the page).
+  (Alt+M on the chat); and NEW CONVERSATION (Ctrl+N) in `⋯`. On the team and a
+  work's page a request is also answered in its decision (`RequestDialog`, the
+  item over the page).
 - On TEAM, Alt+R answers the request waiting on you nearest the work picked
   (its own, above it, below it), else the newest, or, with none for you, what
   the work asked, instead of whoever decides. The items of `⋯` answer to
@@ -832,8 +843,8 @@ picker and the keys dialog:
 
 - No key of its own: anything that creates, sends, answers, grants, denies,
   escalates, reverts, deletes or cancels is pressed or clicked. Enter in the
-  composer and in a request's words send what is written there, and a quick
-  chip over the composer is chosen by Alt and its number; no other key does.
+  composer and in a request's words send what is written there; no other key
+  does.
 - Bare keys, for navigation without effect: the digit of a page, `/`, `[`
   and `]` on the team page, `?`, F1 and Esc, the digits of the cards of the
   picker, and N, H, B and P on the start screen. They act only while an item to navigate has the keyboard and
@@ -845,8 +856,7 @@ picker and the keys dialog:
 - Chords, which a field being written leaves to them: Ctrl and the digit of
   a page, Ctrl+Tab and Ctrl+Shift+Tab for the next or the previous page,
   Ctrl+N for a new conversation, Ctrl+P for the projects, Alt with a
-  letter for the commands of a page (R, P, M, O, W, C, E, L, G, F, S, A, J),
-  and Alt with a digit for the quick chips over the composer.
+  letter for the commands of a page (R, P, M, O, W, C, E, L, G, F, S, A, J).
 
 The IPC's `start`, `page <name>` (`projects`, `conversations`, `board` and,
 with a conversation open, `chat`, `map`, `log`, `cost`, `artifacts`), `projects`,
