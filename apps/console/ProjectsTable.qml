@@ -53,7 +53,7 @@ DataTable {
   tone: (row, column) => column === 2
     ? ({ waiting: Theme.warning, unreachable: Theme.warning, working: Theme.primary, failed: Theme.error })[row.state] || Theme.dim
     : ""
-  dotted: row => row.state === "working"
+  statusIcon: row => row.state === "working" ? "spark" : ""
   stacked: [[0], [1]]
   status: 2
   emptyText: "no project in this server's registry"

@@ -96,7 +96,7 @@ DataTable {
   tone: (conversation, column) => column === 2
     ? ({ "needs-you": Theme.warning, working: Theme.primary, failed: Theme.error })[stateOf(conversation)] || Theme.dim
     : ""
-  dotted: conversation => stateOf(conversation) === "working"
+  statusIcon: conversation => ({ "needs-you": "warning", working: "spark", done: "check", failed: "close" })[stateOf(conversation)] || ""
   stacked: [[0], [1], [3]]
   status: 2
   emptyText: "no conversation yet"
