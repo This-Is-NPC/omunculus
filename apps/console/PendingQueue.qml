@@ -24,10 +24,13 @@ FocusScope {
   // panel itself when there is none, so Esc closes it and Tab goes in.
   function focusFirst() {
     const first = list.count > 0 ? list.itemAt(0) as RequestDecision : null
-    if (first)
-      first.focusFirst()
-    else
+    if (!first) {
       panel.forceActiveFocus()
+      return
+    }
+    first.focusFirst()
+    // The question is read from its top, whatever the focus scrolled to.
+    Qt.callLater(() => scroller.scrollTo(0))
   }
 
   visible: shown && items.length > 0
@@ -95,6 +98,7 @@ FocusScope {
       }
 
       ScrollPage {
+        id: scroller
         Layout.fillWidth: true
         Layout.fillHeight: true
         contentHeight: column.implicitHeight

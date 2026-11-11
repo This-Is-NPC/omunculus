@@ -99,6 +99,9 @@ SurfaceFrame {
     { name: "FOR", value: facts.audience === "owner" ? "the project's owner" : "" }
   ].filter(field => field.value !== "")
 
+  // The recommended button of the one decision it gathers, when it has no
+  // options of its own.
+  property Item recommendedButton: null
   // Whether the words written escalate it rather than answer it.
   property bool escalating: false
   // What was sent, shown while it goes.
@@ -129,7 +132,7 @@ SurfaceFrame {
     if (formLoader.active || wordsShown)
       return focusWords()
     const at = ownActions.once.indexOf(ownActions.primary)
-    const first = ownOptions.count > 0 ? ownOptions.itemAt(Math.max(0, at)) : null
+    const first = ownOptions.count > 0 ? ownOptions.itemAt(Math.max(0, at)) : recommendedButton
     if (first)
       first.forceActiveFocus()
     else if (deny.visible)
@@ -501,12 +504,17 @@ SurfaceFrame {
           Repeater {
             model: choice.parts.once.concat(choice.parts.denies)
             delegate: TraceButton {
+              id: gatheredOption
               required property string modelData
+              // The one decision gathered is recommended like the card's own.
+              readonly property bool recommended: modelData === choice.parts.primary && card.gathered.length === 1
               dense: true
               role: Requests.guarded(modelData) ? "guarded" : "progress"
+              filled: recommended && card.yours
               icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : "diamond"
               text: card.labelOf(modelData, choice.modelData.request)
               onClicked: choice.decide(modelData)
+              Component.onCompleted: if (recommended) card.recommendedButton = gatheredOption
             }
           }
           AlwaysMenu {
