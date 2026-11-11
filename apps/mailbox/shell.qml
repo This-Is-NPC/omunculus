@@ -134,6 +134,7 @@ ShellRoot {
               RowLayout {
                 Layout.fillWidth: true
                 visible: window.narrow
+                Layout.topMargin: 6
                 spacing: 4
                 FolderTab { rail: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
                 FolderTab { rail: true; name: "sent"; icon: "send"; label: "Sent" }
