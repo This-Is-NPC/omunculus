@@ -275,7 +275,14 @@ defmodule Omunculus.SalesDeskProposalTest do
 
   describe "start_sale" do
     test "hands the seller the request's goal and moves to stage sale", %{root: root} do
-      view = %{"work" => %{"id" => "w1", "stage" => "start", "title" => "Padaria Sol", "goal" => "Quero um site."}}
+      view = %{
+        "work" => %{
+          "id" => "w1",
+          "stage" => "start",
+          "title" => "Padaria Sol",
+          "goal" => "Quero um site."
+        }
+      }
 
       assert %{
                "ok" => true,

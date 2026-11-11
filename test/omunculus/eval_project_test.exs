@@ -796,7 +796,9 @@ defmodule Omunculus.EvalProjectTest do
   end
 
   for configuration <- ~w(sales-desk agency) do
-    test "#{configuration} takes every work the front desk opens through engagement", %{conn: conn} do
+    test "#{configuration} takes every work the front desk opens through engagement", %{
+      conn: conn
+    } do
       dir = Fixtures.tmp_dir()
 
       assert {:ok, path} =
