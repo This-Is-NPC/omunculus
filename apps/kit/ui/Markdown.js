@@ -29,6 +29,11 @@ function imageless(text) {
     .replace(/!\[/g, "!​[")
 }
 
+// `address` with a zero-width space after each "/", ".", "-", "_", "?", "=" and "&"
+// (not between slashes), where a line may break, so a long address wraps at
+// its parts and not inside one.
+const breakable = address => address.replace(/([\/.\-_?=&])(?!\/)/g, "$1\u200b")
+
 const escapeHtml = part => part.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
 // `value` with each web or e-mail address it links or holds bare as an
@@ -49,17 +54,17 @@ function linked(value, ink, tint) {
       if (code !== undefined)
         return "<span style=\"background-color:" + tint + "\">" + escapeHtml(code).replace(/[\\*_\[\]!~#|@]/g, c => "&#" + c.charCodeAt(0) + ";") + "</span>"
       if (mail)
-        return anchor("mailto:" + mail, escapeHtml(mail))
+        return anchor("mailto:" + mail, escapeHtml(breakable(mail)))
       if (at)
         return at.replace(/@/g, "&#64;")
       if (auto)
-        return anchor(auto, escapeHtml(auto))
+        return anchor(auto, escapeHtml(breakable(auto)))
       if (target)
         return anchor(target, label)
       // Punctuation that ends a sentence ends the address too.
       const tail = bare.match(/[.,;:!?)'"]+$/)
       const url = tail ? bare.slice(0, -tail[0].length) : bare
-      return anchor(url, escapeHtml(url)) + (tail ? tail[0] : "")
+      return anchor(url, escapeHtml(breakable(url))) + (tail ? tail[0] : "")
     })
   return { text: text, links: links.filter((link, at) => links.indexOf(link) === at) }
 }
