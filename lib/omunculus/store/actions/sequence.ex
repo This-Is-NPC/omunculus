@@ -407,13 +407,36 @@ defmodule Omunculus.Store.Actions.Sequence do
          ) do
       {:ok, %{open: 1, held: held, root: root}} ->
         with :ok <- no_broken_child(:end, conn, ctx.work_id),
-             do: if(held == 0, do: {:error, {:end, hanging(root)}}, else: :ok)
+             do: park_or_refuse(conn, ctx, held, root)
 
       {:ok, _settled} ->
         :ok
 
       {:error, _reason} = error ->
         error
+    end
+  end
+
+  # A work that ends open with a child still open or waiting is taken up
+  # when that child hands it back, so it parks on its children as if the run
+  # had delegated. A pending request keeps its own way back.
+  defp park_or_refuse(conn, ctx, held, root) do
+    with {:ok, %{children: children, asked: asked}} <-
+           Query.one(
+             conn,
+             """
+             SELECT (SELECT COUNT(*) FROM works
+                     WHERE parent_id = ?1 AND (state = 'open' OR (state = 'waiting' AND waiting IS NOT NULL))) AS children,
+                    (SELECT COUNT(*) FROM requests
+                     WHERE work_id = ?1 AND status IN ('pending', 'escalated')) AS asked
+             """,
+             [ctx.work_id]
+           ) do
+      cond do
+        children > 0 and asked == 0 -> wait_on_children(conn, ctx, ctx.work_id)
+        held == 0 -> {:error, {:end, hanging(root)}}
+        true -> :ok
+      end
     end
   end
 

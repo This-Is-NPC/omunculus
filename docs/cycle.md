@@ -43,7 +43,12 @@ when the work would stay open with no request of it pending and no run of
 it due since the run began, and when a child that broke waits on it. The
 call fails with the refusal, which names what hands the work on (`done`,
 `ask`, `work`, `break`, on a root work `wait`, or `reopen` or `retire`
-for the broken child), and the run goes on; a model that then stops without `end` is
+for the broken child), and the run goes on. A work that would stay open
+while a child of it is still open or waiting, with no request of it pending,
+is not refused: `end` parks it (`waiting = child`) as if the run had
+delegated, and that child's `continue` or `break` wakes it again. This
+leaves no stage obligation behind, since the woken run still has to
+`done` or move on; a model that then stops without `end` is
 retried as below. A person's next message is not something an open work
 waits for: a work that needs the person asks (`ask`, `request_access`)
 and waits on the request; a root work that only the person can move on

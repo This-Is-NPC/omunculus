@@ -1902,6 +1902,50 @@ defmodule Omunculus.Store.ActionsTest do
                Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
     end
 
+    # A run of its own work, as the harness opens one.
+    defp own_run(conn, work_id) do
+      event_id =
+        Fixtures.insert(conn, :events, %{type: "start-run", body: ~s({"own":true}), sequence: 1})
+
+      run_id = Fixtures.insert(conn, :runs, %{work_id: work_id, event_id: event_id})
+      %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+    end
+
+    test "a work left open with a child still open parks on it and wakes when it hands back",
+         %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: work_id,
+          workflow: "delivery",
+          stage: "review",
+          assignee: "worker"
+        })
+
+      ctx = own_run(conn, work_id)
+
+      assert {:ok, [_tool_event, %{type: "end"}]} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], ctx)
+
+      assert {:ok, %{state: "waiting", waiting: "child"}} = Store.view(conn, "work", work_id)
+      assert close_child(conn, child_id) == work_id
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work_id)
+    end
+
+    test "a work left open with no child open and nothing to take it up is refused",
+         %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      Fixtures.insert(conn, :works, %{parent_id: work_id, state: "done"})
+      ctx = own_run(conn, work_id)
+
+      assert {:error, {:end, :root_open}} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], ctx)
+
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work_id)
+    end
+
     test "a run without a work may end", %{conn: conn} do
       run_id = Fixtures.insert(conn, :runs)
 
