@@ -11,7 +11,7 @@ bootstrap_role = "admin"
 
 [access.roles.admin]
 scope = "project"
-capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
+capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
 
 [access.roles.participant]
 scope = "conversation"
@@ -22,7 +22,7 @@ scope = "conversation"
 capabilities = ["conversation.read"]
 ```
 
-The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
+The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `project.own`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. `project.own` marks a role's members as the project's owners, the destination of the `owners` request route ([requests](requests.md#client-and-owner)). A role granting `project.own` must grant `conversation.reply` too. A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
 
 Before starting the server, seed the first project administrator. For the local user, the principal is issuer `local` and the numeric user ID as subject, the same principal the direct CLI acts as:
 
@@ -91,7 +91,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /v1/identity` | Return the token principal. |
 | `GET /v1/projects` | List the projects you see: over HTTP, those whose conversations you may read or where you are a member of one; on a local socket, every project the server serves with its `socket`. |
 | `GET /config?whole=true` | Read the project's setup as the `config` tool prints it: without `whole`, its index (the revision and the size of each item); with it, the whole setup for an editor, with its `revision`. Needs `project.manage_config`. |
-| `GET /config/{section}`, `GET /config/{section}/{name}` | Read one section (`agents`, `workflows`, `models`, `workspaces`, `auth`, `secrets`, `packs`, `policy`, `access`, `names`) or one item of a named section, with the `revision` it was read at. An unknown section or item is `404`. |
+| `GET /config/{section}`, `GET /config/{section}/{name}` | Read one section (`agents`, `workflows`, `models`, `workspaces`, `auth`, `secrets`, `packs`, `policy`, `access`, `names`) or one item of a named section, with the `revision` it was read at; `policy` also carries `default_agent`, the agent a new conversation goes to when the person names none, when `[policy] default_agent` is set. An unknown section or item is `404`. |
 | `PUT /config/{section}/{name}`, `PUT /config/{section}` | Write an item of `agents`, `workflows`, `models`, `workspaces`, `auth` or `secrets`, or the `policy` or `access` table, from `{"revision":"…","value":{…}}`; `"from":"old"` renames the item of the same section in the same write. It is the `configure` tool's write, `Config.edit/5`, which refuses a result that does not load. Needs `project.manage_config`. |
 | `DELETE /config/{section}/{name}?revision={revision}`, `DELETE /config/{section}?revision={revision}` | Remove the item or table. |
 | `GET /members` | List the project's members, `{"items":[{"issuer","subject","role","updated_at"}]}`. Needs `project.manage_access`. |
@@ -109,6 +109,8 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
 | `POST /conversations/{id}/messages` | Send `{"message":"text","agent":"name"}` to an agent of depth 0, or `{"message":"text","work_id":"id"}` to a work; one of the two, never both. A message the store refuses (an agent not at depth 0) is `422 message_refused`. Either may carry `"attachments":[{"name":"notes.txt","media_type":"text/plain","data":"<base64>"}]` when the project's `[store] attachments` is set; the server keeps each file and the message's `prompt` event describes it as `{name, media_type, bytes, sha256}`. A file past `[store] attachment_bytes`, or attachments without that directory, is `422 attachment_refused`. |
 | `GET /conversations/{id}/attachments/{sha256}` | Read a file attached in the conversation, by a message or an agent's `attach`, with its media type and name. |
+| `GET /conversations/{id}/artifacts` | List the conversation's artifacts, `{"items":[{"name","kind","versions":[{"version","media_type","bytes","sha256","note","at","by"}]}]}`, oldest artifact first and versions oldest first. Needs `conversation.read`. See [Artifacts](#artifacts). |
+| `GET /conversations/{id}/artifacts/{name}/versions/{version}` | Read the content of one version, with its media type and name; `404` for a version the conversation does not hold, `400` for a version that is not a positive integer. |
 | `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"body":"text"}`, optionally with `"option":"name"` to execute that option's calls, and recursive `"parts":{"name":{"body":"text","option":"choice"}}` for linked origins. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |
 | `POST /conversations/{id}/inbox/{inbox_id}/read` | Mark an inbox item read. |
@@ -128,6 +130,17 @@ maps part names to their canonical requests, including the original `reason`,
 original target and the actual authenticated answerer. Omit `option` for text;
 explicit null or empty values return `400`. A person escalates through
 `/requests/escalate`, below.
+
+## Artifacts
+
+The documents agents make ([tools](tools.md#artifacts)) are read here, and
+only read: no route writes one. They are the operator's view. A version
+reaches the person's conversation only when an agent attaches it, and then
+it is an attachment like any other, served by its `sha256` above. The two
+routes need `conversation.read`, the same as the conversation's events, and
+answer `404` for a conversation the caller cannot read. The `artifact`
+event also appears in the event stream, with the version's description as
+its `body`.
 
 ## Event stream
 
@@ -164,7 +177,7 @@ receipt, and reuse the shared CLI/model tools, store actions and reply path.
 Replaying the same key and body returns its receipt; changing the body conflicts.
 The verified principal supplies authorship. Unknown body fields and malformed
 required fields return 400; hidden conversations or cross-conversation targets
-return 404; a request/escalation domain refusal returns 422. Human requests
+return 404; a request/escalation domain refusal returns 422. A reply to a request that is closed or already passed up returns `409 request_not_pending` with the reason in `message`; any other reply refusal returns `422 request_refused`. Human requests
 have no requester run. Configured agent receivers open runs, and human
 receivers get the request without a synthetic run. Snapshot request reads retain
 the original identities, questions and linked origins.

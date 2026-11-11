@@ -54,26 +54,39 @@ leads and administrators answer known facts and escalate the remaining
 named origins while preserving child waits ([requests](requests.md)).
 
 Each of the sales desk's conversations is one client's: the project
-importing it sets `[project] conversations`, so no client's proposal,
-design or site is in another's reach, and the dream team's deploy tools
-name each conversation's apps apart. Its depth layer requires the
-workflow `sale` at depth 1, below the generalist, so every work there is
-a client's request the seller works through it: a work the generalist
-opens without naming an agent goes through `sale`, and one naming an
-agent is refused. The generalist stays at depth 0 and holds no work of
-its own. The system team beside it opens no work; a project whose other
-agents at depth 0 open works imports the desk a depth below them.
+importing it sets `[project] conversations`, so no client's design or site
+is in another's reach (its proposal is an artifact of the conversation), and
+the dream team's deploy tools name each conversation's apps apart. One agent
+owns each responsibility: the front desk at depth 0 is the only one that
+talks with the client; the project manager at depth 1 is the internal hub,
+which starts the seller's sale at its first stage, owns the delivery stages
+after it and hands works to the teams; the seller at depth 2 scopes and
+prices. Its depth layer
+requires the workflow `engagement` at depth 1, below the front desk, so every
+work there is a client's request the project manager works through it: a
+work the front desk opens without naming an agent goes through
+`engagement`, and one naming an agent is refused. The front desk stays at
+depth 0 and holds no work of its own. The design and dev teams are imported
+at depth 2, beside the seller, so they answer the project manager and never
+the seller. The system team beside the front desk opens no work; a project
+whose other agents at depth 0 open works imports the desk a depth below
+them.
 
-The sales desk and its `next_stage` refusal name the logical `owner` route,
-which the project importing it configures, as do the dream team's
+The sales desk and its `next_stage` refusal name the route `owner`,
+which the project importing it declares, as do the dream team's
 administrator and surgeon for what only the machine's operator can settle;
-the dream-team, sales-desk and agency eval overlays declare it. Their default route goes through the parent, then the
-sales generalist, then the conversation origin. The generalist batches all
-received questions in its conversation into one escalation and distributes
-the returned text with `reply`; seller questions and preview and price
-approvals use `ask`. It ends on acknowledgements after delivery and creates
-new work only for an explicit new request. See
-[`packs/sales-desk/README.md`](../packs/sales-desk/README.md).
+the dream-team, sales-desk and agency eval overlays declare it. The seller
+asks the project manager, its parent, with the route `pm`; the dream team's
+release asks to grant `promote` of the project manager, who has the client
+accept the built site and asks the owner (the route ends at `owners`, so the
+client is never asked to approve going live); the seller's other questions go to
+the front desk, then the conversation origin; every other request goes
+through the parent, then the front desk, then the origin. The front desk
+batches all received questions in its conversation into one escalation and
+distributes the returned text with `reply`; seller and project manager
+questions and preview and price approvals use `ask`. It ends on
+acknowledgements after delivery and creates new work only for an explicit new
+request. See [`packs/sales-desk/README.md`](../packs/sales-desk/README.md).
 
 ## The system team
 
@@ -97,9 +110,10 @@ The default preset imports the system team (`priv/packs/system`):
 The auditor and the refiner are granted `config`, `overview` and
 `propose_config` but not `propose_pack`: importing a pack is the steward's.
 
-Their proposals go on the logical `owner` route, which a project importing
-the team declares, as the default preset does with
-`{ name = "owner", via = ["origin"] }`; see [requests](requests.md).
+Their proposals go on the project's `[policy] harness_route`, which a project
+importing the team declares, as the default preset does with
+`harness_route = "owner"` and `{ name = "owner", via = ["owners", "origin"] }`;
+see [requests](requests.md).
 
 Their portraits and their skills (`team-design`, `team-composition`,
 `configure`, `audit`, `refine`) are in the pack; see

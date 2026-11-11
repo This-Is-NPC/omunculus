@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""The project manager's wait for the client's next message. At stage sale it
+holds only once the seller's sale work broke because the client will decide
+later: while the seller still works on it, a wait would stall the client and
+the desk both."""
+
+import json
+import sys
+
+
+def refuse(message):
+    return {"ok": False, "output": f"wait refused at stage sale: {message}", "emit": [], "chain": []}
+
+
+def run(call):
+    report = str((call.get("args") or {}).get("report") or "").strip()
+    if not report:
+        return {"ok": False, "output": "report required", "emit": [], "chain": []}
+    work = (call.get("view") or {}).get("work") or {}
+    if work.get("stage") == "sale":
+        sales = [child for child in (call.get("view") or {}).get("children") or [] if child.get("workflow") == "sale"]
+        if any(not (child.get("state") == "waiting" and not child.get("waiting")) for child in sales):
+            return refuse("the seller's sale work is not broken, so there is nothing to wait for: end this run when it is open, "
+                          "and its result comes back to you; call next_stage when it came back done with the proposal approved")
+    return {"ok": True, "output": "", "emit": [{"type": "wait", "body": {"body": report}}], "chain": []}
+
+
+json.dump(run(json.load(sys.stdin)), sys.stdout)
+sys.stdout.write("\n")

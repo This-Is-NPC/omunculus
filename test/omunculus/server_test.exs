@@ -536,6 +536,78 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
+  test "the operator lists a conversation's artifacts and reads a version of one" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+
+    data =
+      update_in(
+        Toml.decode_file!(project_path),
+        ["store"],
+        &Map.merge(&1, %{"attachments" => "files", "attachment_bytes" => 64})
+      )
+
+    File.write!(project_path, Config.Toml.encode(data))
+    {:ok, config} = Config.load(project_path)
+    project = Fixtures.open_project(dir)
+    conversation = Omunculus.Id.new()
+    other = Omunculus.Id.new()
+
+    for id <- [conversation, other] do
+      :ok =
+        Omunculus.Store.Query.insert(project.conn, :conversations, %{
+          id: id,
+          created_issuer: "local",
+          created_subject: "someone",
+          created_at: "2026-01-01T00:00:00Z"
+        })
+    end
+
+    put = fn id, name, kind, number, content ->
+      {:ok, meta} = Omunculus.Artifacts.put(config.store, name, kind, "text/plain", content)
+      record = Map.merge(meta, %{"kind" => kind, "version" => number})
+
+      {:ok, _event} =
+        Omunculus.Store.Events.append(project.conn, %{
+          type: "artifact",
+          conversation_id: id,
+          body: Jason.encode!(record)
+        })
+    end
+
+    put.(conversation, "brief", "brief", 1, "first")
+    put.(conversation, "brief", "brief", 2, "second")
+    put.(other, "secret", "brief", 1, "elsewhere")
+    Project.close(project)
+    {server, local} = serve_local(dir, project_path)
+    base = "/v1/projects/solo/conversations/#{conversation}/artifacts"
+
+    assert %{status: 200, body: %{"items" => [%{"name" => "brief", "kind" => "brief"} = brief]}} =
+             local.(:get, base, [])
+
+    assert [%{"version" => 1, "bytes" => 5}, %{"version" => 2, "media_type" => "text/plain"}] =
+             brief["versions"]
+
+    got = local.(:get, base <> "/brief/versions/1", [])
+    assert got.status == 200
+    assert got.body == "first"
+
+    assert Req.Response.get_header(got, "content-disposition") ==
+             ["attachment; filename*=UTF-8''brief"]
+
+    assert local.(:get, base <> "/brief/versions/3", []).status == 404
+    assert local.(:get, base <> "/secret/versions/1", []).status == 404
+    assert local.(:get, base <> "/brief/versions/one", []).status == 400
+    assert local.(:post, base, json: %{}).status in [404, 405]
+
+    other_base = "/v1/projects/solo/conversations/#{other}/artifacts"
+    assert %{body: %{"items" => [%{"name" => "secret"}]}} = local.(:get, other_base, [])
+
+    :ok = Supervisor.stop(server)
+  end
+
   test "an agent's image is served to whoever sees the project" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
@@ -582,6 +654,7 @@ defmodule Omunculus.ServerTest do
     assert %{"item" => "models.fake", "file" => %{"api" => "module"}} = item.body
     assert item.body["revision"] == revision
     assert local.(:get, config <> "/access", []).body["items"]["file"]["roles"]["admin"]
+    assert local.(:get, config <> "/policy", []).body["items"]["default_agent"] == "concierge"
     assert local.(:get, config <> "/models/nobody", []).status == 404
     assert local.(:get, config <> "/nothing", []).status == 404
 
@@ -858,9 +931,11 @@ defmodule Omunculus.ServerTest do
     data = Toml.decode_file!(project_path)
 
     data =
-      put_in(data, ["policy", "request_routes"], [
+      data
+      |> update_in(["policy"], &Map.delete(&1, "harness_route"))
+      |> put_in(["policy", "request_routes"], [
         %{"from" => local_identity, "via" => [reviewer_identity, final_identity]},
-        %{"name" => "origin", "via" => ["origin"]},
+        %{"name" => "origin", "via" => ["origin", final_identity]},
         %{"via" => ["parent", "origin"]}
       ])
 
@@ -942,6 +1017,24 @@ defmodule Omunculus.ServerTest do
 
     assert {:ok, %{status: "closed", answer: nil}} =
              Store.view(reader.conn, "request", request_id)
+
+    late =
+      local.(:post, reply_url, headers: [{"idempotency-key", "late"}], json: %{body: "Again."})
+
+    assert {late.status, late.body["error"]} == {409, "request_not_pending"}
+
+    escalated_id =
+      Fixtures.insert(reader.conn, :requests, %{run_id: run["id"], status: "escalated"})
+
+    passed_up =
+      local.(
+        :post,
+        "/v1/projects/solo/conversations/#{conversation_id}/requests/#{escalated_id}/reply",
+        headers: [{"idempotency-key", "passed-up"}],
+        json: %{body: "Too late."}
+      )
+
+    assert {passed_up.status, passed_up.body["error"]} == {409, "request_not_pending"}
 
     assert {:ok, [%{body: "Use blue."}]} = Store.comments(reader.conn, :request, request_id)
 

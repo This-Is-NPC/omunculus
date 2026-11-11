@@ -13,7 +13,9 @@ defmodule Omunculus.Config do
   project root), optionally the `client` and a `summary` that say what it
   is for, plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries` and `request_routes`, the
-  optional `[policy] max_reopens` (how many times in a row a parent may
+  optional `[policy] harness_route` (the `request_routes` rule that takes the
+  harness's own requests) and `[policy] default_agent` (the agent of depth 0 that receives a
+  new conversation when the person names none), the optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
   conversation_bytes` (how much of its conversation's works and exchanges
@@ -55,6 +57,8 @@ defmodule Omunculus.Config do
     :max_retries,
     :max_reopens,
     :request_routes,
+    :default_agent,
+    :harness_route,
     :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
@@ -121,7 +125,9 @@ defmodule Omunculus.Config do
           resources: [String.t()],
           host: boolean,
           deny_read: [String.t()],
+          read: [String.t()],
           write: [String.t()],
+          variables: %{String.t() => String.t()},
           sandbox: sandbox
         }
 
@@ -139,6 +145,8 @@ defmodule Omunculus.Config do
           max_retries: non_neg_integer,
           max_reopens: non_neg_integer | nil,
           request_routes: [map],
+          default_agent: String.t() | nil,
+          harness_route: String.t() | nil,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
           conversation_bytes: pos_integer | nil,
@@ -183,13 +191,13 @@ defmodule Omunculus.Config do
     queue_timeout_ms
     resources
   )
-  @execution_optional_keys ~w(host deny_read write)
+  @execution_optional_keys ~w(host deny_read read write variables)
   @known_execution_resources ~w(sandbox.write sandbox.network)
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes default_agent harness_route)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -748,6 +756,9 @@ defmodule Omunculus.Config do
                  agents,
                  workflows
                ),
+             {:ok, default_agent} <- fetch_default_agent(data, agents),
+             {:ok, harness_route} <-
+               Omunculus.RequestRoutes.fetch_harness_route(data, request_routes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -771,6 +782,8 @@ defmodule Omunculus.Config do
               max_retries: max_retries,
               max_reopens: max_reopens,
               request_routes: request_routes,
+              default_agent: default_agent,
+              harness_route: harness_route,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,
@@ -801,7 +814,7 @@ defmodule Omunculus.Config do
   end
 
   @capabilities ~w(
-    project.manage_access project.manage_config conversation.create
+    project.manage_access project.manage_config project.own conversation.create
     conversation.read conversation.send conversation.comment
     conversation.reply conversation.manage_access conversation.manage
   )
@@ -821,6 +834,7 @@ defmodule Omunculus.Config do
          true <- "project.manage_config" in parsed[bootstrap].capabilities do
       {:ok, %{creator_role: creator, bootstrap_role: bootstrap, roles: parsed}}
     else
+      {:error, {:access, :owner_cannot_reply, _role}} = error -> error
       _ -> {:error, {:access, :invalid}}
     end
   end
@@ -832,13 +846,19 @@ defmodule Omunculus.Config do
       case role do
         %{"scope" => scope, "capabilities" => caps} = data
         when scope in ~w(project conversation) and is_list(caps) ->
-          if Map.keys(data) -- ~w(scope capabilities) == [] and
-               Enum.all?(caps, &(&1 in @capabilities)) and
-               (scope == "project" or
-                  Enum.all?(caps, &String.starts_with?(&1, "conversation."))) do
-            {:cont, {:ok, Map.put(acc, name, %{scope: scope, capabilities: caps})}}
-          else
-            {:halt, {:error, {:access, :invalid_role, name}}}
+          cond do
+            Map.keys(data) -- ~w(scope capabilities) != [] or
+              not Enum.all?(caps, &(&1 in @capabilities)) or
+                (scope != "project" and
+                   not Enum.all?(caps, &String.starts_with?(&1, "conversation."))) ->
+              {:halt, {:error, {:access, :invalid_role, name}}}
+
+            # An owner arbitrates requests, so it must be able to answer them.
+            "project.own" in caps and "conversation.reply" not in caps ->
+              {:halt, {:error, {:access, :owner_cannot_reply, name}}}
+
+            true ->
+              {:cont, {:ok, Map.put(acc, name, %{scope: scope, capabilities: caps})}}
           end
 
         _ ->
@@ -1066,7 +1086,9 @@ defmodule Omunculus.Config do
              {:ok, resources} <- execution_resources(rest),
              {:ok, host} <- execution_host(rest),
              {:ok, deny_read} <- execution_paths(rest, "deny_read"),
+             {:ok, read} <- execution_paths(rest, "read"),
              {:ok, write} <- execution_paths(rest, "write"),
+             {:ok, variables} <- execution_variables(rest),
              {:ok, sandbox} <- parse_sandbox(sandbox_data, config_dir) do
           {:ok,
            %{
@@ -1081,7 +1103,9 @@ defmodule Omunculus.Config do
              resources: resources,
              host: host,
              deny_read: deny_read,
+             read: read,
              write: write,
+             variables: variables,
              sandbox: sandbox
            }}
         end
@@ -1177,14 +1201,28 @@ defmodule Omunculus.Config do
     end
   end
 
-  # Paths a command may not read (`deny_read`) or may also write (`write`),
-  # absolute or under `~`.
+  # Paths a command may not read (`deny_read`), may also read (`read`) or
+  # may also write (`write`), absolute or under `~`.
   defp execution_paths(data, key) do
     paths = Map.get(data, key, [])
 
     if is_list(paths) and Enum.all?(paths, &host_path?/1),
       do: {:ok, Enum.map(paths, &Path.expand/1)},
       else: {:error, {:execution, {:invalid, String.to_atom(key)}}}
+  end
+
+  # `variables`, optional: the environment variables every command gets
+  # with the value written here, apart from `environment`'s, which pass the
+  # server's own.
+  defp execution_variables(data) do
+    variables = Map.get(data, "variables", %{})
+
+    if is_map(variables) and
+         Enum.all?(variables, fn {name, value} ->
+           environment_name?(name) and is_binary(value)
+         end),
+       do: {:ok, variables},
+       else: {:error, {:execution, {:invalid, :variables}}}
   end
 
   defp host_path?("~/" <> rest), do: rest != ""
@@ -1372,6 +1410,23 @@ defmodule Omunculus.Config do
       nil -> {:ok, nil}
       n when is_integer(n) and n >= 0 -> {:ok, n}
       _invalid -> {:error, {:policy, {:invalid, :max_reopens}}}
+    end
+  end
+
+  # Absent, clients name the agent of every conversation themselves.
+  defp fetch_default_agent(data, agents) do
+    case get_in(data, ["policy", "default_agent"]) do
+      nil ->
+        {:ok, nil}
+
+      name when is_binary(name) ->
+        case agents do
+          %{^name => %{depth: 0, workflow_only: false}} -> {:ok, name}
+          _unusable -> {:error, {:policy, {:invalid, :default_agent}}}
+        end
+
+      _invalid ->
+        {:error, {:policy, {:invalid, :default_agent}}}
     end
   end
 

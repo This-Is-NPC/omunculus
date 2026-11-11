@@ -1,6 +1,6 @@
 [eval]
 extra_packs = [{ path = "../priv/packs/system" }, { name = "course-recovery" }]
-entry_agent = "sales"
+entry_agent = "front-desk"
 tool_paths = ["../packs/course-recovery/tools"]
 
 [eval.agent_overrides.steward]
@@ -21,15 +21,16 @@ timeout_ms = "infinity"
 timeout_ms = "infinity"
 
 [execution]
-environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "MISE_STATE_DIR"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "OMUNCULUS_DEPLOY_PROVIDER", "MISE_STATE_DIR"]
 
 # Model tools select named question routes. Harness fallback has no name.
 [policy]
 tools = ["route_ask_step", "route_request_access_step", "route_escalate_step"]
+harness_route = "owner"
 request_routes = [
-  { name = "owner", via = ["origin"] },
-  { name = "client", from = { kind = "agent", agent = "sales" }, via = ["origin"] },
-  { name = "questions", workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }] },
-  { name = "questions", via = ["parent", { kind = "agent", agent = "sales" }] },
+  { name = "owner", via = ["owners", "origin"] },
+  { name = "client", from = { kind = "agent", agent = "front-desk" }, via = ["origin"] },
+  { name = "questions", workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, { kind = "agent", agent = "steward" }] },
+  { name = "questions", via = ["parent", { kind = "agent", agent = "front-desk" }] },
   { via = [{ kind = "agent", agent = "steward" }] },
 ]

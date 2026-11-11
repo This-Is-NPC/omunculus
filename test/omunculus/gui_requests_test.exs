@@ -12,6 +12,13 @@ defmodule Omunculus.GuiRequestsTest do
     assert {"", 0} = GuiModules.run(modules, @fixtures <> assertions)
   end
 
+  test "a request's origin has no arbiter, which is no human" do
+    run!(["Requests"], """
+    if (Requests.human(undefined) || Requests.human(null)) throw Error("no participant is no human");
+    if (Requests.kind({status: "pending", options: {}, origins: {}}) !== "team") throw Error("a request without arbiter is the team's");
+    """)
+  end
+
   test "pending, human, answer and label use participant-neutral fields" do
     run!(["Requests"], """
     const owner = {kind: "human", issuer: "local", subject: "1000"};
@@ -29,15 +36,16 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
-  test "chose heads an answer by the option, apart from asking to adjust" do
+  test "a request is for the owner, the client or agents by its destination" do
     run!(["Requests"], """
-    if (Requests.chose("approve") !== "YOU CHOSE APPROVE") throw Error("approve");
-    if (Requests.chose("grant_agent") !== "YOU CHOSE GRANT AGENT") throw Error("underscore");
-    if (Requests.chose("adjust") !== "YOU ASKED TO ADJUST") throw Error("adjust");
-    if (Requests.chose("") !== "") throw Error("words only");
-    if (Requests.chose("grant") !== "YOU GRANTED  \u00b7  THIS WORK ONLY") throw Error("grant keeps its scope");
-    if (Requests.chose("grant_agent", true, {who: "clerk"}) !== "YOU GRANTED  \u00b7  FOR CLERK") throw Error("saved scope");
-    if (Requests.chose("grant_network", false) !== "YOU CHOSE GRANT NETWORK") throw Error("a decision's own option");
+    const ask = over => Object.assign({status: "pending", arbiter: human}, over);
+    const who = request => Requests.audience(request);
+    if (who(ask({destination: "owners"})) !== "owner") throw Error("owners destination");
+    if (who(ask({route: "owner", destination: "origin"})) !== "client") throw Error("a route name decides nothing");
+    if (who(ask({route: null, destination: "origin"})) !== "client") throw Error("default route");
+    if (who(ask({})) !== "client") throw Error("no destination");
+    if (who(ask({arbiter: agent("sales"), destination: "parent"})) !== "agents") throw Error("agent arbiter");
+    if (Requests.audiences.owner.text !== "OWNER DECISION" || Requests.audiences.client.text !== "CLIENT QUESTION") throw Error("words");
     """)
   end
 
@@ -52,20 +60,19 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
-  test "options read and order the same on the card and its chips" do
+  test "options read and group as the card shows them" do
     run!(["Requests"], """
     const all = ["deny", "grant_agent", "grant_depth", "grant", "grant_workspace"];
-    if (Requests.ordered(all, true).join() !== "grant,deny") throw Error("order " + Requests.ordered(all, true));
+    if (Requests.once(all, true).join() !== "grant") throw Error("once " + Requests.once(all, true));
     if (Requests.always(all, true).join() !== "grant_agent,grant_workspace") throw Error("always");
     // A decision that names an option grant_* offers it once, like any other.
     const decision = ["confirm_by_hand", "grant_network"];
-    if (Requests.ordered(decision, false).join() !== "confirm_by_hand,grant_network") throw Error("decision order " + Requests.ordered(decision, false));
+    if (Requests.once(decision, false).join() !== "confirm_by_hand,grant_network") throw Error("decision once " + Requests.once(decision, false));
     if (Requests.always(decision, false).length !== 0) throw Error("a decision has no saved scopes");
     if (Requests.optionLabel("grant") !== "GRANT\u00a0\u00b7\u00a0THIS WORK ONLY") throw Error("grant label");
     if (Requests.optionLabel("grant_agent", {who: "clerk"}) !== "FOR CLERK") throw Error("agent label");
     if (Requests.optionLabel("approve") !== "APPROVE") throw Error("plain label");
     if (Requests.optionLabel("pedir-mudancas") !== "PEDIR MUDANCAS") throw Error("hyphen label");
-    if (Requests.chose("pedir-mudancas") !== "YOU CHOSE PEDIR MUDANCAS") throw Error("hyphen chose");
     """)
   end
 
@@ -122,17 +129,19 @@ defmodule Omunculus.GuiRequestsTest do
 
   test "repeated finds the answered request a new one asks again" do
     run!(["Requests"], """
-    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q"});
+    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q", created_at: {a: "1", b: "2", c: "3", d: "4", p: "1", q: "2", r: "3", s: "4"}[id] || "5"});
     const replies = {a: {stamp: "09:48"}, b: {stamp: "09:50"}};
     const list = [ask("a", "closed", "w1", "lead"), ask("b", "closed", "w1", "lead"), ask("c", "closed", "w2", "lead"),
       ask("d", "closed", "w1", "other"), ask("n", "pending", "w1", "lead")];
     if (Requests.repeated(list[4], list, replies).id !== "b") throw Error("the last answered one");
+    if (Requests.repeated(list[4], list.slice().reverse(), replies).id !== "b") throw Error("by when asked, not by order given");
+    if (Requests.repeated(ask("n", "pending", "w1", "lead"), list.slice(0, 2).concat([Object.assign({}, list[4], {id: "z", status: "closed", created_at: "9"})]), Object.assign({z: {}}, replies)).id !== "b") throw Error("one asked later is no earlier one");
     if (Requests.repeated(ask("n", "pending", "w2", "lead"), list, replies) !== null) throw Error("answered request only");
     if (Requests.repeated(ask("n", "pending", "w1", "third"), list, replies) !== null) throw Error("same asker");
     if (Requests.repeated(list[0], [list[0]], replies) !== null) throw Error("not itself");
     // The preview, then the proposal, then the owner's decision: one asker, one
     // work, other options; none repeats the one before.
-    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, {}]))});
+    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, []]))});
     const preview = decide("p", "closed", ["aprovar", "pedir-mudancas"]);
     const proposal = decide("q", "closed", ["accept", "adjust", "refuse"]);
     const owner = decide("r", "pending", ["approve", "deny"]);
@@ -141,6 +150,13 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.repeated(owner, [preview, proposal, owner], answered) !== null) throw Error("the owner's decision is no repeat");
     const again = decide("s", "pending", ["aprovar", "pedir-mudancas"]);
     if ((Requests.repeated(again, [preview, proposal, again], answered) || {}).id !== "p") throw Error("the same decision again is");
+    // A grant of another thing is no repeat of the earlier grant.
+    const grant = (id, status, name, at) => Object.assign(ask(id, status, "w1", "seller"), {created_at: at, options: {grant_once: [{name: "grant", args: {kind: "tool", name: name}}], deny: []}});
+    const deploy = grant("g1", "closed", "deploy_preview", "1");
+    const network = grant("g2", "pending", "network", "2");
+    if (Requests.repeated(network, [deploy, network], {g1: {}}) !== null) throw Error("another resource is no repeat");
+    const network2 = grant("g3", "pending", "network", "3");
+    if ((Requests.repeated(network2, [deploy, Object.assign({}, network, {status: "closed"}), network2], {g1: {}, g2: {}}) || {}).id !== "g2") throw Error("the same resource again is");
     """)
   end
 end

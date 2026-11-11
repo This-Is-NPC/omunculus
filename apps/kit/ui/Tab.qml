@@ -1,7 +1,8 @@
 import QtQuick
 
-// Tab is a section switch: a two-digit index and a tracked name, underlined
-// by a hairline in the accent while shown; a dot in the error colour after
+// Tab is a section switch: a two-digit index (none when `digit` is empty, for
+// a narrow window) and a tracked name, underlined by a hairline in the accent
+// while shown; a dot in the error colour after
 // the name while something on its page needs fixing.
 Item {
   id: tab
@@ -31,7 +32,7 @@ Item {
   Row {
     id: body
     spacing: 8
-    Label { text: tab.digit; color: tab.current ? Theme.primary : Theme.faint; font.pixelSize: Theme.type.tabDigit.size; font.letterSpacing: Theme.type.tabDigit.tracking }
+    Label { visible: tab.digit !== ""; text: tab.digit; color: tab.current ? Theme.primary : Theme.faint; font.pixelSize: Theme.type.tabDigit.size; font.letterSpacing: Theme.type.tabDigit.tracking }
     Label { text: tab.label.toUpperCase(); color: tab.tone; font.pixelSize: Theme.type.tab.size; font.letterSpacing: Theme.type.tab.tracking }
   }
   // In the gap after the name, so the tabs keep their places.

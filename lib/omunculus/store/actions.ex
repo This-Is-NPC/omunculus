@@ -25,9 +25,9 @@ defmodule Omunculus.Store.Actions do
   `compact` and `comment.delete` to `Actions.Comments`.
   """
 
-  alias Omunculus.{Attachments, Ceiling, Config, Id}
+  alias Omunculus.{Artifacts, Attachments, Ceiling, Config, Id}
   alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Requests, Sequence}
-  alias Omunculus.Store.{Events, Query}
+  alias Omunculus.Store.{Events, Query, View}
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
 
@@ -59,6 +59,9 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "attach"} = emit, ctx),
     do: attach(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "artifact"} = emit, ctx),
+    do: artifact(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "work"} = emit, ctx),
     do: work(conn, Map.get(emit, "body", %{}), ctx)
@@ -172,6 +175,53 @@ defmodule Omunculus.Store.Actions do
         {:error, {:attach, {:invalid, :attachments}}}
     end
   end
+
+  # The next version of a run's artifact: its content kept by
+  # `Omunculus.Artifacts`, numbered after the last of its name.
+  defp artifact(conn, body, %{run_id: run_id} = ctx) when not is_nil(run_id) do
+    with :ok <- Helpers.ensure_text(:artifact, body, "name"),
+         :ok <- Helpers.ensure_text(:artifact, body, "kind"),
+         :ok <- Helpers.ensure_text(:artifact, body, "media_type"),
+         :ok <- Helpers.ensure_text(:artifact, body, "content"),
+         {:ok, %{conversation_id: conversation_id}} <-
+           Query.one(conn, "SELECT conversation_id FROM runs WHERE id = ?", [run_id]),
+         true <- not is_nil(conversation_id) || {:error, {:artifact, :no_conversation}},
+         {:ok, versions} <- View.artifacts(conn, conversation_id),
+         :ok <-
+           Artifacts.check(
+             ctx.config.store,
+             versions,
+             body["name"],
+             body["kind"],
+             body["media_type"],
+             byte_size(body["content"]),
+             body["base"]
+           ),
+         {:ok, meta} <-
+           Artifacts.put(
+             ctx.config.store,
+             body["name"],
+             body["kind"],
+             body["media_type"],
+             body["content"]
+           ) do
+      record =
+        meta
+        |> Map.merge(%{
+          "kind" => body["kind"],
+          "version" => Artifacts.next(body["name"], versions),
+          "tool" => Map.get(ctx, :tool)
+        })
+        |> put_note(body)
+
+      Events.append(conn, %{type: "artifact", run_id: run_id, body: Jason.encode!(record)})
+    end
+  end
+
+  defp artifact(_conn, _body, _ctx), do: {:error, {:artifact, :no_run}}
+
+  defp put_note(record, %{"note" => note}) when is_binary(note), do: Map.put(record, "note", note)
+  defp put_note(record, _body), do: record
 
   defp prompt(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:prompt, body, "message"),

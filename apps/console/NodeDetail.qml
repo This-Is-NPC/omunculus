@@ -272,18 +272,9 @@ FocusScope {
             Layout.fillWidth: true
             spacing: Theme.space.tight
             Label {
-              visible: !!(pane.node && pane.node.lastCall)
-              Layout.maximumWidth: implicitWidth
               Layout.fillWidth: true
               Layout.minimumWidth: 0
-              text: pane.node && pane.node.lastCall ? pane.node.lastCall.name : ""
-              font.pixelSize: Theme.type.body.size
-              elide: Text.ElideRight
-            }
-            Label {
-              Layout.fillWidth: true
-              Layout.minimumWidth: 0
-              text: pane.node ? (pane.node.lastCall ? pane.node.lastCall.brief : pane.node.doing) : ""
+              text: pane.node ? (pane.node.lastStep !== "" ? pane.node.lastStep : pane.node.doing) : ""
               color: Theme.dim
               font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight

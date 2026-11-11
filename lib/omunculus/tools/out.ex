@@ -110,8 +110,14 @@ defmodule Omunculus.Tools.Out do
     do:
       "#{agent} stopped the work \"#{title}\" without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
 
-  @doc "The inbox note of a request the harness opens with `reason` and `options`."
+  @doc """
+  The inbox note of a request the harness opens with `reason` and `options`,
+  or, with no option, of one that had no arbiter left on its route.
+  """
   @spec request_inbox(String.t(), [String.t()]) :: String.t()
+  def request_inbox(reason, []),
+    do: reason <> " No arbiter is left on its route, so it stays stopped."
+
   def request_inbox(reason, options),
     do: "#{reason} Answer it with #{Enum.join(options, " or ")}."
 
@@ -231,6 +237,22 @@ defmodule Omunculus.Tools.Out do
   @doc "What a model reads of a call that failed: a text as it is, anything else inspected."
   @spec failure(term) :: String.t()
   def failure(reason) when is_binary(reason), do: reason
+
+  def failure({:artifact, {:conflict, name, base, current}}),
+    do: "#{name} is at version #{current}, not #{base}: read it again and build on that"
+
+  def failure({:artifact, {:kind, name, kind}}),
+    do: "#{name} is an artifact of kind #{kind}: a name keeps its kind"
+
+  def failure({:artifact, {:invalid, :kind}}), do: "kind is a lowercase word"
+  def failure({:artifact, :no_conversation}), do: "this run has no conversation"
+  def failure({:attachment, :not_configured}), do: "[store] attachments is not set"
+  def failure({:attachment, {:invalid, field}}), do: "the #{field} is not valid"
+
+  def failure({:attachment, {:too_large, size, limit}}),
+    do: "#{size} bytes is more than the #{limit} a file may hold"
+
+  def failure({:attachment, :not_found}), do: "that file is not kept"
   def failure(reason), do: inspect(reason)
 
   @doc """
@@ -293,7 +315,7 @@ defmodule Omunculus.Tools.Out do
   @spec reopen_limit(String.t(), String.t()) :: String.t()
   def reopen_limit(work_id, instructions),
     do:
-      "Work #{work_id} broke again after going back as many times in a row as [policy] max_reopens allows, so it does not go back once more on its own. Say how to go on: send it back anyway, retire it and hand out what must come first, or pass this work up. The instructions it would have gone back with: #{instructions}"
+      "Work #{work_id} keeps breaking: it was sent back as many times in a row as the project allows, so it does not go back once more on its own. Say how to go on: send it back anyway, retire it and hand out what must come first, or pass this work up. The instructions it would have gone back with: #{instructions}"
 
   @spec refused(term) :: String.t()
   def refused({:request, {:blocked, name}}),

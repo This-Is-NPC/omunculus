@@ -36,11 +36,11 @@ These keys work on every screen of the console:
 | --- | --- |
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
-| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log and cost; only while you navigate, not a second after typing |
+| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, tree, log, cost and artifacts; only while you navigate, not a second after typing |
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Ctrl+P | the projects, also from a field being written |
-| Esc | let go of what the page holds, then back to where you were, at last the start |
+| Esc · BACK | let go of what the page holds, then up one level — a conversation, its list, the start; the masthead's OMUNCULUS goes straight to the start |
 | Alt + a key of the page | the key, from a field being written |
 | ? · F1 | the keys dialog, which lists these tables |
 
@@ -57,14 +57,16 @@ and a key pressed with no field to take it only says "Click a field to type".
 The console answers Quickshell IPC too (`quickshell ipc --path apps/console
 call omunculus <function>`): `start`, `page <name>`, `projects`,
 `project <id>`, `conversations`,
-`agents`, `log`, `board`, `open <conversation id>`, `work <work id>`,
+`tree`, `log`, `board`, `open <conversation id>`, `work <work id>`,
 `newConversation`, `back` and `send <message>`.
 
 ### 1. The start
 
-On a project, its name and four ways in: NEW CONVERSATION, CONVERSATIONS,
-BOARD and PROJECTS. On the registry alone, how many projects it holds and
-two: PROJECTS and BOARD. Under them, in the warning tone, the projects
+On a project, its name, "What now?" and four ways in as cards, each with
+its number and one line of what is there, the first one filled: NEW
+CONVERSATION, CONVERSATIONS (how many, how many need you, how many work),
+BOARD and PROJECTS. On the registry alone, two: PROJECTS (how many it holds)
+and BOARD. Under them, in the warning tone, the projects
 where conversations need you and how many, each a way into that project's
 conversations with NEEDS YOU lit (a line says it is reading until every
 project is). The ⓘ at the top right opens the
@@ -72,14 +74,15 @@ keys.
 
 | Keys | What they do |
 | --- | --- |
-| N · H · B · P | a new conversation, the conversations, the board, the projects |
+| 1 · 2 · 3 · 4 | the card of that number: a new conversation, the conversations, the board, the projects (on the registry alone, 1 and 2) |
+| Enter | the first card |
 
 ### 2. Projects
 
 Every project of the server's registry, under a rule of its state (NEEDS
-YOU, WORKING, IDLE), two lines each: its id, OPEN beside the one the window
-is on, and its state at the top right — NEEDS YOU, WORKING, IDLE, NOT
-REACHABLE or READING…; under it its conversations, how many need you and
+YOU, WORKING, FAILED, IDLE), two lines each: its id, OPEN beside the one the
+window is on, and its state at the top right — NEEDS YOU, WORKING, ✕ FAILED,
+IDLE, NOT REACHABLE or READING…; under it its conversations, how many need you and
 how many agents work in and its last activity.
 Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
@@ -115,10 +118,10 @@ The project's conversations, those needing you first, the longest waiting
 first, then the others under a rule of the day each began: its title and
 its state at the top right, what waits on you ("7 QUESTIONS", "A
 DECISION"); under it since when it waits, whom it is with and which agent
-holds its work at which stage ("sales · seller is at design (2/6)"), when
+holds its work at which stage ("front-desk · project-manager is at design (2/4)"), when
 it began and its works; then what the newest request asks. Under the
 search line, chips filter by state, ALL listing every one; a row's `⋯`
-opens it at its team or its log.
+opens it at its tree or its log.
 
 | Keys | What they do |
 | --- | --- |
@@ -129,90 +132,100 @@ opens it at its team or its log.
 
 ### 5. Chat
 
-The chat between you and the root agent, read as a history from the top
-down, each kind of entry in a form of its own. What you said is a filled
-bubble on the right; what an agent says is a bubble on the left tinted with
-its colour, under its name and time. A note an agent of the team left is an
-outlined card headed NOTE FROM SELLER. The rest is the log, small, dim rows
-with an icon at the left: each run's tool calls, folded to one line that
-counts them and unfolding to one row per call, and a run that said nothing
-is that line alone, with its agent's name. A work handed down is a sub-work
-row where it was, which unfolds into its own transcript, changes and runs;
-each run of the works below leaves a row when it ends ("designer worked 4
-min · 12 steps"). A question for you
-is a card in the thread; a numbered list of questions keeps SEND and I CAN'T
-ANSWER THIS on the view's bottom edge, with how many questions are below,
-until the card's end comes into view. What an agent asked another is an exchange in the
-thread it was asked in, its question quoted in a frame, which DECIDE INSTEAD
-lets you answer. While an agent works, a live line at the end of the thread
-says who works, from the agent you wrote to down to the one at work, what it
-does and for how long, and leaves its row when that run ends. Over the tabs
-of every page of the conversation, a header strip says whom it is with, the
-stage, or that the conversation is starting, how long, and how many agents
-and replies, each count opening the team or the cost, with the chevron and
-ANSWER while a question waits on you; under it one line says the stages of
-the work in focus. The
-chevron or Alt+P open the progress: the works nested by stage and level, beside the
-thread from 1100 px, a card over it from 700 px, a sheet over the chat below.
-While a decision waits on you, its options are numbered chips over the
-composer, then PROGRESS; one pressed decides it. The clip in the composer
-attaches files. A conversation with no message yet, opened from the
-conversations, first asks whom it is with, on the cards of
+The chat is the dialogue between you and the root agent, read as a history
+from the top down. What you said is a filled bubble on the right; what an
+agent says is a bubble on the left tinted with its colour, under its name and
+time. A note an agent of the team left is an outlined card headed NOTE FROM
+SELLER. Each work handed down is one work card: WORK and its title, its state
+as an icon and a word (WORKING, WAITING FOR SURGEON, WAITING FOR YOU, DONE),
+how long, who it waits for and OPEN IN TREE, which opens the tree on that work;
+the card has no stages and no one at work, which the header strip says once.
+What you answered, chose or granted is one sentence with its icon and
+word (ANSWERED, CHOSE, GRANTED, DENIED) and the time. There are no run rows,
+tool calls or exchanges between agents here: they are in the tree and the
+log. While any agent of the team works, a live line at the end of the thread,
+at every width, says who, down from the agent you write to, what it does in a
+plain verb and for how long. The "N NEW" pill, when the thread runs past the
+view, sits above the composer and never over an entry. Over the tabs of every page of the
+conversation, a header strip says whom it is with, the stage, or that the
+conversation is starting, the step of how many, how long, and how many agents and replies, each
+count opening the tree or the cost, with the chevron and ANSWER while
+something waits on you; under it the stages of the work in focus, in large type, and the chain
+of agents from the one you talk with down to the one at work, with a plain verb
+for what it does; the tabs are on one line, without their digits on a narrow window; at their right, "⚠ 3 PENDING" opens
+the [pending queue](#6-the-pending-queue). The chevron or Alt+P open the
+progress: the works nested by stage and level, beside the thread from 1100 px,
+a card over it from 700 px, a sheet over the chat below. The composer is a
+line with a clip that attaches files and SEND; it has no options of a request
+above it. A conversation with no message yet, opened from the conversations,
+first asks whom it is with, on the cards of
 [a new conversation](#3-a-new-conversation) when several agents of depth 0
 may take it.
 
 A sub-work's open glyph (an arrow out of a box), or OPEN in the progress, shows that work's thread as a
 page of its own, under the way down to it, with a composer to its agent;
-OPEN IN TEAM (Alt+O) shows it on the team page.
+OPEN IN TREE (Alt+O) shows it on the tree page.
 
 | Keys | What they do |
 | --- | --- |
-| Alt+R | put the keyboard in the words of the newest question waiting on you |
+| Alt+R | open the pending queue |
 | Alt+P | open or close the progress, the keyboard in it |
-| Alt+1 … Alt+9 | the quick chip of that number: an option of the newest decision (with the card's note) when its card is out of view, then the progress |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
 | ↑ · ↓ · → · ←, in the progress | move, unfold, fold |
-| Esc, in a question's card or the progress | back to the composer; the sheet closes |
+| Esc, in the progress | back to the composer; the sheet closes |
 
-### 6. A request
+### 6. The pending queue
 
-A request's decision, over the page, as its card: who asked, what for and
-who decides, a field for words, and its options as buttons at the bottom
-left, with SEND while words are written and DENY last. The card's "more"
-menu holds ESCALATE, which makes the words the reason it goes up.
-
-| Keys | What they do |
-| --- | --- |
-| Enter | in its words: answer, or escalate when escalating |
-
-### 7. Team
-
-The conversation's agents as a tree, who handed work to whom, every level
-deep. The agent that talks with you is the root, with its own state and
-what it asks you; each work sits under the work that handed it down, lines
-joining it to its parent as in a file tree. A row is the work's mark (a
-chevron while it handed works down, else its agent's dot), its agent in its
-tone (a workflow's agents, the one at work lit), its title, and its state at
-the right: what it does and a clock, whom it waits on, Needs you. Under them
-its stages, time, steps and cost, and a badge for the climb of what it waits
-on (⇡ surgeon › administrator › seller › sales › you) and what it is asked
-(⇣). The paths at work or waiting are open; the done works under an open
-one fold into one line ("✓ 3 sub-works done · 30 min · toolsmith, surgeon
-×2"), those up next into another, each unfolding on a click. Chips keep the
-works that need you or work, with the works above them. The work picked
-shows in full under a header strip with ANSWER or OPEN THREAD, in the tabs
-OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS and LOG: beside the tree from
-1100 px, as a page over it narrower.
+Everything that waits on you, over any page of the conversation: a panel on
+the right, the whole page when narrow, headed "PENDING · 3" with a close
+button, the requests oldest first, from the top. It opens only while something
+waits and closes when you answer the last one. The keyboard starts in the first
+field, or on the recommended action. An item is one of three kinds, each with
+its icon and word: QUESTION, DECISION or PERMISSION. It says what it asks in a
+sentence, then who asks, the way down from the front desk, the work, what it
+unblocks and, for a permission, what it grants; every text wraps inside it. Its
+actions are one group at its bottom: a box and ANSWER for a question; a button
+per option for a decision, the recommended one (APPROVE or ACCEPT) filled and
+the others outlined; GRANT · THIS WORK ONLY, filled, DENY and an ALWAYS… menu of
+the wider scopes (for the agent, the stage, the folder or the project, saved
+in the project settings) for a permission. A note, or the reason of a no, is
+behind ADD A NOTE, and the item's "more" menu holds ESCALATE. Acting on an
+item removes it and leaves its sentence in the chat.
 
 | Keys | What they do |
 | --- | --- |
-| ↑ · ↓ | move from row to row; the detail follows |
+| Alt+R | open it |
+| Enter | in an answer's words: send it, or escalate when escalating |
+| Esc | close |
+
+### 7. Tree
+
+The conversation's works in the order they were made, who handed work to
+whom, every level deep. The agent that talks with you is the root, with its
+own state and what it asks you; each work sits under the work that handed it
+down, lines joining it to its parent as in a file tree. A row is the work's
+mark (a chevron while it handed works down, else its agent's dot), its agent
+in its tone, its title, its stage track (a dot per stage, the step of how
+many under it), its state in words — WORKING, WAITING FOR the child or agent
+it waits for, WAITING FOR YOU, DONE, FAILED, CANCELLED — and how long it has
+run; under the title its steps and cost, and a badge for the climb of what it
+waits on (⇡ surgeon › administrator › project-manager › front-desk › you) and
+what it is asked (⇣). On a narrow window the stage track and the state go
+under the title. The paths at work or waiting are open; the rest fold behind
+their chevron. Chips keep the works that need you or work, with the works
+above them. A click on a work opens its runs inside it, one line each, and
+DETAIL opens it in full, as a page over the tree, under a header strip with
+ANSWER or OPEN THREAD, in the tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS
+and LOG.
+
+| Keys | What they do |
+| --- | --- |
+| ↑ · ↓ | move from row to row |
 | → · ← | unfold, or the first row under it; fold, or its parent |
-| Enter | open its detail, or its tabs beside the tree; a fold, unfold or fold it |
-| [ · ] | the previous or next tab |
+| Enter | show its runs inside it; again, open it in full |
 | / | filter the works |
 | Alt+R | answer what waits on you nearest the work picked |
 | Alt+E | open the decision of what it asked you, to escalate (the detail's `⋯` ESCALATE) |
@@ -231,17 +244,21 @@ Every event of the conversation, a row each, which opens whole.
 | / | filter the events |
 | Esc | empty the filter, then back to the rows |
 
-Each row is one line: when, its kind, what the event says, who. Chips keep
+Each row is one line: when, its kind, what the event says, who; under 560 px
+two lines, the sentence under the rest. Chips, which wrap onto lines, keep
 the events that need you or failed, a picker one agent's, and BEHIND THE
 SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
-names each day and each run. Opened from a work of
-the team, it is kept to that work.
+names each day and each run. The count says how many rows a filter keeps out,
+and "2 BEHIND THE SCENES HIDDEN" when that is why. A failed event has the
+warning icon in the error tone. Opened from a work of
+the tree, it is kept to that work.
 
 ### 9. Cost
 
 What the conversation used: model replies, tokens and cost in all in a
-header strip, then a row per agent; with no price from the provider, no cost
-column, only a note. It has no keys of its own.
+header strip, then a row per agent, its figures in columns or, on a narrow
+window, on lines of their own; with no price from the provider, no cost
+column, only the kicker NO PRICE REPORTED. It has no keys of its own.
 
 ### 10. Board
 
@@ -269,7 +286,7 @@ right.
 | Keys | What they do |
 | --- | --- |
 | Alt+R | answer what it asked you |
-| Alt+O | its conversation's team, the work picked |
+| Alt+O | its conversation's tree, the work picked |
 | Esc | back |
 
 ### 12. The keys dialog
@@ -281,39 +298,39 @@ arrows and PgUp/PgDn scroll it.
 
 `apps/kit/run mailbox --config <server.toml> [--project <id>]`. Its IPC
 (`quickshell ipc --path apps/mailbox call mailbox <function>`):
-`newThread`, `open <key>`, `search <query>`, `fold folders|threads` and
-`reply`.
+`compose`, `open <key>`, `search <query>`, `fold folders|list` and `reply`.
+How it maps a conversation to e-mail is in [the mailbox](mailbox.md).
 
-### 13. The threads
+### 13. The folders
 
-The folders — all threads, those waiting for you and those working — the
-project chips, and the threads of the folder, newest first, each with its
-state. A command bar holds NEW THREAD and MARK ALL READ.
+Inbox (with its unread count), Sent, Drafts and Archive, named, and the
+threads of the folder, newest first, each with its sender, subject, snippet, label and time;
+unread ones in bold. A command bar holds COMPOSE and MARK ALL READ.
 
 | Keys | What they do |
 | --- | --- |
-| Ctrl+N | a new thread |
-| / | search threads by subject, agent, project, message or file name |
+| Ctrl+N | compose |
+| / | search by subject, agent, project, message or file name |
 | Esc | clear the search |
 | Ctrl+B | fold the folders to a rail |
-| Ctrl+L | fold the threads to a rail of their agents' portraits |
+| Ctrl+L | fold the list to a rail of the agents' portraits |
 
 ### 14. A thread
 
-One conversation with an agent of depth 0, newest first: what you wrote,
-what the agent said to you, and each request whose decision is yours, with
-its options. Its state and what happens next head it.
+One conversation with an agent of depth 0, stacked oldest first, the latest
+message open, with its label in the head. Each open message offers REPLY,
+REPLY ALL and FORWARD; a reply is written under the messages.
 
 | Keys | What they do |
 | --- | --- |
-| Ctrl+R | reply |
+| Ctrl+R | reply to the latest message |
 | Alt+Up · Alt+Down | the thread before or after |
 | Esc | close the reply, then the thread |
 
-### 15. A new thread
+### 15. Compose
 
-A dialog: its To, an agent of depth 0 of one project, and the first
-message, with the files it carries.
+A dialog: To (one agent, as a chip, with autocomplete), Subject, the message,
+Attach and SEND, the filled action. It keeps what is written in Drafts when closed.
 
 ## The studio
 

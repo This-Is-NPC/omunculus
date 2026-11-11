@@ -18,6 +18,17 @@ defmodule Omunculus.GuiEventsTest do
              )
   end
 
+  test "a model event's calls are read from every message shape" do
+    run!("""
+    const names = body => JSON.stringify(Model.calls(body));
+    check(names({content: [{type: "text", text: "x"}, {type: "tool_use", name: "bash", input: {command: "ls"}}]}) === '[{"name":"bash","args":{"command":"ls"}}]', "anthropic", "");
+    check(names({tool_calls: [{function: {name: "read", arguments: '{"path":"a"}'}}]}) === '[{"name":"read","args":{"path":"a"}}]', "openai", "");
+    check(names({output: [{type: "function_call", name: "ls", arguments: "{}"}]}) === '[{"name":"ls","args":{}}]', "responses", "");
+    check(names({type: "call", name: "__omunculus_execute", args: {}}) === '[{"name":"code","args":{}}]', "code", "");
+    check(names("plain") === "[]" && names({content: "words"}) === "[]", "none", "");
+    """)
+  end
+
   test "requests, escalations and replies say who asks whom what" do
     run!("""
     says("request", {reason: "Which logo?\\nThe new one?", requester: agent("sales"), arbiter: human, options: {}}, "sales", "sales asks you: Which logo?");
@@ -89,6 +100,9 @@ defmodule Omunculus.GuiEventsTest do
     says("delegate", {title: "Logo", goal: "g", parent_id: "p"}, "sales", "handed down: Logo");
     says("work", {works: [{title: "Bakery"}, {title: "Menu"}], start: true}, "sales", "opened Bakery +1 more");
     says("work", {state: "open", reason: "reopened_by_prompt"}, "", "reopened by a message");
+    says("artifact", {name: "proposal-0023b19cb2ea27323f5f6d8b3443cbe4.md", kind: "proposal", media_type: "text/markdown", version: 3}, "seller", "saved Proposal, version 3");
+    says("tool", {name: "put_artifact", args: {name: "proposal-0023b19cb2ea27323f5f6d8b3443cbe4", content: "x"}, ok: true}, "seller", "saved Proposal");
+    check(Events.what("work", {state: "done"}, "", {}, "", {}, "Bakery website") === "Bakery website is now done" && Events.what("work", {}, "", {}, "", {}, "") === "a work changed", "work event names its work", "");
     says("grant", {name: "bash", kind: "tool"}, "you", "granted: run a command, for this work");
     says("attach", {attachments: [{}, {}]}, "sales", "attached 2 files");
     says("comment.delete", {ids: ["a"]}, "sales", "deleted 1 comment");

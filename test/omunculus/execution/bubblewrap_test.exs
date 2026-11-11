@@ -43,6 +43,38 @@ defmodule Omunculus.Execution.BubblewrapTest do
              )
   end
 
+  test "a command reads a folder of tools named by a variable, read-only, without network",
+       %{workspace: workspace} do
+    # A synthetic folder of tools; nothing of the host's is touched.
+    tools = Omunculus.Fixtures.tmp_dir()
+    File.write!(Path.join(tools, "hello"), "#!/usr/bin/sh\necho fixture-tool\n")
+    File.chmod!(Path.join(tools, "hello"), 0o755)
+
+    policy =
+      Policy.with_scratch(
+        policy(workspace,
+          read_only: [tools],
+          network: "none",
+          environment: %{"LANG" => "C", "TOOLS_DIR" => tools}
+        ),
+        Omunculus.Fixtures.tmp_dir()
+      )
+
+    run = fn policy, script ->
+      Omunculus.Execution.run(elem(Command.new("/usr/bin/sh", ["-c", script]), 1), policy)
+    end
+
+    assert {:ok, %{stdout: "fixture-tool\n", status: 0}} =
+             run.(policy, "\"$TOOLS_DIR/hello\"")
+
+    assert {:ok, %{stdout: "refused\n"}} =
+             run.(policy, "touch \"$TOOLS_DIR/x\" 2>/dev/null || echo refused")
+
+    # Without the path the same command has nothing to run.
+    assert {:error, {:exit, 127, _stdout, _stderr}} =
+             run.(policy(workspace, network: "none"), "\"$TOOLS_DIR/hello\"")
+  end
+
   test "a command waits as long as the one holding the run's home overlay runs",
        %{workspace: workspace} do
     policy =
@@ -327,7 +359,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
       host: Keyword.get(overrides, :host, false),
       runtimes: ["/usr"],
       backend: "bubblewrap",
-      environment: %{"LANG" => "C"},
+      environment: Keyword.get(overrides, :environment, %{"LANG" => "C"}),
       network: Keyword.get(overrides, :network, "host"),
       limits: %{
         timeout_ms: Keyword.get(overrides, :timeout_ms, 2_000),

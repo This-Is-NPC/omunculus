@@ -43,7 +43,12 @@ when the work would stay open with no request of it pending and no run of
 it due since the run began, and when a child that broke waits on it. The
 call fails with the refusal, which names what hands the work on (`done`,
 `ask`, `work`, `break`, on a root work `wait`, or `reopen` or `retire`
-for the broken child), and the run goes on; a model that then stops without `end` is
+for the broken child), and the run goes on. A work that would stay open
+while a child of it is still open or waiting, with no request of it pending,
+is not refused: `end` parks it (`waiting = child`) as if the run had
+delegated, and that child's `continue` or `break` wakes it again. This
+leaves no stage obligation behind, since the woken run still has to
+`done` or move on; a model that then stops without `end` is
 retried as below. A person's next message is not something an open work
 waits for: a work that needs the person asks (`ask`, `request_access`)
 and waits on the request; a root work that only the person can move on
@@ -157,9 +162,9 @@ reach `max_retries` (`[policy]`, or the work's workspace), the harness
 does not open another run. A work with a parent gets `break` with the
 comment `<agent> stopped the work "<title>" without a report after N
 runs.`, which parks it and wakes the parent waiting on it, whose run
-opens. A root work gets a request instead, on the `owner` route where
-`[policy] request_routes` names one and along the default route
-otherwise, opened by the harness with that sentence as its reason and the options
+opens. A root work gets a request instead, on the
+project's `[policy] harness_route` where it declares one and along the
+default route otherwise, opened by the harness with that sentence as its reason and the options
 `retry` (no call) and `cancel`, and an inbox note, the sentence followed
 by `Answer it with cancel or retry.`; the work waits on it. `reply --option retry`
 opens another run of the work; `reply --option cancel` cancels it. The
@@ -233,7 +238,8 @@ under `## Environment`, the workspace every command starts in, the
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → under `## Inbox`, at depth 0: pending requests addressed to this agent
-  in this conversation, including linked origin questions and work/stage
+  in this conversation, and at any depth those whose run opens on this
+  work or below it other than the request that opened the run, including linked origin questions and work/stage
   context; a request already here is not repeated under `## Request`
 → if the opening carried inbox_id: its comments join `## Inbox`
 → under `## Attachments`, the files attached in the run's conversation,
@@ -319,7 +325,7 @@ of calling hooks are not recovered.
 ```text
 open:     action work (root) or delegate (child); stage = first of the TOML
 open → waiting:  break, request (waiting = request, waiting_for = the request), delegate (waiting = child), or wait on a root (waiting = message)
-waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
+waiting → open:    reply to the request it waits on, all its children done or cancelled, the last child a finished run opened to answer its pending request done or cancelled, or a child on break — same stage
 waiting → open:    send / prompt on a work waiting on a request, parked by break or waiting on a message — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or on a work in no workflow
@@ -334,7 +340,14 @@ which nothing else brings.
 `continue` that closes a work, `cancel` and `break` hand it back to a
 parent waiting on its children: a `break` reopens the parent at once, a
 closing `continue` or a `cancel` once each of the parent's children is
-done or cancelled. The event that reopened the parent carries its
+done or cancelled. It also reopens when the closed child was opened by a
+finished run of the parent that was opened for a request still pending with
+the parent's agent, and no other child of that run is left open or waiting:
+the run ended without answering, waiting on those children (see
+[requests](requests.md)), and other children of the parent, such as the work
+that asked, may stay open. One close batch wakes the parent once; a child
+of a run with nothing pending wakes nothing early. The resumed run sees the
+closed children's results and the pending request. The event that reopened the parent carries its
 `parent_id`, and the parent's next run opens. A child that broke waits
 on that run to `reopen` it, `retire` it or `break` the parent: until one does, the
 store refuses the parent's `continue` (so `done`, or a move to the next
@@ -348,7 +361,9 @@ A work that keeps breaking does not go round for ever. With `[policy]
 max_reopens`, once a parent has sent one work back that many times in a
 row — its reopens since an answer to a request of the parent's work last
 came — its next `reopen` sends nothing back: the store opens a request
-along the parent's route instead, its reason the question the `reopen`
+instead, on the project's `[policy]
+harness_route` where it declares one and along the default route
+otherwise, its reason the question the `reopen`
 tool wrote (`past_limit`: the work, that it went back as often as the
 limit allows, and the instructions it would have gone back with), and
 the parent waits on it, the broken work still waiting on the parent. The

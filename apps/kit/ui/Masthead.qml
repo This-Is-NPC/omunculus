@@ -10,12 +10,16 @@ import "Breakpoints.js" as Breakpoints
 // do not fit they elide from the left: the first, the project, down to 8
 // characters and no further, then the middle ones, then the last. Under
 // 560 px the name is left out, leaving the crumbs its room. Tight, it packs
-// closer to give its height and width to what is below and on the right.
+// closer to give its height and width to what is below and on the right. With
+// `home` the name is a link that says `homeClicked`, for a window whose start
+// screen is a place to return to.
 ColumnLayout {
   id: mast
   // Where the window is, outermost first: [{text, run}], `run` optional.
   property var crumbs: []
   property bool tight: false
+  property bool home: false
+  signal homeClicked()
   // Whether the name leads the line; without it, the crumbs do.
   property bool branded: Window.width >= 560
   readonly property var shown: crumbs.filter(crumb => String(crumb.text) !== "")
@@ -58,7 +62,23 @@ ColumnLayout {
     // does not move between pages.
     Layout.minimumHeight: Breakpoints.target(Window.width)
     spacing: Theme.space.gap
-    Label { visible: mast.branded; text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
+    Label {
+      visible: mast.branded
+      text: "OMUNCULUS"
+      color: mast.home && wordmark.containsMouse ? Theme.primary : Theme.foreground
+      font.pixelSize: 15
+      font.bold: true
+      font.letterSpacing: 6
+      MouseArea {
+        id: wordmark
+        anchors.fill: parent
+        enabled: mast.home
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: mast.homeClicked()
+      }
+      Hint { active: wordmark.containsMouse; text: "back to the start" }
+    }
     Label { visible: mast.branded && mast.shown.length > 0; text: "╱"; color: Theme.primary; font.pixelSize: 13 }
     Item {
       id: area

@@ -150,5 +150,5 @@ Rectangle {
 
   GuardNudge { id: guardNudge; targetObject: contentShift }
   FocusRing { border.color: button.armed || button.filled ? Theme.background : Theme.primary }
-  Hint { id: hint; active: pointer.containsMouse || button.activeFocus; text: button.reason || button.tip }
+  Hint { id: hint; active: pointer.containsMouse; text: button.reason || button.tip }
 }

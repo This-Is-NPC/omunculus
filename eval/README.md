@@ -63,8 +63,8 @@ A configuration may run a team of `packs/` instead: the dream team
 | `negotiated` | the workers must ask Father for `fs.write`, `sandbox.write`, `bash`, `sandbox.network` |
 | `human-gated` | workers request them through Father, who escalates for the human decision |
 | `dream-team` | the dream team of `packs/dream-team` alone, imported by the `pack` tool |
-| `sales-desk` | the sales desk, with the dream team one depth below the seller |
-| `agency` | the sales desk, with the dream team and the design team one depth below the seller |
+| `sales-desk` | the sales desk, with the dream team beside the seller, at its depth |
+| `agency` | the sales desk, with the dream team and the design team beside the seller, at its depth |
 
 A configuration is a TOML merged into the Amestris preset: tables merge, a
 list replaces a list. `[eval] drop_agents` removes agents, and the
@@ -150,7 +150,8 @@ holds, 2 when the workspace holds but the run ended otherwise than expected,
 and 1 when the workspace does not hold. The outcome file names the configuration, the outcome and the last
 words to the person (`report`); for a conversation, the root works (`works`),
 what was said (`conversation`) and whether the first message became a work at
-once (`first_run_made_work`), and for a task that publishes, the published
+once (`first_run_made_work`), the data of the proposals the sales desk wrote
+(`proposals`), and for a task that publishes, the published
 copy (`published`). Checks are Python and run with
 `tasks/_lib` on their `PYTHONPATH`: `from check import *` is all they import,
 wherever the task lives.
@@ -256,7 +257,7 @@ To mix models, give the coordinators one model and the workers another.
 `<coordinator-model>` is a placeholder for a model alias:
 
 ```sh
-mise run eval:run -- --model <model-b> --agent-model sales=<coordinator-model> --agent-model seller=<coordinator-model> --agent-model administrator=<coordinator-model> --agent-model design-lead=<coordinator-model> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-mixed
+mise run eval:run -- --model <model-b> --agent-model front-desk=<coordinator-model> --agent-model project-manager=<coordinator-model> --agent-model seller=<coordinator-model> --agent-model administrator=<coordinator-model> --agent-model design-lead=<coordinator-model> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-mixed
 ```
 
 Design, implementation, review and publication agents keep the `--model`

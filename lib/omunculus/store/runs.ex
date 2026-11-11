@@ -12,7 +12,7 @@ defmodule Omunculus.Store.Runs do
   another run while the work's latest runs without `end` are within
   `max_retries`; past it, a `break` with the given text for a child,
   or, for a root, a request by the harness with the options `retry` and
-  `cancel`, on the `owner` route where the project configures one, and an
+  `cancel`, on the project's `[policy] harness_route`, and an
   inbox note saying how to answer it; their texts name the
   agent and the work's title.
   `continues/3` records the `session` event of a run that continues its
@@ -237,7 +237,7 @@ defmodule Omunculus.Store.Runs do
              inbox_id: Map.get(ctx, :inbox_id),
              body: Jason.encode!(call)
            }),
-         {:ok, emit_events} <- Actions.run(conn, emits, ctx) do
+         {:ok, emit_events} <- Actions.run(conn, emits, Map.put(ctx, :tool, call.name)) do
       {:ok, [tool_event | emit_events]}
     end
   end
@@ -296,13 +296,68 @@ defmodule Omunculus.Store.Runs do
 
   def unanswered(conn, run, config, reason_text) do
     Query.transaction(conn, fn ->
-      with {:ok, request} <- View.view(conn, "request", run.request_id) do
+      with {:ok, request} <- View.view(conn, "request", run.request_id),
+           {:ok, delegated?} <- delegated?(conn, run) do
         case left(request, Omunculus.Participant.agent(run.agent)) do
           [] -> {:ok, []}
+          # The run opened works to answer it and waits on them: not unanswered.
+          _parts when delegated? -> {:ok, []}
           parts -> pass_on(conn, run, config, reason_text, parts)
         end
       end
     end)
+  end
+
+  @doc """
+  Whether the closed `child` was opened by a finished run of its parent that
+  still holds a pending request and has no other child of that run left
+  unfinished: the parent has the answer to give.
+  """
+  @spec answerable?(Connection.t(), map) :: {:ok, boolean} | {:error, term}
+  def answerable?(conn, child) do
+    with {:ok, run} <-
+           Query.one(
+             conn,
+             """
+             SELECT runs.* FROM works
+             JOIN events ON events.id = works.event_id
+             JOIN runs ON runs.id = events.run_id
+             WHERE works.id = ?
+             """,
+             [child.id]
+           ) do
+      case run do
+        %{status: status, work_id: work_id, request_id: request_id}
+        when status != "open" and work_id == child.parent_id and request_id != nil ->
+          with {:ok, request} <- View.view(conn, "request", request_id),
+               {:ok, delegated?} <- delegated?(conn, run),
+               do:
+                 {:ok,
+                  not delegated? and left(request, Omunculus.Participant.agent(run.agent)) != []}
+
+        _other ->
+          {:ok, false}
+      end
+    end
+  end
+
+  # Whether the run opened a child of its work that is still unfinished.
+  defp delegated?(_conn, %{work_id: nil}), do: {:ok, false}
+
+  defp delegated?(conn, run) do
+    with {:ok, rows} <-
+           Query.all(
+             conn,
+             """
+             SELECT 1 FROM works
+             JOIN events ON events.id = works.event_id
+             WHERE works.parent_id = ? AND works.state IN ('open', 'waiting')
+               AND events.run_id = ?
+             LIMIT 1
+             """,
+             [run.work_id, run.id]
+           ),
+         do: {:ok, rows != []}
   end
 
   # What a run of `receiver` leaves pending: the request it was opened
@@ -427,20 +482,24 @@ defmodule Omunculus.Store.Runs do
 
     options = %{"retry" => [], "cancel" => [%{"name" => "cancel"}]}
     body = %{"reason" => text, "options" => options}
-    owner = RequestRoutes.owner()
+    # The work is the project's to retry or give up, so it takes the
+    # project's harness route.
+    body = RequestRoutes.put_harness_route(body, config)
 
-    # The work is the project's to retry or give up, so it goes to its
-    # owner where the project names one, not to whoever the default reaches.
-    body =
-      if RequestRoutes.named?(config.request_routes, owner),
-        do: Map.put(body, "to", owner),
-        else: body
+    case Actions.run(conn, [%{"type" => "request", "body" => body}], ctx) do
+      {:ok, [request]} ->
+        inbox = inbox_text.(text, Map.keys(options))
+        notify = %{"body" => inbox, "work_id" => run.work_id}
 
-    with {:ok, [request]} <- Actions.run(conn, [%{"type" => "request", "body" => body}], ctx),
-         inbox = inbox_text.(text, Map.keys(options)),
-         notify = %{"body" => inbox, "work_id" => run.work_id},
-         {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
-      {:ok, [request | inbox]}
+        with {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx),
+             do: {:ok, [request | inbox]}
+
+      # Nobody is left on the route: a person is told, once.
+      {:error, {:request, :no_route}} ->
+        notify_once(conn, ctx, inbox_text.(text, []))
+
+      error ->
+        error
     end
   end
 

@@ -265,6 +265,74 @@ defmodule Omunculus.Store.EscalationTest do
                ~s(worker's on the work "tone": "tone")
   end
 
+  # A lead run opened for `request` that delegates, or not, and ends.
+  defp lead_run(conn, ctx, request, delegate?) do
+    run =
+      Fixtures.open_run(conn, %{
+        agent: "lead",
+        work_id: ctx.lead,
+        depth: 1,
+        conversation_id: ctx.conversation,
+        request_id: request,
+        ceiling: %{
+          have: ["delegate", "reply", "end"],
+          askable: [],
+          sealed: [],
+          blocked: [],
+          uncited: "askable",
+          overrides: %{}
+        }
+      })
+
+    if delegate? do
+      run_ctx = %{ctx.lead_ctx | run_id: run.id}
+
+      assert {:ok, _} =
+               apply_action(conn, "delegate", %{"title" => "assess", "goal" => "g"}, run_ctx)
+    end
+
+    {:ok, _} = Store.close_run(conn, run.id)
+    {:ok, closed} = Store.view(conn, "run", run.id)
+    closed
+  end
+
+  describe "a receiver that delegated to answer" do
+    setup %{conn: conn} = ctx do
+      [first, _second] = ctx.child_ctxs
+      %{asked: ask(conn, first, "Can we build this?")}
+    end
+
+    test "does not escalate; the request stays pending", %{conn: conn} = ctx do
+      closed = lead_run(conn, ctx, ctx.asked, true)
+      unanswered = &Omunculus.Tools.Out.unanswered/3
+
+      assert {:ok, []} = Store.unanswered(conn, closed, ctx.config, unanswered)
+      assert request(conn, ctx.asked).status == "pending"
+      assert count(conn, "request_escalations") == 0
+    end
+
+    test "answers the requester once the children closed", %{conn: conn} = ctx do
+      closed = lead_run(conn, ctx, ctx.asked, true)
+
+      assert {:ok, []} =
+               Store.unanswered(conn, closed, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+      assert {:ok, _} = reply(conn, ctx.lead_ctx, ctx.asked, %{"body" => "Yes, in two weeks."})
+      assert request(conn, ctx.asked).status == "closed"
+      assert {:ok, comments} = Store.comments(conn, :request, ctx.asked)
+      assert List.last(comments).body == "Yes, in two weeks."
+    end
+
+    test "escalates when it ends with nothing delegated", %{conn: conn} = ctx do
+      closed = lead_run(conn, ctx, ctx.asked, false)
+      unanswered = &Omunculus.Tools.Out.unanswered/3
+
+      assert {:ok, events} = Store.unanswered(conn, closed, ctx.config, unanswered)
+      assert Enum.any?(events, &(&1.type == "request"))
+      assert request(conn, ctx.asked).status == "escalated"
+    end
+  end
+
   test "an unanswered request with no route left notifies a person once and stays pending",
        %{conn: conn} = ctx do
     client = human_origin(conn, ctx, "owner")
@@ -623,13 +691,12 @@ defmodule Omunculus.Store.EscalationTest do
     upstream = escalate(conn, reviewer, %{"deployment" => origin})
     assert is_nil(request(conn, upstream).run_id)
 
-    assert {:ok, _} =
-             reply(conn, ctx.owner, upstream, %{
-               "body" => "Not now",
-               "parts" => %{"deployment" => %{"body" => "Not now"}}
-             })
+    # The upstream request is the root agent's: the human who escalated it is
+    # not its arbiter.
+    assert {:error, {:reply, :not_arbiter}} =
+             reply(conn, ctx.owner, upstream, %{"body" => "Not now"})
 
-    assert request(conn, origin).status == "closed"
+    assert request(conn, origin).status == "escalated"
   end
 
   test "a receiver cannot route an escalation back into its linked origins",

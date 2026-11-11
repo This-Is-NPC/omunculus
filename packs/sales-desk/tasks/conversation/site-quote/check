@@ -11,18 +11,22 @@ if not assessed:
     fail("the builders were not asked for an assessment")
 if not any(w["state"] == "done" for w in assessed):
     fail("no assessment came back")
+
+# It came through the project manager, never from the seller.
+assignees = {w["id"]: w["assignee"] for w in team(outcome)}
+if any(assignees.get(w["parent_id"]) != "project-manager" for w in assessed):
+    fail("the assessment was not asked by the project manager")
 builders = {"surgeon", "copilot", "clerk", "toolsmith", "tester", "editor", "language_lawyer"}
 built = [w for w in team(outcome) if w["assignee"] in builders]
 if built:
     fail(f"the builders were asked to build: {built[0]['title']}")
 
 # The quote, from the table, written down and told.
-quotes = list((workspace / "quotes").glob("*.md"))
-quotes = [q for q in quotes if q.name != "README.md"]
+quotes = proposals(outcome)
 if not quotes:
-    fail("no quote was written in quotes/")
-if not any(re.search(r"1[.,]?500", q.read_text()) for q in quotes):
-    fail("the quote does not price four pages at R$ 1,500")
+    fail("no proposal was written with the proposal tool")
+if not any((q.get("price") or {}).get("total") == 1500 for q in quotes):
+    fail("the proposal does not price four pages at R$ 1,500")
 if not any(re.search(r"1[.,]?500", text) for who, text in outcome.get("conversation", []) if who == "agent"):
     fail("the client was not told the price")
 ok()

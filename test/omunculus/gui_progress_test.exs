@@ -81,7 +81,7 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w1.state === "waiting" && n.w1.waitingOn === "design-lead" && n.w1.agent === "seller" && n.w1.at === 1 && n.w1.count === 6, "w1", n.w1);
     check(n.w2.state === "waiting" && n.w2.waitingOn === "designer" && n.w2.doing === "Waiting for designer", "w2", n.w2);
     check(n.w3.state === "working" && n.w3.word === "Working" && n.w3.since === 1900 && n.w3.doing === "Thinking · wrote files", "w3", n.w3);
-    check(JSON.stringify(n.w3.lastCall) === JSON.stringify({name: "write", brief: "site/index.html"}), "lastCall", n.w3.lastCall);
+    check(n.w3.lastStep === "Wrote site/index.html", "lastStep", n.w3.lastStep);
     check(n.w3.round === 2 && n.w3.sentBack.by === "design-reviewer" && n.w3.stopped === null, "round", n.w3);
     check(JSON.stringify(n.w3.team) === JSON.stringify([{agent: "designer", current: true}, {agent: "design-reviewer", current: false}, {agent: "publisher", current: false}]), "team", n.w3.team);
     check(JSON.stringify(n.w2.team) === JSON.stringify([{agent: "design-lead", current: true}]), "team of one", n.w2.team);
@@ -99,7 +99,9 @@ defmodule Omunculus.GuiProgressTest do
     const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "What is the bakery called?\\nAnd where?"};
     const out = Progress.build(Object.assign({}, base, {requests: [ask]}));
     check(out.state === "needs-you" && nodes(out).w1.state === "needs-you" && nodes(out).w1.doing === "Waiting for your answer", "needs-you", out.state);
-    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", asks: 1}]), "forYou", out.forYou);
+    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", audience: "client", asks: 1}]), "forYou", out.forYou);
+    const owned = Progress.build(Object.assign({}, base, {requests: [Object.assign({}, ask, {route: "boss", destination: "owners"})]}));
+    check(owned.forYou[0].audience === "owner", "owner decision", owned.forYou);
     check(out.spoken === "seller asks you: What is the bakery called?", "spoken", out.spoken);
     check(out.path.map(each => each.agent).join() === "seller,design-lead,designer", "path keeps going down", out.path);
     const broken = [{id: "w9", title: "Menu", state: "waiting", assignee: "designer", created_at: iso(1000), updated_at: iso(1100)}];
@@ -244,6 +246,8 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 50}, rootAgent: "sales", now: 60});
     check(out.state === "working" && out.focus === null && out.roots.length === 0 && out.path.length === 0, "working", out);
     check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true, state: "working"}), "now", out.now);
+    const going = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, asked: {"": [{name: "bash", args: {command: "npm run build"}}]}, rootAgent: "sales", now: 60});
+    check(going.now.doing === "Running a command", "a call asked for and not answered", going.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
     check(asking.now.doing === "Thinking · asked a teammate", "calling", asking.now);
     const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};
@@ -315,8 +319,8 @@ defmodule Omunculus.GuiProgressTest do
       origins: {a: {requester: agent("designer"), reason: "1. Colours?\\n2. Fonts?"}}};
     const relayed = Progress.build(Object.assign({}, base, {requests: [passed], noted: {q2: true}}));
     check(relayed.forYou[0].asker === "designer" && relayed.forYou[0].asks === 2, "passed on", relayed.forYou);
-    const answered = {id: "q0", status: "closed", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Which one?"};
-    const again = Progress.build(Object.assign({}, base, {requests: [answered, form], replies: {q0: {stamp: "09:48"}}}));
+    const answered = {id: "q0", status: "closed", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Which one?", created_at: "1"};
+    const again = Progress.build(Object.assign({}, base, {requests: [answered, Object.assign({}, form, {created_at: "2"})], replies: {q0: {stamp: "09:48"}}}));
     check(again.forYou[0].again === true && out.forYou[0].again === false, "asked again", again.forYou);
     check(Progress.given([answered], answered, {}) === 1 && Progress.given([], answered, {}) === 0, "one answer given");
     const numbered = Object.assign({}, answered, {reason: "1. A?\\n2. B?"});
@@ -367,7 +371,7 @@ defmodule Omunculus.GuiProgressTest do
     const you = {id: "q3", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Budget?",
       origins: {p: {id: "q0", status: "escalated", requester: agent("design-lead"), reason: "Budget?"}}};
     const n = nodes(Progress.build(Object.assign({}, base, {requests: [ask, you]})));
-    check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", human: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"]}]), "asks", n.w3.asks);
+    check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", human: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"], audience: "agents"}]), "asks", n.w3.asks);
     check(JSON.stringify(n.w2.asked) === JSON.stringify([{id: "q2", from: "designer", fromWork: "w3", question: "Which logo file?", asks: 1}]), "asked", n.w2.asked);
     check(n.w1.asks.length === 1 && n.w1.asks[0].to === "you" && n.w1.asks[0].human && n.w1.asks[0].toWork === null, "you", n.w1.asks);
     check(n.w1.asks[0].chain.join(" › ") === "design-lead › seller › you", "chain", n.w1.asks[0].chain);
@@ -429,12 +433,34 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
-  test "a run below leaves how long it worked and its steps" do
+  test "standing says the workflow, the step, and the chain down to who works" do
     run!("""
-    check(Progress.worked(240, 12, false) === "worked 4 min · 12 steps", "worked", Progress.worked(240, 12, false));
-    check(Progress.worked(8, 1, false) === "worked 8 s · 1 step", "one step", Progress.worked(8, 1, false));
-    check(Progress.worked(8, 0, false) === "worked 8 s", "no step", Progress.worked(8, 0, false));
-    check(Progress.worked(90, 3, true) === "failed after 1 min · 3 steps", "failed", Progress.worked(90, 3, true));
+    const out = Progress.build(base);
+    const here = Progress.standing(out, "sales");
+    check(JSON.stringify(here) === JSON.stringify({workflow: "sale", stage: "design", step: 2, steps: 6,
+      chain: ["sales", "seller", "design-lead", "designer"], agent: "designer", state: "working", waits: ""}), "working", here);
+    check(out.flat[0].workflow === "sale" && out.flat[1].workflow === "", "a node names its workflow", out.flat.map(node => node.workflow));
+    const idle = Progress.build(Object.assign({}, base, {runs: []}));
+    const waiting = Progress.standing(idle, "sales");
+    check(waiting.state === "waiting" && waiting.waits === "design-lead, designer" && waiting.chain.join() === "sales,seller,design-lead,designer", "waiting", waiting);
+    const done = Progress.standing({state: "done", path: [], flat: [], focus: {workflow: "sale", count: 6, at: 5, state: "done", steps: sale.steps}}, "sales");
+    check(done.step === 6 && done.stage === "build" && done.chain.join() === "sales", "done is at the last step", done);
+    const asked = Progress.standing({state: "needs-you", path: [], flat: [], focus: {workflow: "", count: 0, at: -1, state: "needs-you", steps: []}}, "sales");
+    check(asked.waits === "you" && asked.step === 0 && asked.stage === "", "waiting for you, no workflow", asked);
+    check(JSON.stringify(Progress.track(out.flat[0])) === JSON.stringify({workflow: "sale", step: 2, steps: 6, stage: "design"}) && Progress.track(out.flat[1]) === null, "track", "");
+    check(Progress.standing(null, "sales") === null && Progress.standing({focus: null}, "sales") === null, "none before a work", "");
+    """)
+  end
+
+  test "a run reads as one line, a call as a verb and its object" do
+    run!("""
+    const out = (status, lines) => JSON.stringify(Progress.outcome(status, lines));
+    check(out("open", []) === JSON.stringify({state: "working", text: "RUNNING"}), "open", out("open", []));
+    check(out("closed", ["ended: start_sale", "calls: 3"]) === JSON.stringify({state: "done", text: "ENDED"}), "ended", 0);
+    check(out("closed", ["failed: read", "failed: bash"]) === JSON.stringify({state: "done", text: "ENDED \u00b7 2 FAILED CALLS"}), "failed calls", 0);
+    check(out("closed", ["failed: read", "ended: stopped without end"]) === JSON.stringify({state: "stopped", text: "STOPPED WITHOUT END"}), "stopped", 0);
+    check(Phrases.said("bash", {command: "cat > /tmp/gen.py <<'EOF'\\nimport json\\nEOF"}) === "Ran a command", "no shell text", Phrases.said("bash", {command: "cat > /tmp/gen.py <<'EOF'"}));
+    check(Phrases.said("delegate", {title: "x"}) === "Handed work down", "tool as a verb", 0);
     """)
   end
 end

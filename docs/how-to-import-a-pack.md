@@ -21,7 +21,7 @@ lacks. What a pack holds and how teams talk to each other is
 
    ```console
    $ <checkout>/bin/omunculus pack --path <checkout>/packs/sales-desk
-   Models needed for: team
+   models needed for: team
    ```
 
 2. Import it, each role on a model of the project. A pack that names
@@ -31,11 +31,11 @@ lacks. What a pack holds and how teams talk to each other is
    ```console
    $ <checkout>/bin/omunculus pack --path <checkout>/packs/sales-desk --models team=fake
    imported sales-desk
-   workspace /tmp/omu-howto/first: copied templates/proposal.md
    ```
 
-   The pack is written to `[[packs]]`, and the files of its `workspace/`
-   the project's workspace lacks are copied in. The first line of
+   The pack is written to `[[packs]]`, and the files of its `workspace/`,
+   when it has one, that the project's workspace lacks are copied in
+   (the sales desk has none). The first line of
    `omunculus.toml` is now, the checkout's path shortened to `…`:
 
    ```toml
@@ -46,11 +46,12 @@ lacks. What a pack holds and how teams talk to each other is
 
    ```console
    $ <checkout>/bin/omunculus config
-   {"root":"/tmp/omu-howto/first",…,"sections":{…,"agents":{"auditor":1559,"concierge":8870,"refiner":1851,"reviewer":1249,"sales":4682,"seller":11196,"steward":1839,"worker":3526},…,"packs":{"sales-desk":853,"system":410},…,"workflows":{"delivery":228,"sale":253},…}}
+   {"root":"/tmp/omu-howto/first",…,"sections":{…,"agents":{"auditor":1559,"concierge":8870,"front-desk":4194,"project-manager":7078,"refiner":1851,"reviewer":1249,"seller":5988,"steward":1839,"worker":3526},…,"packs":{"sales-desk":987,"system":452},…,"workflows":{"delivery":220,"engagement":218,"sale":188},…}}
    ```
 
    The output is cut where `…` stands. The sales desk brought the agents
-   `sales` and `seller` and the workflow `sale`.
+   `front-desk`, `project-manager` and `seller` and the workflows
+   `engagement` and `sale`.
 
 ## What can go wrong
 

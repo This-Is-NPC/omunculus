@@ -10,7 +10,7 @@ import "kit/client/Progress.js" as Progress
 // with its reason, the questions it asked and its steps; a done, cancelled or
 // coming work is one line. Picked, it shows its details instead of the
 // questions' first lines: its agent's last words, its questions in full and
-// the ways to its thread, log and team.
+// the ways to its thread, log and tree.
 FocusScope {
   id: row
 
@@ -30,7 +30,7 @@ FocusScope {
   signal foldToggled()
   signal openThread(string work)
   signal openLog(string work)
-  signal openTeam(string work)
+  signal openTree(string work)
 
   readonly property bool quiet: ["done", "cancelled", "up-next"].includes(node.state)
   readonly property real now: Omunculus.tick
@@ -190,26 +190,14 @@ FocusScope {
       tip: row.stageTip
     }
 
-    // The tool it called last, else what it is doing.
-    RowLayout {
+    // What it did last, as a verb and its object, else what it is doing.
+    Label {
       Layout.fillWidth: true
-      spacing: Theme.space.tight
-      Label {
-        visible: !!row.node.lastCall
-        Layout.maximumWidth: card.width * 0.4
-        text: row.node.lastCall ? row.node.lastCall.name : ""
-        color: Theme.foreground
-        font.pixelSize: Theme.type.tab.size
-        elide: Text.ElideRight
-      }
-      Label {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        text: row.node.lastCall ? row.node.lastCall.brief : row.node.doing
-        color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
-        font.pixelSize: Theme.type.tab.size
-        elide: Text.ElideRight
-      }
+      Layout.minimumWidth: 0
+      text: row.node.lastStep !== "" ? row.node.lastStep : row.node.doing
+      color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
+      font.pixelSize: Theme.type.tab.size
+      elide: Text.ElideRight
     }
 
     Label {
@@ -308,7 +296,7 @@ FocusScope {
       spacing: Theme.space.tight
       TraceButton { role: "action"; dense: true; text: "OPEN"; icon: "enter"; tip: "its thread, as a page"; onClicked: row.openThread(row.node.work) }
       TraceButton { role: "action"; dense: true; text: "LOG"; icon: "list"; tip: "the log kept to it"; onClicked: row.openLog(row.node.work) }
-      TraceButton { role: "action"; dense: true; text: "TEAM"; icon: "people"; tip: "the team page, it picked"; onClicked: row.openTeam(row.node.work) }
+      TraceButton { role: "action"; dense: true; text: "TREE"; icon: "people"; tip: "the tree page, it picked"; onClicked: row.openTree(row.node.work) }
     }
   }
 

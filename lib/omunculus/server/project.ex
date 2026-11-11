@@ -8,7 +8,7 @@ defmodule Omunculus.Server.Project do
 
   use GenServer
 
-  alias Omunculus.{Attachments, Config, Cycle, Operations, Project, Run, Store}
+  alias Omunculus.{Artifacts, Attachments, Config, Cycle, Operations, Project, Run, Store}
   alias Omunculus.Store.Access
 
   def start_link({id, config_path, global_limits}) do
@@ -85,6 +85,24 @@ defmodule Omunculus.Server.Project do
          %{} = meta <- Enum.find(attached, &(&1["sha256"] == sha256)) || {:error, :not_found},
          {:ok, config} <- Config.load(project.config_path),
          {:ok, path} <- Attachments.path(config.store, sha256) do
+      {:ok, meta, path}
+    end
+  end
+
+  @doc "The artifact versions of `conversation_id`, for a principal who may read it."
+  def artifacts(id, principal, conversation_id) do
+    project = project(id)
+
+    with :ok <- Access.check(project, principal, "conversation.read", conversation_id),
+         do: Store.artifacts(project.conn, conversation_id)
+  end
+
+  @doc "The version `number` of artifact `name` in `conversation_id`, with the file kept for it."
+  def artifact(id, principal, conversation_id, name, number) do
+    with {:ok, versions} <- artifacts(id, principal, conversation_id),
+         %{} = meta <- Artifacts.find(versions, name, number) || {:error, :not_found},
+         {:ok, config} <- Config.load(project(id).config_path),
+         {:ok, path} <- Attachments.path(config.store, meta["sha256"]) do
       {:ok, meta, path}
     end
   end

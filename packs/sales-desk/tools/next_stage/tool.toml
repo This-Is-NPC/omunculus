@@ -1,7 +1,7 @@
 name = "next_stage"
 kind = "tool"
 triggers = ["model"]
-description = "Moves the client's request to its next stage of the workflow sale: comments the report on the work and continues it, ending the run. Refused until the stage holds — the proposal in quotes/ that names the work has what the stage asks, and the owner approved before the build — saying what is missing."
+description = "Moves the client's request to the next stage of its workflow, sale (the seller's) or engagement (the project manager's): comments the report on the work and continues it, ending the run. Refused until the stage holds — the engagement's proposal artifact (written with the proposal tool) and the works below have what the stage asks — saying what is missing."
 tags = ["sales", "sequence"]
 command = ["./run"]
 chains = ["comment", "continue", "end"]
@@ -13,7 +13,7 @@ required = ["report"]
 
 [parameters.properties.report]
 type = "string"
-description = "What you tell the client, in the language they write in: what was settled and what comes next."
+description = "An internal report for whoever receives this work, plain: what was settled and what comes next. Only the front desk talks with the client, and relays what concerns them."
 
 [views.work]
 source = "works"
@@ -25,3 +25,8 @@ relation = "cause"
 [views.children]
 source = "works"
 relation = "children"
+
+[views.artifacts]
+source = "artifacts"
+include = ["data"]
+prefix = "proposal-"

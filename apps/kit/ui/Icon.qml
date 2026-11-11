@@ -47,7 +47,13 @@ Item {
     // A line that branches off: a work handed down.
     branch: "M4.5 2.5v11 M4.5 5.5c0 3 2 4 5 4h3 M10.5 7.5l2 2-2 2",
     // Two quote marks: words quoted from someone.
-    quote: "M3 8h3.5v3.5h-3.5z M3 8c0-2.2 1-3.5 3-4 M9.5 8h3.5v3.5h-3.5z M9.5 8c0-2.2 1-3.5 3-4"
+    quote: "M3 8h3.5v3.5h-3.5z M3 8c0-2.2 1-3.5 3-4 M9.5 8h3.5v3.5h-3.5z M9.5 8c0-2.2 1-3.5 3-4",
+    // A question in a circle: a question for you.
+    help: "M2.5 8a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0 M6.3 6.6a1.7 1.7 0 0 1 3.4 0c0 1.1-1.7 1.4-1.7 2.5 M8 11.2v0.01",
+    // A diamond with a way through: a choice between options.
+    diamond: "M8 2l6 6-6 6-6-6z M5.5 8h5 M8.5 6l2 2-2 2",
+    // A shield with a tick: a capability granted.
+    shield: "M8 2l5 2v3.5c0 3-2 5-5 6.5-3-1.5-5-3.5-5-6.5v-3.5z M5.8 8l1.7 1.7 2.8-3.4"
   })
 
   implicitWidth: size

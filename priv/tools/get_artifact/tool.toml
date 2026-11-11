@@ -1,0 +1,20 @@
+name = "get_artifact"
+kind = "tool"
+triggers = ["model"]
+description = "Reads a version of an artifact of this conversation, the latest unless version names one. A version that is not text is refused with its size."
+tags = ["files", "artifacts"]
+groups = ["artifacts"]
+module = "Omunculus.Tools.GetArtifact"
+
+[parameters]
+type = "object"
+required = ["name"]
+
+[parameters.properties.name]
+type = "string"
+
+[parameters.properties.version]
+type = "integer"
+
+[views.artifacts]
+source = "artifacts"

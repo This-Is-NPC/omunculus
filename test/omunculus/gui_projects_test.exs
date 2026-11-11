@@ -133,11 +133,18 @@ defmodule Omunculus.GuiProjectsTest do
     check(summary.title === "Hi! I want a website" && summary.agent === "sales", "who " + JSON.stringify(summary));
     check(summary.started && !summary.finished && summary.running === 2, "runs " + JSON.stringify(summary));
     check(summary.waiting === 4 && summary.since === "2026-11-03T10:10:00Z", "waiting " + JSON.stringify(summary));
-    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1}), "asks " + JSON.stringify(summary.asks));
+    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1, owner: 0, client: 4}), "asks " + JSON.stringify(summary.asks));
     check(summary.question === "May I publish?", "newest " + summary.question);
     check(Projects.state(summary) === "needs-you", "state " + Projects.state(summary));
-    check(Projects.waitsFor(summary.asks) === "A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
+    check(Projects.waitsFor(summary.asks) === "CLIENT QUESTION · A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
     check(Projects.waitsFor({questions: 1, decisions: 2, permissions: 0}) === "2 DECISIONS · A QUESTION", "plural");
+    const owned = Projects.summary({prompts: [], runs: [], works: [], requests: [
+      request("o", "2026-11-03T10:00:00Z", {reason: "Approve?", options: {approve: []}, route: "boss", destination: "owners"}),
+      request("d", "2026-11-03T10:01:00Z", {reason: "Approve too?", options: {approve: []}, destination: "owners"}),
+      request("c", "2026-11-03T10:02:00Z", {reason: "Which?", route: null, destination: "origin"})
+    ]});
+    check(owned.asks.owner === 2 && owned.asks.client === 1, "audience counts " + JSON.stringify(owned.asks));
+    check(Projects.waitsFor(owned.asks) === "OWNER DECISION · CLIENT QUESTION · 2 DECISIONS · A QUESTION", "audience words " + Projects.waitsFor(owned.asks));
     const empty = Projects.summary({prompts: [], runs: [], works: [], requests: []});
     check(empty.agent === "" && empty.since === "" && empty.question === "" && Projects.state(empty) === "not-started", "empty " + JSON.stringify(empty));
     """)
@@ -152,6 +159,32 @@ defmodule Omunculus.GuiProjectsTest do
     check(Projects.state(s({running: 1, finished: true})) === "working", "working");
     check(Projects.state(s({finished: true})) === "done", "done");
     check(Projects.state(s({})) === "idle", "idle");
+    check(Projects.state(s({failed: true})) === "failed", "failed");
+    check(Projects.state(s({failed: true, finished: true})) === "done", "done over failed");
+    check(Projects.state(s({failed: true, running: 1})) === "working", "working over failed");
+    """)
+  end
+
+  test "a conversation failed when nothing runs and its last run to end failed" do
+    run!("""
+    const end = error => ({type: "end-run", body: error ? {error} : {}});
+    check(Projects.ended([end("401"), {type: "model"}]) === "401", "error");
+    check(Projects.ended([end("401"), end("")]) === "", "a later run ended well");
+    check(Projects.ended([{type: "model"}]) === "", "no end");
+    const data = runs => ({prompts: [{kind: "message", body: "hi"}], runs: runs, works: [], requests: []});
+    const failed = Projects.summary(data([{status: "done"}]), "401");
+    check(failed.failed && Projects.state(failed) === "failed" && Projects.unsettled(failed), "failed " + JSON.stringify(failed));
+    check(!Projects.summary(data([{status: "open"}]), "401").failed, "running");
+    check(!Projects.unsettled(Projects.summary(data([{status: "open"}]))), "running is settled");
+    const row = Projects.rows(input({
+      projects: [place("agency")],
+      conversations: {agency: [conversation("c1", "2026-11-03T10:00:00Z")]},
+      summaries: {c1: failed}
+    }))[0];
+    check(row.failed === 1 && row.state === "failed", "row " + JSON.stringify(row));
+    check(Projects.meta(row, "", 200, " · ") === "1 conversation · 1 failed", "meta " + Projects.meta(row, "", 200, " · "));
+    const order = Projects.sort([{id: "a", needsYou: 0, working: 0, failed: 0, last: ""}, {id: "b", needsYou: 0, working: 0, failed: 1, last: ""}]).map(row => row.id).join();
+    check(order === "b,a", "failed above idle " + order);
     """)
   end
 

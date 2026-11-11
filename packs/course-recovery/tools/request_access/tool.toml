@@ -4,7 +4,7 @@ triggers = ["model"]
 description = "Requests, in one request, everything the work needs and the run lacks: tools, paths, directories, and sandbox capabilities (resource: sandbox.write, sandbox.network). Comments the report on the run's work when it has one, opens the request and ends the run."
 tags = ["store", "request"]
 groups = ["store"]
-command = ["./run", "sales", "route_request_access_step", "questions", "client"]
+command = ["./run", "front-desk", "route_request_access_step", "questions", "client"]
 chains = ["route_request_access_step"]
 
 [parameters]

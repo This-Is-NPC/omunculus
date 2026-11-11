@@ -6,7 +6,7 @@ the run ended otherwise than expected, and 1 when the workspace does not hold. T
 configuration, how the conversation ended (answer, done, break or waiting) and
 the last words to the person (report); a conversation task's also has the root
 works (works), every work with the agent it went to (team), what was said (conversation, [who, text] pairs), whether the
-first message became a work at once (first_run_made_work) and, for a task that
+first message became a work at once (first_run_made_work), the data of the proposals the sales desk wrote (proposals) and, for a task that
 publishes, the published copy (published: a directory, relative to the
 workspace in a solution).
 """
@@ -169,6 +169,23 @@ def published(workspace, outcome):
     if not site or not site.is_dir():
         fail("nothing was published")
     return site
+
+
+def deploy_descriptor(workspace):
+    """The build commits a Dockerfile and a deploy.toml holding app and port, and nothing else."""
+    if not (workspace / "Dockerfile").is_file():
+        fail("the Dockerfile is missing at the workspace's root")
+    descriptor = workspace / "deploy.toml"
+    if not descriptor.is_file():
+        fail("deploy.toml is missing at the workspace's root")
+    keys = re.findall(r"^\s*([A-Za-z_][\w-]*)\s*=", descriptor.read_text(), re.M)
+    if sorted(keys) != ["app", "port"]:
+        fail(f"deploy.toml holds {sorted(keys)}, not exactly app and port")
+
+
+def proposals(outcome):
+    """The data of each proposal the sales desk's proposal tool wrote, its latest version."""
+    return outcome.get("proposals") or []
 
 
 def works(outcome):

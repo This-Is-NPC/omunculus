@@ -23,12 +23,33 @@ to `max_queue` more wait for a slot, each for at most `queue_timeout_ms`,
 and a run that gets no slot fails with `:queue_full` or
 `:queue_timeout`.
 
-Three keys of `[execution]` are optional. `host = true` shows a command
+Five keys of `[execution]` are optional. `host = true` shows a command
 the machine read-only, as the person sees it, with their home overlaid so
 that what it writes there stays in the run's scratch; without it a
 command sees only the runtimes, the workspace and the folders of the
 catalog's tools. `deny_read` lists paths, absolute or under `~`, a
-command may not read; `write` lists paths it may also write.
+command may not read; `write` lists paths it may also write, given
+`sandbox.write`; `read`, in the same form, lists paths it may also read,
+always read-only, so name none that holds credentials; one that is not
+there is left out. `variables` is a table of environment variables
+every command gets with the value written there, apart from `environment`,
+which passes the server's own.
+
+`read` and `variables` let a command use tools that live outside its
+workspace, such as a read-only folder of tools the person keeps: a
+command's home is its run's scratch, so nothing the person keeps in their
+own home is there. Name the folder in `read` and give the command an
+environment variable that points at it:
+
+```toml
+[execution]
+read = ["~/tools"]
+variables = { TOOLS_DIR = "/home/<you>/tools" }
+```
+
+`variables` takes the absolute path, `~` is not expanded in it. A command
+reads `$TOOLS_DIR` and finds the folder there, read-only: it cannot change
+it. Under `host = true` the folder is visible already.
 
 A root in `runtimes` is read-only inside the sandbox and exposes every
 binary it contains; it is not a per-binary allowlist, so keep those
@@ -42,7 +63,7 @@ the wrapper that feeds it stdin are here, not constants in the core.
 `[store] path` is mandatory, relative to the file. That is the SQLite
 database. Creating the file creates twelve tables. Stores made by earlier versions without conversations, participant columns or escalation links must be recreated before opening them with this version.
 
-`[store] changes`, optional, is the directory where the files each model call changed are kept. `[store] attachments`, optional, is the directory where the files attached to conversations are kept, each under its SHA-256; it needs `[store] attachment_bytes`, the most one file may hold, and that key needs it. Without them a message or an agent can attach nothing.
+`[store] changes`, optional, is the directory where the files each model call changed are kept. `[store] attachments`, optional, is the directory where the files attached to conversations are kept, each under its SHA-256; it needs `[store] attachment_bytes`, the most one file may hold, and that key needs it. Without them a message or an agent can attach nothing, and artifacts ([tools](tools.md#artifacts)), whose content is kept there too, cannot be written.
 
 `[access]` is optional for direct CLI use and required for a project exposed by the HTTP server. It names `creator_role`, `bootstrap_role` and `[access.roles.<name>]` tables, each with `scope = "project"` or `"conversation"` and a `capabilities` list. Memberships are project state in SQLite; role definitions stay in TOML. See [the server guide](server.md).
 
@@ -68,12 +89,35 @@ sets it for the works in that workspace.
 times in a row a parent may send one work below it back with `reopen`.
 The rounds counted are the work's reopens since an answer to a request
 of the parent's work last came. Once they reach `max_reopens`, the next
-`reopen` does not send the work back: the parent asks along its request
-route instead, with a question naming the work and the instructions it
+`reopen` does not send the work back: the parent asks instead, on the
+`[policy] harness_route` where the project declares one, else along the
+default route, with a question naming the work and the instructions it
 would have gone back with, and waits on the answer, the broken work still
 waiting on it ([the cycle](cycle.md#work)). Without it a parent reopens
 a work as often as it likes. A workspace sets it the same way as
 `max_retries`.
+
+`[policy] harness_route` is optional: the name of a rule of
+`request_routes`. It is the route of the harness's own requests: a root
+work stopped past `max_retries`, a `reopen` past `max_reopens`, and the
+proposals of `propose_config` and `propose_pack`. They are the project's to
+decide, so the project says where they go; absent, they take the default
+route, as any request that names none. A name no rule carries is refused at
+load with `{:policy, {:invalid, :harness_route}}`. A pack's prompts may
+name a route of their own with `to`; the project declares it in
+`request_routes`, and names it here when it should take these requests too.
+
+`[policy] default_agent` is optional: the name of an agent of depth 0
+that is not `workflow_only`, the front desk that receives a new
+conversation when the person names no agent, and routes the request on.
+Messages do not change: a client still names the agent in each `POST`
+message, and reads this key to know whom to address by default, as
+`default_agent` under `policy` in `GET /config/policy`. It is absent
+there when not set. Loading a config where it names an unknown agent, an
+agent below depth 0 or a workflow-only agent refuses with
+`{:policy, {:invalid, :default_agent}}`. It belongs to the project: set
+it in `omunculus.toml` only. A pack's `policy` holds depth layers only,
+and a workspace's policy does not change whom a new conversation goes to.
 
 `[policy] request_routes` is mandatory and nonempty. Loading a config without
 it refuses with `{:policy, {:required, :request_routes}}`. Malformed routes return
@@ -83,7 +127,7 @@ once into `Config.request_routes`, including workspace overlays. For example:
 ```toml
 [policy]
 request_routes = [
-  { name = "owner", via = ["origin"] },
+  { name = "owner", via = ["owners", "origin"] },
   { via = ["parent", "origin"] },
 ]
 ```
@@ -92,7 +136,9 @@ The first rule matching the optional logical route name (`to`), authenticated
 `from` identity, `workflow` and `stage` selects its `via` list. Unnamed requests
 match unnamed rules. A stage filter requires its workflow; both must exist.
 Destinations are `parent` (the parent work's assignee), `origin` (the authenticated
-conversation creator, or the run/command origin when there is no conversation),
+conversation creator, or the run/command origin when there is no conversation:
+the client), `owners` (the humans whose project role grants `project.own`; none
+without `[access]` or members, see [requests](requests.md#client-and-owner)),
 or an identity `{ kind = "agent", agent = "name" }` / `{ kind = "human",
 issuer = "issuer", subject = "subject" }`. A named agent must be an ancestor's
 assignee or a configured depth-0 agent that can run without a workflow. Missing contextual destinations and
@@ -562,6 +608,8 @@ needs what is missing:
 | `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
 | `omunculus.toml [policy] request_routes is required, a nonempty list of routes` | `request_routes` absent |
 | `omunculus.toml [policy] request_routes must be a nonempty list of valid routes` | `request_routes` invalid |
+| `omunculus.toml [policy] harness_route must name a rule of [[policy.request_routes]]` | `harness_route` names no `request_routes` rule |
+| `omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only` | `default_agent` names no such agent |
 | `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
 | `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
 | `omunculus.toml [policy] session_ttl_ms and session_max_bytes go together` | one of the two without the other |

@@ -2,7 +2,7 @@ name = "recovery_case"
 kind = "tool"
 triggers = ["model"]
 description = "Reads a recovery request, its original unresolved permissions and structured routing evidence in this conversation."
-command = ["./run", "sales"]
+command = ["./run", "front-desk"]
 
 [parameters]
 type = "object"

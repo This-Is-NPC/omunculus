@@ -227,7 +227,7 @@ Item {
       ]
       cells: work => [work.title, board.metaOf(work), board.originOf(work), board.runs(work) ? "RUNNING" : board.ageOf(work)]
       tone: (work, column) => column === 3 && !board.runs(work) ? Theme.dim : ""
-      dotted: work => board.runs(work)
+      statusIcon: work => board.runs(work) ? "spark" : ""
       dimmed: work => work.state === "done" || work.state === "cancelled"
       stacked: [[0], [1], [2]]
       status: 3

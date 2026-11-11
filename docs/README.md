@@ -13,7 +13,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [How to run the server](how-to-run-the-server.md) | How do I serve a project so the apps can reach it? |
 | [The screens](screens.md) | What does each screen of the apps show, and which keys does it take? |
 | [The console](console.md) | How does the window on a project work? |
-| [The mailbox](mailbox.md) | How does the mailbox over every project work? |
+| [The mailbox](mailbox.md) | How does the e-mail client over every project work? |
 | [The studio](studio.md) | How do the project's settings work? |
 | [The command line](cli.md) | What does each command take and print? |
 | [The TOML](config.md) | What can `omunculus.toml` hold, and what does each key do? |

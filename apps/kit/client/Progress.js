@@ -81,11 +81,13 @@ function live(progress, thread, front) {
     ? { chain: [], agent: node.agent, doing: node.doing, since: node.since, round: node.round || 0 } : null;
 }
 
-// What a run of a work below left in the main thread once it ended: "worked
-// 4 min · 12 steps", or "failed after 4 min" when it ended in an error.
-function worked(seconds, steps, failed) {
-  const lasted = (failed ? "failed after " : "worked ") + span(seconds);
-  return steps > 0 ? lasted + " · " + steps + (steps === 1 ? " step" : " steps") : lasted;
+// How a run reads in one line, from its status and the lines the runs command
+// printed under it: {state, text} in the words of a work's state and capitals.
+function outcome(status, lines) {
+  if (status === "open") return { state: "working", text: "RUNNING" };
+  if (lines.includes("ended: stopped without end")) return { state: "stopped", text: "STOPPED WITHOUT END" };
+  const failed = lines.filter(line => line.startsWith("failed:")).length;
+  return { state: "done", text: "ENDED" + (failed > 0 ? " · " + failed + (failed === 1 ? " FAILED CALL" : " FAILED CALLS") : "") };
 }
 
 // A running clock: "0:42", "12:05", "1:02:03".
@@ -210,10 +212,14 @@ function build(input) {
   const known = new Set(works.map(work => work.id));
   const runStart = run => starts[run.id] !== undefined ? starts[run.id] : seconds(run.started_at);
   const runsOf = id => runs.filter(run => (run.work_id || "") === id);
-  // What an open run on a work is doing: calls are known only once they
-  // finished, so between them it thinks, after the last one it made; a reply
+  // What an open run on a work is doing: a call is recorded once it finished,
+  // but the model event that asked for it is known, so while it runs it says
+  // that call; between calls it thinks, after the last one it made; a reply
   // says what it does, by whom it answers.
   const phrasing = id => {
+    // A call the model asked for that has not answered is what it does now.
+    const asked = (input.asked || {})[id] || [];
+    if (asked.length > 0) return Phrases.phrase(asked[0].name, asked[0].args);
     if (!calling[id]) return "Getting started";
     if (calling[id] !== "reply") {
       const last = Phrases.did(calling[id], callArgs[id]);
@@ -333,8 +339,8 @@ function build(input) {
     const made = {
       work: id, title: work.title || "", level: level, parent: work.parent_id || "", agent: agent,
       state: state, word: word(state), waitingOn: waitingOn, since: since, doing: doing,
-      lastCall: calling[id] ? { name: calling[id], brief: Phrases.brief(calling[id], callArgs[id]) } : null,
-      steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
+      lastStep: calling[id] ? Phrases.said(calling[id], callArgs[id]) : "",
+      workflow: lane ? lane.name : "", steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
       round: journey && journey.rounds > 0 ? journey.rounds + 1 : 0,
       sentBack: journey ? journey.sentBack : null, stopped: state === "stopped" ? stopped : null,
       asks: [], asked: [], below: "", calls: tally.count, failed: tally.failed,
@@ -388,7 +394,8 @@ function build(input) {
       .concat([Requests.label(request.requester), human ? "you" : Requests.label(request.arbiter)]);
     asker.asks.push({
       id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
-      question: request.reason || "", toWork: to ? to.work : null, chain: chain
+      question: request.reason || "", toWork: to ? to.work : null, chain: chain,
+      audience: Requests.audience(request)
     });
     const form = Questions.parse(request.reason || "");
     if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "", asks: form ? form.items.length : 1 });
@@ -413,7 +420,7 @@ function build(input) {
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {
       id: request.id, asker: Requests.asker(request), again: Requests.repeated(request, requests, input.replies || {}) !== null,
-      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, asks: form ? form.items.length : 1
+      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, audience: Requests.audience(request), asks: form ? form.items.length : 1
     };
   });
 
@@ -461,7 +468,7 @@ function build(input) {
   const delegated = Array.from(new Set(roots.filter(each => !closed(each.state) && each.agent !== input.rootAgent).map(each => each.agent)));
   const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
     ? {
-      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "",
+      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "", audience: forYou.length > 0 ? forYou[0].audience : "",
       state: talking ? "working" : forYou.length > 0 ? "needs-you" : delegated.length > 0 ? "waiting" : "idle",
       doing: talking ? phrasing(talking.work_id || "") : delegated.length > 0 && forYou.length === 0 ? "Waiting for " + delegated.join(", ") : "",
       since: talking ? runStart(talking) : null
@@ -469,6 +476,33 @@ function build(input) {
     : null;
 
   return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };
+}
+
+// Where a work is in its workflow: {workflow, step, steps, stage}, the step
+// counted from 1 and the last once the work is done; null in none.
+function track(node) {
+  if (node.count === 0) return null;
+  const at = Math.min(Math.max(node.at, 0), node.count - 1);
+  return { workflow: node.workflow, step: node.state === "done" ? node.count : at + 1, steps: node.count, stage: node.steps[at].name };
+}
+
+// Where the conversation stands, for its head: {workflow, stage, step, steps,
+// chain, agent, state, waits}: the track of the work in focus; `chain`, the
+// agents from the front one down to the one at work or waited for, each once,
+// and `agent`, the one it ends on; `waits`, what a conversation that waits
+// waits on: "you", or the agents it waits for, "" otherwise. null before any
+// work.
+function standing(progress, front) {
+  const focus = progress ? progress.focus : null;
+  if (!focus) return null;
+  const working = live(progress, "", front);
+  const names = working ? working.chain.concat([working.agent]) : [front].concat(progress.path.map(step => step.agent));
+  const chain = names.filter((name, index, all) => name && all.indexOf(name) === index);
+  const state = progress.state;
+  const waits = state === "needs-you" ? "you"
+    : state === "waiting" ? Array.from(new Set(progress.flat.filter(node => !closed(node.state) && node.waitingOn).map(node => node.waitingOn))).join(", ")
+    : "";
+  return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits });
 }
 
 // How many answers of yours a reply passes on: 0 when you answered none, else

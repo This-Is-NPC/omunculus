@@ -2,7 +2,7 @@
 .import "Phrases.js" as Phrases
 
 function pending(request) { return request.status === "pending"; }
-function human(participant) { return participant.kind === "human"; }
+function human(participant) { return !!participant && participant.kind === "human"; }
 function label(participant) {
   return human(participant) ? participant.issuer + ":" + participant.subject : participant.agent;
 }
@@ -43,20 +43,21 @@ function chosen(answer) {
 // An option as a button reads it: its words in capitals.
 function optionText(option) { return option.replace(/[-_]/g, " ").toUpperCase(); }
 
-// An option as its card button and quick chip read it. `of` names where a
-// scope applies: {who, stage, folder}.
+// An option as its button reads it, whole even when what it names is not
+// known. `of` names where a scope applies: {who, stage, folder}.
 function optionLabel(option, of) {
   const at = of || {};
   return ({
     grant: "GRANT" + "\u00a0\u00b7\u00a0THIS WORK ONLY",
-    grant_agent: "FOR " + String(at.who || "").toUpperCase(),
-    grant_stage: "IN THE " + String(at.stage || "").toUpperCase() + " STAGE",
+    grant_agent: at.who ? "FOR " + String(at.who).toUpperCase() : "FOR THIS AGENT",
+    grant_depth: "AT THIS DEPTH",
+    grant_stage: at.stage ? "IN THE " + String(at.stage).toUpperCase() + " STAGE" : "IN THIS STAGE",
     grant_workspace: at.folder ? "IN FOLDER " + at.folder : "IN THE PROJECT",
     deny: "DENY"
   })[option] || optionText(option);
 }
 
-// A no or a cancel: given last and never as a quick first choice.
+// A no or a cancel: given last, apart from the choices that go ahead.
 function guarded(option) { return option === "deny" || option === "cancel"; }
 
 // Whether an option is a scope a grant is saved for: only a permission's
@@ -72,20 +73,6 @@ function always(options, permission) { return options.filter(option => scoped(op
 function once(options, permission) {
   const rest = options.filter(option => option !== "grant" && !scoped(option, permission) && !guarded(option));
   return (options.includes("grant") ? ["grant"] : []).concat(rest);
-}
-
-// Every option in the card's order: those given once, then a no or a cancel.
-function ordered(options, permission) { return once(options, permission).concat(options.filter(guarded)); }
-
-// What the heading of your answer says of the option you chose; "" for an
-// answer in words. Adjusting is asking for changes, not choosing. A grant
-// keeps its scope: `of` ({who, stage, folder}) says where a saved one applies.
-function chose(option, permission, of) {
-  if (!option) return "";
-  if (option === "adjust") return "YOU ASKED TO ADJUST";
-  if (option === "grant") return "YOU GRANTED  \u00b7  THIS WORK ONLY";
-  if (scoped(option, permission)) return "YOU GRANTED  \u00b7  " + optionLabel(option, of);
-  return "YOU CHOSE " + optionText(option);
 }
 
 // What a granted name, as {kind, name}, lets the agent do; `root` is its
@@ -132,9 +119,10 @@ function question(request, noted) {
   return passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : String(request.reason || "");
 }
 
-// The request this one repeats: the last one already answered, from the same
-// asker on the same work at the same stage, offering the same options, given
-// `replies` by request id; null when none. Another decision of that asker
+// The request this one repeats: the one asked just before it and already
+// answered, from the same asker on the same work at the same stage, offering
+// the same options and, when they grant, the same thing, given `replies` by request id; null when none, or when
+// the requests carry no time to tell them by. Another decision of that asker
 // (the proposal after the preview) is no repeat.
 function repeated(request, requests, replies) {
   const work = request.work_id || "";
@@ -142,7 +130,10 @@ function repeated(request, requests, replies) {
   const offered = each => JSON.stringify(choices(each).map(choice => choice.options.slice().sort()));
   const before = requests.filter(each => each.id !== request.id && !pending(each) && replies[each.id]
     && (each.work_id || "") === work && asker(each) === who
-    && (each.stage || "") === (request.stage || "") && offered(each) === offered(request));
+    && (each.stage || "") === (request.stage || "") && offered(each) === offered(request)
+    && JSON.stringify(granted(each)) === JSON.stringify(granted(request))
+    && !!each.created_at && !!request.created_at && each.created_at < request.created_at)
+    .sort((a, b) => a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
   return before.length > 0 ? before[before.length - 1] : null;
 }
 
@@ -193,6 +184,25 @@ function kind(request) {
   if (granted(request) !== null) return "permission";
   return choices(request).length > 0 ? "decision" : "needs-you";
 }
+
+// Whether a request is an owner's decision: its destination is the project's
+// owners, whatever the route that led there is called.
+function owned(request) {
+  return request.destination === "owners";
+}
+
+// Whom a request is for: "owner" for an owner's decision, "agents" when an
+// agent arbitrates it, else "client", the person of the conversation.
+function audience(request) {
+  return !human(request.arbiter) ? "agents" : owned(request) ? "owner" : "client";
+}
+
+// An audience as its marker reads it: icon and word.
+const audiences = {
+  owner: { icon: "spark", text: "OWNER DECISION" },
+  client: { icon: "people", text: "CLIENT QUESTION" },
+  agents: { icon: "branch", text: "AGENT QUESTION" }
+};
 
 // The climb of a request, nearest origin first: each origin's requester and
 // question, depth first.

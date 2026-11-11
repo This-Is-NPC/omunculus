@@ -10,9 +10,10 @@ import "kit/ui"
 // run where it begins. Plumbing (run starts and ends, hooks, empty replies)
 // is dimmer and hidden until BEHIND THE SCENES is on. The search line keeps
 // the rows whose text holds it; chips keep the ones that need you or failed,
-// and a picker one agent's. The count
-// of rows sits at the filters' right end, or under them when they would not
-// fit beside it, and "more" copies the event picked, else the rows shown. A
+// and a picker one agent's; they wrap onto lines rather than run past the
+// edge. The count of rows sits under them with "more", which copies the event
+// picked, else the rows shown. Under 560 px a row is two lines — when, kind,
+// who and status, then what it says in up to three lines — instead of columns. A
 // row picked shows its event in a card below, as the server sent it, the
 // first 20 KB unless all is asked, its raw type in the card's title. The list follows the newest row while it
 // is at the end. `/` goes to the search; Esc there empties it, then goes
@@ -45,6 +46,8 @@ Item {
   readonly property bool filtered: filter.trim() !== "" || asksOnly || failedOnly || agent !== "" || !showMinor
   readonly property var source: filtered ? shown : Omunculus.eventLog.rows
   property int seen: 0
+  // How many rows only BEHIND THE SCENES being off keeps out.
+  property int hidden: 0
   signal leave()
 
   // Whether the line is a question that still waits on the person.
@@ -52,10 +55,10 @@ Item {
     return line.request !== "" && Omunculus.waiting.some(request => request.id === line.request)
   }
 
-  function matches(line) {
+  function matches(line, minor) {
     const wanted = filter.trim().toLowerCase()
     return (!asksOnly || waits(line)) && (!failedOnly || (!line.ok && !line.retried)) && (agent === "" || line.who === agent)
-      && (showMinor || !line.minor || line.head !== "")
+      && (minor || !line.minor || line.head !== "")
       && (wanted === "" || [line.kind, line.who, line.run, line.work, line.what].join(" ").toLowerCase().includes(wanted))
   }
 
@@ -64,6 +67,7 @@ Item {
   function refilter() {
     shown.clear()
     seen = 0
+    hidden = 0
     extend()
   }
 
@@ -73,8 +77,10 @@ Item {
     const rows = Omunculus.eventLog
     for (; seen < rows.rows.count; seen++) {
       const line = rows.row(seen)
-      if (matches(line))
+      if (matches(line, showMinor))
         shown.append(line)
+      else if (matches(line, true))
+        hidden++
     }
   }
 
@@ -162,45 +168,36 @@ Item {
       onLeave: list.forceActiveFocus()
     }
 
-    // The filters, the count and the rare actions; the count and the menu
-    // go under the chips when all would not fit on one line, so neither
-    // covers a chip.
-    GridLayout {
-      id: filters
-      readonly property bool stacked: chips.contentWidth + tally.implicitWidth + menu.implicitWidth + columnSpacing * 2 > width
+    // The filters, which wrap onto lines, then the count and the rare actions.
+    Flow {
       Layout.fillWidth: true
-      columns: stacked ? 2 : 3
-      columnSpacing: Theme.space.gap
-      rowSpacing: Theme.space.tight
-      ChipStrip {
-        id: chips
-        Layout.columnSpan: filters.stacked ? 2 : 1
-        Layout.fillWidth: true
-        Layout.preferredHeight: implicitHeight
-        Chip { text: "NEEDS YOU"; checked: view.asksOnly; accent: Theme.warning; tip: "the questions waiting on you"; onClicked: view.asksOnly = !view.asksOnly }
-        Chip { text: "FAILED"; checked: view.failedOnly; accent: Theme.error; onClicked: view.failedOnly = !view.failedOnly }
-        Chip { text: "BEHIND THE SCENES"; checked: view.showMinor; tip: "run starts and ends, hooks, empty replies"; onClicked: view.showMinor = !view.showMinor }
-        Dropdown {
-          options: [""].concat(Omunculus.eventLog.agents)
-          current: view.agent
-          emphasized: view.agent !== ""
-          describe: option => option === "" ? "ALL AGENTS" : option.toUpperCase()
-          onPicked: option => view.agent = option
-        }
+      spacing: Theme.space.tight
+      Chip { text: "NEEDS YOU"; checked: view.asksOnly; accent: Theme.warning; tip: "the questions waiting on you"; onClicked: view.asksOnly = !view.asksOnly }
+      Chip { text: "FAILED"; checked: view.failedOnly; accent: Theme.error; onClicked: view.failedOnly = !view.failedOnly }
+      Chip { text: "BEHIND THE SCENES"; checked: view.showMinor; tip: "run starts and ends, hooks, empty replies"; onClicked: view.showMinor = !view.showMinor }
+      Dropdown {
+        options: [""].concat(Omunculus.eventLog.agents)
+        current: view.agent
+        emphasized: view.agent !== ""
+        describe: option => option === "" ? "ALL AGENTS" : option.toUpperCase()
+        onPicked: option => view.agent = option
       }
+    }
+    RowLayout {
+      Layout.fillWidth: true
+      spacing: Theme.space.gap
       Label {
         id: tally
-        Layout.maximumWidth: filters.stacked ? Number.POSITIVE_INFINITY : implicitWidth
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events").toUpperCase()
+        text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events"
+          + (view.hidden > 0 ? " · " + view.hidden + " behind the scenes hidden" : "")).toUpperCase()
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: Theme.type.meta.tracking
-        elide: Text.ElideRight
+        wrapMode: Text.Wrap
       }
       ActionMenu {
-        id: menu
         items: [{ id: "copy", icon: "copy", text: view.picked !== null ? "COPY EVENT" : "COPY LOG" }]
         tip: "copy the event picked, else the rows shown"
         onChosen: view.copy()
@@ -242,8 +239,17 @@ Item {
           font.pixelSize: Theme.type.header.size
           font.letterSpacing: Theme.type.header.tracking
         }
+        // The kind column holds the longest single kind whole ("CONVERSATION").
+        TextMetrics {
+          id: kindWidth
+          text: "CONVERSATION"
+          font.pixelSize: Theme.type.header.size
+          font.letterSpacing: Theme.type.header.tracking
+        }
         // A failure a later call settled is dim, not red.
         readonly property bool bad: !model.ok && !model.retried
+        // Narrow, a row is two lines, not columns.
+        readonly property bool stacked: list.width < 560
 
         width: list.width
         height: (model.day !== "" ? Theme.size.rule : 0) + (model.head !== "" ? Theme.size.rule : 0) + box.height
@@ -268,11 +274,66 @@ Item {
         Rectangle {
           id: box
           anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-          height: Theme.size.stackedRow + (row.model.minor ? 0 : Theme.space.line)
+          height: row.stacked ? lines.implicitHeight + Theme.space.tight * 2 : Theme.size.stackedRow + (row.model.minor ? 0 : Theme.space.line)
           color: row.marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
           border.color: row.marked ? Theme.primary : "transparent"
 
+          // Narrow: when, kind, who and status, then what it says.
+          ColumnLayout {
+            id: lines
+            visible: row.stacked
+            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell }
+            spacing: Theme.space.row
+            opacity: row.model.minor && !row.marked ? 0.6 : 1
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: Theme.space.gap
+              Label {
+                text: row.model.time
+                color: Theme.dim
+                font.pixelSize: Theme.type.meta.size
+              }
+              Icon {
+                name: row.bad ? "warning" : row.kind.icon
+                size: 10
+                color: row.bad ? Theme.error : row.kind.tone
+              }
+              Label {
+                text: row.model.kind.toUpperCase()
+                color: row.bad ? Theme.error : row.kind.tone
+                font.pixelSize: Theme.type.header.size
+                font.letterSpacing: Theme.type.header.tracking
+              }
+              Label {
+                visible: row.model.who !== "" && row.model.who !== "harness"
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                text: row.model.who
+                color: Omunculus.toneOf(row.model.who)
+                font.pixelSize: Theme.type.meta.size
+                elide: Text.ElideRight
+              }
+              Item { visible: row.model.who === "" || row.model.who === "harness"; Layout.fillWidth: true }
+              Label {
+                text: row.status
+                color: row.bad ? Theme.error : row.model.ok ? Theme.warning : Theme.dim
+                font.pixelSize: Theme.type.header.size
+                font.letterSpacing: Theme.type.header.tracking
+              }
+            }
+            Label {
+              Layout.fillWidth: true
+              text: row.model.what
+              color: row.bad ? Theme.error : row.model.ok && !row.model.minor ? Theme.foreground : Theme.dim
+              font.pixelSize: Theme.type.body.size
+              wrapMode: Text.Wrap
+              maximumLineCount: row.model.minor ? 1 : 3
+              elide: Text.ElideRight
+            }
+          }
+
           RowLayout {
+            visible: !row.stacked
             anchors { fill: parent; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell }
             spacing: Theme.space.gap
             opacity: row.model.minor && !row.marked ? 0.6 : 1
@@ -282,14 +343,14 @@ Item {
               font.pixelSize: Theme.type.meta.size
             }
             Icon {
-              name: row.kind.icon
+              name: row.bad ? "warning" : row.kind.icon
               size: 10
-              color: row.kind.tone
+              color: row.bad ? Theme.error : row.kind.tone
             }
             Label {
-              Layout.preferredWidth: Theme.size.control * 1.4
+              Layout.preferredWidth: kindWidth.advanceWidth
               text: row.model.kind.toUpperCase()
-              color: row.kind.tone
+              color: row.bad ? Theme.error : row.kind.tone
               font.pixelSize: Theme.type.header.size
               font.letterSpacing: Theme.type.header.tracking
               elide: Text.ElideRight

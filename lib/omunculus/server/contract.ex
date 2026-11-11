@@ -22,6 +22,18 @@ defmodule Omunculus.Server.Contract do
 
   def decode_cursor(_), do: {:error, :invalid}
 
+  @doc "The versions of a conversation's artifacts, grouped by artifact."
+  @spec artifacts([map]) :: [map]
+  def artifacts(versions) do
+    versions
+    |> Omunculus.Artifacts.group()
+    |> Enum.map(fn artifact ->
+      Map.update!(artifact, "versions", fn versions ->
+        Enum.map(versions, &Map.take(&1, ~w(version media_type bytes sha256 note at by)))
+      end)
+    end)
+  end
+
   @spec event(String.t(), map) :: map
   def event(project_id, event) do
     %{
@@ -77,7 +89,7 @@ defmodule Omunculus.Server.Contract do
   def item(:requests, row) do
     row
     |> Map.take(
-      ~w(id run_id requester work_id options arbiter status created_at reason workflow stage origins)a
+      ~w(id run_id requester work_id options arbiter status created_at reason workflow stage route destination origins)a
     )
     |> Map.update!(:options, &body/1)
     |> Map.update!(:requester, &body/1)

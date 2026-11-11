@@ -44,6 +44,11 @@ defmodule Omunculus.Tool.Views do
     `relation = "received"`, from `run`, reads pending requests addressed
     to that depth-0 agent in its conversation, grouped by conversation,
     each with its canonical question and recursively linked origins.
+  - `artifacts`: the artifact versions of the run's conversation, oldest
+    first, each as its event describes it with `event_id`, `at`, `by` and
+    `tool`, the tool that wrote it; `prefix` keeps the names that begin with
+    it; `include = ["data"]` adds `data`, the decoded content of the latest
+    version of each name when it is of media type `application/json`.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
     computed by the harness for the call, each only when a view asks for
     it, through a function of the view in `computed`. `agents` takes
@@ -72,7 +77,7 @@ defmodule Omunculus.Tool.Views do
           limit: pos_integer | nil
         }
 
-  @computed ~w(catalog workspaces agents paths grant_scopes skills)
+  @computed ~w(catalog workspaces agents paths grant_scopes skills artifacts)
   @work_states ~w(open waiting done cancelled)
   @work_includes %{"last_comment" => :last_comment, "comments" => :comments, "runs" => :runs}
   @comment_targets %{"work" => :work, "request" => :request, "inbox" => :inbox}
@@ -102,7 +107,8 @@ defmodule Omunculus.Tool.Views do
       since_last_run: false,
       include: [],
       within: nil,
-      limit: nil
+      limit: nil,
+      prefix: nil
     }
 
     with {:ok, from} <- string_list(table, "from"),
@@ -204,6 +210,13 @@ defmodule Omunculus.Tool.Views do
          do: {:ok, %{spec | include: include || []}}
   end
 
+  defp source_spec("artifacts", table, spec) do
+    with :ok <- only_keys(table, ~w(include prefix)),
+         {:ok, include} <- subset(table, "include", ["data"]),
+         {:ok, prefix} <- optional_string(table, "prefix"),
+         do: {:ok, %{spec | include: include || [], prefix: prefix}}
+  end
+
   defp source_spec(source, table, spec) when source in @computed do
     with :ok <- only_keys(table, []), do: {:ok, spec}
   end
@@ -277,6 +290,14 @@ defmodule Omunculus.Tool.Views do
     case Map.fetch(table, key) do
       :error -> {:ok, default}
       {:ok, value} -> if value in allowed, do: {:ok, value}, else: {:error, {:invalid, key}}
+    end
+  end
+
+  defp optional_string(table, key) do
+    case Map.get(table, key) do
+      nil -> {:ok, nil}
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _value -> {:error, {:invalid, key}}
     end
   end
 

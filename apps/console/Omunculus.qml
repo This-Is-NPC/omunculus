@@ -113,6 +113,8 @@ Singleton {
   property var calling: ({})
   // Work id -> the args of that call.
   property var callArgs: ({})
+  // Work id -> the calls its model asked for that have not answered yet.
+  property var pendingCalls: ({})
   // Inbox id -> the text its notify event carried, and request id -> how it
   // was answered ({option, who, body}); the snapshot has neither.
   property var notes: ({})
@@ -151,6 +153,8 @@ Singleton {
   // it ended in an error.
   property var runStarts: ({})
   property var runErrors: ({})
+  // Why the last run to end in the open conversation failed, "" when it did not.
+  property string lastEnded: ""
   // Request id -> "sending" while its answer goes, "failed" when it did not
   // reach the server; cleared once the answer is read back.
   property var sending: ({})
@@ -199,12 +203,6 @@ Singleton {
   readonly property var running: runs.filter(run => run.status === "open")
   readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
   readonly property var unread: inbox.filter(item => !item.read_at && !cardNotes[item.id])
-  // The newest request waiting on you that offers options, none gathering
-  // it from below; null for none.
-  readonly property var deciding: {
-    const gathered = Requests.contained(requests)
-    return waiting.filter(request => !gathered.has(request.id) && Requests.choices(request).length > 0).pop() || null
-  }
   // What waits on you: requests to decide and notes to read.
   readonly property int pending: waiting.length + unread.length
   // Requests still waiting, on you or on an agent.
@@ -283,12 +281,33 @@ Singleton {
   function summarize(place, ids) {
     if (ids.length === 0)
       return
-    http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations/" + ids[0] + "/snapshot", null, false, data => {
+    const rest = () => summarize(place, ids.slice(1))
+    const base = "/v1/projects/" + place.id + "/conversations/" + ids[0]
+    const keep = (data, ended) => {
       const next = Object.assign({}, summaries)
-      next[ids[0]] = Projects.summary(data)
+      next[ids[0]] = Projects.summary(data, ended)
       summaries = next
-      summarize(place, ids.slice(1))
-    }, () => summarize(place, ids.slice(1)))
+      rest()
+    }
+    http.call(place.socket, "GET", base + "/snapshot", null, false, data => {
+      if (Projects.unsettled(Projects.summary(data)))
+        lastEnd(place, base, "", "", ended => keep(data, ended))
+      else
+        keep(data, "")
+    }, rest)
+  }
+
+  // Reads the events of a conversation after `cursor`, a page at a time, and
+  // gives `done` why its last run to end failed, "" when it did not.
+  function lastEnd(place, base, cursor, ended, done) {
+    http.call(place.socket, "GET", base + "/events" + (cursor !== "" ? "?after=" + cursor : ""), null, false, data => {
+      const events = data.events
+      const error = events.some(event => event.type === "end-run") ? Projects.ended(events) : ended
+      if (events.length < 500)
+        done(error)
+      else
+        lastEnd(place, base, events[events.length - 1].cursor, error, done)
+    }, () => done(ended))
   }
 
   // What a conversation is called: what was first said in it, or when it began.
@@ -384,7 +403,11 @@ Singleton {
     interval: 250
     onTriggered: {
       Object.values(root.staleWorks).forEach(place => root.loadWorks(place))
-      Object.values(root.staleConversations).forEach(place => root.loadBoardConversations(place, false))
+      Object.values(root.staleConversations).forEach(place => {
+        root.loadBoardConversations(place, false)
+        if (place.id === root.project)
+          root.loadConversations()
+      })
       const ids = {}
       for (const [id, place] of Object.entries(root.staleSummaries))
         (ids[place.id] = ids[place.id] || { place: place, list: [] }).list.push(id)
@@ -463,6 +486,7 @@ Singleton {
     runThread = {}
     calling = {}
     callArgs = {}
+    pendingCalls = {}
     threads = {}
     notes = {}
     replies = {}
@@ -479,6 +503,7 @@ Singleton {
     titles = {}
     runStarts = {}
     runErrors = {}
+    lastEnded = ""
     sending = {}
     lastEventAt = 0
     works = []
@@ -511,7 +536,6 @@ Singleton {
   // Closes the conversation on screen; its agents go on without the window.
   function close() {
     clear("")
-    loadConversations()
   }
 
   function refresh() {
@@ -529,7 +553,7 @@ Singleton {
       if (unsettled.length !== Object.keys(sending).length)
         sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
       const next = Object.assign({}, summaries)
-      next[id] = Projects.summary(data)
+      next[id] = Projects.summary(data, lastEnded)
       summaries = next
     })
   }
@@ -595,6 +619,14 @@ Singleton {
   function openAttachment(file) {
     http.openAttachment(socket, base + "/conversations/" + conversationId + "/attachments/" + file.sha256, file)
     connection.tell("opening " + file.name, false)
+  }
+
+  // Saves a version of an artifact of the conversation, `version` as the
+  // artifacts route lists it, to the downloads directory and opens it.
+  function openArtifact(name, version) {
+    const path = base + "/conversations/" + conversationId + "/artifacts/" + encodeURIComponent(name) + "/versions/" + version.version
+    http.openAttachment(socket, path, { name: name, sha256: version.sha256 })
+    connection.tell("opening " + name, false)
   }
 
   // A note on a work: context its agents read, not a new run.
@@ -746,7 +778,7 @@ Singleton {
       who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
+      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf, titles[event.work_id || ""] || ""),
       ok: !failed,
       tool: event.type === "tool" && !Events.hook(body) ? body.name : event.type === "break" || event.type === "reopen" ? "break" : "",
       request: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter) ? event.request_id : "",
@@ -875,7 +907,7 @@ Singleton {
       failed: was.failed + (fails ? 1 : 0),
       open: open,
       retried: retried,
-      last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
+      last: line.hook ? was.last : { text: line.outcome ? line.text : Phrases.said(line.name, line.args), at: line.at }
     })
     const place = rows[runId]
     if (place === undefined)
@@ -936,6 +968,7 @@ Singleton {
       // A new run has made no call yet, on a work or the front agent's own.
       keep("calling", work, "")
       keep("callArgs", work, {})
+      keep("pendingCalls", work, [])
     }
     // Where the event shows: its run's thread, else its work's.
     const key = runThread[event.run_id] !== undefined ? runThread[event.run_id] : threadOf(work)
@@ -966,6 +999,7 @@ Singleton {
     case "model": {
       if (body.usage)
         count(who, work, body.usage)
+      keep("pendingCalls", work, Model.calls(body))
       const said = Model.text(body)
       const place = rows[event.run_id]
       if (place !== undefined)
@@ -978,19 +1012,13 @@ Singleton {
       keep("rows", event.run_id, append(key, { kind: "turn", key: event.run_id, who: body.agent, work: work, streaming: true, stamp: stamp, at: at }))
       break
     case "end-run": {
+      lastEnded = body.error ? String(body.error) : ""
       if (body.error)
         keep("runErrors", event.run_id, String(body.error))
       const place = rows[event.run_id]
       if (place !== undefined) {
         update(place, "streaming", false)
         update(place, "partial", "")
-        // A run below leaves a line in the main thread, so it tells the
-        // team's work in order: who worked, how long and how many steps.
-        if (place.thread !== "") {
-          const ran = entryAt(place)
-          const calls = JSON.parse(ran.steps).filter(line => !line.outcome && !line.hook).length
-          append("", { kind: "worked", key: event.run_id, who: ran.who, text: Progress.worked(at - (runStarts[event.run_id] || at), calls, !!body.error), stamp: stamp, at: at, work: work })
-        }
       }
       break
     }
@@ -1004,6 +1032,12 @@ Singleton {
         if (!hook) {
           keep("calling", work, body.name)
           keep("callArgs", work, body.args || {})
+          // It answered: the rest of those asked for are still going on.
+          const left = (pendingCalls[work] || []).slice()
+          const at = left.findIndex(call => call.name === body.name)
+          if (at >= 0)
+            left.splice(at, 1)
+          keep("pendingCalls", work, left)
         }
       }
       break
@@ -1079,7 +1113,7 @@ Singleton {
       lanes[item.id] = laneOf(item)
     progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
-      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts,
+      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, asked: pendingCalls, runStarts: runStarts,
       journeys: journeys, rootAgent: agent || lastAgent, now: tick, usage: usage.works, calls: callsOf
     })
   }
@@ -1088,6 +1122,7 @@ Singleton {
   onRequestsChanged: progressTimer.restart()
   onNotedChanged: progressTimer.restart()
   onCallingChanged: progressTimer.restart()
+  onPendingCallsChanged: progressTimer.restart()
   onRunStartsChanged: progressTimer.restart()
   onRunErrorsChanged: progressTimer.restart()
   onSetupChanged: progressTimer.restart()

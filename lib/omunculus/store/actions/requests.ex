@@ -5,6 +5,8 @@ defmodule Omunculus.Store.Actions.Requests do
   preserves the receiving work's existing wait. Replies close their request and
   return named parts transactionally through the same reply path. Grants always
   target the original requester and retain the actual answering identity.
+  An escalation without `to` stays on the named route its origins all
+  travelled on, and follows the workflow and stage they were requested in.
   An origin is never escalated to its requesters, nor to an agent it was
   already escalated to that answered with text alone, naming no part, without
   escalating it further.
@@ -29,7 +31,7 @@ defmodule Omunculus.Store.Actions.Requests do
          :ok <- Helpers.ensure_not_waiting_children(:request, work),
          {:ok, participant} <- Participant.from_context(ctx),
          :ok <- classify_options(conn, run, options),
-         {:ok, arbiter, arbiter_work_id} <-
+         {:ok, arbiter, arbiter_work_id, destination} <-
            RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], []) do
       create(
         conn,
@@ -41,6 +43,7 @@ defmodule Omunculus.Store.Actions.Requests do
         options,
         arbiter,
         arbiter_work_id,
+        %{route: body["to"], destination: destination},
         true
       )
     end
@@ -58,8 +61,11 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, upstream} <- held_upstream(conn, origins),
          forbidden =
            upstream ++ Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
-         {:ok, arbiter, arbiter_work_id} <-
-           RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], forbidden),
+         route = body["to"] || origin_route(origins),
+         {:ok, arbiter, arbiter_work_id, destination} <-
+           RequestRoutes.resolve(conn, ctx, run, work, participant, route, forbidden,
+             scope: origin_scope(origins)
+           ),
          {:ok, request} <-
            create(
              conn,
@@ -71,6 +77,7 @@ defmodule Omunculus.Store.Actions.Requests do
              %{},
              arbiter,
              arbiter_work_id,
+             %{route: route, destination: destination},
              false
            ),
          {:ok, event} <-
@@ -170,7 +177,19 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp create(conn, ctx, run, work, participant, reason, options, arbiter, arbiter_work_id, park?) do
+  defp create(
+         conn,
+         ctx,
+         run,
+         work,
+         participant,
+         reason,
+         options,
+         arbiter,
+         arbiter_work_id,
+         via,
+         park?
+       ) do
     request_id = Id.new()
     comment_id = Id.new()
 
@@ -180,6 +199,8 @@ defmodule Omunculus.Store.Actions.Requests do
       requester: participant,
       arbiter: arbiter,
       arbiter_work_id: arbiter_work_id,
+      route: via.route,
+      destination: via.destination,
       workflow: work && work.workflow,
       stage: work && work.stage
     }
@@ -251,6 +272,30 @@ defmodule Omunculus.Store.Actions.Requests do
   defp origins(_conn, _raw, _participant, _conversation),
     do: {:error, {:escalate, :invalid_origins}}
 
+  # The workflow and stage the origins were requested in, when they agree:
+  # an escalation follows the routes of the work it carries up.
+  defp origin_scope(origins) do
+    case origins |> Enum.flat_map(fn {_part, origin} -> leaf_scopes(origin) end) |> Enum.uniq() do
+      [{workflow, _stage} = scope] when not is_nil(workflow) -> scope
+      _none_or_mixed -> nil
+    end
+  end
+
+  # The named route the origins travelled on, when they all share one: an
+  # escalation without `to` stays on it. Every request records the route it
+  # was resolved on, so one link up is enough.
+  defp origin_route(origins) do
+    case origins |> Enum.map(fn {_part, origin} -> origin.route end) |> Enum.uniq() do
+      [route] -> route
+      _mixed -> nil
+    end
+  end
+
+  defp leaf_scopes(%{origins: origins}) when map_size(origins) > 0,
+    do: Enum.flat_map(origins, fn {_part, origin} -> leaf_scopes(origin) end)
+
+  defp leaf_scopes(request), do: [{request.workflow, request.stage}]
+
   defp requesters(request),
     do: [
       Jason.decode!(request.requester)
@@ -307,10 +352,14 @@ defmodule Omunculus.Store.Actions.Requests do
     end)
   end
 
-  defp authorize_reply(_request, %{author: "human"}), do: :ok
-
   defp authorize_reply(request, ctx) do
-    if Jason.decode!(request.arbiter) == Participant.agent(ctx.agent),
+    answerer =
+      case ctx do
+        %{author: "human"} -> Participant.from_context(ctx)
+        _agent -> {:ok, Participant.agent(ctx.agent)}
+      end
+
+    if {:ok, Jason.decode!(request.arbiter)} == answerer,
       do: :ok,
       else: {:error, {:reply, :not_arbiter}}
   end

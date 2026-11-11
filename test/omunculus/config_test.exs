@@ -139,6 +139,56 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{max_retries: 0}} = load(dir)
   end
 
+  test "[policy] default_agent names an agent of depth 0 that is not workflow-only", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [agents.worker]
+    depth = 1
+    text = "hi"
+
+    [agents.reviewer]
+    depth = 0
+    workflow_only = true
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{default_agent: nil}} = load(dir)
+
+    Fixtures.write_config(dir, agents <> "\n[policy]\ndefault_agent = \"concierge\"\n")
+    assert {:ok, %Config{default_agent: "concierge"}} = load(dir)
+
+    for invalid <- [~s("nobody"), ~s("worker"), ~s("reviewer"), "3", ~s("")] do
+      Fixtures.write_config(dir, agents <> "\n[policy]\ndefault_agent = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :default_agent}}} = load(dir)
+    end
+  end
+
+  test "[policy] harness_route is optional and names a declared route", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [policy]
+    request_routes = [{ name = "boss", via = ["owners"] }, { via = ["parent", "origin"] }]
+    """
+
+    Fixtures.write_config(dir, agents, request_routes: false)
+    assert {:ok, %Config{harness_route: nil}} = load(dir)
+
+    Fixtures.write_config(dir, agents <> "harness_route = \"boss\"\n", request_routes: false)
+    assert {:ok, %Config{harness_route: "boss"}} = load(dir)
+
+    for invalid <- [~s("nobody"), "3", ~s("")] do
+      Fixtures.write_config(dir, agents <> "harness_route = #{invalid}\n", request_routes: false)
+      assert {:error, {:policy, {:invalid, :harness_route}}} = load(dir)
+    end
+  end
+
   test "[policy] max_reopens is optional, a non-negative integer", %{dir: dir} do
     agents = """
     [agents.concierge]
@@ -277,6 +327,37 @@ defmodule Omunculus.ConfigTest do
 
     assert {:error, {:execution, {:invalid, :deny_read}}} =
              load_with.(%{"deny_read" => ["relative"]})
+  end
+
+  test "a command may read more paths and get variables of its own", %{dir: dir} do
+    load_with = fn keys ->
+      write_toml(dir, "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n")
+      {:ok, data} = Toml.decode_file(toml(dir))
+
+      File.write!(
+        toml(dir),
+        Config.Toml.encode(update_in(data, ["execution"], &Map.merge(&1, keys)))
+      )
+
+      load(dir)
+    end
+
+    assert {:ok, %{execution: %{read: [read], variables: %{"TOOLS_DIR" => "/t"}}}} =
+             load_with.(%{
+               "read" => ["~/tools"],
+               "variables" => %{"TOOLS_DIR" => "/t"}
+             })
+
+    assert read == Path.expand("~/tools")
+    assert {:ok, %{execution: %{read: [], variables: %{}}}} = load_with.(%{})
+
+    assert {:error, {:execution, {:invalid, :read}}} = load_with.(%{"read" => ["relative"]})
+
+    assert {:error, {:execution, {:invalid, :variables}}} =
+             load_with.(%{"variables" => %{"bad-name" => "x"}})
+
+    assert {:error, {:execution, {:invalid, :variables}}} =
+             load_with.(%{"variables" => %{"NAME" => 1}})
   end
 
   test "an HTTP model offers code mode only with code_mode = true", %{dir: dir} do

@@ -19,6 +19,7 @@ without one.
 | `requester`, `arbiter` | Authenticated participant identities: an agent name, or human issuer/subject. Clients cannot supply another participant's authorship. |
 | `run_id`, `work_id` | Optional origin. A human-origin request requires no run. |
 | Conversation, workflow, stage | Historical context in the immutable opening event, not inferred from the work's current stage. |
+| `route`, `destination` | The logical route name the request was put on (nil for the default route) and the kind of destination that produced its arbiter: `parent`, `origin`, `owners`, `agent` or `human`. Both are recorded in the opening event, so they are immutable. |
 | `status` | `pending`, `escalated` or `closed`. |
 | `answer` | The selected option, or nil for a text-only answer. Closed status and the reply comment distinguish a text answer from an unanswered question. |
 | `origins` | Canonical linked requests keyed by escalation part names, including their questions, options and original targets. |
@@ -39,7 +40,7 @@ once into `Config.request_routes`, including workspace overlays. For example:
 ```toml
 [policy]
 request_routes = [
-  { name = "owner", via = ["origin"] },
+  { name = "owner", via = ["owners", "origin"] },
   { via = ["parent", "origin"] },
 ]
 ```
@@ -50,8 +51,8 @@ requests match unnamed rules. Workflow and stage filters refer to existing
 configuration; a stage filter needs its workflow.
 
 Destinations are `parent` (the parent work's assignee), `origin` (the authenticated
-conversation creator, or the run/command origin without a conversation), or
-an explicit configured agent/human identity. A named agent must be an ancestor's
+conversation creator, or the run/command origin without a conversation),
+`owners` (the project's owners, see below), or an explicit configured agent/human identity. A named agent must be an ancestor's
 assignee or a depth-0 agent able to run without a workflow. Missing contextual
 destinations and participants already in the linked origins are skipped within
 the configured list. If no destination resolves, the action refuses with
@@ -67,21 +68,94 @@ An agent's selected grant also requires the applicable ceiling to allow it.
 Text never substitutes for a grant or impersonates an upstream answerer.
 
 The presets, Amestris and benchmark declare parent then origin in TOML. The
-sales-desk and agency eval overlays also declare the logical `owner` route
-used by sales decisions. Importing that pack requires configuring this logical
-responsibility; it can name a different participant from the conversation origin.
+default preset, the sales-desk and agency eval configs and the
+course-recovery overlay also declare a route named `owner` as
+`["owners", "origin"]`, which the agency's prompts name with `to = "owner"`
+(a sale's approval, a discount, production): the owner where the project has
+one, else the one local person. The name is the pack's own convention, not
+the core's: importing such a pack requires declaring the route it names; it
+reaches the project's owners, not the client.
 
-A change to the project is its owner's to decide, whoever the default route
-passes through: `propose_config` and `propose_pack` send their request with
-`to = "owner"`, so a project whose agents have them — the system team's —
-declares the `owner` route, as the default preset and the development
-projects do. Without it the proposal is refused as an unknown route, naming
-the routes there are; there is no fallback to the default route. In the
-agency, whose default route passes the sales generalist, the system team's
-proposals reach the person directly instead of being reworded on the way.
-So does the harness's retry/cancel request for a root work its agent
-stopped on past `max_retries`, in a project with the `owner` route; in one
-without, it follows the default route.
+A change to the project, a root work stopped past `max_retries` and a
+`reopen` past `max_reopens` are the project's to decide, whoever the default
+route passes through. The core names no route for them: the project declares
+`[policy] harness_route = "<name of a request_routes rule>"` and
+`propose_config`, `propose_pack` and the harness send those requests along
+it. The key is optional and must name a declared rule; without it they
+follow the default route, as any request that names none. A project whose
+agents hold the proposal tools, such as the system team's, usually declares a
+route to its owners and names it there, as the default preset does with
+`harness_route = "owner"`. In the agency, whose default route passes the
+front desk, the system team's proposals then reach the person directly
+instead of being reworded on the way.
+
+### Client and owner
+
+The conversation's person is the **client**; the project's operator is its
+**owner**. They are different roles, and a route says which it reaches:
+
+- `origin` is the client: whoever opened the conversation.
+- `owners` is the humans whose project role grants the capability
+  `project.own`. Roles are declared in `[access.roles.<name>]`; the
+  capability is accepted only in a role with `scope = "project"`. The
+  destination resolves to the owner added to the project first (membership
+  order, which a role change keeps), skipping the requester and the
+  participants already in the linked origins.
+- A project with no owner, or with no `[access]`, has no `owners`
+  destination. The route moves to its next destination, and with none left
+  the action refuses with `no_route`, as for any destination that does not
+  resolve. A route that must never reach the client lists `owners` alone.
+  One that serves a single local user lists `["owners", "origin"]`.
+- A human answers a request only as its arbiter: the principal's issuer and
+  subject must equal the arbiter's, else the reply is refused with
+  `not_arbiter`, as for an agent. The client cannot answer an owner's
+  request, and an owner not chosen cannot answer another's. Answers
+  returned through named parts of an upstream request are checked on that
+  upstream request.
+- A role granting `project.own` must also grant `conversation.reply`, or the
+  config is refused at load with `{:access, :owner_cannot_reply, role}`: an
+  owner who could not answer would leave its requests pending. Owners of
+  `propose_config` and `propose_pack` requests also need
+  `project.manage_config` for the apply option to take effect.
+- When the harness stops a root work past `max_retries` and the
+  `harness_route` resolves to nobody, no request is made: an inbox note, once, says no
+  arbiter is left on its route.
+- A person holding both roles is both: the same identity arbitrates
+  either route, and `route` tells which kind of request it is.
+
+A project that composes a hub between the teams and the owner sends the
+owner route through it with a rule on `from`: `{ name = "owner", via =
+[{ kind = "agent", agent = "project-manager" }, "owners"] }` takes every
+agent's owner-route request to the hub first, which decides what is its own
+or escalates with `to = "owner"`; a rule before it, with `from` naming an
+agent that answers to no hub, keeps that agent's requests going to `owners`.
+The requester is skipped within a list, so the hub's own request goes on to
+`owners`. The [agency](../packs/sales-desk/README.md#what-the-project-configures)
+is composed that way.
+
+An escalation matches the rules' `workflow` and `stage` against the work its
+origins were requested in, when they all come from one workflow and stage,
+and not against the escalator's own work. A release's `promote` request that
+an intermediary escalates without `to` therefore still takes the
+`{ workflow = "release", stage = "promote" }` rule, whose `via` can end at
+`owners` so that it never reaches the client. The requester is skipped, so
+the intermediary listed first passes it on to the next destination.
+
+An escalation that gives no `to` also stays on the named route its origins
+all travelled on, and is matched against the rules of that name. An
+owner-route request that the hub escalates without `to` therefore goes on to
+`owners`, never along the default route to the client. An explicit `to`
+wins; origins on different routes, or on the default route, leave the
+escalation on the default route. The automatic escalation of an unanswered
+request is such an escalation, so it moves along the request's own route.
+
+Every request records `route` and `destination`, and its view, snapshots and
+events expose them. A client reads `destination = "owners"` as a decision of the
+project's owners (a sale's approval, a build past `max_reopens`, a project
+change, a permission) and `destination = "origin"` as a question for the
+client; the route's name decides nothing. An escalation carries the route it was resolved on: the
+upstream request of an escalation on `to = "owner"` has `route = "owner"`, when the project declares that name;
+one that omits `to` carries the route of its origins, or the default route (`route = null`) when they have none in common.
 
 ## Forms and effects
 
@@ -96,9 +170,9 @@ without, it follows the default route.
 | `break`, `reopen`, `retire` | Stop failed work, return it for correction, or retire it when the parent no longer wants it. A resumable question uses a request rather than a break/reopen round trip. |
 | `wait` | A root work that only the person can move on later — a decision they will think over, something they will send — waits for their next message rather than asking again: their answer stays the answer, and the message reopens the work. A work below another cannot wait on a message. |
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
-| `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
-| Harness retry/cancel | A routed request after root retry exhaustion, on the logical `owner` route where the project configures it, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
-| Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. When no destination is left on the route (every one excluded, see below), nothing is escalated: the request stays pending and an inbox note, once, names the question and says no arbiter is left on its route, for a person to answer. An origin never goes again to an agent that answered it with text without escalating it (see below). |
+| `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, on the project's `harness_route`, else the default route. A text reply records advice without applying the proposal. |
+| Harness retry/cancel | A routed request after root retry exhaustion, on the project's `harness_route` where it declares one, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
+| Unanswered receiver | Not when the run opened child works (`delegate`, `work`) that are still open or waiting: the receiver waits on them to answer, and the request stays pending with it. When the last of those children closes, the receiver's work is reopened even if other children of it (the asker's work) are still open, and its run sees the results and the request; if that run ends without answering, this rule applies again. Otherwise, linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. When no destination is left on the route (every one excluded, see below), nothing is escalated: the request stays pending and an inbox note, once, names the question and says no arbiter is left on its route, for a person to answer. An origin never goes again to an agent that answered it with text without escalating it (see below). |
 
 An agent's run opened by the answer to its own question — a reply to its
 request, or an upstream answer resuming an intermediary — does not put that
@@ -163,7 +237,7 @@ an intermediary cannot turn an upstream text answer into that grant. Already
 answered origins cannot execute an effect again through later distribution.
 
 For example, two design works ask their lead for logo and tone. The lead
-merges them as logo/tone parts and escalates to its parent. The generalist can
+merges them as logo/tone parts and escalates to its parent. The front desk can
 ask once and return the combined text for distribution, or reply with named
 parts to close each origin directly. Each worker receives its own answer.
 Later arrivals remain pending for a later turn; no batching timer runs in the
@@ -173,7 +247,10 @@ harness.
 
 The existing `inbox` view with `relation = received` is anchored to the current
 run. At depth 0 it returns one group for that run's conversation, containing
-all pending requests addressed to that agent there. Client means conversation;
+all pending requests addressed to that agent there. At any depth it also
+returns the pending requests addressed to that agent whose run opens on the
+run's work or a work below it, other than the request that opened the run, so a run woken to answer a request an earlier
+run received sees it and can `reply`. Client means conversation;
 matching an agent name alone never exposes another conversation. Closed
 requests and escalated origins are not independent actionable entries.
 
@@ -227,4 +304,4 @@ hidden/cross-conversation resources and domain refusals retain explicit 400,
 | Approval text without an option | It records content and resumes the requester; it grants nothing and records no named decision. |
 | Partial upstream answer | Only supplied valid parts close their origins. Missing parts return to pending for distribution. |
 | Late or concurrent answer | Completed/cancelled work stays so; serialized transitions prevent duplicate effects. |
-| Several clients at one generalist | Each run sees its own conversation group. Cross-client merging is refused. |
+| Several clients at one front desk | Each run sees its own conversation group. Cross-client merging is refused. |

@@ -47,6 +47,14 @@ defmodule Omunculus.Errors do
   def format({:policy, {:invalid, :request_routes}}),
     do: "omunculus.toml [policy] request_routes must be a nonempty list of valid routes"
 
+  def format({:policy, {:invalid, :harness_route}}) do
+    "omunculus.toml [policy] harness_route must name a rule of [[policy.request_routes]]"
+  end
+
+  def format({:policy, {:invalid, :default_agent}}) do
+    "omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only"
+  end
+
   def format({:policy, {:invalid, :max_retries}}) do
     "omunculus.toml [policy] max_retries is required, a non-negative integer"
   end
@@ -124,6 +132,11 @@ defmodule Omunculus.Errors do
 
   def format({:prompt, {:no_agent_at_depth, depth}}), do: "no agent has depth #{depth}"
   def format({:prompt, {:not_at_depth_0, name}}), do: "#{name} is not an agent of depth 0"
+
+  def format({:access, :owner_cannot_reply, role}),
+    do:
+      "omunculus.toml [access.roles.#{role}] grants project.own, so it must grant conversation.reply too"
+
   def format(:access_disabled), do: "omunculus.toml has no [access] table"
 
   def format({adapter, {:http, status, _body}} = reason)

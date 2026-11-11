@@ -1,6 +1,6 @@
 # The agency: the sales desk answering the client, with the dream team
-# (packs/dream-team) and the design team (packs/design-team) one depth
-# below the seller, imported by the pack tool in that order, as the design
+# (packs/dream-team) and the design team (packs/design-team) beside the
+# seller, at its depth, imported by the pack tool in that order, as the design
 # team requires the dream team's deploy_preview. What the packs leave to the
 # project is as in dream-team.toml; the workflows below compose the two
 # teams.
@@ -8,7 +8,7 @@
 packs = [{ name = "sales-desk" }, { name = "dream-team", depth = 2 }, { name = "design-team", depth = 2 }]
 
 [execution]
-environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "OMUNCULUS_DEPLOY_PROVIDER"]
 timeout_ms = 300000
 
 # The seller attaches the proposal it gives the client.
@@ -43,12 +43,25 @@ steps = [
 [policy.depth.3]
 workflows = ["design", "page", "release"]
 
-# The release's request to grant promote is the client's approval of the
-# built site: it goes to the seller, who presents it to the client through
-# the generalist, rather than through the builders' administrator.
+# The owner decides the sale, a discount beyond the seller's limit and what
+# goes to production. The eval has no owner member (its direct CLI runs
+# without [access], and its one person is both client and owner), so the
+# owner route ends at `origin`: only here, a real project lists `owners`
+# alone (packs/sales-desk/README.md). The teams' owner-route requests go to
+# the project manager first, which decides what is its own and escalates the
+# rest; the seller's go straight to the owner. The seller asks the project
+# manager, its parent, with `to = "pm"`, and the client through the front
+# desk. The release's request to grant promote goes to the project manager,
+# who has the client accept the built site and then asks the owner. The
+# default route passes the project manager before the front desk.
 [policy]
+default_agent = "front-desk"
+harness_route = "owner"
 request_routes = [
-  { name = "owner", via = ["origin"] },
-  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }, "origin"] },
-  { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] },
+  { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners", "origin"] },
+  { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners", "origin"] },
+  { name = "pm", via = ["parent"] },
+  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, "owners", "origin"] },
+  { from = { kind = "agent", agent = "seller" }, via = [{ kind = "agent", agent = "front-desk" }, "origin"] },
+  { via = ["parent", { kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, "origin"] },
 ]

@@ -34,6 +34,7 @@ defmodule Omunculus.Harness do
   """
 
   alias Omunculus.{
+    Artifacts,
     Ceiling,
     Changes,
     Config,
@@ -252,9 +253,44 @@ defmodule Omunculus.Harness do
       "agents" => fn spec -> agents_view(project, config, work, catalog, workspace, spec) end,
       "paths" => fn _spec -> path_permissions(project, run, workspace) end,
       "grant_scopes" => fn _spec -> Requests.scopes() end,
-      "skills" => fn _spec -> skills_view(project, run, catalog) end
+      "skills" => fn _spec -> skills_view(project, run, catalog) end,
+      "artifacts" => fn spec -> artifacts_view(project, run, config, spec) end
     })
   end
+
+  # The artifact versions of the run's conversation, with the data of the
+  # JSON ones when the view asks for it.
+  defp artifacts_view(_project, nil, _config, _spec), do: []
+  defp artifacts_view(_project, %{conversation_id: nil}, _config, _spec), do: []
+
+  defp artifacts_view(project, run, config, spec) do
+    {:ok, versions} = Store.artifacts(project.conn, run.conversation_id)
+
+    versions =
+      if spec.prefix,
+        do: Enum.filter(versions, &String.starts_with?(&1["name"], spec.prefix)),
+        else: versions
+
+    if "data" in spec.include do
+      latest = versions |> Enum.map(&{&1["name"], &1["version"]}) |> Map.new()
+      Enum.map(versions, &with_data(&1, latest, config.store))
+    else
+      versions
+    end
+  end
+
+  # Only the latest version of a name is read: it is the one a tool builds on.
+  defp with_data(%{"media_type" => "application/json"} = version, latest, store) do
+    with true <- latest[version["name"]] == version["version"],
+         {:ok, content} <- Artifacts.read(store, version),
+         {:ok, data} <- Jason.decode(content) do
+      Map.put(version, "data", data)
+    else
+      _unreadable -> version
+    end
+  end
+
+  defp with_data(version, _latest, _store), do: version
 
   # The skills the run has, among the names its mounted ceiling has.
   defp skills_view(project, run, catalog) do

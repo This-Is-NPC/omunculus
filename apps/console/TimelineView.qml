@@ -2,31 +2,32 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
+import "kit/client/Events.js" as Events
+import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
-// TimelineView is one thread of the conversation: what you and its agents
-// said, what each run did on a line below its words, and, in the main thread,
-// each request where it was made, live or read back.
+// TimelineView is one thread of the conversation. The main thread is the
+// dialogue: what you and the agent you write to said, each work handed down
+// once, as a WorkCard that opens the tree, and what you did to a request as
+// one sentence (ResolvedLine); requests waiting on you are the pending queue's,
+// and what each run did is the tree's. A work's own thread also holds what
+// the agents said among themselves (TeamRow), a work handed down as a
+// SubWorkBlock that unfolds into its own thread nested here, and the notes its
+// agents left (TeamNote).
 // Like a chat, it sits on the bottom and grows upwards, and it follows new
 // entries unless you scrolled up to read; then a pill counts what arrived out
 // of view and leads back to it. A turn streaming taller than the view is held
 // by its top, so its first words stay readable. From the keyboard, Tab reaches
 // it on the newest entry: ↑/↓ and PgUp/PgDn move, Home goes to the first and
 // End back to the newest, and Tab moves into the tools of the entry it is on.
-// A request is a card only while it waits on you; your answer reads as a
-// bubble, and what the team asked among itself is an exchange (TeamRow). A
-// note a handed-down work's agent left on its work is a card of its own
-// where it was left (TeamNote). A work handed down is a SubWorkBlock where it
-// was, which unfolds into its own thread nested here; each run of the works
-// below that ended is a line of the log in the main thread (LogLine), "designer
-// worked 4 min · 12 steps". A question for you that arrives while the view
-// follows is held by its top. While an agent works for the thread, a live line
-// at its end says who, from the agent you wrote to down to the one at work,
-// what that one does and for how long, unless that agent's own turn streams
-// here and says it. Its implicit height is its entries', for a thread nested
-// in a block, which says itself that its agents work.
+// While an agent works for the thread, a live line at its end says who, from
+// the agent you wrote to down to the one at work, what that one does, in a
+// plain verb, and for how long, unless that agent's own turn streams here and
+// says it. Its
+// implicit height is its entries', for a thread nested in a block, which says
+// itself that its agents work.
 Item {
   id: root
 
@@ -39,42 +40,39 @@ Item {
   // Whether requests show where they were made; beside the map they show on
   // the node that asked instead.
   property bool requestsShown: true
+  // Whether this is the main thread, the dialogue.
+  readonly property bool dialogue: thread === ""
   // Counts changes to the entries, so each line knows again whether it
   // continues the turn before it.
   property int revision: 0
   // Counts every change to the entries, a turn streaming included.
   property int changes: 0
 
-  // Entries that arrived while the view was not following, counted once each.
-  property int unseen: 0
-  property var seen: ({})
-  // The turns streaming, by key, so the one that finishes counts as new.
-  property var streams: ({})
+  // How many entries lie below the view: the ones the NEW pill counts. An
+  // entry that draws nothing, an empty turn or a request the queue holds, is
+  // not news, and a thread that fits has none.
+  readonly property int below: {
+    if (changes < 0 || timeline.contentHeight < 0 || timeline.contentHeight + timeline.edge <= timeline.height)
+      return 0
+    const last = timeline.indexAt(1, timeline.contentY + timeline.height - 2)
+    let count = 0
+    for (let row = last < 0 ? timeline.count : last + 1; row < timeline.count; row++) {
+      const entry = timeline.itemAtIndex(row)
+      if (!entry || entry.drawn)
+        count++
+    }
+    return count
+  }
   // The streaming turn whose top the view holds, and the one you jumped to
   // the end of, which it does not hold.
   property string held: ""
   property string released: ""
-  // Whether `held` is a question for you rather than a streaming turn.
-  property bool holdingCard: false
-  // The question whose card the keyboard was in when it was answered.
-  property string typing: ""
-  // The answer to a question the keyboard was in has come: focus belongs elsewhere.
-  signal answered()
   // A work is wanted as a transcript of its own.
   signal openWork(string work)
   // The log of a work is wanted ("" for the conversation's own).
   signal openLog(string work)
   // The requests no other request gathers; the rest are its climb.
   readonly property var contained: Requests.contained(Omunculus.requests)
-
-  // Counts a new entry when the view is away from the end; speech has no key.
-  function arrived(key) {
-    if (timeline.following || (key !== "" && root.seen[key]))
-      return
-    if (key !== "")
-      root.seen[key] = true
-    root.unseen++
-  }
 
   function rowOf(key) {
     for (let row = 0; row < model.count; row++) {
@@ -106,108 +104,26 @@ Item {
       reveal(model.get(newestNote).key, true)
   }
 
-  // The card of the newest question for you, once its entry exists.
-  function cardItem() {
-    const row = newestCard !== "" ? rowOf(newestCard) : -1
-    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    return entry ? entry.content : null
-  }
-
-  // Brings the newest question into view and puts the keyboard in its words.
-  // Hidden, it waits for the view to show (the page calls it again then); a
-  // card whose row or form is not built yet is tried again every 100 ms, ten
-  // times at most, until the keyboard is inside it and it is in view, so
-  // a card placed while rows were still unmeasured is placed again.
-  function focusCard() {
-    if (newestCard === "" || !visible)
-      return
-    focusTries = 10
-    focusRetry.restart()
-    reveal(newestCard, true)
-    tryFocusCard()
-  }
-  property int focusTries: 0
-  function tryFocusCard() {
-    if (!cardShown())
-      reveal(newestCard, true)
-    const card = cardItem()
-    if (card)
-      card.focusWords()
-    if (cardFocused() && cardShown() || --focusTries <= 0)
-      focusRetry.stop()
-  }
-  // Whether the newest question's entry shows whole, or from its top when it is
-  // taller than the view.
-  function cardShown() {
-    const row = newestCard !== "" ? rowOf(newestCard) : -1
-    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    return !!entry && entry.y >= timeline.contentY - 1 && entry.y + Math.min(entry.height, timeline.height) <= timeline.contentY + timeline.height + 1
-  }
-  Timer {
-    id: focusRetry
-    interval: 100
-    repeat: true
-    onTriggered: root.tryFocusCard()
-  }
-
-  // Decides the request of `key` with `option`, as its card's own options do,
-  // so the card shows what was sent while it goes.
-  function decide(key, option, path) {
-    reveal(key)
-    const row = rowOf(key)
-    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    if (entry && entry.content)
-      (entry.content as RequestDecision).decide(option, (entry.content as RequestDecision).note, path)
-  }
-
-  // Whether the options of the newest decision waiting on you are in view,
-  // so the quick chips need not offer them again.
-  readonly property bool decidingShown: {
-    timeline.contentY; timeline.height; timeline.contentHeight; revision
-    const row = Omunculus.deciding ? rowOf(Omunculus.deciding.id) : -1
-    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    const options = entry && entry.content ? entry.content.choicesRow : null
-    if (!options || !options.visible)
-      return false
-    const top = options.mapToItem(timeline.contentItem, 0, 0).y
-    return top >= timeline.contentY && top + options.height <= timeline.contentY + timeline.height
-  }
-
-  // Whether the keyboard is inside the card of a question.
-  function cardFocused() {
-    const card = cardItem()
-    return !!card && Focus.within(Window.activeFocusItem, card)
-  }
-
-  // How the entry at `row` shows: "card" for a request waiting on you,
-  // "answer" for one you answered, "team" for the rest, "none" for one
-  // another gathers; "turn", "work", "note", "worked" and "speech" for the
-  // rest of the thread.
+  // How the entry at `row` shows: "turn", "note" and "speech" for what is
+  // said; "card" for a work handed down in the dialogue, "work" for one in a
+  // work's thread; "answer" for a request you answered and "team" for the
+  // agents' own; "none" for a request waiting on you, which the queue holds,
+  // or one another gathers.
   function roleAt(row) {
     const entry = model.get(row)
     if (!entry)
       return "none"
+    if (entry.kind === "work")
+      return dialogue ? "card" : "work"
     if (entry.kind !== "request")
-      return ["turn", "work", "note", "worked"].includes(entry.kind) ? entry.kind : "speech"
+      return ["turn", "note"].includes(entry.kind) ? entry.kind : "speech"
     const request = Omunculus.requests.find(item => item.id === entry.key)
-    if (!request || contained.has(entry.key))
+    if (!requestsShown || !request || contained.has(entry.key) || (Requests.pending(request) && Requests.human(request.arbiter)))
       return "none"
-    if (Requests.pending(request) && Requests.human(request.arbiter))
-      return "card"
     const answer = Omunculus.replies[entry.key]
-    return answer && answer.who === "you" ? "answer" : "team"
+    return answer && answer.who === "you" ? "answer" : dialogue ? "none" : "team"
   }
 
-  // The newest question waiting on you, by key; "" when none.
-  readonly property string newestCard: {
-    if (revision < 0)
-      return ""
-    for (let row = model.count - 1; row >= 0; row--) {
-      if (roleAt(row) === "card")
-        return model.get(row).key
-    }
-    return ""
-  }
   // The row of the newest note a work's agent left, or -1.
   readonly property int newestNote: {
     if (revision < 0)
@@ -220,27 +136,11 @@ Item {
   }
   // Whether the conversation's work is done: its closing note shows whole.
   readonly property bool finished: !!Omunculus.progress && Omunculus.progress.state === "done"
-  // A card that arrives while the keyboard is free is offered to the page.
-  signal cardArrived
-  onNewestCardChanged: {
-    if (newestCard !== "" && !inEntry)
-      cardArrived()
-    if (newestCard !== "" && timeline.following) {
-      held = newestCard
-      holdingCard = true
-    } else if (newestCard === "" && holdingCard) {
-      held = ""
-      holdingCard = false
-      Qt.callLater(timeline.follow)
-    }
-  }
-
   // Goes to the end and follows it again, past a turn still streaming.
   function jump() {
     const newest = timeline.count > 0 ? timeline.model.get(timeline.count - 1) : null
     root.released = newest && newest.streaming ? newest.key : ""
     root.held = ""
-    root.holdingCard = false
     timeline.following = true
     if (timeline.currentIndex >= 0)
       timeline.currentIndex = timeline.count - 1
@@ -255,27 +155,10 @@ Item {
 
   Connections {
     target: root.model
-    // A turn growing as it streams changes no one's turn, but it is new again
-    // when it finishes.
-    function onDataChanged(topLeft) {
-      root.changes++
-      const entry = root.model.get(topLeft.row)
-      if (entry.streaming)
-        root.streams[entry.key] = true
-      else if (root.streams[entry.key]) {
-        delete root.streams[entry.key]
-        root.arrived(entry.key)
-      }
-    }
-    function onRowsInserted(parent, first, last) {
+    function onDataChanged() { root.changes++ }
+    function onRowsInserted() {
       root.revision++
       root.changes++
-      for (let row = first; row <= last; row++) {
-        const entry = root.model.get(row)
-        if (entry.streaming)
-          root.streams[entry.key] = true
-        root.arrived(entry.key)
-      }
     }
     function onRowsRemoved() {
       root.revision++
@@ -285,9 +168,11 @@ Item {
 
   // Who works for this thread, as {chain, agent, doing, since, round}
   // (Progress.live); null when no one does, in a thread nested in a block, or
-  // while that agent's own turn streams here and shows it.
+  // while that agent's own turn streams here and shows it. In the dialogue it
+  // is whoever works, down the team, at every width.
   readonly property var working: {
-    const live = nesting > 0 ? null : Progress.live(Omunculus.progress, thread, Omunculus.agent || Omunculus.lastAgent)
+    const front = Omunculus.agent || Omunculus.lastAgent
+    const live = nesting > 0 ? null : Progress.live(Omunculus.progress, thread, front)
     if (!live || changes < 0)
       return null
     for (let row = model.count - 1; row >= 0; row--) {
@@ -303,12 +188,8 @@ Item {
   onModelChanged: {
     changes++
     timeline.following = true
-    unseen = 0
-    seen = {}
-    streams = {}
     held = ""
     released = ""
-    holdingCard = false
   }
 
   // The keyboard is inside an entry, in a form being written, not on the list.
@@ -332,18 +213,17 @@ Item {
       return false
     const previous = timeline.model.get(index - 1)
     const current = timeline.model.get(index)
-    const apart = ["request", "work", "note", "worked"]
+    const apart = ["request", "work", "note"]
     return !apart.includes(previous.kind) && !apart.includes(current.kind)
       && previous.who === current.who && current.at - previous.at < root.pause
   }
 
-  implicitHeight: timeline.contentHeight + timeline.topMargin + timeline.bottomMargin
+  implicitHeight: timeline.contentHeight + timeline.edge
 
   ListView {
     id: timeline
 
     property bool following: true
-    onFollowingChanged: if (following) { root.unseen = 0; root.seen = {} }
 
     // Keeps the newest entry in view: its end, or the top of a turn streaming
     // taller than the view.
@@ -357,23 +237,37 @@ Item {
       const heldRow = root.held !== "" ? root.rowOf(root.held) : -1
       // A held entry that fits shows whole, its bottom with it.
       const held = heldRow >= 0 ? itemAtIndex(heldRow) : null
-      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin))
+      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin)) {
         positionViewAtIndex(heldRow, ListView.Beginning)
-      else
+        // The entry before it shows whole above it, never cut by the view.
+        const before = heldRow > 0 ? itemAtIndex(heldRow - 1) : null
+        if (before)
+          contentY = Math.max(originY - topMargin, contentY - before.height)
+      } else
         positionViewAtEnd()
     }
 
-    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-    height: Math.min(root.height, contentHeight + topMargin + bottomMargin)
+    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: newerBand }
+    height: Math.min(root.height - earlierBand - newerBand, contentHeight + edge)
     clip: true
     // An entry's outline never lies on the clip's edge, where a fractional scale
-    // would cut it.
-    topMargin: 1
-    bottomMargin: 1
+    // would cut it. Once the thread outgrows the view, each end has a band for
+    // a pill, so a pill never covers an entry; the band does not follow the
+    // pill, whose count follows the view.
+    readonly property bool scrolls: contentHeight + edge > Math.min(root.height, Window.height / 2)
+    // The two pixels of an entry's outline, one at each end.
+    readonly property int edge: 2
+    // The bands above and below the view hold the pills, so none covers a line.
+    readonly property real earlierBand: scrolls ? earlier.height + Theme.space.gap + Theme.space.gap : 0
+    readonly property real newerBand: scrolls ? newer.anchors.bottomMargin + newer.height + Theme.space.gap : 0
+    topMargin: edge / 2
+    bottomMargin: edge / 2
     spacing: 0
     model: root.model
     footer: workingRow
-    onMovementEnded: following = atYEnd
+    // Only the person's own scrolling ends it, and the end is within a row:
+    // the live row under the entries changes height as work goes on.
+    onMovementEnded: following = contentHeight - (contentY + height) < Theme.size.control
     onContentHeightChanged: if (following) Qt.callLater(follow)
     onCountChanged: if (following) Qt.callLater(follow)
 
@@ -385,10 +279,10 @@ Item {
     // an entry also makes the list's activeFocus true, and making an entry
     // current would take the keyboard from that field.
     onActiveFocusChanged: if (activeFocus && Window.activeFocusItem === timeline && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
-    onCurrentIndexChanged: if (!root.inEntry) following = currentIndex === count - 1
+    onCurrentIndexChanged: if (!root.inEntry && currentIndex >= 0) following = currentIndex === count - 1
     // Entries beyond the view are kept for two views each way, so a form
     // scrolled away from while written in is not rebuilt.
-    cacheBuffer: root.height * 2
+    cacheBuffer: Window.height * 2
     Keys.onPressed: event => {
       const page = { [Qt.Key_PageDown]: 5, [Qt.Key_PageUp]: -5 }[event.key]
       if (page !== undefined)
@@ -433,7 +327,7 @@ Item {
       // Entries are set apart by a margin above each one, so one that draws
       // nothing leaves no gap.
       readonly property int gap: Theme.space.line
-      readonly property string role: root.revision >= 0 && kind === "request" && root.requestsShown ? root.roleAt(index) : kind
+      readonly property string role: root.revision >= 0 ? root.roleAt(index) : kind
       readonly property alias content: slot.item
       readonly property bool drawn: slot.status === Loader.Ready && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
@@ -449,7 +343,7 @@ Item {
         id: slot
         y: entry.gap
         width: entry.width
-        sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, work: handed, note: teamNote, worked: worked, speech: speech })[entry.role] || null
+        sourceComponent: ({ card: workCard, answer: resolved, team: team, turn: turn, work: handed, note: teamNote, speech: speech })[entry.role] || null
 
         FocusRing { shown: entry.selected; anchors.margins: 0 }
       }
@@ -488,38 +382,30 @@ Item {
       }
 
       Component {
-        id: request
-        RequestDecision {
+        id: workCard
+        WorkCard {
           width: entry.width
-          key: entry.key
+          work: entry.key
           stamp: entry.stamp
-          onSent: keyboard => root.typing = keyboard ? entry.key : ""
+          onOpened: work => root.openWork(work)
         }
       }
 
       Component {
-        id: answer
-        AnswerBubble {
+        id: resolved
+        ResolvedLine {
           id: said
-          // The keyboard was in the card that this answer replaces.
-          Component.onCompleted: if (root.typing === entry.key) {
-            root.typing = ""
-            timeline.currentIndex = -1
-            root.jump()
-            root.answered()
-          }
           readonly property var asked: Omunculus.requests.find(item => item.id === entry.key) || null
           readonly property var reply: Omunculus.replies[entry.key] || null
-          width: entry.width
-          asker: asked ? Requests.asker(asked) : ""
-          route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
-          question: asked ? Requests.question(asked, Omunculus.noted[entry.key]) : ""
-          readonly property var wanted: asked ? Requests.granted(asked) : null
           readonly property var job: asked ? Omunculus.work(asked.work_id || "") : null
-          readonly property var place: Omunculus.workspaceOf(job ? job.workspace || "" : "")
-          unlock: Requests.unlocks(wanted, place.root)
-          choice: reply ? Requests.chose(reply.option, wanted !== null, asked ? { who: Requests.label(asked.requester), stage: job && job.stage ? job.stage : "", folder: place.name || "" } : undefined) : ""
-          body: reply && reply.body !== reply.option ? reply.body : ""
+          readonly property var line: asked && reply ? Pending.resolved(asked, reply, {
+            flat: Omunculus.progress ? Omunculus.progress.flat : [], text: Events.readable(Requests.question(asked, Omunculus.noted[entry.key])),
+            folder: Omunculus.workspaceOf(job ? job.workspace || "" : "").root || ""
+          }) : null
+          width: entry.width
+          icon: line ? line.icon : ""
+          word: line ? line.word : ""
+          sentence: line ? line.sentence : ""
           stamp: reply && reply.stamp ? reply.stamp : entry.stamp
         }
       }
@@ -557,19 +443,6 @@ Item {
       }
 
       Component {
-        id: worked
-        LogLine {
-          width: entry.width
-          names: [entry.who]
-          text: entry.text
-          failed: entry.text.startsWith("failed")
-          icon: entry.text.startsWith("failed") ? "warning" : "check"
-          tone: entry.text.startsWith("failed") ? Theme.error : Theme.dim
-          stamp: entry.stamp
-        }
-      }
-
-      Component {
         id: turn
         AgentTurn {
           width: entry.width
@@ -578,7 +451,8 @@ Item {
           text: entry.text
           partial: entry.partial
           streaming: entry.streaming
-          steps: entry.steps
+          // The dialogue has the words only: the steps of a run are the tree's.
+          steps: root.dialogue ? "[]" : entry.steps
           files: entry.files
           stamp: entry.stamp
           continued: root.revision >= 0 && root.continues(entry.index)
@@ -613,28 +487,29 @@ Item {
     }
   }
 
-  // Whether the newest question's form ends below the view, where its
-  // actions float on the bottom edge (QuestionForm); the pill goes above them.
-  readonly property bool formFloats: {
-    // Read first, so the view's scrolling and size update it.
-    const shown = timeline.contentY
-    const tall = timeline.height
-    const row = newestCard !== "" ? rowOf(newestCard) : -1
-    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    if (!entry || !entry.content || !entry.content.form)
-      return false
-    const top = entry.y - shown
-    return top < tall && top + entry.height > tall
+  // The entries above the view: an opened conversation lands at its end, and
+  // this says that the history goes on above, and leads to its start.
+  NewPill {
+    id: earlier
+    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Theme.space.gap }
+    above: true
+    word: "EARLIER"
+    tip: "Show the start of the conversation"
+    count: root.revision < 0 || timeline.contentY <= timeline.originY + 4 ? 0 : Math.max(0, timeline.indexAt(1, timeline.contentY + 2))
+    onClicked: {
+      timeline.following = false
+      timeline.positionViewAtBeginning()
+    }
   }
 
   NewPill {
+    id: newer
     anchors {
       horizontalCenter: parent.horizontalCenter
       bottom: parent.bottom
-      // Over a floating form's actions: a row of them, two when narrow.
-      bottomMargin: Theme.space.gap + (root.formFloats ? Theme.size.control + Theme.space.gap + (root.width < Theme.size.measureFrom ? Theme.size.control : 0) : 0)
+      bottomMargin: Theme.space.gap
     }
-    count: root.unseen
+    count: root.below
     onClicked: root.jump()
   }
 

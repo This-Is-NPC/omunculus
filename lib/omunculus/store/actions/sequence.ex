@@ -19,7 +19,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   agent lacks and the parent could grant it on a request; once the child
   went back `[policy] max_reopens` times in a row, since an answer to a
   request of the parent's work last came, the parent opens a request with
-  the `past_limit` reason instead, along its route; `delegate` is refused while a child that broke waits on
+  the `past_limit` reason instead, on the project's `harness_route` where it
+  names one, else along its route; `delegate` is refused while a child that broke waits on
   the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
@@ -39,7 +40,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   broken child gone it may delegate.
   """
 
-  alias Omunculus.{Ceiling, Config}
+  alias Omunculus.{Ceiling, Config, RequestRoutes}
   alias Omunculus.Id
   alias Omunculus.Store.Actions.{Helpers, Requests}
   alias Omunculus.Store.{Events, Query, View}
@@ -161,13 +162,18 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp past_limit?(max_reopens, rounds), do: rounds >= max_reopens
 
   # Past `[policy] max_reopens` the work does not go back once more: the
-  # parent asks along its route instead, with the reason its tool wrote,
-  # and waits on the request, the broken child still waiting on it.
+  # parent asks instead, with the reason its tool wrote, and waits on the
+  # request, the broken child still waiting on it. It is the project's
+  # decision, so it takes the project's `harness_route`, else the default route.
   defp ask_instead(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:reopen, body, "past_limit"),
-         {:ok, event} <-
-           Requests.request(conn, %{"reason" => body["past_limit"], "options" => %{}}, ctx),
+         {:ok, event} <- Requests.request(conn, ask(body["past_limit"], ctx.config), ctx),
          do: {:ok, [event]}
+  end
+
+  defp ask(reason, config) do
+    ask = %{"reason" => reason, "options" => %{}}
+    RequestRoutes.put_harness_route(ask, config)
   end
 
   # What the parent gives with the reopen: names the agent lacks on the work
@@ -401,13 +407,36 @@ defmodule Omunculus.Store.Actions.Sequence do
          ) do
       {:ok, %{open: 1, held: held, root: root}} ->
         with :ok <- no_broken_child(:end, conn, ctx.work_id),
-             do: if(held == 0, do: {:error, {:end, hanging(root)}}, else: :ok)
+             do: park_or_refuse(conn, ctx, held, root)
 
       {:ok, _settled} ->
         :ok
 
       {:error, _reason} = error ->
         error
+    end
+  end
+
+  # A work that ends open with a child still open or waiting is taken up
+  # when that child hands it back, so it parks on its children as if the run
+  # had delegated. A pending request keeps its own way back.
+  defp park_or_refuse(conn, ctx, held, root) do
+    with {:ok, %{children: children, asked: asked}} <-
+           Query.one(
+             conn,
+             """
+             SELECT (SELECT COUNT(*) FROM works
+                     WHERE parent_id = ?1 AND (state = 'open' OR (state = 'waiting' AND waiting IS NOT NULL))) AS children,
+                    (SELECT COUNT(*) FROM requests
+                     WHERE work_id = ?1 AND status IN ('pending', 'escalated')) AS asked
+             """,
+             [ctx.work_id]
+           ) do
+      cond do
+        children > 0 and asked == 0 -> wait_on_children(conn, ctx, ctx.work_id)
+        held == 0 -> {:error, {:end, hanging(root)}}
+        true -> :ok
+      end
     end
   end
 
@@ -492,12 +521,14 @@ defmodule Omunculus.Store.Actions.Sequence do
   end
 
   # A child that closes or is cancelled wakes its waiting parent once no
-  # sibling is left undone; a child that breaks wakes it at once.
+  # sibling is left undone, or once the last child a finished run of the
+  # parent opened to answer its pending request is closed; a child that
+  # breaks wakes it at once.
   defp reopen_waiting_parent(_conn, %{parent_id: nil}, _when_to), do: {:ok, nil}
 
-  defp reopen_waiting_parent(conn, %{parent_id: parent_id}, when_to) do
+  defp reopen_waiting_parent(conn, %{parent_id: parent_id} = child, when_to) do
     with {:ok, parent} <- Helpers.fetch_work(conn, parent_id),
-         {:ok, wake?} <- wake_parent?(conn, parent, when_to) do
+         {:ok, wake?} <- wake_parent?(conn, parent, when_to, child) do
       if wake? do
         with :ok <- Helpers.reopen_work(conn, parent_id), do: {:ok, parent_id}
       else
@@ -506,20 +537,20 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  defp wake_parent?(_conn, %{waiting: "child"}, :now), do: {:ok, true}
+  defp wake_parent?(_conn, %{waiting: "child"}, :now, _child), do: {:ok, true}
 
-  defp wake_parent?(conn, %{waiting: "child", id: parent_id}, :all_done) do
+  defp wake_parent?(conn, %{waiting: "child", id: parent_id}, :all_done, child) do
     with {:ok, row} <-
            Query.one(
              conn,
              "SELECT COUNT(*) AS undone FROM works WHERE parent_id = ? AND state NOT IN ('done', 'cancelled')",
              [parent_id]
            ) do
-      {:ok, row.undone == 0}
+      if row.undone == 0, do: {:ok, true}, else: Omunculus.Store.Runs.answerable?(conn, child)
     end
   end
 
-  defp wake_parent?(_conn, _parent, _when_to), do: {:ok, false}
+  defp wake_parent?(_conn, _parent, _when_to, _child), do: {:ok, false}
 
   defp apply_break(conn, ctx, body, work) do
     comment_id = Id.new()

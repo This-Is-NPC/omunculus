@@ -6,9 +6,10 @@ import "kit/ui"
 // CostView is what the conversation open has used. A header strip sums it
 // up — the model replies, the tokens read by the model (with those from
 // cache) and written by it — with its cost at the right; then a row per
-// agent, the busiest first, its name in its colour over the same figures,
-// its cost at the top right, "-" for an agent none priced. When no provider reported a price there is no
-// cost anywhere, only one note saying so. Esc leaves.
+// agent, the busiest first, its name in its colour and the same figures in
+// columns, or, under 700 px, on lines of their own, never cut; its cost at the
+// top right, "-" for an agent none priced. When no provider reported a price
+// there is no cost anywhere, only one kicker, NO PRICE REPORTED. Esc leaves.
 FocusScope {
   id: view
 
@@ -21,14 +22,12 @@ FocusScope {
   }).map(name => Object.assign({ name: name }, Omunculus.usage.agents[name]))
   readonly property bool unpriced: all.calls > 0 && all.priced === 0
 
-  // A tally's calls and tokens, as one line.
-  function used(tally) {
-    return [
-      tally.calls + (tally.calls === 1 ? " reply" : " replies"),
-      Omunculus.tokens(tally.input) + " read" + (tally.cached > 0 ? " (" + Omunculus.tokens(tally.cached) + " from cache)" : ""),
-      Omunculus.tokens(tally.output) + " written"
-    ].join(Theme.type.meta.separator)
-  }
+  // A tally's replies, tokens read and tokens written.
+  function replies(tally) { return tally.calls + (tally.calls === 1 ? " reply" : " replies") }
+  function read(tally) { return Omunculus.tokens(tally.input) + " read" + (tally.cached > 0 ? " (" + Omunculus.tokens(tally.cached) + " from cache)" : "") }
+  function written(tally) { return Omunculus.tokens(tally.output) + " written" }
+  // The three as one line.
+  function used(tally) { return [replies(tally), read(tally), written(tally)].join(Theme.type.meta.separator) }
   // A tally's cost, "-" when none of its replies was priced.
   function spent(tally) {
     if (tally.priced === 0)
@@ -75,9 +74,10 @@ FocusScope {
     Label {
       Layout.fillWidth: true
       visible: view.unpriced
-      text: "The provider sends no price."
+      text: "NO PRICE REPORTED"
       color: Theme.dim
-      font.pixelSize: Theme.type.tab.size
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: Theme.type.meta.tracking
       wrapMode: Text.Wrap
     }
 
@@ -90,12 +90,12 @@ FocusScope {
       rows: view.agents
       idOf: entry => entry.name
       columns: view.unpriced
-        ? [{ title: "Agent", weight: 0.25 }, { title: "Used", weight: 0.75 }]
-        : [{ title: "Agent", weight: 0.25 }, { title: "Used", weight: 0.55 }, { title: "Cost", weight: 0.2 }]
-      cells: entry => view.unpriced ? [entry.name, view.used(entry)] : [entry.name, view.used(entry), view.spent(entry)]
-      tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 2 && entry.priced === 0 ? Theme.dim : ""
-      stacked: [[0], [1]]
-      status: view.unpriced ? -1 : 2
+        ? [{ title: "Agent", weight: 0.25 }, { title: "Replies", weight: 0.15 }, { title: "Read", weight: 0.4 }, { title: "Written", weight: 0.2 }]
+        : [{ title: "Agent", weight: 0.2 }, { title: "Replies", weight: 0.12 }, { title: "Read", weight: 0.33 }, { title: "Written", weight: 0.15 }, { title: "Cost", weight: 0.2 }]
+      cells: entry => [entry.name, view.replies(entry), view.read(entry), view.written(entry)].concat(view.unpriced ? [] : [view.spent(entry)])
+      tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 4 && entry.priced === 0 ? Theme.dim : ""
+      stacked: [[0], [1, 2], [3]]
+      status: view.unpriced ? -1 : 4
       emptyText: "Nothing used yet."
       onBackRequested: view.leave()
     }

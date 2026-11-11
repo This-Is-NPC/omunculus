@@ -4,6 +4,37 @@ defmodule Omunculus.Store.ViewTest do
   alias Omunculus.Fixtures
   alias Omunculus.Store.View
 
+  describe "children back since the last run" do
+    test "include one closed after a run opened by a request's answer", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      request_id = Fixtures.insert(conn, :requests, %{work_id: work_id, status: "closed"})
+      event_id = Fixtures.insert(conn, :events, %{type: "start-run", sequence: 1})
+
+      Fixtures.insert(conn, :runs, %{
+        work_id: work_id,
+        event_id: event_id,
+        request_id: request_id,
+        status: "done",
+        finished_at: "2026-01-01T00:00:00Z"
+      })
+
+      back =
+        Fixtures.insert(conn, :works, %{
+          parent_id: work_id,
+          state: "done",
+          updated_at: "2026-01-02T00:00:00Z"
+        })
+
+      Fixtures.insert(conn, :works, %{
+        parent_id: work_id,
+        state: "done",
+        updated_at: "2025-12-31T00:00:00Z"
+      })
+
+      assert {:ok, [%{id: ^back}]} = View.children(conn, work_id, ["done", "cancelled"], true)
+    end
+  end
+
   describe "comments of a work" do
     test "returns only comments of that work, ordered by created_at", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)

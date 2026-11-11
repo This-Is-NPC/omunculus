@@ -75,7 +75,16 @@ defmodule Omunculus.Store.ActionsTest do
     {run, event.request_id}
   end
 
-  defp human_ctx, do: %{@ctx | author: "human", agent: nil}
+  defp human_ctx do
+    principal = Omunculus.Operations.local_principal()
+
+    Map.merge(@ctx, %{
+      author: "human",
+      agent: nil,
+      issuer: principal.issuer,
+      subject: principal.subject
+    })
+  end
 
   defp reply_emit(request_id, option, body) do
     %{
@@ -420,6 +429,108 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert attached ==
                Map.merge(meta, %{"event_id" => event.id, "at" => event.at, "by" => "concierge"})
+    end
+  end
+
+  describe "artifacts" do
+    setup %{conn: conn} do
+      dir = Fixtures.tmp_dir()
+      store = %{@ctx.config.store | attachments: dir, attachment_bytes: 64}
+      conversation_id = Omunculus.Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation_id,
+          created_at: "2026-01-01T00:00:00Z",
+          created_issuer: "local",
+          created_subject: "1000"
+        })
+
+      run_id = Fixtures.insert(conn, :runs, %{conversation_id: conversation_id})
+
+      %{
+        ctx: %{@ctx | config: %{@ctx.config | store: store}, run_id: run_id},
+        conversation_id: conversation_id,
+        store: store
+      }
+    end
+
+    defp artifact(name, kind, content, media_type \\ "text/plain") do
+      %{
+        "type" => "artifact",
+        "body" => %{
+          "name" => name,
+          "kind" => kind,
+          "media_type" => media_type,
+          "content" => content
+        }
+      }
+    end
+
+    test "each put is the next version of its name, kept as written",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id, store: store} do
+      emits = [
+        artifact("brief", "brief", "first"),
+        artifact("brief", "brief", "second"),
+        artifact("handoff", "handoff", "other")
+      ]
+
+      assert {:ok, [_tool_event | events]} = record_tool(conn, emits, ctx)
+      assert Enum.map(events, & &1.type) == ["artifact", "artifact", "artifact"]
+
+      assert {:ok, [v1, v2, other]} = Store.artifacts(conn, conversation_id)
+      assert [v1["version"], v2["version"], other["version"]] == [1, 2, 1]
+      assert %{"kind" => "brief", "bytes" => 5, "by" => "concierge"} = v1
+      assert {:ok, "first"} = Omunculus.Artifacts.read(store, v1)
+      assert {:ok, "second"} = Omunculus.Artifacts.read(store, v2)
+
+      # A later batch continues the numbering.
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "third")], ctx)
+      assert {:ok, [_, _, _, v3]} = Store.artifacts(conn, conversation_id)
+      assert v3["version"] == 3
+    end
+
+    test "a name keeps its kind, and a refused put writes nothing",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)
+
+      assert {:error, {:artifact, {:kind, "brief", "brief"}}} =
+               record_tool(conn, [artifact("brief", "design", "b")], ctx)
+
+      assert {:error, {:artifact, {:invalid, :kind}}} =
+               record_tool(conn, [artifact("x", "Not A Kind", "b")], ctx)
+
+      assert {:error, {:attachment, {:invalid, :name}}} =
+               record_tool(conn, [artifact("a/b", "brief", "b")], ctx)
+
+      assert {:error, {:attachment, {:too_large, 65, 64}}} =
+               record_tool(conn, [artifact("big", "brief", String.duplicate("x", 65))], ctx)
+
+      assert {:ok, [_only]} = Store.artifacts(conn, conversation_id)
+    end
+
+    test "a write built on a replaced version is refused, and a version records the tool that called it",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      first = put_in(artifact("brief", "brief", "a"), ["body", "base"], 0)
+      assert {:ok, _events} = record_tool(conn, [first], ctx)
+      assert {:ok, [%{"tool" => "t"}]} = Store.artifacts(conn, conversation_id)
+
+      stale = put_in(artifact("brief", "brief", "b"), ["body", "base"], 0)
+
+      assert {:error, {:artifact, {:conflict, "brief", 0, 1}}} = record_tool(conn, [stale], ctx)
+
+      fresh = put_in(artifact("brief", "brief", "b"), ["body", "base"], 1)
+      assert {:ok, _events} = record_tool(conn, [fresh], ctx)
+      assert {:ok, [_, %{"version" => 2}]} = Store.artifacts(conn, conversation_id)
+    end
+
+    test "it needs a run, and a version is no attachment",
+         %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
+      assert {:error, {:artifact, :no_run}} =
+               record_tool(conn, [artifact("brief", "brief", "a")], %{ctx | run_id: nil})
+
+      assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)
+      assert {:ok, []} = Store.attachments(conn, conversation_id)
     end
   end
 
@@ -1103,9 +1214,41 @@ defmodule Omunculus.Store.ActionsTest do
                record_tool(conn, [delegate], ctx)
     end
 
+    test "past [policy] max_reopens the decision goes to the harness route",
+         %{conn: conn} do
+      config =
+        Fixtures.config(
+          arbiter_toml() <> "\n[policy]\nmax_reopens = 0\nharness_route = \"owner\"\n"
+        )
+
+      root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      emit = put_in(reopen_emit(child_id), ["body", "past_limit"], "it keeps breaking")
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
+
+      assert {:ok, [_tool_event, %{type: "request"} = asked]} =
+               record_tool(conn, [emit], request_ctx(run, parent_id, config))
+
+      assert {:ok, %{arbiter: @human, status: "pending"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [asked.request_id])
+    end
+
     test "past [policy] max_reopens the parent asks its route instead, until an answer comes",
          %{conn: conn} do
-      config = Fixtures.config(arbiter_toml() <> "\n[policy]\nmax_reopens = 1\n")
+      config =
+        Fixtures.config(
+          arbiter_toml() <>
+            "\n[policy]\nmax_reopens = 1\nrequest_routes = [{ via = [\"parent\", \"origin\"] }]\n"
+        )
+
       root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
 
@@ -1759,6 +1902,50 @@ defmodule Omunculus.Store.ActionsTest do
                Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
     end
 
+    # A run of its own work, as the harness opens one.
+    defp own_run(conn, work_id) do
+      event_id =
+        Fixtures.insert(conn, :events, %{type: "start-run", body: ~s({"own":true}), sequence: 1})
+
+      run_id = Fixtures.insert(conn, :runs, %{work_id: work_id, event_id: event_id})
+      %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+    end
+
+    test "a work left open with a child still open parks on it and wakes when it hands back",
+         %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: work_id,
+          workflow: "delivery",
+          stage: "review",
+          assignee: "worker"
+        })
+
+      ctx = own_run(conn, work_id)
+
+      assert {:ok, [_tool_event, %{type: "end"}]} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], ctx)
+
+      assert {:ok, %{state: "waiting", waiting: "child"}} = Store.view(conn, "work", work_id)
+      assert close_child(conn, child_id) == work_id
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work_id)
+    end
+
+    test "a work left open with no child open and nothing to take it up is refused",
+         %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      Fixtures.insert(conn, :works, %{parent_id: work_id, state: "done"})
+      ctx = own_run(conn, work_id)
+
+      assert {:error, {:end, :root_open}} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], ctx)
+
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work_id)
+    end
+
     test "a run without a work may end", %{conn: conn} do
       run_id = Fixtures.insert(conn, :runs)
 
@@ -1983,6 +2170,39 @@ defmodule Omunculus.Store.ActionsTest do
       body = Jason.decode!(event.body)
       assert body["arbiter"] == Omunculus.Participant.agent("concierge")
       assert body["arbiter_work_id"] == parent_id
+    end
+
+    test "a later run of the arbiter on the work sees the request and answers it", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      config = Fixtures.config(arbiter_toml())
+      asking = Fixtures.open_run(conn, %{agent: "worker", depth: 1, ceiling: @ceiling})
+
+      assert {:ok, [_tool, event]} =
+               record_tool(conn, [request_emit(%{})], request_ctx(asking, work_id, config))
+
+      # A first run received it and ended; a woken run has no request of its own.
+      woken = Fixtures.open_run(conn, %{agent: "concierge", depth: 1, work_id: parent_id})
+      assert woken.request_id == nil
+
+      assert {:ok, [%{requests: [%{id: id}]}]} = Store.received_inbox(conn, woken.id)
+      assert id == event.request_id
+
+      other = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      unrelated = Fixtures.open_run(conn, %{agent: "concierge", depth: 1, work_id: other})
+      assert {:ok, []} = Store.received_inbox(conn, unrelated.id)
+
+      assert {:ok, [_tool, reply]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "reply", "body" => %{"request_id" => id, "body" => "yes"}}],
+                 request_ctx(woken, parent_id, config)
+               )
+
+      assert reply.type == "reply"
+      assert {:ok, %{status: "closed"}} = Store.view(conn, "request", id)
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work_id)
+      assert {:ok, []} = Store.received_inbox(conn, woken.id)
     end
 
     test "a decision follows the default or named logical route", %{conn: conn} do
@@ -2892,6 +3112,96 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert Enum.sort(events, :desc) == [parent_id, nil]
       assert {:ok, %{state: "open"}} = Store.view(conn, "work", parent_id)
+    end
+
+    # The parent waits on S, which asked it; its run opened A1 and A2 to answer.
+    defp answering_children(conn, request_attrs) do
+      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+
+      Fixtures.insert(conn, :works, %{
+        parent_id: parent_id,
+        state: "waiting",
+        waiting: "request",
+        workflow: "delivery",
+        stage: "review",
+        assignee: "worker"
+      })
+
+      request_id =
+        Fixtures.insert(
+          conn,
+          :requests,
+          Map.merge(
+            %{arbiter: Jason.encode!(Omunculus.Participant.agent("concierge"))},
+            request_attrs
+          )
+        )
+
+      run_id =
+        Fixtures.insert(conn, :runs, %{
+          work_id: parent_id,
+          request_id: request_id,
+          status: "done"
+        })
+
+      children =
+        for sequence <- 1..2 do
+          event_id =
+            Fixtures.insert(conn, :events, %{run_id: run_id, type: "delegate", sequence: sequence})
+
+          Fixtures.insert(conn, :works, %{
+            parent_id: parent_id,
+            event_id: event_id,
+            workflow: "delivery",
+            stage: "review",
+            assignee: "worker"
+          })
+        end
+
+      {parent_id, children}
+    end
+
+    defp close_child(conn, child_id) do
+      run_id = Fixtures.insert(conn, :runs)
+      config = Fixtures.config(delivery_toml())
+      ctx = %{@ctx | run_id: run_id, work_id: child_id, config: config}
+      {:ok, [_tool, continue]} = record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+      Jason.decode!(continue.body)["parent_id"]
+    end
+
+    test "wakes on the last child opened to answer a pending request, an open sibling left",
+         %{conn: conn} do
+      {parent_id, [first, second]} = answering_children(conn, %{})
+
+      assert close_child(conn, first) == nil
+      assert {:ok, %{state: "waiting", waiting: "child"}} = Store.view(conn, "work", parent_id)
+      assert close_child(conn, second) == parent_id
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", parent_id)
+    end
+
+    test "does not wake for children opened for no pending request", %{conn: conn} do
+      {parent_id, [first, second]} = answering_children(conn, %{status: "closed"})
+
+      assert close_child(conn, first) == nil
+      assert close_child(conn, second) == nil
+      assert {:ok, %{state: "waiting", waiting: "child"}} = Store.view(conn, "work", parent_id)
+    end
+
+    test "still wakes when every child is closed", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+
+      [first, second] =
+        for _ <- 1..2,
+            do:
+              Fixtures.insert(conn, :works, %{
+                parent_id: parent_id,
+                workflow: "delivery",
+                stage: "review",
+                assignee: "worker"
+              })
+
+      assert close_child(conn, first) == nil
+      assert close_child(conn, second) == parent_id
     end
   end
 end

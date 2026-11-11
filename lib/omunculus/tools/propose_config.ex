@@ -2,7 +2,7 @@ defmodule Omunculus.Tools.ProposeConfig do
   @moduledoc """
   Builtin `propose_config` tool: loads the config `config_path` would make
   once `item` is `value` (`Omunculus.Config.try_item/3`) and, when it loads,
-  emits a request, on the logical route `Omunculus.RequestRoutes.owner/0` names, whose `apply`
+  emits a request, on the project's `[policy] harness_route`, whose `apply`
   option calls `configure` with that change
   at the file's current revision, and whose `deny` calls nothing; its
   reason gives the agent's `reason` and the item as it is and as it would
@@ -24,7 +24,7 @@ defmodule Omunculus.Tools.ProposeConfig do
          [] <- steps(config, item, value),
          {:ok, %{document: document, revision: revision}} <- Config.document(path) do
       Out.ok("", [
-        %{"type" => "request", "body" => request(args, item, value, document, revision)}
+        %{"type" => "request", "body" => request(args, item, value, document, revision, config)}
       ])
     else
       {:error, reason} -> Out.fail("the config would not load: #{inspect(reason)}")
@@ -40,27 +40,29 @@ defmodule Omunculus.Tools.ProposeConfig do
 
   defp steps(_config, _item, _value), do: []
 
-  defp request(args, item, value, document, revision) do
+  defp request(args, item, value, document, revision, config) do
     configure =
       %{"item" => args["item"], "value" => Jason.encode!(value), "revision" => revision}
       |> Args.put_present("from", args)
 
-    %{
-      "to" => RequestRoutes.owner(),
-      "reason" =>
-        Enum.join(
-          [
-            args["reason"],
-            "#{args["item"]} as it is:\n" <> shown(item, get_in(document, Tuple.to_list(item))),
-            "#{args["item"]} as it would be:\n" <> shown(item, value)
-          ],
-          "\n\n"
-        ),
-      "options" => %{
-        "apply" => [%{"name" => "configure", "args" => configure}],
-        "deny" => []
-      }
-    }
+    RequestRoutes.put_harness_route(
+      %{
+        "reason" =>
+          Enum.join(
+            [
+              args["reason"],
+              "#{args["item"]} as it is:\n" <> shown(item, get_in(document, Tuple.to_list(item))),
+              "#{args["item"]} as it would be:\n" <> shown(item, value)
+            ],
+            "\n\n"
+          ),
+        "options" => %{
+          "apply" => [%{"name" => "configure", "args" => configure}],
+          "deny" => []
+        }
+      },
+      config
+    )
   end
 
   defp shown(_item, nil), do: "(none)"

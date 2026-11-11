@@ -15,10 +15,8 @@ defmodule Omunculus.Attachments do
   def put(%{attachments: nil}, _name, _media_type, _content),
     do: {:error, {:attachment, :not_configured}}
 
-  def put(%{attachments: dir, attachment_bytes: limit}, name, media_type, content) do
-    with {:ok, name} <- name(name),
-         :ok <- media_type(media_type),
-         :ok <- within(byte_size(content), limit) do
+  def put(%{attachments: dir} = store, name, media_type, content) do
+    with :ok <- validate(store, name, media_type, byte_size(content)) do
       sha256 = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
       path = Path.join(dir, sha256)
 
@@ -35,6 +33,17 @@ defmodule Omunculus.Attachments do
         {:error, reason} -> {:error, {:attachment, reason}}
       end
     end
+  end
+
+  @doc "Whether a file of that name, media type and size may be kept."
+  @spec validate(store, term, term, non_neg_integer) :: :ok | {:error, {:attachment, term}}
+  def validate(%{attachments: nil}, _name, _media_type, _size),
+    do: {:error, {:attachment, :not_configured}}
+
+  def validate(%{attachment_bytes: limit}, name, media_type, size) do
+    with {:ok, _name} <- name(name),
+         :ok <- media_type(media_type),
+         do: within(size, limit)
   end
 
   @doc "The described attachments, each checked against the file kept for it."

@@ -287,6 +287,36 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/artifacts",
+                :list_artifacts do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, artifacts} <- Project.artifacts(project_id, principal, conversation_id) do
+      reply(conn, 200, %{items: Contract.artifacts(artifacts)})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/artifacts/:name/versions/:version",
+                :get_artifact_version do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, number} <- version_number(version),
+         {:ok, meta, path} <-
+           Project.artifact(project_id, principal, conversation_id, name, number) do
+      conn
+      |> put_resp_content_type(meta["media_type"], nil)
+      |> put_resp_header(
+        "content-disposition",
+        "attachment; filename*=UTF-8''" <> URI.encode(meta["name"], &URI.char_unreserved?/1)
+      )
+      |> send_file(200, path)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :get, "/v1/projects/:project_id/agents/:agent/image", :get_agent_image do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, path} <- Project.agent_image(project_id, principal, agent) do
@@ -695,6 +725,13 @@ defmodule Omunculus.Server.Router do
       else: {:error, :invalid}
   end
 
+  defp version_number(text) do
+    case Integer.parse(text) do
+      {number, ""} when number > 0 -> {:ok, number}
+      _invalid -> {:error, :invalid}
+    end
+  end
+
   defp error_reply(conn, {:error, :unauthorized}), do: reply(conn, 401, %{error: "unauthorized"})
   defp error_reply(conn, {:error, :invalid}), do: reply(conn, 400, %{error: "invalid"})
   defp error_reply(conn, {:error, :invalid_role}), do: reply(conn, 400, %{error: "invalid_role"})
@@ -714,8 +751,17 @@ defmodule Omunculus.Server.Router do
   defp error_reply(conn, {:error, :last_administrator}),
     do: reply(conn, 409, %{error: "last_administrator"})
 
-  defp error_reply(conn, {:error, {action, _reason}}) when action in [:request, :escalate],
-    do: reply(conn, 422, %{error: "request_refused"})
+  # A reply to a request that is no longer pending conflicts with its state.
+  defp error_reply(conn, {:error, {:reply, reason}}) when reason in [:escalated, :closed],
+    do:
+      reply(conn, 409, %{
+        error: "request_not_pending",
+        message: Errors.format({:reply, reason})
+      })
+
+  defp error_reply(conn, {:error, {action, _reason}})
+       when action in [:request, :escalate, :reply, :grant],
+       do: reply(conn, 422, %{error: "request_refused"})
 
   defp error_reply(conn, {:error, {:attachment, reason}}),
     do: reply(conn, 422, %{error: "attachment_refused", message: inspect(reason)})

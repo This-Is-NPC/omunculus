@@ -9,12 +9,12 @@ import "kit/ui"
 // first under NEEDS YOU, the one waiting longest first, then the others under
 // the day each began, newest first as given. Each row, at every width: its
 // title — its first work's, else what was first said in it — with its state
-// at the top right, toned only while something waits for you or agents work
-// in it, saying what waits: questions, a decision, a permission; under it,
-// dim, whom it is with, "with sales › seller · qualify 1/6" when another
+// at the top right, toned only while something waits for you, agents work in
+// it or its last run failed, saying what waits: questions, a decision, a permission; under it,
+// dim, whom it is with, "with front-desk › project-manager · sale 1/4" when another
 // agent holds its first work, at which stage of how many, and since when it
 // waits, else when it began; then what the newest request asks, or, under a work's title, what
-// was first said. Each row's menu opens it at its team or its log. Its cells
+// was first said. Each row's menu opens it at its tree or its log. Its cells
 // decode into view.
 DataTable {
   id: table
@@ -22,7 +22,7 @@ DataTable {
   decode: true
   compact: true
   property var conversations: []
-  // A row's menu chose where to open it: "map" or "log".
+  // A row's menu chose where to open it: "tree" or "log".
   signal openedAt(var conversation, string page)
 
   function summary(conversation) {
@@ -42,18 +42,18 @@ DataTable {
     return root && root.title ? root.title : known && known.title ? known.title : "new conversation"
   }
 
-  // "not-started", "needs-you", "working", "done", "idle", or "" unread.
+  // "not-started", "needs-you", "working", "done", "failed", "idle", or "" unread.
   function stateOf(conversation) { return Projects.state(summary(conversation)) }
 
   function stateText(conversation) {
     const state = stateOf(conversation)
     return state === "needs-you" ? Projects.waitsFor(summary(conversation).asks)
-      : ({ "not-started": "NOT STARTED", working: "WORKING", done: "DONE", idle: "IDLE" })[state] || ""
+      : ({ "not-started": "NOT STARTED", working: "WORKING", done: "DONE", failed: "✕ FAILED", idle: "IDLE" })[state] || ""
   }
 
   // Whom it is with, the agent its first work is with when another, and the
-  // stage of the workflow while the work goes on: "with sales › seller ·
-  // design 2/6".
+  // stage of the workflow while the work goes on: "with front-desk › project-manager ·
+  // design 2/4".
   function whoOf(conversation, root) {
     const known = summary(conversation)
     const partner = known ? known.agent : ""
@@ -94,9 +94,9 @@ DataTable {
     ]
   }
   tone: (conversation, column) => column === 2
-    ? ({ "needs-you": Theme.warning, working: Theme.primary })[stateOf(conversation)] || Theme.dim
+    ? ({ "needs-you": Theme.warning, working: Theme.primary, failed: Theme.error })[stateOf(conversation)] || Theme.dim
     : ""
-  dotted: conversation => stateOf(conversation) === "working"
+  statusIcon: conversation => ({ "needs-you": "warning", working: "spark", done: "check", failed: "close" })[stateOf(conversation)] || ""
   stacked: [[0], [1], [3]]
   status: 2
   emptyText: "no conversation yet"
@@ -111,7 +111,7 @@ DataTable {
       property var entry
       tip: "open it elsewhere"
       items: [
-        { id: "map", icon: "people", text: "OPEN IN TEAM" },
+        { id: "tree", icon: "people", text: "OPEN IN TREE" },
         { id: "log", icon: "list", text: "SHOW LOG" }
       ]
       onChosen: id => table.openedAt(entry, id)

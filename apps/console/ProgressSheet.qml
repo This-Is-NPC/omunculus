@@ -5,8 +5,8 @@ import "kit/ui"
 // ProgressSheet holds the progress tree, in the form its place asks for:
 // "dock", a column beside the chat, its header PROGRESS and a close button;
 // "card", under the strip, no header, as tall as the tree up to
-// `maximumHeight`; "sheet", over the whole page, its header ‹ CHAT, PROGRESS
-// and a close button, and Esc closes it. The tree scrolls inside.
+// `maximumHeight`; "sheet", over the whole page, its header ‹ CHAT and
+// PROGRESS, the one way out besides Esc. The tree scrolls inside.
 Rectangle {
   id: sheet
 
@@ -19,7 +19,7 @@ Rectangle {
   signal answer(string id)
   signal openThread(string work)
   signal openLog(string work)
-  signal openTeam(string work)
+  signal openTree(string work)
   // Esc in the dock or the card: the keyboard goes back to the composer.
   signal escaped()
 
@@ -62,6 +62,7 @@ Rectangle {
         elide: Text.ElideRight
       }
       IconButton {
+        visible: sheet.mode !== "sheet"
         name: "close"
         tip: "close the progress"
         onClicked: sheet.closed()
@@ -80,7 +81,7 @@ Rectangle {
         onAnswer: id => sheet.answer(id)
         onOpenThread: work => sheet.openThread(work)
         onOpenLog: work => sheet.openLog(work)
-        onOpenTeam: work => sheet.openTeam(work)
+        onOpenTree: work => sheet.openTree(work)
         onEscaped: sheet.mode === "sheet" ? sheet.closed() : sheet.escaped()
       }
     }

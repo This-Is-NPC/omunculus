@@ -1,7 +1,7 @@
 name = "deploy_preview"
 kind = "tool"
 triggers = ["model"]
-description = "Publishes the workspace's last commit to homologation, where the person sees it before anything reaches production, and concludes the stage that publishes: comments the homologation address and the commit on the work and continues it, ending the run. app names it: lowercase letters, digits and dashes. Dokku builds it from a Dockerfile, or detects the language."
+description = "Publishes the workspace's last commit to the preview environment, where the person sees it before anything reaches production, and concludes the stage that publishes: comments the preview address and the commit on the work and continues it, ending the run. The app, its port and the variables it reads come from deploy.toml; the image is built from the Dockerfile at the workspace's root."
 tags = ["deploy", "sequence"]
 command = ["./run"]
 secrets = ["DEPLOY_KEY"]
@@ -10,7 +10,4 @@ then = ["end"]
 
 [parameters]
 type = "object"
-required = ["app"]
-
-[parameters.properties.app]
-type = "string"
+required = []

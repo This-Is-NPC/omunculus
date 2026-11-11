@@ -105,7 +105,7 @@ defmodule Omunculus.Execution.Policy do
         host: config.execution.host,
         runtimes: runtimes,
         backend: config.execution.backend,
-        environment: environment(config.execution.environment),
+        environment: environment(config.execution),
         network: "none",
         limits: limits(config),
         tools: [],
@@ -217,9 +217,10 @@ defmodule Omunculus.Execution.Policy do
         [workspace_root | external_allowed]
       end
       |> Kernel.++(implementation_roots)
+      |> Kernel.++(existing(config.execution.read))
       |> unique()
 
-    read_write = if write?, do: [workspace_root | writable(config)], else: []
+    read_write = if write?, do: [workspace_root | existing(config.execution.write)], else: []
 
     policy = %__MODULE__{
       id: "",
@@ -229,7 +230,7 @@ defmodule Omunculus.Execution.Policy do
       hidden: hidden,
       runtimes: runtimes,
       backend: config.execution.backend,
-      environment: environment(config.execution.environment),
+      environment: environment(config.execution),
       network: network,
       limits: limits(config),
       tools: Enum.sort(tools),
@@ -350,10 +351,11 @@ defmodule Omunculus.Execution.Policy do
     store_hidden ++ [Path.expand(config.path) | host_hidden]
   end
 
-  # The other paths a writing command may write, those that exist.
-  defp writable(config) do
-    for path <- config.execution.write,
+  # Those of the paths `[execution] read` or `write` names that exist.
+  defp existing(paths) do
+    for path <- paths,
         {:ok, canonical} <- [FilesystemPath.canonical(path)],
+        File.exists?(canonical),
         do: canonical
   end
 
@@ -370,8 +372,10 @@ defmodule Omunculus.Execution.Policy do
     }
   end
 
-  defp environment(names) do
-    Map.new(names, fn name -> {name, System.get_env(name, "")} end)
+  defp environment(%{environment: names, variables: variables}) do
+    names
+    |> Map.new(fn name -> {name, System.get_env(name, "")} end)
+    |> Map.merge(variables)
   end
 
   defp policy_id(policy) do

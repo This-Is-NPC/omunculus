@@ -41,7 +41,9 @@ defmodule Omunculus.EvalDeployTest do
   end
 
   test "environment names the sockets by the target of a link under a deep state folder" do
-    names = ~w(OMUNCULUS_DEPLOY OMUNCULUS_HOMOLOGATION_KEY OMUNCULUS_PRODUCTION_KEY)
+    names =
+      ~w(OMUNCULUS_DEPLOY OMUNCULUS_DEPLOY_PROVIDER OMUNCULUS_HOMOLOGATION_KEY OMUNCULUS_PRODUCTION_KEY)
+
     saved = Map.new(names, &{&1, System.get_env(&1)})
 
     on_exit(fn ->
@@ -64,6 +66,7 @@ defmodule Omunculus.EvalDeployTest do
     assert byte_size(Path.join([state, "sockets", "homologation.sock"])) > 107
     assert :ok = EquivalentExchange.Deploy.environment(state)
     assert System.get_env("OMUNCULUS_DEPLOY") == target
+    assert System.get_env("OMUNCULUS_DEPLOY_PROVIDER") == "dokku"
     assert System.get_env("OMUNCULUS_PRODUCTION_KEY") == "production key"
   end
 end

@@ -1,0 +1,17 @@
+name = "list_artifacts"
+kind = "tool"
+triggers = ["model"]
+description = "Lists the artifacts of this conversation, each with its kind and versions; kind keeps those of one kind."
+tags = ["files", "artifacts"]
+groups = ["artifacts"]
+module = "Omunculus.Tools.ListArtifacts"
+
+[parameters]
+type = "object"
+required = []
+
+[parameters.properties.kind]
+type = "string"
+
+[views.artifacts]
+source = "artifacts"

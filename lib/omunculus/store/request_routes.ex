@@ -1,9 +1,15 @@
 defmodule Omunculus.Store.RequestRoutes do
-  @moduledoc "Resolves TOML request destinations from authenticated origins and work ancestry."
+  @moduledoc """
+  Resolves TOML request destinations from authenticated origins, work ancestry
+  and project owners. Returns the arbiter, its work and the destination kind.
+
+  Options: `scope: {workflow, stage}` is matched against rules instead of the
+  requester's work: an escalation follows the rules of its origins' work.
+  """
   alias Omunculus.Participant
   alias Omunculus.Store.{Query, View}
 
-  def resolve(conn, ctx, run, work, participant, name, forbidden) do
+  def resolve(conn, ctx, run, work, participant, name, forbidden, opts \\ []) do
     routes = Enum.filter(ctx.config.request_routes, &(&1["name"] == name))
 
     if not is_nil(name) and routes == [] do
@@ -16,24 +22,29 @@ defmodule Omunculus.Store.RequestRoutes do
 
       {:error, {:request, {:unknown_route, name, names}}}
     else
-      resolve_routes(conn, ctx, run, work, participant, forbidden, routes)
+      resolve_routes(conn, ctx, run, work, participant, forbidden, routes, opts)
     end
   end
 
-  defp resolve_routes(conn, ctx, run, work, participant, forbidden, routes) do
+  defp resolve_routes(conn, ctx, run, work, participant, forbidden, routes, opts) do
+    {workflow, stage} = Keyword.get(opts, :scope) || {work && work.workflow, work && work.stage}
+
     rule =
       Enum.find(routes, fn rule ->
         (is_nil(rule["from"]) or rule["from"] == participant) and
-          (is_nil(rule["workflow"]) or (work && work.workflow) == rule["workflow"]) and
-          (is_nil(rule["stage"]) or (work && work.stage) == rule["stage"])
+          (is_nil(rule["workflow"]) or workflow == rule["workflow"]) and
+          (is_nil(rule["stage"]) or stage == rule["stage"])
       end)
 
     destinations = if rule, do: rule["via"], else: []
 
     Enum.reduce_while(destinations, {:error, {:request, :no_route}}, fn destination, _error ->
-      with {:ok, identity, work_id} <- destination(conn, destination, ctx, run, work),
-           false <- identity in [participant | forbidden] do
-        {:halt, {:ok, identity, work_id}}
+      with {:ok, candidates} <- destination(conn, destination, ctx, run, work),
+           {identity, work_id} <-
+             Enum.find(candidates, fn {identity, _work_id} ->
+               identity not in [participant | forbidden]
+             end) do
+        {:halt, {:ok, identity, work_id, kind(destination)}}
       else
         {:error, reason} when reason != :absent -> {:halt, {:error, reason}}
         _missing_or_cycle -> {:cont, {:error, {:request, :no_route}}}
@@ -41,13 +52,16 @@ defmodule Omunculus.Store.RequestRoutes do
     end)
   end
 
+  defp kind(destination) when is_binary(destination), do: destination
+  defp kind(%{"kind" => kind}), do: kind
+
   defp destination(_conn, "parent", _ctx, _run, nil), do: {:error, :absent}
   defp destination(_conn, "parent", _ctx, _run, %{parent_id: nil}), do: {:error, :absent}
 
   defp destination(conn, "parent", _ctx, _run, work) do
     with {:ok, parent} <- View.view(conn, "work", work.parent_id) do
       if parent && parent.assignee,
-        do: {:ok, Participant.agent(parent.assignee), parent.id},
+        do: {:ok, [{Participant.agent(parent.assignee), parent.id}]},
         else: {:error, :absent}
     end
   end
@@ -67,9 +81,30 @@ defmodule Omunculus.Store.RequestRoutes do
           Map.get(ctx, :origin_subject) || Map.get(ctx, :subject)
 
       if is_binary(issuer) and is_binary(subject),
-        do: {:ok, Participant.human(issuer, subject), nil},
+        do: {:ok, [{Participant.human(issuer, subject), nil}]},
         else: {:error, :absent}
     end
+  end
+
+  # Humans whose project role grants `project.own`, first added first: a
+  # role change keeps a member's rowid.
+  defp destination(conn, "owners", ctx, _run, _work) do
+    roles =
+      for {name, %{capabilities: capabilities}} <- (ctx.config.access || %{roles: %{}}).roles,
+          "project.own" in capabilities,
+          do: name
+
+    with {:ok, rows} <-
+           Query.all(
+             conn,
+             """
+             SELECT issuer, subject FROM project_members
+             WHERE role IN (#{Query.placeholders(roles)})
+             ORDER BY rowid
+             """,
+             roles
+           ),
+         do: {:ok, Enum.map(rows, &{Participant.human(&1.issuer, &1.subject), nil})}
   end
 
   defp destination(conn, %{"kind" => "agent", "agent" => agent} = identity, ctx, _run, work) do
@@ -77,13 +112,13 @@ defmodule Omunculus.Store.RequestRoutes do
       spec = ctx.config.agents[agent]
 
       if work_id || (spec.depth == 0 and not spec.workflow_only),
-        do: {:ok, identity, work_id},
+        do: {:ok, [{identity, work_id}]},
         else: {:error, :absent}
     end
   end
 
   defp destination(_conn, %{"kind" => "human"} = identity, _ctx, _run, _work),
-    do: {:ok, identity, nil}
+    do: {:ok, [{identity, nil}]}
 
   defp ancestor(_conn, nil, _agent), do: {:ok, nil}
   defp ancestor(_conn, %{assignee: agent, id: id}, agent), do: {:ok, id}

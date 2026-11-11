@@ -18,8 +18,7 @@ ModalDialog {
   // [group, [[keys, what they do]…]]; keys are written as they are pressed.
   // Those with a key of the table are read from it; the others are the keys
   // of the controls themselves. Nothing that sends, answers, grants, denies,
-  // escalates, reverts, deletes or cancels has a key of its own; a quick chip
-  // over the composer that decides is chosen by its chord.
+  // escalates, reverts, deletes or cancels has a key of its own.
   readonly property var groups: [
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
@@ -45,12 +44,12 @@ ModalDialog {
       ["Enter", "start it with them"]
     ].concat(Shortcuts.rows("new conversation"))],
     ["chat", Shortcuts.rows("chat")],
-    ["team", [
-      ["↑ · ↓", "move between the works; the detail follows"],
+    ["tree", [
+      ["↑ · ↓", "move between the works"],
       ["→ · ←", "unfold, fold; on a folded work, go to its parent"],
-      ["Enter", "open its detail, or its tabs beside the outline"]
-    ].concat(Shortcuts.rows("team"), [
-      ["Esc", "the detail, then the outline, then back"]
+      ["Enter", "show its runs and steps; again, open it in full"]
+    ].concat(Shortcuts.rows("tree"), [
+      ["Esc", "the detail, then the tree, then back"]
     ])],
     ["work", Shortcuts.rows("work").concat([["Esc", "back"]])],
     ["thread", Shortcuts.rows("thread").concat([["Esc", "back"]])],

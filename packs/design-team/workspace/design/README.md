@@ -16,7 +16,9 @@ work from `handoff.md` once the client and the owner approve it.
   `wireframes/`, `mockup/` (`index.html` the home, `<page>.html` each
   other page in scope). The
   workspace's `Dockerfile` serves it with nginx on port 80 until the site
-  is built.
+  is built. It is published with the dream team's `deploy_preview`, which
+  reads the app's name and port from a committed `deploy.toml` at the
+  workspace's root, beside the Dockerfile (`templates/deploy.toml`).
 
 A text the client has not sent is a short suggestion in the briefing's
 tone, only rearranging what the client said and adding no fact of its

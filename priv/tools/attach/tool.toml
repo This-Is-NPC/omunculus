@@ -1,16 +1,28 @@
 name = "attach"
 kind = "tool"
 triggers = ["model"]
-description = "Attaches a file of the workspace to this conversation, for the person to open: path names the file, note says what it is. The conversation keeps it as it is now."
+description = "Attaches a file to this conversation, for the person to open: path names a file of the workspace, as it is now, or artifact names an artifact, its version (the latest when omitted) kept exactly; name, with an artifact, is the file name the person sees (the artifact's own when omitted); note says what it is."
 tags = ["files", "attachments"]
 module = "Omunculus.Tools.Attach"
 
 [parameters]
 type = "object"
-required = ["path"]
+required = []
 
 [parameters.properties.path]
 type = "string"
 
+[parameters.properties.artifact]
+type = "string"
+
+[parameters.properties.version]
+type = "integer"
+
+[parameters.properties.name]
+type = "string"
+
 [parameters.properties.note]
 type = "string"
+
+[views.artifacts]
+source = "artifacts"

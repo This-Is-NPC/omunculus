@@ -12,7 +12,7 @@ defmodule Omunculus.Store.View do
   many of a work's latest closed runs in a row lack `end`, the depth of a
   work by walking `parent_id`, whether a work descends from another, and
   replay of `events` for a project, run, work, request, inbox or
-  conversation scope, and the files attached in a conversation. Never executes anything against the store.
+  conversation scope, the files attached in a conversation and its artifact versions. Never executes anything against the store.
   """
 
   alias Omunculus.Store.Query
@@ -46,7 +46,7 @@ defmodule Omunculus.Store.View do
            Query.one(
              conn,
              """
-             SELECT requests.*, json_extract(requester_start.body, '$.ceiling') AS requester_ceiling, json_extract(opening.body, '$.reason') AS reason, json_extract(opening.body, '$.workflow') AS workflow, json_extract(opening.body, '$.stage') AS stage, COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id,
+             SELECT requests.*, json_extract(requester_start.body, '$.ceiling') AS requester_ceiling, json_extract(opening.body, '$.reason') AS reason, json_extract(opening.body, '$.workflow') AS workflow, json_extract(opening.body, '$.stage') AS stage, json_extract(opening.body, '$.route') AS route, json_extract(opening.body, '$.destination') AS destination, COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id,
                (SELECT json_extract(body, '$.option') FROM events WHERE request_id = requests.id AND type = 'reply' ORDER BY sequence DESC LIMIT 1) AS answer
              FROM requests LEFT JOIN events opening ON opening.id = requests.event_id
              LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id
@@ -256,40 +256,51 @@ defmodule Omunculus.Store.View do
     )
   end
 
-  @doc "Pending requests addressed to a depth-0 run's agent, in that run's conversation."
+  @doc """
+  Pending requests addressed to the run's agent, grouped by conversation: those
+  of the run's conversation at depth 0, and, at any depth, those whose arbiter
+  run opens on the run's work or one below it, but for the one that opened the
+  run, which its prompt shows under `## Request`.
+  """
   @spec received_inbox(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def received_inbox(conn, run_id) do
     Query.transaction(conn, fn ->
-      with {:ok, run} <- view(conn, "run", run_id) do
-        case run do
-          %{depth: "0", conversation_id: conversation_id} when is_binary(conversation_id) ->
-            with {:ok, rows} <-
-                   Query.all(
-                     conn,
-                     """
-                     SELECT requests.id FROM requests
-                     JOIN events opening ON opening.id = requests.event_id
-                     WHERE requests.status = 'pending'
-                       AND opening.conversation_id = ?
-                       AND json_extract(requests.arbiter, '$.kind') = 'agent'
-                       AND json_extract(requests.arbiter, '$.agent') = ?
-                     ORDER BY requests.created_at, requests.id
-                     """,
-                     [conversation_id, run.agent]
-                   ),
-                 {:ok, requests} <- request_views(conn, rows) do
-              {:ok,
-               if(requests == [],
-                 do: [],
-                 else: [%{conversation_id: conversation_id, requests: requests}]
-               )}
-            end
-
-          _other ->
-            {:ok, []}
-        end
+      with {:ok, run} <- view(conn, "run", run_id),
+           {:ok, rows} <- received_rows(conn, run),
+           {:ok, requests} <- request_views(conn, rows) do
+        {:ok,
+         requests
+         |> Enum.group_by(& &1.conversation_id)
+         |> Enum.map(fn {conversation_id, requests} ->
+           %{conversation_id: conversation_id, requests: requests}
+         end)
+         |> Enum.sort_by(&hd(&1.requests).created_at)}
       end
     end)
+  end
+
+  defp received_rows(_conn, nil), do: {:ok, []}
+
+  defp received_rows(conn, run) do
+    Query.all(
+      conn,
+      """
+      WITH RECURSIVE reach(id) AS (
+        SELECT ? WHERE ? IS NOT NULL
+        UNION
+        SELECT works.id FROM works JOIN reach ON works.parent_id = reach.id)
+      SELECT requests.id FROM requests
+      JOIN events opening ON opening.id = requests.event_id
+      WHERE requests.status = 'pending'
+        AND json_extract(requests.arbiter, '$.kind') = 'agent'
+        AND json_extract(requests.arbiter, '$.agent') = ?
+        AND ((? = '0' AND opening.conversation_id = ?)
+          OR (json_extract(opening.body, '$.arbiter_work_id') IN (SELECT id FROM reach)
+              AND requests.id IS NOT ?))
+      ORDER BY requests.created_at, requests.id
+      """,
+      [run.work_id, run.work_id, run.agent, run.depth, run.conversation_id, run.request_id]
+    )
   end
 
   @doc "Hydrates request rows with their canonical question, historical context and linked origins."
@@ -351,13 +362,28 @@ defmodule Omunculus.Store.View do
   """
   @spec attachments(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def attachments(conn, conversation_id) do
+    carried(conn, conversation_id, "'prompt', 'attach'", fn body ->
+      Map.fetch!(body, "attachments")
+    end)
+  end
+
+  @doc """
+  The artifact versions of a conversation, oldest first: each as its
+  `artifact` event describes it, with that event's `event_id`, its `at` and
+  `by`.
+  """
+  @spec artifacts(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  def artifacts(conn, conversation_id),
+    do: carried(conn, conversation_id, "'artifact'", fn body -> [body] end)
+
+  defp carried(conn, conversation_id, types, files) do
     with {:ok, events} <-
            Query.all(
              conn,
              """
              SELECT id, at, actor_kind, actor_id, body FROM events
-             WHERE conversation_id = ? AND type IN ('prompt', 'attach')
-               AND json_extract(body, '$.attachments') IS NOT NULL
+             WHERE conversation_id = ? AND type IN (#{types})
+               AND (type = 'artifact' OR json_extract(body, '$.attachments') IS NOT NULL)
              ORDER BY sequence
              """,
              [conversation_id]
@@ -368,7 +394,7 @@ defmodule Omunculus.Store.View do
 
          event.body
          |> Jason.decode!()
-         |> Map.fetch!("attachments")
+         |> files.()
          |> Enum.map(&Map.merge(&1, %{"event_id" => event.id, "at" => event.at, "by" => by}))
        end)}
     end

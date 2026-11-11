@@ -1,0 +1,14 @@
+name = "start_sale"
+kind = "tool"
+triggers = ["model"]
+description = "Starts the sale: hands the seller the client's request as a work of the workflow sale, with the request's goal as its own, and moves the engagement to stage sale. The only move of stage start, and takes no arguments."
+tags = ["sales", "sequence"]
+command = ["./run"]
+chains = ["continue", "delegate", "end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+
+[views.work]
+source = "works"

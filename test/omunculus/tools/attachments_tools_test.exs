@@ -37,6 +37,20 @@ defmodule Omunculus.Tools.AttachmentsToolsTest do
     assert {:ok, [^meta]} = Attachments.check(ctx.store, [meta])
   end
 
+  test "attach shows an artifact under the name it is given, the artifact keeping its key", ctx do
+    {:ok, kept} = Attachments.put(ctx.store, "doc-w1.md", "text/markdown", "# Proposal")
+    view = %{"artifacts" => [Map.merge(kept, %{"version" => 1})]}
+    input = %{args: %{"artifact" => "doc-w1.md", "name" => "Proposal - Ana.md"}, view: view}
+
+    assert %{"ok" => true, "emit" => [%{"body" => %{"attachments" => [meta], "note" => note}}]} =
+             Attach.run(input, ExecutionPolicyFixtures.policy([ctx.root]))
+
+    assert %{"name" => "Proposal - Ana.md", "sha256" => sha256} = meta
+    assert sha256 == kept["sha256"]
+    assert note == "doc-w1.md version 1"
+    assert {:ok, [^meta]} = Attachments.check(ctx.store, [meta])
+  end
+
   test "attach refuses a path outside the roots and a file past attachment_bytes",
        %{root: root} = ctx do
     assert attach(%{"path" => "../omunculus.toml"}, ctx) ==
@@ -44,7 +58,7 @@ defmodule Omunculus.Tools.AttachmentsToolsTest do
 
     File.write!(Path.join(root, "big.txt"), String.duplicate("x", 65))
     assert %{"ok" => false, "output" => output} = attach(%{"path" => "big.txt"}, ctx)
-    assert output =~ "too_large"
+    assert output == "65 bytes is more than the 64 a file may hold"
   end
 
   test "read_attachment reads a file attached in the conversation, and only those", ctx do

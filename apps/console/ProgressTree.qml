@@ -5,6 +5,7 @@ import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui/focus.js" as Focus
 import "kit/client/Progress.js" as Progress
+import "kit/client/Requests.js" as Requests
 import "kit/client/Time.js" as Time
 
 // ProgressTree is who works on the conversation, compact, for the chat's
@@ -27,7 +28,7 @@ Item {
   signal answer(string id)
   signal openThread(string work)
   signal openLog(string work)
-  signal openTeam(string work)
+  signal openTree(string work)
   signal escaped()
 
   readonly property real now: Omunculus.tick
@@ -244,7 +245,7 @@ Item {
             onFoldToggled: tree.toggle(entry.key, entry.modelData.fold)
             onOpenThread: work => tree.openThread(work)
             onOpenLog: work => tree.openLog(work)
-            onOpenTeam: work => tree.openTeam(work)
+            onOpenTree: work => tree.openTree(work)
           }
         }
 
@@ -262,11 +263,11 @@ Item {
               RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.space.tight
-                Icon { name: "warning"; size: 12; color: Theme.warning }
+                Icon { name: Requests.audiences[entry.modelData.ask.audience].icon; size: 12; color: Theme.warning }
                 Label {
                   Layout.fillWidth: true
                   Layout.minimumWidth: 0
-                  text: ("Needs you · " + entry.modelData.ask.asker + " asks").toUpperCase()
+                  text: (Requests.audiences[entry.modelData.ask.audience].text + " · " + entry.modelData.ask.asker + " asks").toUpperCase()
                   color: Theme.warning
                   font.pixelSize: Theme.type.kicker.size
                   font.letterSpacing: Theme.type.kicker.tracking

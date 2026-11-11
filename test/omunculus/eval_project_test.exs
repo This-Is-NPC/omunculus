@@ -13,7 +13,9 @@ defmodule Omunculus.EvalProjectTest do
     conn: _conn
   } do
     overlay = Path.expand("../../eval/overlays/course-recovery.toml", __DIR__)
-    overrides = Map.new(~w(sales seller administrator design-lead), &{&1, "haiku"})
+
+    overrides =
+      Map.new(~w(front-desk project-manager seller administrator design-lead), &{&1, "haiku"})
 
     assert {:ok, path} =
              EquivalentExchange.Project.build(
@@ -35,7 +37,7 @@ defmodule Omunculus.EvalProjectTest do
     assert catalog["escalate"].dir =~ "packs/course-recovery/tools/escalate"
     assert Map.has_key?(catalog, "skill.course-correction")
     assert {:ok, settings} = EquivalentExchange.Project.configuration("agency", overlay)
-    assert settings["eval"]["entry_agent"] == "sales"
+    assert settings["eval"]["entry_agent"] == "front-desk"
     assert {:ok, base} = EquivalentExchange.Project.configuration("agency")
     refute get_in(base, ["eval", "entry_agent"])
   end
@@ -64,7 +66,9 @@ defmodule Omunculus.EvalProjectTest do
 
   test "a hybrid agency overrides imported coordinators and keeps workers on the default model" do
     dir = Fixtures.tmp_dir()
-    coordinators = Map.new(~w(sales seller administrator design-lead), &{&1, "haiku"})
+
+    coordinators =
+      Map.new(~w(front-desk project-manager seller administrator design-lead), &{&1, "haiku"})
 
     assert {:ok, path} =
              EquivalentExchange.Project.build(dir, "agency", {"local", true}, nil, coordinators)
@@ -80,7 +84,7 @@ defmodule Omunculus.EvalProjectTest do
     assert data["models"]["haiku"]["code_mode"]
   end
 
-  test "steward recovery preserves permission origins and returns client presentation to sales",
+  test "steward recovery preserves permission origins and returns client presentation to the front desk",
        %{conn: conn} do
     overlay = Path.expand("../../eval/overlays/course-recovery.toml", __DIR__)
 
@@ -100,9 +104,9 @@ defmodule Omunculus.EvalProjectTest do
 
     root =
       Fixtures.insert(conn, :works, %{
-        assignee: "seller",
+        assignee: "project-manager",
         conversation_id: conversation,
-        workflow: "sale",
+        workflow: "engagement",
         stage: "build",
         state: "waiting",
         waiting: "child"
@@ -149,9 +153,9 @@ defmodule Omunculus.EvalProjectTest do
         conn,
         config,
         conversation,
-        "seller",
+        "project-manager",
         root,
-        config.agents["seller"].depth
+        config.agents["project-manager"].depth
       )
 
     assert {:ok, %{ok: true}, made} =
@@ -163,7 +167,7 @@ defmodule Omunculus.EvalProjectTest do
              )
 
     envelope = Enum.find(made, &(&1.type == "request")).request_id
-    sales = configured_actor(conn, config, conversation, "sales", nil, 0)
+    sales = configured_actor(conn, config, conversation, "front-desk", nil, 0)
 
     assert {:ok, %{ok: true}, _} =
              Harness.dispatch(
@@ -181,9 +185,9 @@ defmodule Omunculus.EvalProjectTest do
         conn,
         config,
         conversation,
-        "seller",
+        "project-manager",
         root,
-        config.agents["seller"].depth,
+        config.agents["project-manager"].depth,
         nil,
         envelope
       )
@@ -252,9 +256,9 @@ defmodule Omunculus.EvalProjectTest do
              )
 
     assert [corrected] = Enum.filter(correction, &(&1.type == "request"))
-    assert Jason.decode!(corrected.body)["arbiter"] == Participant.agent("sales")
+    assert Jason.decode!(corrected.body)["arbiter"] == Participant.agent("front-desk")
     refute Enum.any?(correction, &(&1.type in ~w(grant prompt)))
-    sales = configured_actor(conn, config, conversation, "sales", nil, 0)
+    sales = configured_actor(conn, config, conversation, "front-desk", nil, 0)
 
     assert {:ok, %{ok: true}, made} =
              Harness.dispatch(
@@ -276,7 +280,7 @@ defmodule Omunculus.EvalProjectTest do
   end
 
   test "model overrides reject unknown agents and model aliases" do
-    for override <- [{"missing", "haiku"}, {"sales", "missing"}] do
+    for override <- [{"missing", "haiku"}, {"front-desk", "missing"}] do
       assert {:error, {:agent_model, ^override}} =
                EquivalentExchange.Project.build(
                  Fixtures.tmp_dir(),
@@ -361,6 +365,47 @@ defmodule Omunculus.EvalProjectTest do
                )
 
       assert Enum.any?(events, &(&1.type == "request"))
+    end
+  end
+
+  test "dream-team builders may be granted the network by their parent, only a person promote",
+       %{conn: _conn} do
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(
+               Fixtures.tmp_dir(),
+               "dream-team",
+               {"fake", false},
+               nil
+             )
+
+    assert {:ok, config} = Config.load(path)
+
+    class = fn agent, name, kind ->
+      snapshot =
+        Ceiling.mount(
+          config,
+          %{
+            agent: agent,
+            depth: config.agents[agent].depth,
+            grants: [],
+            stage: nil,
+            workspace: nil,
+            groups: %{}
+          },
+          ["sandbox.network", "promote"]
+        )
+
+      Ceiling.classify(snapshot, name, kind)
+    end
+
+    for agent <- ~w(administrator surgeon toolsmith tester editor language_lawyer clerk) do
+      assert class.(agent, "sandbox.network", "resource") == "askable", agent
+    end
+
+    assert class.("clerk", "promote", "tool") == "sealed"
+
+    for agent <- ~w(administrator surgeon) do
+      assert "grant" in config.agents[agent].ceiling.granted
     end
   end
 
@@ -626,11 +671,11 @@ defmodule Omunculus.EvalProjectTest do
       conversation = conversation(conn)
       project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
 
-      seller_work =
+      manager_work =
         Fixtures.insert(conn, :works, %{
-          assignee: "seller",
+          assignee: "project-manager",
           conversation_id: conversation,
-          workflow: "sale",
+          workflow: "engagement",
           stage: "build",
           state: "waiting",
           waiting: "child"
@@ -639,7 +684,7 @@ defmodule Omunculus.EvalProjectTest do
       admin_work =
         Fixtures.insert(conn, :works, %{
           assignee: "administrator",
-          parent_id: seller_work,
+          parent_id: manager_work,
           conversation_id: conversation,
           state: "waiting",
           waiting: "child"
@@ -681,35 +726,36 @@ defmodule Omunculus.EvalProjectTest do
 
       origin = Enum.find(events, &(&1.type == "request")).request_id
 
-      # The release's request is the client's approval: it goes to the
-      # seller, past the administrator whose work waits on the release.
-      upstream =
-        Enum.reduce(
-          [
-            {"seller", seller_work, config.agents["seller"].depth,
-             Enum.find(config.workflows["sale"], &(&1.name == "build")).ceiling},
-            {"sales", nil, 0, nil}
-          ],
-          origin,
-          fn {agent, work, depth, ceiling}, id ->
-            actor = configured_actor(conn, config, conversation, agent, work, depth, ceiling)
-            assert {:ok, request} = Store.view(conn, "request", id)
-            assert Jason.decode!(request.arbiter) == Participant.agent(agent)
-
-            assert {:ok, %{ok: true}, events} =
-                     Harness.dispatch(
-                       project,
-                       "escalate",
-                       %{
-                         "reason" => "Production approval",
-                         "origins" => %{"production" => id}
-                       },
-                       actor
-                     )
-
-            Enum.find(events, &(&1.type == "request")).request_id
-          end
+      # The release's request goes to the project manager, past the
+      # administrator whose work waits on the release; the manager asks the
+      # owner.
+      manager =
+        configured_actor(
+          conn,
+          config,
+          conversation,
+          "project-manager",
+          manager_work,
+          config.agents["project-manager"].depth,
+          Enum.find(config.workflows["engagement"], &(&1.name == "build")).ceiling
         )
+
+      assert {:ok, request} = Store.view(conn, "request", origin)
+      assert Jason.decode!(request.arbiter) == Participant.agent("project-manager")
+
+      assert {:ok, %{ok: true}, events} =
+               Harness.dispatch(
+                 project,
+                 "escalate",
+                 %{
+                   "reason" => "Production approval",
+                   "origins" => %{"production" => origin},
+                   "to" => "owner"
+                 },
+                 manager
+               )
+
+      upstream = Enum.find(events, &(&1.type == "request")).request_id
 
       assert {:ok, request} = Store.view(conn, "request", upstream)
       assert Jason.decode!(request.arbiter) == Participant.human("test", "owner")
@@ -750,7 +796,9 @@ defmodule Omunculus.EvalProjectTest do
   end
 
   for configuration <- ~w(sales-desk agency) do
-    test "#{configuration} takes every work the generalist opens through sale", %{conn: conn} do
+    test "#{configuration} takes every work the front desk opens through engagement", %{
+      conn: conn
+    } do
       dir = Fixtures.tmp_dir()
 
       assert {:ok, path} =
@@ -760,17 +808,17 @@ defmodule Omunculus.EvalProjectTest do
       conversation = conversation(conn)
       project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
       item = %{"title" => "Padaria Sol: a site", "goal" => "Quero um site."}
-      sales = fn -> configured_actor(conn, config, conversation, "sales", nil, 0) end
+      sales = fn -> configured_actor(conn, config, conversation, "front-desk", nil, 0) end
 
       assert {:ok, %{ok: false, output: refusal}, _events} =
                Harness.dispatch(
                  project,
                  "work",
-                 %{"report" => "Opened.", "works" => [Map.put(item, "agent", "sales")]},
+                 %{"report" => "Opened.", "works" => [Map.put(item, "agent", "front-desk")]},
                  sales.()
                )
 
-      assert refusal =~ "works at that depth go through the workflow sale"
+      assert refusal =~ "works at that depth go through the workflow engagement"
 
       assert {:ok, %{ok: true}, events} =
                Harness.dispatch(
@@ -782,9 +830,171 @@ defmodule Omunculus.EvalProjectTest do
 
       work_id = Enum.find(events, &(&1.type == "work")).work_id
 
-      assert {:ok, %{workflow: "sale", stage: "qualify", assignee: "seller"}} =
+      assert {:ok, %{workflow: "engagement", stage: "start", assignee: "project-manager"}} =
                Store.view(conn, "work", work_id)
     end
+  end
+
+  test "agency's manager can only start the sale at stage start, which opens the seller's work",
+       %{conn: conn} do
+    dir = Fixtures.tmp_dir()
+    assert {:ok, path} = EquivalentExchange.Project.build(dir, "agency", {"fake", false}, nil)
+    assert {:ok, config} = Config.load(path)
+    conversation = conversation(conn)
+    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+
+    manager_work =
+      Fixtures.insert(conn, :works, %{
+        assignee: "project-manager",
+        conversation_id: conversation,
+        workflow: "engagement",
+        stage: "start",
+        title: "Padaria Sol",
+        goal: "Quero um site."
+      })
+
+    stage = Enum.find(config.workflows["engagement"], &(&1.name == "start")).ceiling
+
+    manager = fn ->
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "project-manager",
+        manager_work,
+        config.agents["project-manager"].depth,
+        stage
+      )
+    end
+
+    tools = config.agents["project-manager"].ceiling.granted
+
+    ceiling =
+      Ceiling.mount(
+        config,
+        %{
+          agent: "project-manager",
+          depth: config.agents["project-manager"].depth,
+          grants: [],
+          stage: stage,
+          workspace: Config.workspace_ceiling(config, nil),
+          groups: %{}
+        },
+        tools
+      )
+
+    # The model is left with the sale's start, and the steps it chains.
+    have = Enum.filter(tools, &(Ceiling.classify(ceiling, &1, "tool") == "have"))
+    assert Enum.sort(have) == ~w(comment continue delegate end start_sale)
+
+    assert {:ok, %{ok: true}, _} = Harness.dispatch(project, "start_sale", %{}, manager.())
+
+    assert {:ok, %{stage: "sale", state: "waiting", waiting: "child"}} =
+             Store.view(conn, "work", manager_work)
+
+    assert {:ok, [seller]} =
+             Query.all(conn, "SELECT * FROM works WHERE parent_id = ?", [manager_work])
+
+    assert %{
+             workflow: "sale",
+             stage: "qualify",
+             assignee: "seller",
+             goal: "Quero um site.",
+             title: "Padaria Sol: sale"
+           } = seller
+  end
+
+  test "agency's manager hands the seller a sale and the teams their works, and the seller asks it",
+       %{
+         conn: conn
+       } do
+    dir = Fixtures.tmp_dir()
+    assert {:ok, path} = EquivalentExchange.Project.build(dir, "agency", {"fake", false}, nil)
+    assert {:ok, config} = Config.load(path)
+    conversation = conversation(conn)
+    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+
+    manager_work =
+      Fixtures.insert(conn, :works, %{
+        assignee: "project-manager",
+        conversation_id: conversation,
+        workflow: "engagement",
+        stage: "sale"
+      })
+
+    stage = Enum.find(config.workflows["engagement"], &(&1.name == "sale")).ceiling
+
+    manager =
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "project-manager",
+        manager_work,
+        config.agents["project-manager"].depth,
+        stage
+      )
+
+    works = [
+      %{"title" => "Sale", "goal" => "Sell it.", "workflow" => "sale"},
+      %{
+        "title" => "Assess",
+        "goal" => "Assessment only, build nothing: x",
+        "agent" => "administrator"
+      },
+      %{"title" => "Preview", "goal" => "Design it.", "agent" => "design-lead"}
+    ]
+
+    assert {:ok, %{ok: true}, _} =
+             Harness.dispatch(
+               project,
+               "work",
+               %{"report" => "Handed down.", "works" => works},
+               manager
+             )
+
+    assert {:ok, children} =
+             Query.all(conn, "SELECT * FROM works WHERE parent_id = ? ORDER BY rowid", [
+               manager_work
+             ])
+
+    [sale, assess, preview] = children
+
+    assert %{workflow: "sale", stage: "qualify", assignee: "seller"} = sale
+    assert %{assignee: "administrator"} = assess
+    assert %{assignee: "design-lead"} = preview
+
+    # The seller asks the manager, its parent, with `to = "pm"`, and the client
+    # through the front desk.
+    seller =
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "seller",
+        sale.id,
+        config.agents["seller"].depth,
+        Enum.find(config.workflows["sale"], &(&1.name == "estimate")).ceiling
+      )
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(
+               project,
+               "ask",
+               %{"question" => "Can it be built?", "to" => "pm"},
+               seller
+             )
+
+    id = Enum.find(events, &(&1.type == "request")).request_id
+    assert {:ok, row} = Store.view(conn, "request", id)
+    assert Jason.decode!(row.arbiter) == Participant.agent("project-manager")
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(project, "ask", %{"question" => "Which pages?"}, seller)
+
+    id = Enum.find(events, &(&1.type == "request")).request_id
+    assert {:ok, row} = Store.view(conn, "request", id)
+    assert Jason.decode!(row.arbiter) == Participant.agent("front-desk")
   end
 
   test "agency generalist batches received questions and distributes one client answer", %{
@@ -827,15 +1037,15 @@ defmodule Omunculus.EvalProjectTest do
 
         id = Enum.find(events, &(&1.type == "request")).request_id
         assert {:ok, row} = Store.view(conn, "request", id)
-        assert Jason.decode!(row.arbiter) == Participant.agent("sales")
+        assert Jason.decode!(row.arbiter) == Participant.agent("front-desk")
         {part, id}
       end
 
-    sales = configured_actor(conn, config, conversation, "sales", nil, 0)
+    sales = configured_actor(conn, config, conversation, "front-desk", nil, 0)
     assert {:ok, [%{requests: received}]} = Store.received_inbox(conn, sales.run_id)
     assert MapSet.new(received, & &1.id) == MapSet.new(Map.values(origins))
 
-    for route <- ~w(client person sales) do
+    for route <- ~w(client person front-desk) do
       assert {:ok, %{ok: false, output: output}, _} =
                Harness.dispatch(
                  project,
@@ -849,7 +1059,7 @@ defmodule Omunculus.EvalProjectTest do
                )
 
       assert output ==
-               ~s(refused: "#{route}" is not a configured request route; configured route names: owner; omit to to follow the default request_routes route)
+               ~s(refused: "#{route}" is not a configured request route; configured route names: owner, pm; omit to to follow the default request_routes route)
     end
 
     assert {:ok, %{ok: true}, events} =
@@ -925,6 +1135,9 @@ defmodule Omunculus.EvalProjectTest do
         [
           "ask",
           "work",
+          "comment",
+          "continue",
+          "delegate",
           "promote",
           "sandbox.network",
           "request_access",

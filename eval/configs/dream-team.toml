@@ -7,7 +7,7 @@
 packs = [{ name = "dream-team" }]
 
 [execution]
-environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "OMUNCULUS_DEPLOY_PROVIDER"]
 timeout_ms = 300000
 
 [auth.homologation]
@@ -19,4 +19,5 @@ kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
 
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+harness_route = "owner"
+request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]
