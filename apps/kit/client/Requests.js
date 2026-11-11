@@ -96,6 +96,12 @@ function granted(request) {
   return null;
 }
 
+// Whether a decision of `choices` (its own options, or those of a request it
+// gathers) grants: its scopes then go behind "Always…", whoever decides it.
+function grants(choice) {
+  return choice.options.some(option => (choice.request.options[option] || []).some(step => step.name === "grant"));
+}
+
 // Whether an event is the harness opening a request, as when an agent left a
 // question unanswered and the harness passed it on to whoever is next: such
 // a request is no one's words.

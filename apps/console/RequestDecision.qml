@@ -74,7 +74,7 @@ SurfaceFrame {
   readonly property var own: choices.find(choice => choice.path.length === 0) || null
   readonly property var gathered: choices.filter(choice => choice.path.length > 0)
   // The scopes behind "Always…", and the options a grant is made of.
-  readonly property var ownActions: own && !escalating ? Pending.actions(own.options, kind === "permission") : { once: [], primary: "", denies: [], always: [] }
+  readonly property var ownActions: own && !escalating ? Pending.actions(own.options, Requests.grants(own)) : { once: [], primary: "", denies: [], always: [] }
 
   // The dim tone, kept readable on the card's own fill.
   readonly property color dim: Theme.readableOn(fill)
@@ -487,7 +487,7 @@ SurfaceFrame {
       delegate: ColumnLayout {
         id: choice
         required property var modelData
-        readonly property var parts: Pending.actions(modelData.options, Requests.kind(modelData.request) === "permission")
+        readonly property var parts: Pending.actions(modelData.options, Requests.grants(modelData))
         function decide(option) { card.decide(option, card.note, modelData.path) }
         Layout.fillWidth: true
         enabled: !card.busy

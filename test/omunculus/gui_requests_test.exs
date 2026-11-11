@@ -76,6 +76,22 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
+  test "a gathered permission grants whoever arbitrates it, so its scopes stay behind Always" do
+    run!(["Requests", "Pending"], """
+    const step = {name: "grant", args: {kind: "tool", name: "promote"}};
+    const origin = {id: "o1", status: "pending", arbiter: agent("project-manager"), origins: {},
+      options: {grant: [step], grant_agent: [step], grant_depth: [step], deny: []}};
+    const top = {id: "t1", status: "pending", arbiter: human, options: {}, origins: {promote: origin}};
+    const [choice] = Requests.choices(top);
+    if (Requests.kind(origin) !== "team") throw Error("an agent's request is the team's");
+    if (!Requests.grants(choice)) throw Error("grants");
+    const parts = Pending.actions(choice.options, Requests.grants(choice));
+    if (parts.once.join() !== "grant" || parts.always.join() !== "grant_agent") throw Error("scopes " + JSON.stringify(parts));
+    const decision = {id: "o2", status: "pending", arbiter: agent("pm"), origins: {}, options: {accept: [], grant_x: []}};
+    if (Requests.grants({options: ["accept", "grant_x"], request: decision})) throw Error("a decision grants nothing");
+    """)
+  end
+
   test "question is what the origins asked when the harness opened the request" do
     run!(["Requests"], """
     const low = {id: "a", requester: agent("designer"), reason: "1. font?\\n2. colour?", origins: {}};
