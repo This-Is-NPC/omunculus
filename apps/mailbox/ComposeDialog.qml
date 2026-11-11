@@ -130,6 +130,7 @@ ModalDialog {
             }
             IconButton {
               anchors.verticalCenter: parent.verticalCenter
+              implicitWidth: 20
               name: "close"
               size: 10
               tip: "remove " + (dialog.to ? dialog.to.name : "")
@@ -141,7 +142,7 @@ ModalDialog {
           id: address
           Layout.fillWidth: true
           dense: true
-          placeholderText: Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : dialog.to === null ? "name or address" : "another recipient"
+          placeholderText: Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : dialog.to === null ? "name or address" : "add another"
           onTextEdited: { dialog.listing = true; dialog.current = 0 }
           onActiveFocusChanged: if (activeFocus) dialog.listing = true
           onAccepted: if (dialog.listing && dialog.suggestions.length > 0) dialog.pick(dialog.suggestions[dialog.current])

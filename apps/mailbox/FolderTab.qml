@@ -17,7 +17,7 @@ Item {
   readonly property bool current: Mail.folder === name
   readonly property bool hovered: pointer.containsMouse
 
-  implicitHeight: 34
+  implicitHeight: rail ? 44 : 34
   implicitWidth: rail ? 44 : row.implicitWidth + 28
 
   Row {

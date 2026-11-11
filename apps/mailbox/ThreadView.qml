@@ -34,6 +34,8 @@ Item {
   // The message it answers, quoted as {head, lines}, or null.
   readonly property var quote: target && target.quoted ? Mailbox.quoted(target.quoted, Mail.stamp(target.quoted.at)) : null
   property bool quoteAll: false
+  // How many lines of the quote show folded: fewer where the window is narrow.
+  readonly property int quoteFolded: back ? 2 : 4
 
   function isOpen(message, index) {
     if (message.pending)
@@ -103,15 +105,21 @@ Item {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         spacing: 6
-        RowLayout {
+        // The label sits beside the subject; on a narrow window the subject
+        // wraps to two lines and the label goes under it.
+        GridLayout {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
-          spacing: 12
+          columns: view.back ? 1 : 2
+          columnSpacing: 12
+          rowSpacing: 6
           Label {
             Layout.fillWidth: true
             text: view.thread.subject
             font.pixelSize: 16
             font.bold: true
+            wrapMode: view.back ? Text.Wrap : Text.NoWrap
+            maximumLineCount: view.back ? 2 : 1
             elide: Text.ElideRight
           }
           MailLabel { kind: view.thread.label }
@@ -195,7 +203,7 @@ Item {
         Editor {
           id: editor
           Layout.fillWidth: true
-          Layout.preferredHeight: 96
+          Layout.preferredHeight: view.back ? 72 : 96
           placeholderText: "your reply"
           onSubmitted: view.send()
         }
@@ -213,13 +221,13 @@ Item {
           }
           Label {
             Layout.fillWidth: true
-            text: view.quote ? (view.quoteAll ? view.quote.lines : view.quote.lines.slice(0, 4)).join("\n") : ""
+            text: view.quote ? (view.quoteAll ? view.quote.lines : view.quote.lines.slice(0, view.quoteFolded)).join("\n") : ""
             color: Theme.dim
             font.pixelSize: 11
             wrapMode: Text.Wrap
           }
           Chip {
-            visible: view.quote !== null && view.quote.lines.length > 4
+            visible: view.quote !== null && view.quote.lines.length > view.quoteFolded
             icon: "more"
             text: view.quoteAll ? "LESS" : "MORE"
             onClicked: view.quoteAll = !view.quoteAll
