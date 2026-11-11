@@ -1307,6 +1307,47 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    test "a request raised while the work waits on children keeps that wait and its reply runs the agent",
+         %{dir: dir} do
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+      Fixtures.insert(project.conn, :works, %{parent_id: work_id})
+      Project.close(project)
+
+      request_id = open_write_request(dir, work_id)
+      project = open_project(dir)
+
+      assert {:ok, %{state: "waiting", waiting: "child"}} =
+               Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+
+      Project.close(project)
+      test_pid = self()
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+        call.("comment", %{"work_id" => work_id, "body" => "noted"})
+        {:ok, "unused"}
+      end)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request_id, "--option", "deny", "no"], dir)
+
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Request"
+
+      project = open_project(dir)
+
+      assert {:ok, runs} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
+
+      assert Enum.any?(runs, &(&1.via == "reply" and &1.request_id == request_id))
+
+      assert {:ok, %{state: "waiting", waiting: "child"}} =
+               Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+
+      Project.close(project)
+    end
+
     test "a request without a linked work has no work_id; the reply runs its agent again with the request and the asking run",
          %{dir: dir} do
       request_id = open_write_request(dir)

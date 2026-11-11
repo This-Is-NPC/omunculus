@@ -206,6 +206,14 @@ routes back into linked requesters are refused. Creation of the upstream
 request and immutable links is one transaction. Original work waits remain
 on their own requests. Escalation preserves the intermediary's child wait.
 
+A work waiting on its children may raise a request too (`ask`,
+`request_access`), for instance to answer one it received: the work keeps
+waiting on its children, and the request is pending beside that wait, so
+the request received stays pending with its receiver (the run that asked
+is not an unanswered receiver). The answer runs the work's agent by name,
+with the answer and the inbox; the work reopens only when its children
+close, or on a message.
+
 An origin is never escalated, explicitly or automatically, to an agent it was
 already escalated to that answered with text alone, naming no part, without
 escalating it further (a person is never skipped for that). A reply that

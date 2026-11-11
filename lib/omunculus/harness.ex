@@ -1110,6 +1110,19 @@ defmodule Omunculus.Harness do
         work.state == "open" ->
           {:ok, [opening(event, %{work_id: work.id, request_id: id, via: via})]}
 
+        # A request raised while the work waits on children: its agent runs
+        # on the answer, by name, and the child wait stays.
+        work.state == "waiting" and work.waiting == "child" ->
+          {:ok,
+           [
+             opening(event, %{
+               work_id: work.id,
+               request_id: id,
+               via: via,
+               agent: requester["agent"]
+             })
+           ]}
+
         true ->
           {:ok, []}
       end

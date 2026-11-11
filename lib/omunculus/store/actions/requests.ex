@@ -1,8 +1,9 @@
 defmodule Omunculus.Store.Actions.Requests do
   @moduledoc """
   Participant-neutral requests and linked escalation. Request origins, answerers,
-  options and escalation links are immutable. A request parks its work; escalation
-  preserves the receiving work's existing wait. Replies close their request and
+  options and escalation links are immutable. A request parks its work, unless it waits on its children: then the
+  child wait stays, as in an escalation, and the request's answer runs the
+  work's agent by name. Replies close their request and
   return named parts transactionally through the same reply path. Grants always
   target the original requester and retain the actual answering identity.
   An escalation without `to` stays on the named route its origins all
@@ -28,7 +29,6 @@ defmodule Omunculus.Store.Actions.Requests do
          :ok <- ensure_actor_run(run, ctx),
          :ok <- not_asked_again(:request, conn, run, ctx, body["reason"]),
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
-         :ok <- Helpers.ensure_not_waiting_children(:request, work),
          {:ok, participant} <- Participant.from_context(ctx),
          :ok <- classify_options(conn, run, options),
          {:ok, arbiter, arbiter_work_id, destination} <-
@@ -44,7 +44,7 @@ defmodule Omunculus.Store.Actions.Requests do
         arbiter,
         arbiter_work_id,
         %{route: body["to"], destination: destination},
-        true
+        not waiting_on_children?(work)
       )
     end
   end
@@ -237,6 +237,9 @@ defmodule Omunculus.Store.Actions.Requests do
       {:ok, event}
     end
   end
+
+  defp waiting_on_children?(%{state: "waiting", waiting: "child"}), do: true
+  defp waiting_on_children?(_work), do: false
 
   defp mark_waiting(_conn, nil, _request_id, _participant), do: :ok
 

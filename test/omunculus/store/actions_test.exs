@@ -3056,7 +3056,7 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "a work waiting on its children" do
-    test "takes comment, delegate and end, and refuses continue, break and request",
+    test "takes comment, delegate and end, and refuses continue and break",
          %{conn: conn} do
       {parent_id, _child_id} = waiting_parent_and_child(conn, nil)
       run = Fixtures.open_run(conn, %{ceiling: @ceiling})
@@ -3075,15 +3075,46 @@ defmodule Omunculus.Store.ActionsTest do
 
       for {emit, refusal} <- [
             {%{"type" => "continue", "body" => %{}}, {:continue, :waiting}},
-            {%{"type" => "break", "body" => %{"body" => "stuck"}}, {:break, :waiting_children}},
-            {request_emit(%{"grant" => [grant_call("tool", "write")], "deny" => []}),
-             {:request, :waiting_children}}
+            {%{"type" => "break", "body" => %{"body" => "stuck"}}, {:break, :waiting_children}}
           ] do
         assert {:error, ^refusal} = Store.record_tools(conn, run.id, [{@call, [emit]}], ctx)
       end
 
       assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
       assert {parent.state, parent.waiting} == {"waiting", "child"}
+    end
+
+    test "takes a request and keeps waiting on its children, and the answer keeps the wait",
+         %{conn: conn} do
+      {parent_id, child_id} = waiting_parent_and_child(conn, nil)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      ctx = %{request_ctx(run, parent_id) | config: Fixtures.config(delivery_toml())}
+
+      assert {:ok, [_tool, %{type: "request"} = event]} =
+               Store.record_tools(conn, run.id, [{@call, [request_emit(%{})]}], ctx)
+
+      assert {:ok, request} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+
+      assert request.status == "pending"
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert {parent.state, parent.waiting, parent.waiting_for} == {"waiting", "child", nil}
+
+      reply = %{"type" => "reply", "body" => %{"request_id" => event.request_id, "body" => "ok"}}
+      assert {:ok, _events} = Store.record_tools(conn, run.id, [{@call, [reply]}], human_ctx())
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert {parent.state, parent.waiting} == {"waiting", "child"}
+
+      assert {:ok, [_tool, %{type: "continue"}]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "continue", "body" => %{}}],
+                 %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: child_id}
+               )
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert parent.state == "open"
     end
 
     test "reopens once when two children close at the same time from two processes",
