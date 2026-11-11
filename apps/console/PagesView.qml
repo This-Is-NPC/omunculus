@@ -149,13 +149,32 @@ Item {
     Qt.callLater(focusEntry)
   }
 
-  // Leaves the conversation: a fresh one for the picker it began on, one
-  // with something said for the list of the project's; BACK returns.
+  // Whether the last place remembered is a page of the conversation open, a
+  // move down into it (a work's thread, a log kept to a work).
+  function drilled() {
+    const last = history.length > 0 ? history[history.length - 1] : null
+    return last !== null && last.level === "conversation" && last.conversation === Omunculus.conversationId
+  }
+
+  // Leaves the conversation, up one level: a fresh one for the picker it
+  // began on, one with something said for the list it was opened from, or,
+  // opened from nowhere, the project's.
   function leave() {
-    if (fresh)
-      back()
-    else
+    while (drilled())
+      history = history.slice(0, -1)
+    if (history.length === 0 && !fresh)
       go("conversations")
+    else
+      retreat()
+  }
+
+  // BACK: up one level. In a conversation, from a work's thread or a log kept
+  // to a work, to the page it was opened from; from any other page, out of it.
+  function back() {
+    if (inside && !drilled())
+      leave()
+    else
+      retreat()
   }
 
   // Enters the pages from the start, at a page, with nothing behind it.
@@ -200,7 +219,7 @@ Item {
   // conversation that has said nothing, or is not made yet, is left for the
   // picker it began on; one that has is not returned to it. Leaving makes
   // nothing.
-  function back() {
+  function retreat() {
     if (!fresh)
       while (history.length > 0 && history[history.length - 1].page === "new")
         history = history.slice(0, -1)

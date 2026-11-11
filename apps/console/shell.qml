@@ -130,6 +130,8 @@ ShellRoot {
           Layout.fillWidth: true
           Layout.fillHeight: false
           tight: panel.short
+          home: panel.started
+          onHomeClicked: panel.started = false
           crumbs: panel.crumbs
           // Requests waiting for you in the other projects, while one is
           // open; it opens them, the waiting ones picked out.
