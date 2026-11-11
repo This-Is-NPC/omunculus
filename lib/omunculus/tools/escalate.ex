@@ -1,5 +1,5 @@
 defmodule Omunculus.Tools.Escalate do
-  @moduledoc "Merges received requests into one question linked by distinct named origins, through a model or authenticated human command; optional to names a logical route."
+  @moduledoc "Merges received requests into one question linked by distinct named origins, through a model or authenticated human command; optional to names an account or an agent."
   alias Omunculus.Tools.{Args, Out}
 
   def run(%{args: args}) do

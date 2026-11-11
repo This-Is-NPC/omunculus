@@ -45,17 +45,10 @@ defmodule Omunculus.CLITest do
     |> Enum.map(&Jason.decode!(&1.body)["name"])
   end
 
-  test "CLI refuses missing request routes explicitly", %{dir: dir} do
-    Fixtures.write_config(dir, "[agents.concierge]\ndepth = 0\ntext = \"root\"\n",
-      request_routes: false
-    )
-
-    assert {:error, reason} = CLI.run(["send", "hi"], dir)
-    assert reason == {:policy, {:required, :request_routes}}
-    assert Errors.format(reason) =~ "request_routes is required"
-  end
-
-  test "CLI refuses unknown and looping routes without creating a request", %{dir: dir} do
+  test "CLI refuses an unknown account and an ask nobody could receive without creating a request",
+       %{
+         dir: dir
+       } do
     project = open_project(dir)
     conversation = Omunculus.Id.new()
     principal = Omunculus.Operations.local_principal()
@@ -71,7 +64,8 @@ defmodule Omunculus.CLITest do
     Project.close(project)
 
     for {destination, refusal} <- [
-          {["--to", "absent"], {:request, {:unknown_route, "absent", ["owner"]}}},
+          {["--to", "absent"],
+           {:request, {:unknown_account, "absent", ["concierge", "reviewer", "worker"]}}},
           {[], {:request, :no_route}}
         ] do
       assert {:error, ^refusal} =
@@ -891,8 +885,8 @@ defmodule Omunculus.CLITest do
       assert assembled =~ "answered apply: the reply is below"
     end
 
-    test "a proposal takes the harness route, else the default route", %{dir: dir} do
-      config = """
+    test "a proposal goes to the person who opened the conversation", %{dir: dir} do
+      write_config(dir, """
       [agents.keeper]
       depth = 0
       text = "I keep the project."
@@ -905,65 +899,27 @@ defmodule Omunculus.CLITest do
       tools = ["end"]
 
       [policy]
-      HARNESS
-      request_routes = [ROUTES]
-      """
+      max_retries = 0
+      """)
 
-      owner = ~s({ name = "owner", via = ["origin"] }, )
-      default = ~s({ via = [{ kind = "agent", agent = "desk" }, "origin"] })
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        if assembled =~ "## Request\n" do
+          call.("end", %{})
+        else
+          desk = Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["desk"]
 
-      write_config(
-        dir,
-        config
-        |> String.replace("HARNESS", ~s(harness_route = "owner"))
-        |> String.replace("ROUTES", owner <> default)
-      )
-
-      # Proposes the desk's own table with a shorter text.
-      proposing = fn dir ->
-        fn assembled, _tools, call ->
-          if assembled =~ "## Request\n" do
-            call.("end", %{})
-          else
-            desk = Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["desk"]
-
-            call.("propose_config", %{
-              "item" => "agents.desk",
-              "value" => Map.put(desk, "text", "I answer briefly."),
-              "reason" => "shorter answers"
-            })
-          end
+          call.("propose_config", %{
+            "item" => "agents.desk",
+            "value" => Map.put(desk, "text", "I answer briefly."),
+            "reason" => "shorter answers"
+          })
         end
-      end
-
-      Fixtures.use_model(dir, proposing.(dir))
+      end)
 
       assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
       project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
       assert request.arbiter == @human
-      Project.close(project)
-
-      # Without a harness route the proposal follows the default route, to the desk.
-      dir = Fixtures.tmp_dir()
-      Fixtures.install_default(dir)
-
-      write_config(
-        dir,
-        config |> String.replace("HARNESS", "") |> String.replace("ROUTES", default)
-      )
-
-      Fixtures.use_model(dir, proposing.(dir))
-      assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
-      project = open_project(dir)
-
-      assert {:ok, [%{arbiter: arbiter}]} =
-               Query.all(
-                 project.conn,
-                 "SELECT arbiter FROM requests WHERE requester LIKE '%keeper%'"
-               )
-
-      assert Jason.decode!(arbiter) == %{"kind" => "agent", "agent" => "desk"}
       Project.close(project)
     end
 

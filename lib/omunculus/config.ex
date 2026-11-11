@@ -12,9 +12,8 @@ defmodule Omunculus.Config do
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root), optionally the `client` and a `summary` that say what it
   is for, plus a ceiling layer — the `[policy] workspace`
-  default, the required `[policy] max_retries` and `request_routes`, the
-  optional `[policy] harness_route` (the `request_routes` rule that takes the
-  harness's own requests) and `[policy] default_agent` (the agent of depth 0 that receives a
+  default, the required `[policy] max_retries`, the optional `[accounts]`
+  (names for identities a request can be addressed to) and `[policy] default_agent` (the agent of depth 0 that receives a
   new conversation when the person names none), the optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
@@ -56,9 +55,8 @@ defmodule Omunculus.Config do
     :assemble,
     :max_retries,
     :max_reopens,
-    :request_routes,
+    :accounts,
     :default_agent,
-    :harness_route,
     :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
@@ -144,9 +142,8 @@ defmodule Omunculus.Config do
           assemble: String.t() | nil,
           max_retries: non_neg_integer,
           max_reopens: non_neg_integer | nil,
-          request_routes: [map],
+          accounts: %{String.t() => map},
           default_agent: String.t() | nil,
-          harness_route: String.t() | nil,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
           conversation_bytes: pos_integer | nil,
@@ -197,7 +194,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes default_agent harness_route)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes default_agent)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -724,6 +721,7 @@ defmodule Omunculus.Config do
              "store",
              "auth",
              "access",
+             "accounts",
              "secrets",
              "skills"
            ] do
@@ -750,15 +748,8 @@ defmodule Omunculus.Config do
               conversation_bytes, send_catalog,
               session} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
-             {:ok, request_routes} <-
-               Omunculus.RequestRoutes.parse(
-                 get_in(data, ["policy", "request_routes"]),
-                 agents,
-                 workflows
-               ),
+             {:ok, accounts} <- Omunculus.Accounts.parse(Map.get(data, "accounts"), agents),
              {:ok, default_agent} <- fetch_default_agent(data, agents),
-             {:ok, harness_route} <-
-               Omunculus.RequestRoutes.fetch_harness_route(data, request_routes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -781,9 +772,8 @@ defmodule Omunculus.Config do
               assemble: assemble,
               max_retries: max_retries,
               max_reopens: max_reopens,
-              request_routes: request_routes,
+              accounts: accounts,
               default_agent: default_agent,
-              harness_route: harness_route,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,
@@ -814,7 +804,7 @@ defmodule Omunculus.Config do
   end
 
   @capabilities ~w(
-    project.manage_access project.manage_config project.own conversation.create
+    project.manage_access project.manage_config conversation.create
     conversation.read conversation.send conversation.comment
     conversation.reply conversation.manage_access conversation.manage
   )
@@ -834,7 +824,6 @@ defmodule Omunculus.Config do
          true <- "project.manage_config" in parsed[bootstrap].capabilities do
       {:ok, %{creator_role: creator, bootstrap_role: bootstrap, roles: parsed}}
     else
-      {:error, {:access, :owner_cannot_reply, _role}} = error -> error
       _ -> {:error, {:access, :invalid}}
     end
   end
@@ -852,10 +841,6 @@ defmodule Omunculus.Config do
                 (scope != "project" and
                    not Enum.all?(caps, &String.starts_with?(&1, "conversation."))) ->
               {:halt, {:error, {:access, :invalid_role, name}}}
-
-            # An owner arbitrates requests, so it must be able to answer them.
-            "project.own" in caps and "conversation.reply" not in caps ->
-              {:halt, {:error, {:access, :owner_cannot_reply, name}}}
 
             true ->
               {:cont, {:ok, Map.put(acc, name, %{scope: scope, capabilities: caps})}}

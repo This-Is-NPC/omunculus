@@ -1,7 +1,7 @@
 name = "escalate"
 kind = "tool"
 triggers = ["model", "cli"]
-description = "Raises received requests you cannot answer as one question. origins maps each distinct part name to its received request ID; the receiver sees each origin's question and who asked it. reason is what the receiver is asked, written to them in their language as it should reach them: the merged question alone, without request or work IDs, stage or part names, or notes for agents. Optional to names a route in the project's request_routes; omit to to follow the default route. Routing chooses the next receiver. The run ends; the answer returns with the linked origins for distribution."
+description = "Raises received requests you cannot answer as one question. origins maps each distinct part name to its received request ID; the receiver sees each origin's question and who asked it. reason is what the receiver is asked, written to them in their language as it should reach them: the merged question alone, without request or work IDs, stage or part names, or notes for agents. Optional to names an account of the project or an agent; omit to to raise it to whoever gave you your work. The run ends; the answer returns with the linked origins for distribution."
 tags = ["request"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Escalate"
@@ -20,6 +20,6 @@ minProperties = 1
 type = "string"
 
 [parameters.properties.to]
-description = "Optional name of a route in the project's request_routes. Omit to to follow the default route."
+description = "Optional name of an account of the project or of an agent. Omit to to raise it to whoever gave you your work."
 type = "string"
 minLength = 1

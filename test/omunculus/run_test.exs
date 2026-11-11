@@ -1890,8 +1890,8 @@ defmodule Omunculus.RunTest do
   end
 
   describe "a request left at an agent" do
-    # The sales desk's shape: the seller asks, its request goes to the
-    # generalist, an agent of depth 0 without a work, then to the person.
+    # The sales desk's shape: the seller asks the generalist, an agent of
+    # depth 0 without a work, which passes it on to the person.
     defp desk_config(dir) do
       write_config(dir, """
       [agents.seller]
@@ -1903,9 +1903,6 @@ defmodule Omunculus.RunTest do
       depth = 0
       text = "sales"
       tools = ["reply", "escalate", "end"]
-
-      [policy]
-      request_routes = [{ via = [{ kind = "agent", agent = "sales" }, "origin"] }]
       """)
     end
 
@@ -1934,7 +1931,12 @@ defmodule Omunculus.RunTest do
 
       Fixtures.use_model(project, fn assembled, _tools, call ->
         if String.starts_with?(assembled, "seller"),
-          do: call.("ask", %{"question" => "Retry the deploy?", "options" => ["retry", "stop"]}),
+          do:
+            call.("ask", %{
+              "question" => "Retry the deploy?",
+              "options" => ["retry", "stop"],
+              "to" => "sales"
+            }),
           else: call.("end", %{})
       end)
 
@@ -1962,7 +1964,11 @@ defmodule Omunculus.RunTest do
       seller =
         Fixtures.open_run(project.conn, %{agent: "seller", work_id: work_id, ceiling: ceiling})
 
-      ask = %{"reason" => "Retry the deploy?", "options" => %{"retry" => [], "stop" => []}}
+      ask = %{
+        "reason" => "Retry the deploy?",
+        "options" => %{"retry" => [], "stop" => []},
+        "to" => "sales"
+      }
 
       {:ok, events} =
         Store.record_tools(
@@ -2013,7 +2019,7 @@ defmodule Omunculus.RunTest do
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
       seller = due_run(project, %{agent: "seller", work_id: work_id, own: true})
-      asked = lost_call(project, seller, "ask", %{"question" => "Which colour?"})
+      asked = lost_call(project, seller, "ask", %{"question" => "Which colour?", "to" => "sales"})
       request = asked(project)
       cause = Enum.find(asked, &(&1.type == "request"))
       sales = due_run(project, %{agent: "sales", request_id: request.id, cause_id: cause.id})
@@ -2066,7 +2072,6 @@ defmodule Omunculus.RunTest do
 
       [policy]
       max_retries = 2
-      request_routes = [{ via = [{ kind = "agent", agent = "lead" }, "origin"] }]
       """)
 
       project = open_project(dir)
@@ -2305,7 +2310,7 @@ defmodule Omunculus.RunTest do
   end
 
   describe "a parent past [policy] max_reopens" do
-    test "asks along its route instead of reopening, and its run ends", %{dir: dir} do
+    test "asks whoever gave it its work instead of reopening, and its run ends", %{dir: dir} do
       write_config(dir, """
       [agents.lead]
       depth = 0
@@ -2320,7 +2325,6 @@ defmodule Omunculus.RunTest do
       [policy]
       max_retries = 0
       max_reopens = 0
-      request_routes = [{ via = ["origin"] }]
       """)
 
       project = open_project(dir)

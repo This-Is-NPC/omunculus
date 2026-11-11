@@ -181,6 +181,12 @@ defmodule Omunculus.CycleTest do
         )
       )
 
+      File.write!(
+        path,
+        File.read!(path) <>
+          ~s(\n[accounts]\nowner = { kind = "human", issuer = "local", subject = "#{Omunculus.Operations.local_principal().subject}" }\n)
+      )
+
       owner = self()
 
       Fixtures.use_model(

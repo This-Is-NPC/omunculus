@@ -7,7 +7,7 @@ defmodule Omunculus.Tools.RequestAccess do
   scope of the `grant_scopes` view, permanent; `deny`, with no call; and,
   in a run with a work, `grant`, which grants on that work. In a run with
   a work, a `comment` with the `report` on that work comes first. Its
-  manifest's `then` appends `end`. Optional `to` names a logical route.
+  manifest's `then` appends `end`. Optional `to` names an account or an agent.
   """
 
   alias Omunculus.Config

@@ -201,7 +201,6 @@ steps = [
 ]
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 2
 max_reopens = 3

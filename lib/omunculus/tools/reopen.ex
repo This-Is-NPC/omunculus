@@ -5,7 +5,7 @@ defmodule Omunculus.Tools.Reopen do
   it, comments them on it and runs its agent again, the `agent` it names
   at that depth, or, in a workflow, the agent of the `stage` it names,
   giving it on that work what `grant` lists, each a `{kind, name}`, and
-  with `past_limit`, the question the store asks the parent's route
+  with `past_limit`, the question the store asks whoever gave the parent its work
   instead once the work went back `[policy] max_reopens` times in a row.
   Its manifest's `then` appends `end`.
   """

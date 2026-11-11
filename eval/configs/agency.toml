@@ -43,26 +43,5 @@ steps = [
 [policy.depth.3]
 workflows = ["design", "page", "release"]
 
-# The owner decides the sale, a discount beyond the seller's limit and what
-# goes to production. The eval has no owner member (its direct CLI runs
-# without [access], and its one person is both client and owner), so the
-# owner route ends at `origin`: only here, a real project lists `owners`
-# alone (packs/sales-desk/README.md). The teams' owner-route requests go to
-# the project manager first, which decides what is its own and escalates the
-# rest; the seller's go straight to the owner. The seller asks the project
-# manager, its parent, with `to = "pm"`, and the client through the front
-# desk. The release's request to grant promote goes to the project manager,
-# who has the client accept the built site and then asks the owner with request_golive.
-# Alone on the route, an unanswered manager leaves the request pending with it. The
-# default route passes the project manager before the front desk.
 [policy]
 default_agent = "front-desk"
-harness_route = "owner"
-request_routes = [
-  { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners", "origin"] },
-  { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners", "origin"] },
-  { name = "pm", via = ["parent"] },
-  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }] },
-  { from = { kind = "agent", agent = "seller" }, via = [{ kind = "agent", agent = "front-desk" }, "origin"] },
-  { via = ["parent", { kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, "origin"] },
-]

@@ -127,7 +127,7 @@ defmodule Omunculus.Tools.Out do
   asker's work, nil without one) with who asked it and on which work, the
   question shortened. With `note`, it is the inbox note of the request it
   links, which reached a person, or `:no_route`, the inbox note of a
-  request no agent or person on its route could receive.
+  request nobody could receive.
   """
   @spec unanswered(String.t(), [map], boolean | :no_route) :: String.t()
   def unanswered(agent, questions, note) do
@@ -146,7 +146,7 @@ defmodule Omunculus.Tools.Out do
     case note do
       false -> text
       true -> text <> " It is yours to answer now."
-      :no_route -> text <> " No arbiter is left on its route, so it stays pending."
+      :no_route -> text <> " Nobody is left to ask, so it stays pending."
     end
   end
 
@@ -371,11 +371,16 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{inspect(name)} is not a workflow a work can go through there; name one of: #{Enum.join(names, ", ")}"
 
-  def refused({:request, {:unknown_route, name, names}}) do
-    configured = if names == [], do: "none", else: Enum.join(names, ", ")
+  def refused({:request, {:unknown_account, name, names}}),
+    do:
+      "refused: #{inspect(name)} is neither an account nor an agent; to takes one of: #{Enum.join(names, ", ")}; omit to to ask whoever gave you your work"
 
-    "refused: #{inspect(name)} is not a configured request route; configured route names: #{configured}; omit to to follow the default request_routes route"
-  end
+  def refused({:request, {:ask_self, name}}),
+    do: "refused: #{inspect(name)} is you: name someone else, or omit to"
+
+  def refused({:request, {:unreachable, name}}),
+    do:
+      "refused: #{inspect(name)} cannot be asked from this work: it is neither above this work nor an agent that talks with the person; name an account, or omit to"
 
   def refused({:reply, {:unknown_option, option, []}}),
     do:
@@ -464,7 +469,8 @@ defmodule Omunculus.Tools.Out do
     do: "refused: #{tag} names more than one target: name one"
 
   def refused({tag, :no_route}),
-    do: "refused: #{tag} has no route to anyone who can answer: ask the person in plain text"
+    do:
+      "refused: #{tag} has nobody to ask: it has no giver of its work who can answer; ask the person in plain text"
 
   def refused({tag, reason}) when reason in [:invalid_origin, :invalid_origins],
     do: "refused: #{tag} takes the ids of requests you hold as origins: use ids you were given"

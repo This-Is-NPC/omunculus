@@ -72,8 +72,8 @@ workflows that needed them go too. `[eval] packs` lists packs of `packs/`,
 each a `name` and the `depth` its team works below its own, whose teams run
 alone: Amestris's agents and workflows go, and the `pack` tool imports each,
 in order, its roles on the run's model and each provider it names on the
-configuration's login of that name. The configuration's own `workflows`,
-`[policy.depth.<n>]` layers and `[policy] request_routes` are laid over the
+configuration's login of that name. The configuration's own `workflows` and
+`[policy.depth.<n>]` layers are laid over the
 project once the packs are imported, so they can compose the teams. A
 pack's `tasks/` run with the others, their ids led by the pack's name.
 

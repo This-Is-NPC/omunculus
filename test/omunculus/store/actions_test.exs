@@ -67,7 +67,7 @@ defmodule Omunculus.Store.ActionsTest do
     do: request_emit(%{"grant" => [grant_call(kind, name)], "deny" => []})
 
   defp open_request(conn, ceiling, work_id) do
-    run = Fixtures.open_run(conn, %{ceiling: ceiling})
+    run = Fixtures.open_run(conn, %{agent: "worker", ceiling: ceiling})
 
     {:ok, [_tool_event, event]} =
       record_tool(conn, [access_request("tool", "write")], request_ctx(run, work_id))
@@ -123,7 +123,8 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   defp waiting_parent_and_child(conn, stage) do
-    parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+    parent_id =
+      Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child", assignee: "concierge"})
 
     child_id =
       Fixtures.insert(conn, :works, %{
@@ -1238,40 +1239,10 @@ defmodule Omunculus.Store.ActionsTest do
                record_tool(conn, [delegate], ctx)
     end
 
-    test "past [policy] max_reopens the decision goes to the harness route",
+    test "past [policy] max_reopens the parent asks whoever gave it its work instead, until an answer comes",
          %{conn: conn} do
       config =
-        Fixtures.config(
-          arbiter_toml() <> "\n[policy]\nmax_reopens = 0\nharness_route = \"owner\"\n"
-        )
-
-      root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
-      parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
-
-      child_id =
-        Fixtures.insert(conn, :works, %{
-          parent_id: parent_id,
-          assignee: "worker",
-          state: "waiting"
-        })
-
-      emit = put_in(reopen_emit(child_id), ["body", "past_limit"], "it keeps breaking")
-      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
-
-      assert {:ok, [_tool_event, %{type: "request"} = asked]} =
-               record_tool(conn, [emit], request_ctx(run, parent_id, config))
-
-      assert {:ok, %{arbiter: @human, status: "pending"}} =
-               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [asked.request_id])
-    end
-
-    test "past [policy] max_reopens the parent asks its route instead, until an answer comes",
-         %{conn: conn} do
-      config =
-        Fixtures.config(
-          arbiter_toml() <>
-            "\n[policy]\nmax_reopens = 1\nrequest_routes = [{ via = [\"parent\", \"origin\"] }]\n"
-        )
+        Fixtures.config(arbiter_toml() <> "\n[policy]\nmax_reopens = 1\n")
 
       root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
@@ -2062,10 +2033,10 @@ defmodule Omunculus.Store.ActionsTest do
       assert work.waiting_from == run.agent
     end
 
-    test "a sealed grant goes to the human even with an arbiter above", %{conn: conn} do
+    test "a sealed grant goes to whoever gave the work", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       assert {:ok, [_tool_event, event]} =
@@ -2074,7 +2045,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == @human
+      assert request.arbiter == @concierge
       assert request.status == "pending"
     end
 
@@ -2229,9 +2200,16 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, []} = Store.received_inbox(conn, woken.id)
     end
 
-    test "a decision follows the default or named logical route", %{conn: conn} do
+    test "a decision goes to whoever gave the work, or to the account or agent named", %{
+      conn: conn
+    } do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
-      config = Fixtures.config(arbiter_toml())
+
+      config =
+        Fixtures.config(
+          arbiter_toml() <>
+            ~s(\n[accounts]\nowner = { kind = "human", issuer = "local", subject = "#{Omunculus.Operations.local_principal().subject}" }\n)
+        )
 
       arbiter = fn extra ->
         work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
@@ -2255,10 +2233,11 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert arbiter.(%{}) == @concierge
       assert arbiter.(%{"to" => "owner"}) == @human
+      assert arbiter.(%{"to" => "concierge"}) == @concierge
 
       run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
 
-      assert {:error, {:request, {:unknown_route, "nobody", ["owner"]}}} =
+      assert {:error, {:request, {:unknown_account, "nobody", ["concierge", "owner", "worker"]}}} =
                record_tool(
                  conn,
                  [

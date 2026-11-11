@@ -84,201 +84,6 @@ defmodule Omunculus.EvalProjectTest do
     assert data["models"]["haiku"]["code_mode"]
   end
 
-  test "steward recovery preserves permission origins and returns client presentation to the front desk",
-       %{conn: conn} do
-    overlay = Path.expand("../../eval/overlays/course-recovery.toml", __DIR__)
-
-    assert {:ok, path} =
-             EquivalentExchange.Project.build(
-               Fixtures.tmp_dir(),
-               "agency",
-               {"fake", false},
-               nil,
-               %{},
-               overlay
-             )
-
-    assert {:ok, config} = Config.load(path)
-    conversation = conversation(conn)
-    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
-
-    root =
-      Fixtures.insert(conn, :works, %{
-        assignee: "project-manager",
-        conversation_id: conversation,
-        workflow: "engagement",
-        stage: "build",
-        state: "waiting",
-        waiting: "child"
-      })
-
-    child =
-      Fixtures.insert(conn, :works, %{
-        assignee: "clerk",
-        parent_id: root,
-        conversation_id: conversation,
-        workflow: "release",
-        stage: "promote"
-      })
-
-    stage = Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
-
-    clerk =
-      configured_actor(
-        conn,
-        config,
-        conversation,
-        "clerk",
-        child,
-        config.agents["clerk"].depth,
-        stage
-      )
-
-    assert {:ok, %{ok: true}, made} =
-             Harness.dispatch(
-               project,
-               "request_access",
-               %{
-                 "report" => "Built",
-                 "reason" => "Approve production at http://site.homologation.localhost:8080",
-                 "access" => [%{"kind" => "tool", "name" => "promote"}]
-               },
-               clerk
-             )
-
-    origin = Enum.find(made, &(&1.type == "request")).request_id
-
-    seller =
-      configured_actor(
-        conn,
-        config,
-        conversation,
-        "project-manager",
-        root,
-        config.agents["project-manager"].depth
-      )
-
-    assert {:ok, %{ok: true}, made} =
-             Harness.dispatch(
-               project,
-               "escalate",
-               %{"reason" => "Approve the built site?", "origins" => %{"production" => origin}},
-               seller
-             )
-
-    envelope = Enum.find(made, &(&1.type == "request")).request_id
-    sales = configured_actor(conn, config, conversation, "front-desk", nil, 0)
-
-    assert {:ok, %{ok: true}, _} =
-             Harness.dispatch(
-               project,
-               "reply",
-               %{"request_id" => envelope, "body" => "The client has already been asked; wait."},
-               sales
-             )
-
-    assert {:ok, _} = Store.close_run(conn, seller.run_id)
-    assert {:ok, _} = Store.close_run(conn, sales.run_id)
-
-    resumed =
-      configured_actor(
-        conn,
-        config,
-        conversation,
-        "project-manager",
-        root,
-        config.agents["project-manager"].depth,
-        nil,
-        envelope
-      )
-
-    assert {:ok, _} = Store.close_run(conn, resumed.run_id)
-    assert {:ok, run} = Store.view(conn, "run", resumed.run_id)
-
-    assert {:ok, fallback} =
-             Store.unanswered(conn, run, config, &Omunculus.Tools.Out.unanswered/3)
-
-    pending = Enum.find(fallback, &(&1.type == "request")).request_id
-    assert {:ok, request} = Store.view(conn, "request", pending)
-    assert Jason.decode!(request.arbiter) == Participant.agent("steward")
-    assert {:ok, []} = Store.unanswered(conn, run, config, &Omunculus.Tools.Out.unanswered/3)
-
-    assert {:ok, []} =
-             Query.all(
-               conn,
-               "SELECT * FROM requests WHERE json_extract(arbiter, '$.kind') = 'human'"
-             )
-
-    steward = configured_actor(conn, config, conversation, "steward", nil, 0, nil, pending)
-
-    assert {:ok, %{ok: true}, _} =
-             Harness.dispatch(project, "skill", %{"name" => "course-correction"}, steward)
-
-    assert {:ok, %{ok: true, output: evidence}, _} =
-             Harness.dispatch(project, "recovery_case", %{"request_id" => pending}, steward)
-
-    assert evidence =~ origin
-    assert evidence =~ "already been asked"
-    assert Jason.decode!(evidence)["client_delivery"]["state"] == "unverified"
-    assert Jason.decode!(evidence)["evidence_scope"]["recent"] =~ "not a complete history"
-
-    assert {:ok, %{ok: false, output: refusal}, rejected} =
-             Harness.dispatch(
-               project,
-               "correct_course",
-               %{
-                 "request_id" => pending,
-                 "instructions" => "The client has already been asked; wait.",
-                 "client_delivery" => "pending",
-                 "client_request_id" => envelope,
-                 "client_event_id" => request.event_id,
-                 "evidence_event_ids" => [request.event_id]
-               },
-               steward
-             )
-
-    assert refusal =~ "Internal escalation and agent text are not proof"
-    refute Enum.any?(rejected, &(&1.type in ~w(request escalate end grant)))
-    assert {:ok, %{status: "pending"}} = Store.view(conn, "request", pending)
-
-    assert {:ok, %{ok: true}, correction} =
-             Harness.dispatch(
-               project,
-               "correct_course",
-               %{
-                 "request_id" => pending,
-                 "client_delivery" => "unverified",
-                 "evidence_event_ids" => [request.event_id],
-                 "instructions" =>
-                   "Inspect your Inbox and escalate the production approval to the client with its exact homologation address."
-               },
-               steward
-             )
-
-    assert [corrected] = Enum.filter(correction, &(&1.type == "request"))
-    assert Jason.decode!(corrected.body)["arbiter"] == Participant.agent("front-desk")
-    refute Enum.any?(correction, &(&1.type in ~w(grant prompt)))
-    sales = configured_actor(conn, config, conversation, "front-desk", nil, 0)
-
-    assert {:ok, %{ok: true}, made} =
-             Harness.dispatch(
-               project,
-               "escalate",
-               %{
-                 "reason" =>
-                   "Você aprova publicar as quatro páginas em http://site.homologation.localhost:8080?",
-                 "origins" => %{"production" => corrected.request_id}
-               },
-               sales
-             )
-
-    human = Enum.find(made, &(&1.type == "request")).request_id
-    assert {:ok, question} = Store.view(conn, "request", human)
-    assert Jason.decode!(question.arbiter) == Participant.human("test", "owner")
-    assert question.origins["production"].origins["recovery"].origins["production"].id == origin
-    assert {:ok, %{grants: nil}} = Store.view(conn, "work", child)
-  end
-
   test "model overrides reject unknown agents and model aliases" do
     for override <- [{"missing", "haiku"}, {"front-desk", "missing"}] do
       assert {:error, {:agent_model, ^override}} =
@@ -302,7 +107,6 @@ defmodule Omunculus.EvalProjectTest do
                EquivalentExchange.Project.build(dir, unquote(configuration), {"fake", false}, nil)
 
       assert {:ok, config} = Config.load(path)
-      assert config.request_routes != []
 
       {agent, _} =
         Enum.find(config.agents, fn {_name, spec} ->
@@ -331,12 +135,7 @@ defmodule Omunculus.EvalProjectTest do
         })["emit"]
       end
 
-      forms =
-        [fn _ -> [decision] end, permission] ++
-          if(config.agents["seller"],
-            do: [fn _ -> [put_in(decision, ["body", "to"], "owner")] end],
-            else: []
-          )
+      forms = [fn _ -> [decision] end, permission]
 
       for form <- forms do
         {run, ctx} = opening(conn, config, agent, conversation_id)
@@ -726,9 +525,19 @@ defmodule Omunculus.EvalProjectTest do
 
       origin = Enum.find(events, &(&1.type == "request")).request_id
 
-      # The release's request goes to the project manager, past the
-      # administrator whose work waits on the release; the manager asks the
-      # owner.
+      # The release's request goes to the administrator whose work it was
+      # delegated from, who raises it to the project manager, who raises it
+      # to the person who opened the conversation.
+      administrator =
+        configured_actor(
+          conn,
+          config,
+          conversation,
+          "administrator",
+          admin_work,
+          config.agents["administrator"].depth
+        )
+
       manager =
         configured_actor(
           conn,
@@ -741,17 +550,25 @@ defmodule Omunculus.EvalProjectTest do
         )
 
       assert {:ok, request} = Store.view(conn, "request", origin)
+      assert Jason.decode!(request.arbiter) == Participant.agent("administrator")
+
+      assert {:ok, %{ok: true}, events} =
+               Harness.dispatch(
+                 project,
+                 "escalate",
+                 %{"reason" => "Production approval", "origins" => %{"production" => origin}},
+                 administrator
+               )
+
+      at_manager = Enum.find(events, &(&1.type == "request")).request_id
+      assert {:ok, request} = Store.view(conn, "request", at_manager)
       assert Jason.decode!(request.arbiter) == Participant.agent("project-manager")
 
       assert {:ok, %{ok: true}, events} =
                Harness.dispatch(
                  project,
                  "escalate",
-                 %{
-                   "reason" => "Production approval",
-                   "origins" => %{"production" => origin},
-                   "to" => "owner"
-                 },
+                 %{"reason" => "Production approval", "origins" => %{"production" => at_manager}},
                  manager
                )
 
@@ -1000,8 +817,7 @@ defmodule Omunculus.EvalProjectTest do
     assert %{assignee: "administrator"} = assess
     assert %{assignee: "design-lead"} = preview
 
-    # The seller asks the manager, its parent, with `to = "pm"`, and the client
-    # through the front desk.
+    # The seller asks the manager, its parent, and the front desk by name.
     seller =
       configured_actor(
         conn,
@@ -1017,7 +833,7 @@ defmodule Omunculus.EvalProjectTest do
              Harness.dispatch(
                project,
                "ask",
-               %{"question" => "Can it be built?", "to" => "pm"},
+               %{"question" => "Can it be built?"},
                seller
              )
 
@@ -1026,7 +842,12 @@ defmodule Omunculus.EvalProjectTest do
     assert Jason.decode!(row.arbiter) == Participant.agent("project-manager")
 
     assert {:ok, %{ok: true}, events} =
-             Harness.dispatch(project, "ask", %{"question" => "Which pages?"}, seller)
+             Harness.dispatch(
+               project,
+               "ask",
+               %{"question" => "Which pages?", "to" => "front-desk"},
+               seller
+             )
 
     id = Enum.find(events, &(&1.type == "request")).request_id
     assert {:ok, row} = Store.view(conn, "request", id)
@@ -1043,6 +864,9 @@ defmodule Omunculus.EvalProjectTest do
     project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
     stage = Enum.find(config.workflows["sale"], &(&1.name == "qualify")).ceiling
 
+    engagement =
+      Fixtures.insert(conn, :works, %{assignee: "front-desk", conversation_id: conversation})
+
     origins =
       for {part, question} <- [
             {"identity", "What is the business name and city?"},
@@ -1052,6 +876,7 @@ defmodule Omunculus.EvalProjectTest do
         work =
           Fixtures.insert(conn, :works, %{
             assignee: "seller",
+            parent_id: engagement,
             conversation_id: conversation,
             workflow: "sale",
             stage: "qualify"
@@ -1081,7 +906,11 @@ defmodule Omunculus.EvalProjectTest do
     assert {:ok, [%{requests: received}]} = Store.received_inbox(conn, sales.run_id)
     assert MapSet.new(received, & &1.id) == MapSet.new(Map.values(origins))
 
-    for route <- ~w(client person front-desk) do
+    for {to, refusal} <- [
+          {"client", "neither an account nor an agent"},
+          {"person", "neither an account nor an agent"},
+          {"front-desk", "is you"}
+        ] do
       assert {:ok, %{ok: false, output: output}, _} =
                Harness.dispatch(
                  project,
@@ -1089,13 +918,12 @@ defmodule Omunculus.EvalProjectTest do
                  %{
                    "reason" => "Business details?",
                    "origins" => origins,
-                   "to" => route
+                   "to" => to
                  },
                  sales
                )
 
-      assert output ==
-               ~s(refused: "#{route}" is not a configured request route; configured route names: owner, pm; omit to to follow the default request_routes route)
+      assert output =~ ~s(refused: "#{to}" ) and output =~ refusal
     end
 
     assert {:ok, %{ok: true}, events} =

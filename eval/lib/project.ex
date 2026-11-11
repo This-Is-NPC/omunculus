@@ -14,9 +14,8 @@ defmodule EquivalentExchange.Project do
   imports each, in order, every role on the run's model and each provider
   the pack names on the configuration's login of that name, copying the
   pack's workspace files in before the task's. Such a configuration's own
-  `workflows`, `[policy.depth.<n>]` layers and `[policy] request_routes` and `harness_route`
-  compose the teams — a workflow whose stages are agents of different
-  packs, a route naming a pack's workflow — so they are laid over the
+  `workflows`, `[policy.depth.<n>]` layers compose the teams — a workflow whose stages are
+  agents of different packs — so they are laid over the
   project once the packs are imported, and it must load then.
   Per-agent model overrides are applied after those imports and validated
   against the expanded agents and available model aliases.
@@ -204,7 +203,7 @@ defmodule EquivalentExchange.Project do
   # workflows, so it is laid over the project only once they are imported.
   defp composition(overlay) do
     {workflows, overlay} = Map.pop(overlay, "workflows")
-    {layers, policy} = Map.split(Map.get(overlay, "policy", %{}), ["depth", "request_routes", "harness_route"])
+    {layers, policy} = Map.split(Map.get(overlay, "policy", %{}), ["depth"])
 
     composition =
       %{"workflows" => workflows, "policy" => if(layers != %{}, do: layers)}

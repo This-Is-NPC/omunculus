@@ -17,7 +17,3 @@ key = "$OMUNCULUS_HOMOLOGATION_KEY"
 [auth.production]
 kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
-
-[policy]
-harness_route = "owner"
-request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]

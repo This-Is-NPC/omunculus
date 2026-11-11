@@ -127,7 +127,7 @@ defmodule Omunculus.Benchmark.Driver do
           "exec" => ~s(exec "$@")
         }
       },
-      "policy" => %{"mode" => "allowlist", "max_retries" => 0, "request_routes" => [%{"via" => ["parent", "origin"]}]},
+      "policy" => %{"mode" => "allowlist", "max_retries" => 0},
       "models" => %{
         "bench" => %{
           "api" => "module",

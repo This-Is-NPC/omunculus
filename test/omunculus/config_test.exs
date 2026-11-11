@@ -76,29 +76,62 @@ defmodule Omunculus.ConfigTest do
     assert Config.workflows_at(config, 1) == ["delivery"]
   end
 
-  test "request routes are required, validated once and retained on Config", %{dir: dir} do
+  test "[accounts] is optional and names agent and human identities", %{dir: dir} do
     agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
-    Fixtures.write_config(dir, agents, request_routes: false)
-    assert {:error, {:policy, {:required, :request_routes}}} = load(dir)
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{accounts: accounts}} = load(dir)
+    assert accounts == %{}
 
-    for routes <- [
-          "[]",
-          "42",
-          "[{ via = [] }]",
-          "[{ via = [\"person\"] }]",
-          "[{ via = [{ kind = \"agent\", agent = \"absent\" }] }]",
-          "[{ workflow = \"absent\", via = [\"origin\"] }]"
+    Fixtures.write_config(
+      dir,
+      agents <>
+        """
+
+        [accounts]
+        owner = { kind = "human", issuer = "local", subject = "1000" }
+        desk = { kind = "agent", agent = "concierge" }
+        """
+    )
+
+    assert {:ok, %Config{accounts: accounts}} = load(dir)
+
+    assert accounts == %{
+             "owner" => %{"kind" => "human", "issuer" => "local", "subject" => "1000"},
+             "desk" => %{"kind" => "agent", "agent" => "concierge"}
+           }
+  end
+
+  test "[accounts] refuses an invalid identity, an absent agent and an agent's name", %{dir: dir} do
+    agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
+
+    for account <- [
+          ~s(owner = "person"),
+          ~s(owner = { kind = "human", issuer = "local" }),
+          ~s(owner = { kind = "client", issuer = "local", subject = "1" }),
+          ~s(owner = { kind = "agent", agent = "absent" }),
+          ~s(owner = { kind = "agent", agent = "concierge", extra = 1 })
         ] do
-      Fixtures.write_config(dir, agents <> "\n[policy]\nrequest_routes = #{routes}\n")
-      assert {:error, {:policy, {:invalid, :request_routes}}} = load(dir)
+      Fixtures.write_config(dir, agents <> "\n[accounts]\n" <> account <> "\n")
+      assert {:error, {:accounts, {:invalid, "owner"}}} = load(dir)
     end
 
     Fixtures.write_config(
       dir,
-      agents <> "\n[policy]\nrequest_routes = [{ via = [\"parent\", \"origin\"] }]\n"
+      agents <>
+        "\n[accounts]\nconcierge = { kind = \"human\", issuer = \"l\", subject = \"1\" }\n"
     )
 
-    assert {:ok, %{request_routes: [%{"via" => ["parent", "origin"]}]}} = load(dir)
+    assert {:error, {:accounts, {:agent_name, "concierge"}} = reason} = load(dir)
+    assert Omunculus.Errors.format(reason) =~ "also the name of an agent"
+  end
+
+  test "request_routes and harness_route are no policy keys", %{dir: dir} do
+    agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n[policy]\n"
+
+    for key <- ["request_routes = []", ~s(harness_route = "owner")] do
+      Fixtures.write_config(dir, agents <> key <> "\n")
+      assert {:error, _unknown} = load(dir)
+    end
   end
 
   test "the default preset names assemble on policy" do
@@ -164,28 +197,6 @@ defmodule Omunculus.ConfigTest do
     for invalid <- [~s("nobody"), ~s("worker"), ~s("reviewer"), "3", ~s("")] do
       Fixtures.write_config(dir, agents <> "\n[policy]\ndefault_agent = #{invalid}\n")
       assert {:error, {:policy, {:invalid, :default_agent}}} = load(dir)
-    end
-  end
-
-  test "[policy] harness_route is optional and names a declared route", %{dir: dir} do
-    agents = """
-    [agents.concierge]
-    depth = 0
-    text = "hi"
-
-    [policy]
-    request_routes = [{ name = "boss", via = ["owners"] }, { via = ["parent", "origin"] }]
-    """
-
-    Fixtures.write_config(dir, agents, request_routes: false)
-    assert {:ok, %Config{harness_route: nil}} = load(dir)
-
-    Fixtures.write_config(dir, agents <> "harness_route = \"boss\"\n", request_routes: false)
-    assert {:ok, %Config{harness_route: "boss"}} = load(dir)
-
-    for invalid <- [~s("nobody"), "3", ~s("")] do
-      Fixtures.write_config(dir, agents <> "harness_route = #{invalid}\n", request_routes: false)
-      assert {:error, {:policy, {:invalid, :harness_route}}} = load(dir)
     end
   end
 
@@ -1848,7 +1859,6 @@ defmodule Omunculus.ConfigTest do
 
       [policy]
       max_retries = 0
-      request_routes = [{ via = ["parent", "origin"] }]
 
       [models.fake]
       api = "module"

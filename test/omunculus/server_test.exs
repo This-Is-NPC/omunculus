@@ -931,13 +931,7 @@ defmodule Omunculus.ServerTest do
     data = Toml.decode_file!(project_path)
 
     data =
-      data
-      |> update_in(["policy"], &Map.delete(&1, "harness_route"))
-      |> put_in(["policy", "request_routes"], [
-        %{"from" => local_identity, "via" => [reviewer_identity, final_identity]},
-        %{"name" => "origin", "via" => ["origin", final_identity]},
-        %{"via" => ["parent", "origin"]}
-      ])
+      Map.put(data, "accounts", %{"auditor" => reviewer_identity, "closer" => final_identity})
 
     File.write!(project_path, Config.Toml.encode(data))
 
@@ -1059,7 +1053,10 @@ defmodule Omunculus.ServerTest do
     headers = [{"idempotency-key", "human-question"}]
 
     question =
-      local.(:post, requests_url, headers: headers, json: %{question: "What is the deadline?"})
+      local.(:post, requests_url,
+        headers: headers,
+        json: %{question: "What is the deadline?", to: "auditor"}
+      )
 
     assert question.status == 202
 
@@ -1073,7 +1070,7 @@ defmodule Omunculus.ServerTest do
 
     assert local.(:post, requests_url,
              headers: headers,
-             json: %{question: "What is the deadline?"}
+             json: %{question: "What is the deadline?", to: "auditor"}
            ).body == question.body
 
     assert local.(:post, requests_url, headers: headers, json: %{question: "Changed?"}).status ==
@@ -1104,6 +1101,8 @@ defmodule Omunculus.ServerTest do
                  conversation_id,
                  "--question",
                  "Pick a date",
+                 "--to",
+                 "auditor",
                  "--options",
                  ~s(["today","tomorrow"])
                ],
@@ -1130,7 +1129,7 @@ defmodule Omunculus.ServerTest do
              Operations.call(
                reader,
                "ask",
-               %{"conversation_id" => conversation_id, "question" => "Budget?", "to" => "origin"},
+               %{"conversation_id" => conversation_id, "question" => "Budget?"},
                %{principal: actor},
                false
              )
@@ -1141,7 +1140,7 @@ defmodule Omunculus.ServerTest do
              Operations.call(
                reader,
                "ask",
-               %{"conversation_id" => conversation_id, "question" => "Logo?", "to" => "origin"},
+               %{"conversation_id" => conversation_id, "question" => "Logo?"},
                %{principal: actor},
                false
              )
@@ -1154,6 +1153,8 @@ defmodule Omunculus.ServerTest do
                  "escalate",
                  "--reason",
                  "Which logo?",
+                 "--to",
+                 "closer",
                  "--origins",
                  Jason.encode!(%{"logo" => cli_origin_id})
                ],
@@ -1162,7 +1163,12 @@ defmodule Omunculus.ServerTest do
 
     assert {:ok, %{status: "escalated"}} = Store.view(reader.conn, "request", cli_origin_id)
     escalation_headers = [{"idempotency-key", "human-escalation"}]
-    escalation_body = %{reason: "Please answer the budget", origins: %{budget: origin_id}}
+
+    escalation_body = %{
+      reason: "Please answer the budget",
+      origins: %{budget: origin_id},
+      to: "closer"
+    }
 
     escalated =
       local.(:post, requests_url <> "/escalate",

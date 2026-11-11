@@ -19,8 +19,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   agent lacks and the parent could grant it on a request; once the child
   went back `[policy] max_reopens` times in a row, since an answer to a
   request of the parent's work last came, the parent opens a request with
-  the `past_limit` reason instead, on the project's `harness_route` where it
-  names one, else along its route; `delegate` is refused while a child that broke waits on
+  the `past_limit` reason instead, to whoever gave the parent its work;
+  `delegate` is refused while a child that broke waits on
   the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
@@ -40,7 +40,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   broken child gone it may delegate.
   """
 
-  alias Omunculus.{Ceiling, Config, RequestRoutes}
+  alias Omunculus.{Ceiling, Config}
   alias Omunculus.Id
   alias Omunculus.Store.Actions.{Helpers, Requests}
   alias Omunculus.Store.{Events, Query, View}
@@ -163,17 +163,12 @@ defmodule Omunculus.Store.Actions.Sequence do
 
   # Past `[policy] max_reopens` the work does not go back once more: the
   # parent asks instead, with the reason its tool wrote, and waits on the
-  # request, the broken child still waiting on it. It is the project's
-  # decision, so it takes the project's `harness_route`, else the default route.
+  # request, the broken child still waiting on it.
   defp ask_instead(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:reopen, body, "past_limit"),
-         {:ok, event} <- Requests.request(conn, ask(body["past_limit"], ctx.config), ctx),
+         {:ok, event} <-
+           Requests.request(conn, %{"reason" => body["past_limit"], "options" => %{}}, ctx),
          do: {:ok, [event]}
-  end
-
-  defp ask(reason, config) do
-    ask = %{"reason" => reason, "options" => %{}}
-    RequestRoutes.put_harness_route(ask, config)
   end
 
   # What the parent gives with the reopen: names the agent lacks on the work

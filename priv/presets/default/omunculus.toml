@@ -85,12 +85,8 @@ steps = [
   { name = "review", agent = "reviewer", deny = ["fs.write", "sandbox.write"] },
 ]
 
-# The system team proposes changes to the project on the owner route: the
-# project is the person's to change.
 [policy]
 default_agent = "concierge"
-harness_route = "owner"
-request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 max_reopens = 3

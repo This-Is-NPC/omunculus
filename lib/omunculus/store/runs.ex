@@ -12,7 +12,7 @@ defmodule Omunculus.Store.Runs do
   another run while the work's latest runs without `end` are within
   `max_retries`; past it, a `break` with the given text for a child,
   or, for a root, a request by the harness with the options `retry` and
-  `cancel`, on the project's `[policy] harness_route`, and an
+  `cancel`, to the account that opened the conversation, and an
   inbox note saying how to answer it; their texts name the
   agent and the work's title.
   `continues/3` records the `session` event of a run that continues its
@@ -39,7 +39,7 @@ defmodule Omunculus.Store.Runs do
   human it records an inbox note saying so, in the same transaction.
   """
 
-  alias Omunculus.{Id, RequestRoutes}
+  alias Omunculus.Id
   alias Omunculus.Store.Access
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Actions, Connection, Events, Query, View}
@@ -398,7 +398,7 @@ defmodule Omunculus.Store.Runs do
                {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)),
                do: {:ok, events ++ notified}
 
-        # Nobody is left on the route: a person is told, once, and the
+        # Nobody is left to ask: a person is told, once, and the
         # request stays pending where it is.
         {:error, {:request, :no_route}} ->
           notify_once(conn, ctx, text.(:no_route))
@@ -489,9 +489,6 @@ defmodule Omunculus.Store.Runs do
 
     options = %{"retry" => [], "cancel" => [%{"name" => "cancel"}]}
     body = %{"reason" => text, "options" => options}
-    # The work is the project's to retry or give up, so it takes the
-    # project's harness route.
-    body = RequestRoutes.put_harness_route(body, config)
 
     case Actions.run(conn, [%{"type" => "request", "body" => body}], ctx) do
       {:ok, [request]} ->
@@ -501,7 +498,7 @@ defmodule Omunculus.Store.Runs do
         with {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx),
              do: {:ok, [request | inbox]}
 
-      # Nobody is left on the route: a person is told, once.
+      # Nobody is left to ask: a person is told, once.
       {:error, {:request, :no_route}} ->
         notify_once(conn, ctx, inbox_text.(text, []))
 

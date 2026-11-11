@@ -577,8 +577,6 @@ defmodule Omunculus.Server.OpenAPI do
             reason: nullable_string(),
             workflow: nullable_string(),
             stage: nullable_string(),
-            route: nullable_string(),
-            destination: nullable_string(),
             arbiter: %{type: "object"},
             status: %{type: "string", enum: ~w(pending escalated closed)},
             created_at: string()

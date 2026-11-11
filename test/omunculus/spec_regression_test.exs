@@ -68,8 +68,7 @@ defmodule Omunculus.SpecRegressionTest do
     Enum.reduce(
       [
         {"assemble", ~s("assemble")},
-        {"max_retries", "0"},
-        {"request_routes", ~s([{ via = ["parent", "origin"] }])}
+        {"max_retries", "0"}
       ],
       body,
       fn {key, value}, body ->

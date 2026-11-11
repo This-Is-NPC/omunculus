@@ -130,6 +130,8 @@ defmodule Omunculus.Store.EscalationTest do
     human(ctx.config, ctx.conversation, subject) |> Map.put(:work_id, work)
   end
 
+  defp human_identity(ctx), do: Participant.human(ctx.issuer, ctx.subject)
+
   defp apply_action(conn, type, body, ctx) do
     call = %{name: type, args: body, ok: true, output: ""}
     Store.record_tools(conn, ctx.run_id, [{call, [%{"type" => type, "body" => body}]}], ctx)
@@ -237,7 +239,15 @@ defmodule Omunculus.Store.EscalationTest do
   test "a run resumed by a text answer passes on the origins it leaves pending",
        %{conn: conn} = ctx do
     {logo, tone, merged} = questions(conn, ctx)
-    assert {:ok, _} = reply(conn, ctx.root_ctx, merged, %{"body" => "Blue logo; calm tone."})
+
+    assert {:ok, _} =
+             reply(conn, ctx.root_ctx, merged, %{
+               "body" => "Blue logo.",
+               "parts" => %{"logo" => %{"body" => "Blue logo."}}
+             })
+
+    assert request(conn, logo).status == "closed"
+    assert request(conn, tone).status == "pending"
 
     resumed =
       Fixtures.open_run(conn, %{
@@ -255,14 +265,9 @@ defmodule Omunculus.Store.EscalationTest do
              Store.unanswered(conn, resumed, ctx.config, &Omunculus.Tools.Out.unanswered/3)
 
     again = Enum.find(events, &(&1.type == "request")).request_id
-    assert request(conn, logo).status == "escalated"
     assert request(conn, tone).status == "escalated"
-    assert Jason.decode!(request(conn, again).arbiter) == Participant.human("test", "owner")
-    assert request(conn, again).origins |> Map.keys() |> Enum.sort() == ~w(logo tone)
-
-    assert request(conn, again).reason ==
-             ~s(lead left 2 questions unanswered: worker's on the work "logo": "logo"; ) <>
-               ~s(worker's on the work "tone": "tone")
+    assert Jason.decode!(request(conn, again).arbiter) == Participant.agent("root")
+    assert request(conn, again).origins |> Map.keys() == ~w(tone)
   end
 
   # A lead run opened for `request` that delegates, or not, and ends.
@@ -421,7 +426,7 @@ defmodule Omunculus.Store.EscalationTest do
     assert count(conn, "request_escalations") == 0
     assert {:ok, [note]} = Query.all(conn, "SELECT body FROM comments WHERE inbox_id IS NOT NULL")
     assert note.body =~ ~s(root left)
-    assert note.body =~ "No arbiter is left on its route"
+    assert note.body =~ "Nobody is left to ask"
 
     assert {:ok, []} = Store.unanswered(conn, closed, ctx.config, unanswered)
     assert count(conn, "inbox") == 1
@@ -457,10 +462,11 @@ defmodule Omunculus.Store.EscalationTest do
     {:ok, resumed} = Store.view(conn, "run", resumed.id)
     unanswered = &Omunculus.Tools.Out.unanswered/3
 
-    assert {:ok, events} = Store.unanswered(conn, resumed, ctx.config, unanswered)
-    upstream = Enum.find(events, &(&1.type == "request")).request_id
-    assert Jason.decode!(request(conn, upstream).arbiter) == Participant.human("test", "owner")
-    assert request(conn, permission).status == "escalated"
+    # The parent answered with text alone: it is not asked again, so the
+    # lead's origin stays pending and a person is told.
+    assert {:ok, [%{type: "notify"}]} = Store.unanswered(conn, resumed, ctx.config, unanswered)
+    assert request(conn, permission).status == "pending"
+    assert count(conn, "requests") == 2
   end
 
   test "an agent that relayed an upstream text answer down may receive the permission again",
@@ -723,11 +729,8 @@ defmodule Omunculus.Store.EscalationTest do
       Fixtures.config(
         @agents <>
           """
-          [policy]
-          request_routes = [
-            { from = { kind = "agent", agent = "worker" }, via = ["origin"] },
-            { via = ["parent", "origin"] }
-          ]
+          [accounts]
+          owner = { kind = "human", issuer = "test", subject = "owner" }
           """
       )
 
@@ -738,10 +741,24 @@ defmodule Omunculus.Store.EscalationTest do
         child_ctxs: Enum.map(ctx.child_ctxs, &%{&1 | config: config})
     }
 
-    origin =
-      ask(conn, hd(ctx.child_ctxs), "Deploy?", %{
-        "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "deploy"}}]
-      })
+    assert {:ok, events} =
+             apply_action(
+               conn,
+               "request",
+               %{
+                 "reason" => "Deploy?",
+                 "to" => "owner",
+                 "options" => %{
+                   "grant" => [
+                     %{"name" => "grant", "args" => %{"kind" => "tool", "name" => "deploy"}}
+                   ]
+                 }
+               },
+               hd(ctx.child_ctxs)
+             )
+
+    origin = Enum.find(events, &(&1.type == "request")).request_id
+    assert Jason.decode!(request(conn, origin).arbiter) == ctx.owner |> human_identity()
 
     reviewer = Map.put(ctx.owner, :work_id, ctx.lead)
 
@@ -1096,13 +1113,12 @@ defmodule Omunculus.Store.EscalationTest do
     assert work(conn, first.work_id).grants == nil
   end
 
-  test "amestris configures routes for decisions, permissions and root retry exhaustion", %{
-    conn: conn
-  } do
+  test "amestris asks the person who opened the conversation for decisions, permissions and root retry exhaustion",
+       %{
+         conn: conn
+       } do
     {:ok, config} =
       Omunculus.Config.load(Path.expand("../../../eval/presets/amestris/omunculus.toml", __DIR__))
-
-    assert config.request_routes == [%{"via" => ["parent", "origin"]}]
 
     run =
       Fixtures.open_run(conn, %{
