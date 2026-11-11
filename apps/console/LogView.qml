@@ -31,7 +31,10 @@ Item {
     tool: { icon: "list", tone: Theme.foreground },
     "start-run": { icon: "play", tone: Theme.success },
     "end-run": { icon: "check", tone: Theme.success },
-    request: { icon: "people", tone: Theme.warning },
+    question: { icon: "help", tone: Theme.warning },
+    decision: { icon: "diamond", tone: Theme.warning },
+    permission: { icon: "shield", tone: Theme.warning },
+    review: { icon: "spark", tone: Theme.warning },
     reply: { icon: "enter", tone: Theme.warning },
     release: { icon: "check", tone: Theme.warning },
     break: { icon: "warning", tone: Theme.error }
@@ -248,7 +251,7 @@ Item {
         required property var model
         required property int index
         readonly property var line: model
-        readonly property var kind: view.kinds[model.type] || ({ icon: "more", tone: Theme.dim })
+        readonly property var kind: view.kinds[model.type === "request" ? model.kind : model.type] || ({ icon: "more", tone: Theme.dim })
         readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
         readonly property string status: !model.ok ? (model.retried ? "RETRIED" : "FAILED") : view.waits(model) ? "NEEDS YOU" : ""
         // Its width is that of the longest status, so the agent column aligns.

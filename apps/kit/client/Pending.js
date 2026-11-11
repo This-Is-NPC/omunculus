@@ -6,22 +6,6 @@
 // What the chat and the pending queue say about requests and works, derived
 // from the requests and the progress and never stored. Times are in seconds.
 
-// The kinds of item the queue holds, by Requests.kind: its word and icon.
-const kinds = {
-  review: { word: "REVIEW", icon: "spark" },
-  "needs-you": { word: "QUESTION", icon: "help" },
-  decision: { word: "DECISION", icon: "diamond" },
-  permission: { word: "PERMISSION", icon: "shield" }
-};
-
-// What a request asks, by its shape, whoever decides it: "review" when it holds
-// an action, "permission" when a decision grants, "decision" when it offers
-// options, "needs-you" for a free answer.
-function shape(request) {
-  if (Requests.review(request)) return "review";
-  return Requests.granted(request) !== null ? "permission" : Requests.choices(request).length > 0 ? "decision" : "needs-you";
-}
-
 // The requests waiting on you, `me`, reviews included, oldest first, none of
 // which another request gathers from below: one question climbing is one item,
 // at its top.
@@ -94,8 +78,8 @@ function path(request, input) {
 // for one the harness passed on), folder (the root of the work's workspace),
 // text (the question as its readers see it)}.
 function describe(request, input) {
-  const kind = shape(request);
-  const look = kinds[kind];
+  const kind = Requests.shape(request);
+  const look = Requests.marks[kind];
   const asker = Requests.asker(request);
   const node = nodeOf(request, input.flat || []);
   const work = node ? node.title : "";
@@ -109,7 +93,7 @@ function describe(request, input) {
   const unblocks = [asker + " resumes " + (work !== "" ? work : "its work")]
     .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " are" : " is") + " waiting for it"] : []).join(" · ");
   return {
-    id: request.id, kind: kind, word: look.word, icon: look.icon,
+    id: request.id, kind: kind, word: look.text, icon: look.icon,
     asker: asker, line: Requests.line(request, input.me), path: route, work: work,
     title: held ? capital(held.summary) : wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
     body: lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",

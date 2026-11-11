@@ -400,8 +400,8 @@ function build(input) {
       question: request.reason || "", toWork: to ? to.work : null, chain: chain,
       mark: Requests.mark(request)
     });
-    const form = Questions.parse(request.reason || "");
-    if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "", asks: form ? form.items.length : 1 });
+    const form = Requests.shape(request) === "needs-you" ? Questions.parse(request.reason || "") : null;
+    if (to) to.asked.push({ id: request.id, mark: Requests.mark(request), from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "", asks: form ? form.items.length : 1 });
   }
 
   // Above a work that needs you, each work that does not hold its question

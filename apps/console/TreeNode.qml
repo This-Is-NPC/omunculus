@@ -80,14 +80,17 @@ Item {
     return parts
   }
 
-  // Incoming requests, one badge per agent asking.
+  // Incoming requests, one badge per agent asking and kind of request.
   readonly property var askedBy: {
     if (!node)
       return []
     const by = {}
-    for (const request of node.asked)
-      (by[request.from] = by[request.from] || []).push(request)
-    return Object.keys(by).map(from => ({ from: from, requests: by[from], asks: by[from].reduce((sum, request) => sum + request.asks, 0) }))
+    for (const request of node.asked) {
+      const key = request.from + "\n" + request.mark.text
+      by[key] = by[key] || { from: request.from, mark: request.mark, requests: [] }
+      by[key].requests.push(request)
+    }
+    return Object.values(by).map(group => Object.assign(group, { asks: group.requests.reduce((sum, request) => sum + request.asks, 0) }))
   }
 
   implicitHeight: body.implicitHeight + Theme.space.tight * 2
@@ -311,8 +314,8 @@ Item {
         model: branch.askedBy
         delegate: Chip {
           required property var modelData
-          icon: "branch"
-          text: modelData.asks + (modelData.asks === 1 ? " question" : " questions") + " from " + modelData.from
+          icon: modelData.mark.icon
+          text: modelData.asks + " " + (modelData.asks === 1 ? modelData.mark.one : modelData.mark.many) + " from " + modelData.from
           tip: modelData.requests[0].question.split("\n")[0]
           onClicked: branch.requestPicked(modelData.requests[0].id)
         }

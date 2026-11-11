@@ -258,7 +258,7 @@ function kind(type, body) {
   case "tool": return body && typeof body === "object" && hook(body) ? "hook" : "step";
   case "start-run":
   case "end-run": return "run";
-  case "request": return body && body.interception ? "review" : "question";
+  case "request": return Requests.mark(body && typeof body === "object" ? body : {}).one;
   case "release": return "released";
   case "escalate": return "passed up";
   case "reply": return "answer";

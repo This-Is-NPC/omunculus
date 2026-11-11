@@ -35,7 +35,7 @@ defmodule Omunculus.GuiEventsTest do
     const held = {action: "ask", summary: 'seller wants to ask local:2000: "Ready?"', step: 2, of: 3};
     says("request", {reason: "x", requester: agent("seller"), arbiter: human, interception: held}, "seller", 'seller wants to ask local:2000: "Ready?" \\u00b7 for you \\u00b7 step 2 of 3');
     says("request", {reason: "x", requester: agent("seller"), arbiter: agent("sales"), interception: Object.assign({}, held, {of: 1})}, "seller", 'seller wants to ask local:2000: "Ready?" \\u00b7 for sales');
-    check(Events.kind("request", {interception: held}) === "review" && Events.kind("request", {}) === "question" && Events.kind("release", {}) === "released", "kinds", "");
+    check(Events.kind("request", {interception: held}) === "review" && Events.kind("request", {}) === "question" && Events.kind("request", {options: {approve: [], adjust: []}}) === "decision" && Events.kind("release", {}) === "released", "kinds", "");
     says("release", {action: "ask", option: "approve", summary: "ask x", passed: []}, "you", "released: ask x");
     says("release", {action: "ask", option: "edit", summary: "ask x", passed: []}, "you", "edited and released: ask x");
     check(Events.released("0123456789abcdef") === " \\u00b7 released by review #01234567" && Events.released(null) === "", "released by", "");

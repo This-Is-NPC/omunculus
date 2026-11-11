@@ -194,24 +194,31 @@ function works(request) {
   return found;
 }
 
-// What a request asks of you: "review" when it holds an action, "permission"
-// when a decision grants, "decision" when it offers options, "needs-you" for a
-// free answer; "team" when it is not pending on you.
-function kind(request, me) {
-  if (!pending(request) || !forYou(request, me)) return "team";
+// What a request is, whoever decides it: "review" when it holds an action,
+// "permission" when a decision grants, "decision" when it offers options,
+// "needs-you" for a free answer.
+function shape(request) {
   if (review(request)) return "review";
   if (granted(request) !== null) return "permission";
   return choices(request).length > 0 ? "decision" : "needs-you";
 }
 
-// A request's marker: icon and word. Any account asks or reviews; there is no
-// other sort of request.
+// What a request asks of you: its shape; "team" when it is not pending on you.
+function kind(request, me) {
+  return pending(request) && forYou(request, me) ? shape(request) : "team";
+}
+
+// The one name of each shape wherever it shows: its icon, its word and the
+// noun a count uses.
 const marks = {
-  question: { icon: "help", text: "QUESTION" },
-  review: { icon: "spark", text: "REVIEW" }
+  "needs-you": { icon: "help", text: "QUESTION", one: "question", many: "questions" },
+  decision: { icon: "diamond", text: "DECISION", one: "decision", many: "decisions" },
+  permission: { icon: "shield", text: "PERMISSION", one: "permission", many: "permissions" },
+  review: { icon: "spark", text: "REVIEW", one: "review", many: "reviews" }
 };
 
-function mark(request) { return review(request) ? marks.review : marks.question; }
+// A request's marker, by its shape.
+function mark(request) { return marks[shape(request)]; }
 
 // Who a participant is to the viewer: "you" for the viewer, else its name.
 function party(participant, me) { return isMe(participant, me) ? "you" : label(participant); }

@@ -99,7 +99,7 @@ defmodule Omunculus.GuiProgressTest do
     const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "What is the bakery called?\\nAnd where?"};
     const out = Progress.build(Object.assign({}, base, {requests: [ask]}));
     check(out.state === "needs-you" && nodes(out).w1.state === "needs-you" && nodes(out).w1.doing === "Waiting for your answer", "needs-you", out.state);
-    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", mark: {icon: "help", text: "QUESTION"}, asks: 1}]), "forYou", out.forYou);
+    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", mark: {icon: "help", text: "QUESTION", one: "question", many: "questions"}, asks: 1}]), "forYou", out.forYou);
     const held = {action: "ask", summary: 'ask local:2000: "Which?"', step: 1, of: 1};
     const review = Progress.build(Object.assign({}, base, {requests: [Object.assign({}, ask, {options: {approve: [], edit: [], deny: []}, interception: held})]}));
     check(review.forYou[0].kind === "review" && review.forYou[0].mark.text === "REVIEW", "a review is its own kind", review.forYou);
@@ -375,11 +375,14 @@ defmodule Omunculus.GuiProgressTest do
     const you = {id: "q3", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Budget?",
       origins: {p: {id: "q0", status: "escalated", requester: agent("design-lead"), reason: "Budget?"}}};
     const n = nodes(Progress.build(Object.assign({}, base, {requests: [ask, you]})));
-    check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", forYou: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"], mark: {icon: "help", text: "QUESTION"}}]), "asks", n.w3.asks);
-    check(JSON.stringify(n.w2.asked) === JSON.stringify([{id: "q2", from: "designer", fromWork: "w3", question: "Which logo file?", asks: 1}]), "asked", n.w2.asked);
+    check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", forYou: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"], mark: {icon: "help", text: "QUESTION", one: "question", many: "questions"}}]), "asks", n.w3.asks);
+    check(JSON.stringify(n.w2.asked) === JSON.stringify([{id: "q2", mark: {icon: "help", text: "QUESTION", one: "question", many: "questions"}, from: "designer", fromWork: "w3", question: "Which logo file?", asks: 1}]), "asked", n.w2.asked);
     check(n.w1.asks.length === 1 && n.w1.asks[0].to === "you" && n.w1.asks[0].forYou && n.w1.asks[0].toWork === null, "you", n.w1.asks);
     check(n.w1.asks[0].chain.join(" › ") === "design-lead › seller › you", "chain", n.w1.asks[0].chain);
     check(n.w1.asked.length === 0 && n.w3.asked.length === 0, "none asked", "");
+    const held = Object.assign({}, ask, {options: {approve: [], edit: [], deny: []}, interception: {action: "tool", summary: "designer wants to run publish", args: [], step: 1, of: 1}});
+    const r = nodes(Progress.build(Object.assign({}, base, {requests: [held]})));
+    check(r.w2.asked.length === 1 && r.w2.asked[0].mark.text === "REVIEW" && r.w2.asked[0].asks === 1, "a review asked of an agent counts as a review", r.w2.asked);
     const many = Object.assign({}, ask, {reason: "1. Which logo?\\n2. Which colour?\\n3. Which font?"});
     const m = nodes(Progress.build(Object.assign({}, base, {requests: [many]})));
     check(m.w2.asked.length === 1 && m.w2.asked[0].asks === 3, "numbered asks", m.w2.asked);

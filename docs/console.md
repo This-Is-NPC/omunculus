@@ -379,11 +379,11 @@ mailbox.
 The console acts as the account the server read for its token (`GET
 /v1/identity`, `Omunculus.me`). A request waits on you when you are its
 arbiter, whether it was written by an agent or a person; another account's
-request shows, but only its arbiter answers it. A request reads as a QUESTION
-from its requester for its arbiter, and the review of a held action
-([interception](requests.md#interception)) as a REVIEW of what it would do by
-its requester for its arbiter, with its step when there are several reviewers
-(`Requests.line`). One that is for you reads "for you". No kind of account is
+request shows, but only its arbiter answers it. A request reads as a
+QUESTION, DECISION, PERMISSION or REVIEW from its requester for its arbiter
+(`Requests.line`), with its step when it is a review with several reviewers.
+The four names and their icons (`Requests.marks`) are the same in the pending
+queue, the tree badges, the tree counts ("1 review from clerk") and the LOG. One that is for you reads "for you". No kind of account is
 named differently from another.
 
 Everything that waits on you is one queue (`PendingQueue`), reachable from every
@@ -496,7 +496,7 @@ with its state: WORKING while a run of its own is open, WAITING FOR
 PROJECT-MANAGER while a work of the team is open and no run is its own,
 WAITING FOR YOU while a question waits on you, IDLE once nothing is open; and
 a badge "⇡ surgeon asks you 1 question" while one does). A badge says whom a
-request is, with its icon, in the words of the cards: QUESTION or REVIEW,
+request is, with its icon, in the words of the cards: QUESTION, DECISION, PERMISSION or REVIEW,
 then its chain of requesters up to its arbiter ("QUESTION · seller › you").
 Each work sits under the
 work that handed it down, one level further right; an elbow line joins it to
@@ -533,7 +533,7 @@ once done, else since it was made. Under 640 px, the title goes under the
 agent and the stage track and the state go under the title; the time ends the
 agent's line. A badge per request between a work and others shows its climb
 (`⇡ surgeon › administrator › project-manager › front-desk › you`, in the
-warning tone when it is to you; `⇣ 1 question from designer`); it goes to the
+warning tone when it is to you; `⇣ 1 review from designer`); it goes to the
 other end of the request, lights both rows and opens the request in the
 detail.
 
@@ -666,9 +666,10 @@ A conversation's level, in place of the project's once one is opened:
   track, its state and how long it has run, and the work picked in full. Its
   SHOW IN LOG opens the LOG kept to that work, and BACK returns;
 - LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
-  ("question", "review", "step", "reply", "passed up", "released"), what it
-  says as one plain sentence ("sales asks you 5 questions: …", "review of ask
-  … by seller for you", "released: ask …", "passed 5 questions up"; an event an
+  ("question", "decision", "permission", "review", "step", "reply", "passed up",
+  "released"; a review has the review's spark icon), what it
+  says as one plain sentence ("sales asks you 5 questions: …", "seller wants to
+  ask … · for you", "released: ask …", "passed 5 questions up"; an event an
   approved review let go ahead ends "· released by review #<id>"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED,
   RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is

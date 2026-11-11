@@ -44,6 +44,11 @@ defmodule Omunculus.GuiRequestsTest do
     const held = {action: "ask", summary: 'seller wants to ask test:client: "Ready?"', step: 1, of: 1};
     const review = ask({interception: held, options: {approve: [], edit: [], deny: []}});
     if (Requests.mark(review).text !== "REVIEW" || !Requests.review(review) || Requests.review(ask({}))) throw Error("review mark");
+    const decision = ask({options: {approve: [], adjust: []}});
+    const permission = ask({options: {grant: [{name: "grant", args: {kind: "tool", name: "deploy"}}], deny: []}});
+    const marks = [ask({}), decision, permission, review].map(request => Requests.mark(request).icon + ":" + Requests.mark(request).text);
+    if (marks.join() !== "help:QUESTION,diamond:DECISION,shield:PERMISSION,spark:REVIEW") throw Error("one name per kind " + marks);
+    if (Requests.mark(decision).many !== "decisions" || Requests.mark(review).one !== "review") throw Error("nouns");
     if (Requests.line(ask({}), human) !== "from seller for you") throw Error(Requests.line(ask({}), human));
     if (Requests.line(ask({arbiter: agent("sales")}), human) !== "from seller to sales") throw Error("to another account");
     if (Requests.line(review, human) !== 'from seller for you') throw Error(Requests.line(review, human));
