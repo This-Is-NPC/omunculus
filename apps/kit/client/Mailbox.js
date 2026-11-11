@@ -60,10 +60,6 @@ function suggest(list, query) {
   return list.filter(item => text === "" || item.name.toLowerCase().includes(text) || item.address.toLowerCase().includes(text));
 }
 
-function isMe(participant, me) {
-  return !!participant && !!me && Requests.human(participant) && participant.issuer === me.issuer && participant.subject === me.subject;
-}
-
 // A text on one line, without its Markdown marks, cut short when long.
 function oneLine(value) {
   const line = String(value || "").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "").replace(/[*`|]/g, "").replace(/\s+/g, " ").trim();
@@ -165,7 +161,7 @@ function build(projectId, id, snapshot, events, me) {
     if (event.type === "prompt" && event.actor && event.actor.kind === "human") {
       if (body.agent && body.agent !== agent) continue;
       messages.push({ key: event.cursor, mine: true, from: you, to: agentPerson, text: body.message || "", at: event.at, files: body.attachments || [], request: "", pending: false, open: false });
-    } else if (event.type === "reply" && event.request_id && isMe(event.actor, me)) {
+    } else if (event.type === "reply" && event.request_id && Requests.isMe(event.actor, me)) {
       replies[event.request_id] = event;
     } else if (rootRuns[event.run_id] && event.type === "comment" && rootWorks[event.work_id] && String(body.body || "").trim() !== "") {
       // Only what the agent explicitly addresses to the person is an e-mail:
@@ -185,12 +181,14 @@ function build(projectId, id, snapshot, events, me) {
     }
   }
   const notes = noted(events);
-  const asked = snapshot.requests.filter(request => isMe(request.arbiter, me) && !Requests.owned(request)
+  // What reaches the person: the requests whose arbiter they are, whoever
+  // else a review or question was written for stays off their mail.
+  const asked = snapshot.requests.filter(request => Requests.forYou(request, me)
     && !(notes[request.id] && Requests.passedOn(request).length === 0)
     && (!!notes[request.id] || (!!request.requester && request.requester.agent === agent)));
   const waiting = asked.filter(request => Requests.pending(request)).map(request => request.id);
   for (const request of asked) {
-    messages.push({ key: request.id, mine: false, from: agentPerson, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
+    messages.push({ key: request.id, mine: false, from: agentPerson, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, review: Requests.review(request), pending: Requests.pending(request), open: false });
     const reply = replies[request.id];
     if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: agentPerson, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
   }
@@ -242,8 +240,12 @@ function replyTarget(thread, key) {
   return { request: request, quoted: quoted || null };
 }
 
-// The request reply body for an answer in words: text only, never an option.
-function answer(text) { return { body: String(text).trim() }; }
+// The request reply body for an answer in words: text only, never an option,
+// except to a review, which takes an option: the words replace what it holds.
+function answer(text, review) {
+  const body = String(text).trim();
+  return review ? { option: "edit", body: body } : { body: body };
+}
 
 // A forward of a message as the compose window starts it: {subject, body}.
 function forward(thread, message) {

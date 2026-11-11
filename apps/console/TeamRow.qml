@@ -23,7 +23,7 @@ Item {
   readonly property bool pending: !!asked && Requests.pending(asked)
   readonly property string by: asked ? Requests.label(asked.requester) : ""
   readonly property string to: asked ? Requests.label(asked.arbiter) : ""
-  readonly property bool forYou: !!asked && Requests.human(asked.arbiter)
+  readonly property bool forYou: !!asked && Requests.forYou(asked, Omunculus.me)
   readonly property string question: asked ? String(asked.reason || "") : ""
   readonly property string answer: reply ? String(reply.body || reply.option || "") : ""
   // The summary line as its parts, each {text, agent} with the agent it names.

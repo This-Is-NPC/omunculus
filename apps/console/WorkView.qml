@@ -33,7 +33,7 @@ FocusScope {
   readonly property var parentWork: work ? Omunculus.work(work.parent_id || "") : null
   readonly property var handedDown: Omunculus.works.filter(item => item.parent_id === key)
   readonly property var running: Omunculus.running.find(run => (run.work_id || "") === key) || null
-  readonly property var askedOfYou: Omunculus.asked(key).filter(request => Requests.human(request.arbiter))
+  readonly property var askedOfYou: Omunculus.asked(key).filter(request => Requests.forYou(request, Omunculus.me))
   // Its workflow's stages, {name, agent}, and the one it is at.
   readonly property var steps: {
     const flow = Omunculus.setup && work && work.workflow ? Omunculus.setup.workflows.find(each => each.name === work.workflow) : null

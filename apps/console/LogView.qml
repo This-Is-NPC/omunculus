@@ -33,6 +33,7 @@ Item {
     "end-run": { icon: "check", tone: Theme.success },
     request: { icon: "people", tone: Theme.warning },
     reply: { icon: "enter", tone: Theme.warning },
+    release: { icon: "check", tone: Theme.warning },
     break: { icon: "warning", tone: Theme.error }
   })
 

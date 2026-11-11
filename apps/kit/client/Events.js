@@ -32,10 +32,15 @@ function plain(text) {
 
 function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
 
-// A participant as the log names it: "you" for a person, else the agent.
-function party(participant) {
+// A participant as the log names it: "you" for the viewer `me`, else its name.
+function party(participant, me) {
   if (!participant || typeof participant !== "object") return "";
-  return Requests.human(participant) ? "you" : participant.agent || "";
+  return Requests.party(participant, me);
+}
+
+// What a released event adds to its line: the review that let it go ahead.
+function released(id) {
+  return id ? " \u00b7 released by review #" + String(id).slice(0, 8) : "";
 }
 
 // Text without the harness ids the model echoes: "request <hex>" and bare
@@ -107,8 +112,8 @@ function opened(body, titled) {
 // the event itself stays whole in the detail card, never on this line.
 // `asked` maps a request id to how many questions it asked, `askers` to who
 // asked; `requestId` is the event's own request; `titled` the title of the
-// event's work, "" when unknown.
-function what(type, body, who, asked, requestId, askers, titled) {
+// event's work, "" when unknown; `me` the viewer, whom the log calls "you".
+function what(type, body, who, asked, requestId, askers, titled, me) {
   const given = body && typeof body === "object" ? body : {};
   switch (type) {
   case "prompt":
@@ -128,8 +133,12 @@ function what(type, body, who, asked, requestId, askers, titled) {
   case "end-run":
     return given.error ? "run failed" + colon(first(given.error)) : "run finished";
   case "request": {
-    const asker = party(given.requester) || who || "someone";
-    const arbiter = party(given.arbiter);
+    const asker = party(given.requester, me) || who || "someone";
+    const arbiter = party(given.arbiter, me);
+    if (given.interception) {
+      const held = given.interception;
+      return "review of " + flat(held.summary) + " by " + asker + " for " + (arbiter || "the team") + (held.of > 1 ? " \u00b7 step " + held.step + " of " + held.of : "");
+    }
     const count = questions(given.reason);
     const how = count > 1 ? " " + plural(count, "question", "questions") : "";
     return asker + (asker === "you" ? " ask " : " asks ") + (arbiter || "the team") + how + colon(count > 1 ? first(Questions.parse(given.reason).intro) : first(given.reason));
@@ -149,6 +158,10 @@ function what(type, body, who, asked, requestId, askers, titled) {
     const words = option ? Requests.optionText(option).toLowerCase() : "";
     if (option === "grant") return "granted" + (asker ? " for " + asker : "");
     return option ? "chose " + words + (asker ? " for " + asker : "") + (said && said !== option ? colon(said) : "") : "answered" + (asker ? " " + asker : "") + colon(said);
+  }
+  case "release": {
+    const option = given.option === "edit" ? "edited and released" : "released";
+    return option + ": " + flat(given.summary);
   }
   case "grant":
     return "granted: " + (Phrases.act(given.name) || flat(given.name)) + (given.scope ? ", for the " + given.scope : ", for this work");
@@ -241,7 +254,8 @@ function kind(type, body) {
   case "tool": return body && typeof body === "object" && hook(body) ? "hook" : "step";
   case "start-run":
   case "end-run": return "run";
-  case "request": return "question";
+  case "request": return body && body.interception ? "review" : "question";
+  case "release": return "released";
   case "escalate": return "passed up";
   case "reply": return "answer";
   case "break": return "stopped";

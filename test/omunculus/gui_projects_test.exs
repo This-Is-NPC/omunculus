@@ -129,22 +129,24 @@ defmodule Omunculus.GuiProjectsTest do
         request("theirs", "2026-11-03T09:00:00Z", {arbiter: agent, reason: "for an agent"}),
         request("closed", "2026-11-03T09:00:00Z", {status: "closed", reason: "done"})
       ]
-    });
+    }, "", human);
     check(summary.title === "Hi! I want a website" && summary.agent === "sales", "who " + JSON.stringify(summary));
     check(summary.started && !summary.finished && summary.running === 2, "runs " + JSON.stringify(summary));
     check(summary.waiting === 4 && summary.since === "2026-11-03T10:10:00Z", "waiting " + JSON.stringify(summary));
-    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1, owner: 0, client: 4}), "asks " + JSON.stringify(summary.asks));
+    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1, reviews: 0}), "asks " + JSON.stringify(summary.asks));
     check(summary.question === "May I publish?", "newest " + summary.question);
     check(Projects.state(summary) === "needs-you", "state " + Projects.state(summary));
-    check(Projects.waitsFor(summary.asks) === "CLIENT QUESTION · A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
-    check(Projects.waitsFor({questions: 1, decisions: 2, permissions: 0}) === "2 DECISIONS · A QUESTION", "plural");
-    const owned = Projects.summary({prompts: [], runs: [], works: [], requests: [
-      request("o", "2026-11-03T10:00:00Z", {reason: "Approve?", options: {approve: []}, route: "boss", destination: "owners"}),
-      request("d", "2026-11-03T10:01:00Z", {reason: "Approve too?", options: {approve: []}, destination: "owners"}),
-      request("c", "2026-11-03T10:02:00Z", {reason: "Which?", route: null, destination: "origin"})
-    ]});
-    check(owned.asks.owner === 2 && owned.asks.client === 1, "audience counts " + JSON.stringify(owned.asks));
-    check(Projects.waitsFor(owned.asks) === "OWNER DECISION · CLIENT QUESTION · 2 DECISIONS · A QUESTION", "audience words " + Projects.waitsFor(owned.asks));
+    check(Projects.waitsFor(summary.asks) === "A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
+    check(Projects.waitsFor({questions: 1, decisions: 2, permissions: 0, reviews: 0}) === "2 DECISIONS · A QUESTION", "plural");
+    const held = {action: "ask", summary: "ask x", step: 1, of: 1};
+    const reviewed = Projects.summary({prompts: [], runs: [], works: [], requests: [
+      request("v1", "2026-11-03T10:00:00Z", {reason: "Seller would ask x", options: {approve: [], edit: [], deny: []}, interception: held}),
+      request("v2", "2026-11-03T10:01:00Z", {reason: "Seller would ask y", options: {approve: [], edit: [], deny: []}, interception: held}),
+      request("v3", "2026-11-03T10:01:30Z", {reason: "for someone else", options: {approve: [], edit: [], deny: []}, interception: held, arbiter: {kind: "human", issuer: "local", subject: "other"}}),
+      request("c", "2026-11-03T10:02:00Z", {reason: "Which?"})
+    ]}, "", human);
+    check(reviewed.asks.reviews === 2 && reviewed.asks.questions === 1 && reviewed.waiting === 3, "review counts " + JSON.stringify(reviewed.asks));
+    check(Projects.waitsFor(reviewed.asks) === "2 REVIEWS · A QUESTION", "review words " + Projects.waitsFor(reviewed.asks));
     const empty = Projects.summary({prompts: [], runs: [], works: [], requests: []});
     check(empty.agent === "" && empty.since === "" && empty.question === "" && Projects.state(empty) === "not-started", "empty " + JSON.stringify(empty));
     """)

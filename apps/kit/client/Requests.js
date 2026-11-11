@@ -7,6 +7,18 @@ function label(participant) {
   return human(participant) ? participant.issuer + ":" + participant.subject : participant.agent;
 }
 
+// Whether a participant is the viewer `me`, the principal the server read for
+// the token: {issuer, subject}.
+function isMe(participant, me) {
+  return human(participant) && !!me && participant.issuer === me.issuer && participant.subject === me.subject;
+}
+
+// Whether the viewer is the one a request goes to.
+function forYou(request, me) { return isMe(request.arbiter, me); }
+
+// Whether a request is the review of a held action.
+function review(request) { return !!request.interception; }
+
 // An answer with words and an option; given the part names of an escalated
 // request's origins down to the request the option is of, the option goes
 // there, each level carrying the words.
@@ -182,33 +194,45 @@ function works(request) {
   return found;
 }
 
-// What a request asks of you: "permission" when a decision grants, "decision"
-// when it offers options, "needs-you" for a free answer; "team" when it is not
-// pending on a person.
-function kind(request) {
-  if (!pending(request) || !human(request.arbiter)) return "team";
+// What a request asks of you: "review" when it holds an action, "permission"
+// when a decision grants, "decision" when it offers options, "needs-you" for a
+// free answer; "team" when it is not pending on you.
+function kind(request, me) {
+  if (!pending(request) || !forYou(request, me)) return "team";
+  if (review(request)) return "review";
   if (granted(request) !== null) return "permission";
   return choices(request).length > 0 ? "decision" : "needs-you";
 }
 
-// Whether a request is an owner's decision: its destination is the project's
-// owners, whatever the route that led there is called.
-function owned(request) {
-  return request.destination === "owners";
-}
-
-// Whom a request is for: "owner" for an owner's decision, "agents" when an
-// agent arbitrates it, else "client", the person of the conversation.
-function audience(request) {
-  return !human(request.arbiter) ? "agents" : owned(request) ? "owner" : "client";
-}
-
-// An audience as its marker reads it: icon and word.
-const audiences = {
-  owner: { icon: "spark", text: "OWNER DECISION" },
-  client: { icon: "people", text: "CLIENT QUESTION" },
-  agents: { icon: "branch", text: "AGENT QUESTION" }
+// A request's marker: icon and word. Any account asks or reviews; there is no
+// other sort of request.
+const marks = {
+  question: { icon: "help", text: "QUESTION" },
+  review: { icon: "spark", text: "REVIEW" }
 };
+
+function mark(request) { return review(request) ? marks.review : marks.question; }
+
+// Who a participant is to the viewer: "you" for the viewer, else its name.
+function party(participant, me) { return isMe(participant, me) ? "you" : label(participant); }
+
+// What a request is, as a line: "from seller for you", "from seller to
+// sales"; a review "of <what it would do> by seller for you · step 2 of 3".
+function line(request, me) {
+  const to = isMe(request.arbiter, me) ? "for you" : "for " + label(request.arbiter);
+  if (!review(request)) return "from " + label(request.requester) + " " + (to === "for you" ? to : "to " + label(request.arbiter));
+  const held = request.interception;
+  return "of " + held.summary + " by " + label(request.requester) + " " + to + (held.of > 1 ? " \u00b7 step " + held.step + " of " + held.of : "");
+}
+
+// The text an edit replaces: the quoted words of a review's summary, which
+// is the question, the comment or the note; "" for a tool or a grant, which
+// have none and take a note instead.
+function editable(request) {
+  const held = request.interception;
+  const found = held ? /: "([\s\S]*)"$/.exec(held.summary) : null;
+  return found ? found[1] : "";
+}
 
 // The climb of a request, nearest origin first: each origin's requester and
 // question, depth first.

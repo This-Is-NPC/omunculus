@@ -376,6 +376,16 @@ mailbox.
 
 ## Requests
 
+The console acts as the account the server read for its token (`GET
+/v1/identity`, `Omunculus.me`). A request waits on you when you are its
+arbiter, whether it was written by an agent or a person; another account's
+request shows, but only its arbiter answers it. A request reads as a QUESTION
+from its requester for its arbiter, and the review of a held action
+([interception](requests.md#interception)) as a REVIEW of what it would do by
+its requester for its arbiter, with its step when there are several reviewers
+(`Requests.line`). One that is for you reads "for you". No kind of account is
+named differently from another.
+
 Everything that waits on you is one queue (`PendingQueue`), reachable from every
 page of the conversation: a counter under the head, "⚠ 3 PENDING" (on its own
 line above the tabs under 700 px, beside them otherwise), and ANSWER (Alt+R)
@@ -393,11 +403,11 @@ action, and the item shows from its top. The items are held by value
 (`pendingJson` of `PagesView`), so a refresh that changes none of them never
 rebuilds the boxes being written in.
 
-An item (`RequestDecision`) has three kinds, each with its own icon and
-word: QUESTION (a circled question mark), DECISION (a diamond) and PERMISSION
-(a shield). The kind is the request's shape, whoever decides it: a permission
-when one of its options grants, a decision when it offers options, else a
-question. Its heading is one line: the kind, the time and the item's tools
+An item (`RequestDecision`) has four kinds, each with its own icon and
+word: QUESTION (a circled question mark), DECISION (a diamond), PERMISSION
+(a shield) and REVIEW (a spark). The kind is the request's shape, whoever
+decides it: a review when it holds an action, a permission when one of its
+options grants, a decision when it offers options, else a question. Its heading is one line: the kind, the time and the item's tools
 (copy the question, the "more" menu that holds ESCALATE while it waits on
 you, and close where the item opened in place of another, DECIDE INSTEAD), so
 nothing overlaps the title at any width. Under it, wrapped inside the item
@@ -408,8 +418,7 @@ tone), PATH (the agents from the front desk down to the asker: "front-desk ›
 seller › surgeon", from the works the question climbed from), WORK, UNBLOCKS
 ("surgeon resumes Build: Doce Ana · front-desk and seller are waiting for it"), GRANTS
 (a permission: what it lets the agent do, "use the network · this work only")
-and, for a request that went to the project's owners, FOR "the project's
-owner" (`Pending.describe`). Its question shows once, as its asker wrote it;
+and, for a review with several reviewers, STEP "2 of 3" (`Pending.describe`). Its question shows once, as its asker wrote it;
 one passed up has a chip naming through whom, in order, that opens the
 wordings of each level and the harness's own sentence.
 
@@ -417,7 +426,13 @@ The actions are one group (`ActionGroup`) under a hairline at the item's
 bottom, wrapping inside the item, never loose chips above the composer: for a
 question, a box for the answer and ANSWER (dim until there are words) beside
 "I CAN'T ANSWER THIS", which tells the team so in a plain reply; for a
-decision, one button per option, with a cancel last; for a permission,
+decision, one button per option, with a cancel last; for a review, APPROVE
+as the main action (solid), EDIT and DENY: EDIT opens the box, captioned WHAT IT
+WILL DO INSTEAD and filled with the text the action would have (a question's
+words, a comment's body, an attachment's note; empty for a tool or a grant,
+which take a note), and SEND EDIT lets the action go ahead with the words in
+place of that text; DENY gives its words as the answer the actor receives (a
+review cannot be escalated); for a permission,
 GRANT · THIS WORK ONLY as the main action (solid), DENY, and ALWAYS…, a menu
 (`AlwaysMenu`) of the scopes saved in the project settings — FOR <AGENT>, IN
 THE <STAGE> STAGE, IN FOLDER <name> or IN THE PROJECT — under the heading
@@ -481,8 +496,9 @@ with its state: WORKING while a run of its own is open, WAITING FOR
 PROJECT-MANAGER while a work of the team is open and no run is its own,
 WAITING FOR YOU while a question waits on you, IDLE once nothing is open; and
 a badge "⇡ surgeon asks you 1 question" while one does). A badge says whom a
-request is for, with its icon, in the words of the cards: OWNER DECISION,
-CLIENT QUESTION, or, between agents, AGENT QUESTION. Each work sits under the
+request is, with its icon, in the words of the cards: QUESTION or REVIEW,
+then its chain of requesters up to its arbiter ("QUESTION · seller › you").
+Each work sits under the
 work that handed it down, one level further right; an elbow line joins it to
 its parent, and a line goes on down a level's column while rows of it follow,
 as in a file tree. The lines are in the faint ink, never coloured.
@@ -626,8 +642,8 @@ The project's level:
   long for its room ends at a word, with an ellipsis, never mid-word
   (`DecodeLabel`'s `byWords`, on every table). Its title
   is its first work's, else what was first said, with its state at the top
-  right: whom it waits on you for (OWNER DECISION, CLIENT QUESTION), then what
-  ("7 QUESTIONS", "A DECISION", "A PERMISSION", joined when several do), NOT STARTED (nothing was said), WORKING, DONE (every work done or cancelled),
+  right: what waits on you ("2 REVIEWS", "7 QUESTIONS", "A DECISION", "A
+  PERMISSION", joined when several do), NOT STARTED (nothing was said), WORKING, DONE (every work done or cancelled),
   ✕ FAILED (in the error tone; the last run ended in an error) or IDLE; each
   state has its icon before the word (a warning sign, a spark, a check, a cross). Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
@@ -650,8 +666,10 @@ A conversation's level, in place of the project's once one is opened:
   track, its state and how long it has run, and the work picked in full. Its
   SHOW IN LOG opens the LOG kept to that work, and BACK returns;
 - LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
-  ("question", "step", "reply", "passed up"), what it says as one plain
-  sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
+  ("question", "review", "step", "reply", "passed up", "released"), what it
+  says as one plain sentence ("sales asks you 5 questions: …", "review of ask
+  … by seller for you", "released: ask …", "passed 5 questions up"; an event an
+  approved review let go ahead ends "· released by review #<id>"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED,
   RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is
   still open), under rules naming the day and each run. A failed event, such as a run

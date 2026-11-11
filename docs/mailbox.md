@@ -1,6 +1,6 @@
 # The mailbox
 
-`apps/mailbox/` is the client's view of a project, drawn as an ordinary
+`apps/mailbox/` is the requester's view of a project, drawn as an ordinary
 e-mail client, built on the same kit as the console. A thread is one
 conversation of one project, with the agent of depth 0 you first wrote to. It
 has no forms, answer buttons or state banners: the agency writes e-mails, you
@@ -39,6 +39,13 @@ The e-mails of a thread, oldest first, are:
   agent's own words. The questions of the request's origins are other agents'
   text and never appear;
 - your answers to those requests, as e-mails of yours.
+
+What reaches you is what is addressed to you: a request is mail only when you
+are its arbiter. A request for another account is never shown, and a thread
+whose only pending requests are another account's reads in progress. A review
+of a held action ([interception](requests.md#interception)) addressed to you
+is a request like another, and shows as an e-mail from the agent whose action
+it holds, with the reason of the review as its body.
 
 The channel to the person is explicit. An agent speaks to you only through a
 request to you (`ask`, or `escalate` to the origin), a `comment` on the
@@ -82,8 +89,9 @@ A thread has at most one label, on its row and in its header, a small pill
 with a still icon and a word:
 
 - **In progress**: a run of the conversation is open, a request waits on
-  someone other than you (an agent, or the owner), or a work waits on its
-  children. A thread whose only pending requests are hidden ones reads so.
+  someone other than you (a request whose arbiter is another account), or a
+  work waits on its children. A thread whose only pending requests are
+  another account's reads so.
 - **Stuck**: nothing runs, nothing waits for you, and the last run failed or a
   work is still open.
 - **Cancelled**: every root work is cancelled.
@@ -112,7 +120,11 @@ sent, never the quote. What it does:
 - with no request waiting, it is a message to the agent
   (`POST .../messages`), and may carry files.
 
-An answer carries words only, never an option, and no files.
+An answer to a question carries words only, never an option, and no files. A
+review takes an option, so a reply to a review's e-mail sends `edit`: your
+words go ahead in place of the text the agent's action held
+(`{"option": "edit", "body": text}`). To approve or deny it, answer it in the
+console's pending queue.
 
 FORWARD opens the compose window with `Fwd:` and the message quoted.
 

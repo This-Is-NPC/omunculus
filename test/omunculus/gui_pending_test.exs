@@ -25,9 +25,9 @@ defmodule Omunculus.GuiPendingTest do
   const questions = asked("q2", {reason: "Before I start:\\n1. Which colours?\\n2. Which fonts?\\n3. Which number?", created_at: iso(1450)});
   const decision = asked("d1", {requester: agent("seller"), work_id: "w1", reason: "Ana asks for a fifth page.", options: {accept: [], keep: []}, created_at: iso(1600)});
   const run = (id, name, work) => ({id, agent: name, depth: 1, work_id: work, status: "open"});
-  const build = (requests, runs, now) => Progress.build({works, lanes, journeys: {}, runs: runs || [], runStarts: {r1: 1900}, requests: requests || [], calling: {}, callArgs: {}, rootAgent: "sales", now: now || 2000});
+  const build = (requests, runs, now) => Progress.build({me: human, works, lanes, journeys: {}, runs: runs || [], runStarts: {r1: 1900}, requests: requests || [], calling: {}, callArgs: {}, rootAgent: "sales", now: now || 2000});
   const out = build([permission, question, questions, decision], [run("r1", "surgeon", "w2")]);
-  const input = request => ({flat: out.flat, front: "sales", noted: {}, folder: "/work/site", text: request.reason});
+  const input = request => ({me: human, flat: out.flat, front: "sales", noted: {}, folder: "/work/site", text: request.reason});
   """
 
   defp run!(assertions) do
@@ -38,9 +38,11 @@ defmodule Omunculus.GuiPendingTest do
     run!("""
     const agentAsks = asked("a1", {arbiter: agent("seller")});
     const gathering = asked("g1", {created_at: iso(1700), origins: {ask: asked("o1", {status: "escalated", created_at: iso(1100)})}});
-    const ids = Pending.queue([permission, agentAsks, decision, question, gathering]).map(request => request.id).join();
-    check(ids === "q1,p1,d1,g1", "order, humans only, origins hidden", ids);
-    check(Pending.queue([]).length === 0, "empty", "");
+    const review = asked("v1", {requester: agent("seller"), options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'ask local:1000: "Ready?"', step: 1, of: 2}, created_at: iso(1650)});
+    const theirs = asked("t1", {arbiter: {kind: "human", issuer: "local", subject: "2000"}});
+    const ids = Pending.queue([permission, agentAsks, decision, question, gathering, review, theirs], human).map(request => request.id).join();
+    check(ids === "q1,p1,d1,v1,g1", "order, the viewer's requests, reviews included, origins hidden", ids);
+    check(Pending.queue([], human).length === 0, "empty", "");
     """)
   end
 
@@ -65,7 +67,14 @@ defmodule Omunculus.GuiPendingTest do
     const choose = Pending.describe(decision, input(decision));
     check(choose.word === "DECISION" && choose.icon === "diamond" && choose.path.join(" > ") === "sales > seller", "decision", choose);
     check(Pending.describe(Object.assign({}, decision, {arbiter: agent("seller")}), input(decision)).kind === "decision", "an agent's decision has its shape too", "");
-    check(item.audience === "client" && Pending.describe(Object.assign({}, question, {destination: "owners"}), input(question)).audience === "owner", "audience", item.audience);
+    check(item.line === "from surgeon for you", "from whom, for whom", item.line);
+    check(Pending.describe(Object.assign({}, question, {arbiter: agent("sales")}), input(question)).line === "from surgeon to sales", "to another account", "");
+    const held = Object.assign({}, decision, {options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'ask local:1000: "Ready?"', step: 2, of: 3}});
+    const review = Pending.describe(held, input(held));
+    check(review.kind === "review" && review.word === "REVIEW" && review.title === 'Seller would ask local:1000: "Ready?"', "review", review);
+    check(review.line === 'of ask local:1000: "Ready?" by seller for you \u00b7 step 2 of 3' && review.unblocks === "seller waits for your review", "review line", review.line);
+    const parts = Pending.actions(Object.keys(held.options), false);
+    check(parts.primary === "approve" && parts.once.join() === "approve,edit" && parts.denies.join() === "deny", "approve, edit, deny", parts);
     check(choose.unblocks === "seller resumes Doce Ana: site \\u00b7 sales is waiting for it", "single waiter", choose.unblocks);
     """)
   end
@@ -108,6 +117,8 @@ defmodule Omunculus.GuiPendingTest do
     check(denied.word === "DENIED" && denied.icon === "close" && denied.sentence.startsWith("You denied surgeon permission"), "denied", denied);
     const chose = said(decision, {option: "accept"});
     check(chose.word === "CHOSE" && chose.icon === "diamond" && chose.sentence === "You chose accept on seller's decision (Doce Ana: site)", "chose", chose);
+    const held = Object.assign({}, decision, {options: {approve: [], edit: [], deny: []}, interception: {action: "ask", summary: 'ask local:1000: "Ready?"', step: 1, of: 1}});
+    check(said(held, {option: "approve"}).sentence === "You approved seller's request to ask local:1000: \\"Ready?\\" (Doce Ana: site)" && said(held, {option: "edit"}).word === "EDITED" && said(held, {option: "deny"}).word === "DENIED", "review", said(held, {option: "edit"}));
     check(said(decision, {option: "adjust"}).sentence === "You asked seller to adjust (Doce Ana: site)", "adjust", "");
     const answered = said(question, {option: "", body: "5511"});
     check(answered.word === "ANSWERED" && answered.icon === "help" && answered.sentence === "You answered surgeon's question (Build: Doce Ana)", "answered", answered);

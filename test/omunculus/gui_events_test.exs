@@ -7,7 +7,8 @@ defmodule Omunculus.GuiEventsTest do
   const check = (ok, what, value) => { if (!ok) throw Error(what + " " + JSON.stringify(value)); };
   const human = {kind: "human", issuer: "local", subject: "1000"};
   const agent = name => ({kind: "agent", agent: name});
-  const says = (type, body, who, line) => check(Events.what(type, body, who) === line, type, Events.what(type, body, who));
+  const what = (type, body, who) => Events.what(type, body, who, undefined, undefined, undefined, undefined, human);
+  const says = (type, body, who, line) => check(what(type, body, who) === line, type, what(type, body, who));
   """
 
   defp run!(assertions) do
@@ -26,6 +27,19 @@ defmodule Omunculus.GuiEventsTest do
     check(names({output: [{type: "function_call", name: "ls", arguments: "{}"}]}) === '[{"name":"ls","args":{}}]', "responses", "");
     check(names({type: "call", name: "__omunculus_execute", args: {}}) === '[{"name":"code","args":{}}]', "code", "");
     check(names("plain") === "[]" && names({content: "words"}) === "[]", "none", "");
+    """)
+  end
+
+  test "a review and its release read as the generic labels, and a released event says by which review" do
+    run!("""
+    const held = {action: "ask", summary: 'ask local:2000: "Ready?"', step: 2, of: 3};
+    says("request", {reason: "x", requester: agent("seller"), arbiter: human, interception: held}, "seller", 'review of ask local:2000: "Ready?" by seller for you \\u00b7 step 2 of 3');
+    says("request", {reason: "x", requester: agent("seller"), arbiter: agent("sales"), interception: Object.assign({}, held, {of: 1})}, "seller", 'review of ask local:2000: "Ready?" by seller for sales');
+    check(Events.kind("request", {interception: held}) === "review" && Events.kind("request", {}) === "question" && Events.kind("release", {}) === "released", "kinds", "");
+    says("release", {action: "ask", option: "approve", summary: "ask x", passed: []}, "you", "released: ask x");
+    says("release", {action: "ask", option: "edit", summary: "ask x", passed: []}, "you", "edited and released: ask x");
+    check(Events.released("0123456789abcdef") === " \\u00b7 released by review #01234567" && Events.released(null) === "", "released by", "");
+    check(Events.party(human, {kind: "human", issuer: "local", subject: "2000"}) === "local:1000" && Events.party(human, human) === "you", "another person is named", "");
     """)
   end
 

@@ -49,7 +49,7 @@ Column {
   // to a teammate say so.
   readonly property var answered: lone && lone.name === "reply" ? Omunculus.requests.find(request => request.id === (lone.args || {}).request_id) || null : null
   readonly property string loneText: !lone ? ""
-    : answered ? Phrases.replied(answered.requester && answered.requester.agent || "", Progress.given(Omunculus.requests, answered, Omunculus.noted))
+    : answered ? Phrases.replied(answered.requester && answered.requester.agent || "", Progress.given(Omunculus.requests, answered, Omunculus.noted, Omunculus.me))
     : Phrases.did(lone.name, lone.args)
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([

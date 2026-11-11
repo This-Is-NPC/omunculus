@@ -120,7 +120,7 @@ Item {
     if (entry.kind !== "request")
       return ["turn", "note"].includes(entry.kind) ? entry.kind : "speech"
     const request = Omunculus.requests.find(item => item.id === entry.key)
-    if (!requestsShown || !request || contained.has(entry.key) || (Requests.pending(request) && Requests.human(request.arbiter)))
+    if (!requestsShown || !request || contained.has(entry.key) || (Requests.pending(request) && Requests.forYou(request, Omunculus.me)))
       return "none"
     const answer = Omunculus.replies[entry.key]
     return answer && answer.who === "you" ? "answer" : dialogue ? "none" : "team"

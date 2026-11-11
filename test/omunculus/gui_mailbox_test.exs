@@ -161,17 +161,24 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
-  test "owner decisions never reach the mailbox, and only they pending read as in progress" do
+  test "the mailbox holds what reaches the requester: requests whose arbiter is them, reviews included" do
     run!("""
     const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];
     const works = [{id: "w1", state: "waiting", waiting: "request", parent_id: null}];
     const closed = [run("r1", "sales", "closed")];
     const mails = (requests) => build(snap({runs: closed, works, requests}), events);
-    const shown = mails([request("c", {route: null, destination: "origin"}), request("o1", {route: "boss", destination: "owners"}), request("o2", {destination: "owners"}), request("bare")]);
-    if (shown.pending.join() !== "c,bare") throw Error("pending " + shown.pending);
-    if (shown.messages.some(message => message.request.startsWith("o"))) throw Error("an owner decision is no e-mail");
-    const hidden = mails([request("o1", {route: "boss", destination: "owners"})]);
-    if (hidden.pending.length !== 0 || hidden.label !== "progress") throw Error("only hidden requests: " + hidden.label);
+    const other = {kind: "human", issuer: "local", subject: "2000"};
+    const held = {action: "ask", summary: 'ask local:1000: "Ready?"', step: 1, of: 1};
+    const options = {approve: [], edit: [], deny: []};
+    const shown = mails([request("c"), request("o1", {arbiter: other}), request("o2", {arbiter: agent("seller")}),
+      request("v1", {reason: "Sales would ask local:1000", options, interception: held}),
+      request("v2", {reason: "Sales would ask local:2000", options, interception: held, arbiter: other})]);
+    if (shown.pending.join() !== "c,v1") throw Error("pending " + shown.pending);
+    if (shown.messages.some(message => ["o1", "o2", "v2"].includes(message.request))) throw Error("only what is addressed to the person is mail");
+    if (!shown.messages.find(message => message.request === "v1").review) throw Error("a review is flagged");
+    const hidden = mails([request("o1", {arbiter: other})]);
+    if (hidden.pending.length !== 0 || hidden.label !== "progress") throw Error("only others' requests: " + hidden.label);
+    if (JSON.stringify(Mailbox.answer(" Go ", true)) !== JSON.stringify({option: "edit", body: "Go"})) throw Error("a reply to a review edits it");
     """)
   end
 

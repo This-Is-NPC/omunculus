@@ -9,18 +9,20 @@ import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // RequestDecision is one request, wherever it shows, as an item of one of
-// three kinds, each with its icon and word: QUESTION, answered in words (a
+// four kinds, each with its icon and word: REVIEW, of an action an account
+// holds, with APPROVE, EDIT (which opens the action's text to rewrite) and
+// DENY; QUESTION, answered in words (a
 // numbered list of questions has a box for each); DECISION, with a button for
 // each option; and PERMISSION, with GRANT for this work only, DENY, and an
 // "Always…" menu of the wider scopes. Its heading is the kind, the time and
 // the item's tools (copy the question, the "more" menu that holds ESCALATE,
 // close where the item can close), all on one line; under it the request
 // in a sentence, and who asks, the way down from the front desk, the work,
-// what it unblocks and, for a permission, what it grants. Every text wraps
+// what it unblocks and, for a permission, what it grants, for a review its step. Every text wraps
 // inside the item. The question is shown once, as its asker wrote it; when it
 // was passed up, a chip says through whom and opens the wordings of each
-// level and the harness's own sentence. Who decides, you or an agent you can
-// overrule, and each decision it gathers from below, under its part, are
+// level and the harness's own sentence. Who decides, you or
+// another account, and each decision it gathers from below, under its part, are
 // shown as before. The actions are one group at the bottom: the options, the
 // recommended one (GRANT, APPROVE or ACCEPT) filled and the rest outlined, SEND
 // while words are written, "I can't answer this", DENY last and "Always…"
@@ -41,7 +43,7 @@ SurfaceFrame {
   readonly property var request: Omunculus.requests.find(item => item.id === key) || null
   readonly property var answer: Omunculus.replies[key] || null
   readonly property bool open: request !== null && Requests.pending(request)
-  readonly property bool yours: open && Requests.human(request.arbiter)
+  readonly property bool yours: open && Requests.forYou(request, Omunculus.me)
   readonly property var work: request ? Omunculus.work(request.work_id || "") : null
   // The questions it passes on when the harness opened it, each its asker's;
   // its own reason is then only how it came here.
@@ -50,7 +52,7 @@ SurfaceFrame {
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
   readonly property string question: request ? Requests.question(request, Omunculus.noted[key]) : ""
   readonly property var facts: request ? Pending.describe(request, {
-    flat: Omunculus.progress ? Omunculus.progress.flat : [], front: Omunculus.agent || Omunculus.lastAgent,
+    me: Omunculus.me, flat: Omunculus.progress ? Omunculus.progress.flat : [], front: Omunculus.agent || Omunculus.lastAgent,
     noted: Omunculus.noted, folder: place.root || "", text: Events.readable(question)
   }) : null
   readonly property string asker: facts ? facts.asker : ""
@@ -63,9 +65,9 @@ SurfaceFrame {
   // their visibility, which follows the column that holds them.
   // A decision is sent by one of its options, which carry the words; SEND
   // would send them with none chosen.
-  readonly property bool sends: open && !formLoader.active && (escalating || kind === "needs-you")
-  readonly property bool cannotShown: open && kind === "needs-you" && !formLoader.active && !escalating
-  readonly property bool denies: open && options.includes("deny") && !escalating
+  readonly property bool sends: yours && !formLoader.active && (escalating || editing || kind === "needs-you")
+  readonly property bool cannotShown: yours && kind === "needs-you" && !formLoader.active && !escalating
+  readonly property bool denies: yours && options.includes("deny") && !escalating
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // Its own options, then those of the decisions it gathers from below still
   // waiting, each {part, path, options, request}, as an escalation keeps a
@@ -96,7 +98,7 @@ SurfaceFrame {
     { name: "WORK", value: facts.work },
     { name: "UNBLOCKS", value: facts.unblocks },
     { name: "GRANTS", value: kind === "permission" ? facts.grants : "", tone: Theme.warning },
-    { name: "FOR", value: facts.audience === "owner" ? "the project's owner" : "" }
+    { name: "STEP", value: request.interception && request.interception.of > 1 ? request.interception.step + " of " + request.interception.of : "" }
   ].filter(field => field.value !== "")
 
   // The recommended button of the one decision it gathers, when it has no
@@ -104,6 +106,8 @@ SurfaceFrame {
   property Item recommendedButton: null
   // Whether the words written escalate it rather than answer it.
   property bool escalating: false
+  // Whether a review's action is being rewritten: the words replace its text.
+  property bool editing: false
   // What was sent, shown while it goes.
   property string sentText: ""
   property bool wording: false
@@ -113,7 +117,7 @@ SurfaceFrame {
   readonly property bool hasWords: note !== ""
   // The box for words shows for a question and an escalation, and for a
   // decision or a permission once a note is asked for.
-  readonly property bool wordsShown: open && !formLoader.active && (escalating || kind === "needs-you" || noting)
+  readonly property bool wordsShown: yours && !formLoader.active && (escalating || editing || kind === "needs-you" || noting)
 
   // Put the keyboard in the words, or on the first way to decide.
   function focusWords() {
@@ -163,6 +167,12 @@ SurfaceFrame {
     Omunculus.reply(key, "", body)
   }
 
+  // Approves a review with the words as the action's text in place of its own.
+  function editSent() {
+    if (card.note !== "")
+      decide("edit", card.note, [])
+  }
+
   // Tells the team that you cannot answer, in words they read as any answer.
   function cannotAnswer() {
     answerInWords("I can't answer this one; please sort it out with the team.")
@@ -178,10 +188,23 @@ SurfaceFrame {
     Omunculus.escalate(key, reason)
   }
 
-  // Sends what the words say: the reason it goes up, or an answer in words.
+  // Opens the held action's text to rewrite, in the words box.
+  function startEdit() {
+    editing = true
+    escalating = false
+    Qt.callLater(() => {
+      words.text = Requests.editable(request)
+      focusWords()
+    })
+  }
+
+  // Sends what the words say: the reason it goes up, the text that replaces a
+  // review's action, or an answer in words.
   function submitWords() {
     if (escalating)
       escalate()
+    else if (editing)
+      editSent()
     else if (kind !== "permission")
       answerInWords(words.text)
   }
@@ -239,7 +262,7 @@ SurfaceFrame {
         onClicked: Omunculus.copy(card.question)
       }
       ActionMenu {
-        visible: card.yours
+        visible: card.yours && card.kind !== "review"
         tip: "more"
         items: [card.escalating
           ? { id: "answer", icon: "enter", text: "ANSWER INSTEAD" }
@@ -379,7 +402,7 @@ SurfaceFrame {
         font.letterSpacing: Theme.type.meta.tracking
       }
       Label {
-        text: " DECIDES" + Theme.type.meta.separator + "YOU CAN DECIDE INSTEAD"
+        text: " DECIDES"
         color: card.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: Theme.type.meta.tracking
@@ -430,7 +453,7 @@ SurfaceFrame {
     Loader {
       id: formLoader
       Layout.fillWidth: true
-      active: card.open && card.form !== null && !card.escalating
+      active: card.yours && card.form !== null && !card.escalating
       visible: active
       sourceComponent: QuestionForm {
         parsed: card.form
@@ -445,7 +468,7 @@ SurfaceFrame {
 
     // A note to a decision or a permission is asked for.
     Chip {
-      visible: card.open && !formLoader.active && !card.escalating && card.kind !== "needs-you" && !card.noting
+      visible: card.yours && !formLoader.active && !card.escalating && !card.editing && card.kind !== "needs-you" && !card.noting
       icon: "plus"
       text: card.kind === "permission" ? "ADD A REASON OR A NOTE" : "ADD A NOTE"
       onClicked: {
@@ -462,7 +485,7 @@ SurfaceFrame {
       spacing: Theme.space.tight
       Caption {
         Layout.fillWidth: true
-        text: card.escalating ? "WHY IT GOES UP" : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
+        text: card.escalating ? "WHY IT GOES UP" : card.editing ? "WHAT IT WILL DO INSTEAD" : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
           : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
       }
       TextBlock {
@@ -472,10 +495,10 @@ SurfaceFrame {
         implicitHeight: contentHeight + topPadding + bottomPadding
         readOnly: card.busy
         opacity: readOnly ? 0.5 : 1
-        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
+        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.editing ? "the text to go ahead with" : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
         Accessible.name: card.escalating ? "why it goes up" : "your words"
         Keys.onPressed: Typing.mark()
-        submits: card.kind !== "decision"
+        submits: card.kind !== "decision" && card.kind !== "review"
         onAccepted: card.submitWords()
       }
     }
@@ -483,7 +506,7 @@ SurfaceFrame {
     // The decisions it gathers from below, each under its part and who asked
     // it, as a group of its own.
     Repeater {
-      model: card.open && !card.escalating ? card.gathered : []
+      model: card.yours && !card.escalating ? card.gathered : []
       delegate: ColumnLayout {
         id: choice
         required property var modelData
@@ -532,20 +555,20 @@ SurfaceFrame {
       id: actions
       readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || card.sends || card.cannotShown || card.denies || card.ownActions.always.length > 0
       label: "actions"
-      visible: card.open && actions.shown
+      visible: card.yours && actions.shown
       enabled: !card.busy
 
       Repeater {
         id: ownOptions
-        model: card.open && !card.escalating ? card.ownActions.once : []
+        model: card.yours && !card.escalating ? card.ownActions.once.filter(option => !(card.editing && option === "edit")) : []
         delegate: TraceButton {
           required property string modelData
           dense: true
           role: "progress"
           filled: modelData === card.ownActions.primary && card.yours
-          icon: modelData === "grant" ? "check" : "diamond"
+          icon: modelData === "grant" || modelData === "approve" ? "check" : modelData === "edit" ? "edit" : "diamond"
           text: card.labelOf(modelData)
-          onClicked: card.decide(modelData, card.note, [])
+          onClicked: modelData === "edit" ? card.startEdit() : card.decide(modelData, card.note, [])
         }
       }
       TraceButton {
@@ -555,10 +578,10 @@ SurfaceFrame {
         role: "progress"
         filled: card.hasWords
         icon: card.escalating ? "chevron-up" : "enter"
-        text: card.escalating ? "ESCALATE" : "ANSWER"
-        tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : "answer in your words, choosing no option"
+        text: card.escalating ? "ESCALATE" : card.editing ? "SEND EDIT" : "ANSWER"
+        tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : card.editing ? "let it go ahead with your words in place of its text" : "answer in your words, choosing no option"
         busy: card.busy
-        reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : "type your answer first"
+        reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : card.editing ? "write the text it goes ahead with first" : "type your answer first"
         onClicked: card.submitWords()
       }
       TraceButton {
@@ -572,7 +595,7 @@ SurfaceFrame {
       }
       Repeater {
         id: ownGuarded
-        model: card.open && card.own && !card.escalating ? card.own.options.filter(option => option === "cancel") : []
+        model: card.yours && card.own && !card.escalating ? card.own.options.filter(option => option === "cancel") : []
         delegate: TraceButton {
           required property string modelData
           dense: true

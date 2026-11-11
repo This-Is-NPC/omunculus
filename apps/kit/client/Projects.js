@@ -12,23 +12,22 @@
 //   title: what was first said in it, on one line; agent: whom it is with,
 //   the agent of its first run at depth 0, "" before one; started;
 //   finished: every work of it is done or cancelled; running: its runs open;
-//   waiting: the requests waiting on you; asks: those by kind, {questions,
-//   decisions, permissions, owner, client}, `owner` and `client` counting
-//   those for the owner and for the client, a numbered question counted by its items;
+//   waiting: the requests waiting on you, `me`; asks: those by kind, {questions,
+//   decisions, permissions, reviews}, a numbered question counted by its items;
 //   since: when the oldest of them was asked, "" for none; question: what the
 //   newest asks, on one line; failed: nothing runs and the last run `ended`
 //   in an error, which only the events tell: its text, "" for none.
-function summary(data, ended) {
+function summary(data, ended, me) {
   const said = data.prompts.find(prompt => prompt.kind === "message");
   const first = data.runs.filter(run => String(run.depth) === "0" && run.agent)
     .sort((a, b) => String(a.started_at || "").localeCompare(String(b.started_at || "")))[0];
-  const waiting = data.requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
+  const waiting = data.requests.filter(request => Requests.pending(request) && Requests.forYou(request, me))
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-  const asks = { questions: 0, decisions: 0, permissions: 0, owner: 0, client: 0 };
+  const asks = { questions: 0, decisions: 0, permissions: 0, reviews: 0 };
   for (const request of waiting) {
-    asks[Requests.audience(request)] += 1;
-    const kind = Requests.kind(request);
-    if (kind === "permission") asks.permissions += 1;
+    const kind = Requests.kind(request, me);
+    if (kind === "review") asks.reviews += 1;
+    else if (kind === "permission") asks.permissions += 1;
     else if (kind === "decision") asks.decisions += 1;
     else {
       const form = Questions.parse(Requests.question(request, true));
@@ -78,13 +77,12 @@ function state(summary) {
 }
 
 // What waits on you in a conversation, from its summary's `asks`, as its
-// state says it: whom it is for, then its kinds: "OWNER DECISION · A
-// PERMISSION · 2 DECISIONS · 7 QUESTIONS".
+// state says it, by kind: "A REVIEW · A PERMISSION · 2 DECISIONS · 7
+// QUESTIONS".
 function waitsFor(asks) {
   const say = (count, one, many) => count === 0 ? [] : [count === 1 ? one : count + " " + many];
   return [].concat(
-    asks.owner > 0 ? [Requests.audiences.owner.text] : [],
-    asks.client > 0 ? [Requests.audiences.client.text] : [],
+    say(asks.reviews, "A REVIEW", "REVIEWS"),
     say(asks.permissions, "A PERMISSION", "PERMISSIONS"),
     say(asks.decisions, "A DECISION", "DECISIONS"),
     say(asks.questions, "A QUESTION", "QUESTIONS")

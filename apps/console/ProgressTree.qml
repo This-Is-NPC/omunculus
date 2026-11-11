@@ -5,7 +5,6 @@ import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui/focus.js" as Focus
 import "kit/client/Progress.js" as Progress
-import "kit/client/Requests.js" as Requests
 import "kit/client/Time.js" as Time
 
 // ProgressTree is who works on the conversation, compact, for the chat's
@@ -263,11 +262,11 @@ Item {
               RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.space.tight
-                Icon { name: Requests.audiences[entry.modelData.ask.audience].icon; size: 12; color: Theme.warning }
+                Icon { name: entry.modelData.ask.mark.icon; size: 12; color: Theme.warning }
                 Label {
                   Layout.fillWidth: true
                   Layout.minimumWidth: 0
-                  text: (Requests.audiences[entry.modelData.ask.audience].text + " · " + entry.modelData.ask.asker + " asks").toUpperCase()
+                  text: (entry.modelData.ask.mark.text + " · " + entry.modelData.ask.asker + " asks").toUpperCase()
                   color: Theme.warning
                   font.pixelSize: Theme.type.kicker.size
                   font.letterSpacing: Theme.type.kicker.tracking

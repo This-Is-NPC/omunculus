@@ -121,7 +121,7 @@ FocusScope {
   // The request waiting on you nearest the work picked — its own, above it,
   // below it — else the newest.
   function nearestForYou() {
-    const human = node => node.asks.filter(ask => ask.human).map(ask => ask.id)
+    const human = node => node.asks.filter(ask => ask.forYou).map(ask => ask.id)
     for (let at = pickedNode; at; at = byWork[at.parent])
       if (human(at).length > 0)
         return human(at)[0]

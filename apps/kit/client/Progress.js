@@ -105,9 +105,11 @@ function elide(text, budget) {
 }
 
 // Who an event's actor is: an agent by its name, the harness as "harness",
-// any person as "you"; "" for an event without one.
-function actorOf(event) {
+// the viewer as "you" and any other person by identity; "" for an event
+// without one.
+function actorOf(event, me) {
   const actor = event.actor || {};
+  if (actor.kind === "human" && me && !Requests.isMe(actor, me)) return Requests.label(actor);
   return actor.kind === "agent" ? actor.id || "" : actor.kind === "harness" ? "harness" : actor.kind ? "you" : "";
 }
 
@@ -190,7 +192,7 @@ function intervals(lane, journey, created, end) {
 // tool calls, shown as steps: the model calls are in `usage`.
 // input: {works, lanes (work id -> laneOf), runs (with error), requests,
 // noted (request id -> true for one the harness passed on), calling,
-// callArgs, runStarts, journeys, rootAgent, now, usage (work id -> Usage
+// callArgs, runStarts, journeys, rootAgent, me (the viewer), now, usage (work id -> Usage
 // tally), calls (work id -> tool calls {count, failed, last: {text, at}})}.
 function build(input) {
   const works = input.works || [];
@@ -203,6 +205,7 @@ function build(input) {
   const usage = input.usage || {};
   const callsOf = input.calls || {};
   const noted = input.noted || {};
+  const me = input.me || null;
   const now = input.now || 0;
   // Per node, while building: the latest end in its branch, its agents and
   // the requests holding its questions.
@@ -226,7 +229,7 @@ function build(input) {
       return "Thinking · " + last.charAt(0).toLowerCase() + last.slice(1);
     }
     const answered = requests.find(request => request.id === (callArgs[id] || {}).request_id);
-    return Phrases.replied(answered && answered.requester ? answered.requester.agent || "" : "", given(requests, answered, noted));
+    return Phrases.replied(answered && answered.requester ? answered.requester.agent || "" : "", given(requests, answered, noted, me));
   };
 
   const node = (work, level) => {
@@ -253,7 +256,7 @@ function build(input) {
     let state = "up-next";
     let waitingOn = "";
     if (run) state = "working";
-    else if (asking.some(request => Requests.human(request.arbiter))) state = "needs-you";
+    else if (asking.some(request => Requests.forYou(request, me))) state = "needs-you";
     else if (work.state === "cancelled") state = "cancelled";
     else if (work.state === "done") state = "done";
     else if (work.state === "broken" || (work.state === "waiting" && !work.waiting))
@@ -370,7 +373,7 @@ function build(input) {
   // it climbed through wait for your answer to it.
   for (const each of flat) {
     if (each.state !== "needs-you") continue;
-    const mine = inner.get(each).asking.filter(request => Requests.human(request.arbiter));
+    const mine = inner.get(each).asking.filter(request => Requests.forYou(request, me));
     if (mine.some(request => askerOf(request) === each)) continue;
     const asker = askerOf(mine[0]);
     each.state = "waiting";
@@ -384,18 +387,18 @@ function build(input) {
   for (const request of pending) {
     const asker = askerOf(request);
     if (!asker) continue;
-    const human = Requests.human(request.arbiter);
+    const you = Requests.forYou(request, me);
     let to = null;
-    if (!human) {
+    if (!you) {
       const arbiter = Requests.label(request.arbiter);
       for (let at = asker; at && !to; at = byWork[at.parent]) if (at.agent === arbiter) to = at;
     }
     const chain = Requests.chain(request).map(origin => Requests.label(origin.requester)).reverse()
-      .concat([Requests.label(request.requester), human ? "you" : Requests.label(request.arbiter)]);
+      .concat([Requests.label(request.requester), Requests.party(request.arbiter, me)]);
     asker.asks.push({
-      id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
+      id: request.id, to: Requests.party(request.arbiter, me), forYou: you,
       question: request.reason || "", toWork: to ? to.work : null, chain: chain,
-      audience: Requests.audience(request)
+      mark: Requests.mark(request)
     });
     const form = Questions.parse(request.reason || "");
     if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "", asks: form ? form.items.length : 1 });
@@ -405,7 +408,7 @@ function build(input) {
   // says so, keeping its own state.
   for (const each of flat) {
     if (each.state !== "needs-you") continue;
-    const ask = each.asks.find(item => item.human);
+    const ask = each.asks.find(item => item.forYou);
     for (let at = byWork[each.parent]; at && ask; at = byWork[at.parent])
       if (at.below === "" && !inner.get(at).asking.some(request => request.id === ask.id)) at.below = ask.id;
   }
@@ -413,14 +416,14 @@ function build(input) {
   const hidden = Requests.contained(requests);
   // A request the harness passed on asks what its origins asked; a numbered
   // question asks each of its items.
-  const forYou = pending.filter(request => Requests.human(request.arbiter) && !hidden.has(request.id)).map(request => {
+  const forYou = pending.filter(request => Requests.forYou(request, me) && !hidden.has(request.id)).map(request => {
     const of = askerOf(request);
     const question = Requests.question(request, noted[request.id]);
-    const kind = Requests.kind(request);
+    const kind = Requests.kind(request, me);
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {
       id: request.id, asker: Requests.asker(request), again: Requests.repeated(request, requests, input.replies || {}) !== null,
-      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, audience: Requests.audience(request), asks: form ? form.items.length : 1
+      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, mark: Requests.mark(request), asks: form ? form.items.length : 1
     };
   });
 
@@ -468,7 +471,7 @@ function build(input) {
   const delegated = Array.from(new Set(roots.filter(each => !closed(each.state) && each.agent !== input.rootAgent).map(each => each.agent)));
   const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
     ? {
-      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "", audience: forYou.length > 0 ? forYou[0].audience : "",
+      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "", mark: forYou.length > 0 ? forYou[0].mark : null,
       state: talking ? "working" : forYou.length > 0 ? "needs-you" : delegated.length > 0 ? "waiting" : "idle",
       doing: talking ? phrasing(talking.work_id || "") : delegated.length > 0 && forYou.length === 0 ? "Waiting for " + delegated.join(", ") : "",
       since: talking ? runStart(talking) : null
@@ -507,8 +510,8 @@ function standing(progress, front) {
 
 // How many answers of yours a reply passes on: 0 when you answered none, else
 // the items of the numbered question answered, or one.
-function given(requests, answered, noted) {
-  if (!requests.some(request => Requests.human(request.arbiter) && !Requests.pending(request))) return 0;
+function given(requests, answered, noted, me) {
+  if (!requests.some(request => Requests.forYou(request, me) && !Requests.pending(request))) return 0;
   const form = answered ? Questions.parse(Requests.question(answered, noted[answered.id])) : null;
   return form ? form.items.length : 1;
 }
@@ -518,10 +521,10 @@ function given(requests, answered, noted) {
 // kind, counted: "7 questions, 2 decisions".
 function asking(asks) {
   const count = kind => asks.filter(ask => ask.kind === kind).reduce((sum, ask) => sum + ask.asks, 0);
-  const counted = [["needs-you", "question"], ["decision", "decision"], ["permission", "permission"]]
+  const counted = [["needs-you", "question"], ["decision", "decision"], ["permission", "permission"], ["review", "review"]]
     .map(([kind, noun]) => ({ kind: kind, noun: noun, n: count(kind) })).filter(each => each.n > 0);
   if (counted.length === 1 && counted[0].n === 1 && counted[0].kind !== "needs-you")
-    return counted[0].kind === "decision" ? "to decide" : "for a permission";
+    return { decision: "to decide", permission: "for a permission", review: "for your review" }[counted[0].kind];
   return counted.map(each => each.n + " " + each.noun + (each.n === 1 ? "" : "s")).join(", ");
 }
 

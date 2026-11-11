@@ -13,6 +13,9 @@ QtObject {
   readonly property bool registry: project === "" && socket !== ""
   readonly property string base: "/v1/projects/" + project
   property bool connected: false
+  // Who the window acts as: the identity the server read for its token, null
+  // until the server answers. Requests whose arbiter it is wait on it.
+  property var identity: null
   // The server did not answer the last time it was asked.
   property bool unreachable: false
   readonly property Notices notices: Notices { offline: root.unreachable }
@@ -39,7 +42,8 @@ QtObject {
   }
 
   function check() {
-    call("GET", "/v1/identity", null, false, () => {
+    call("GET", "/v1/identity", null, false, who => {
+      identity = who
       unreachable = false
       if (!connected) {
         connected = true

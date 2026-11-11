@@ -54,7 +54,7 @@ FocusScope {
   readonly property var asked: node ? node.asked : []
   readonly property var steps: node ? node.steps : []
   // What waits on you: its own question, else one below it.
-  readonly property var askedOfYou: asks.filter(ask => ask.human)
+  readonly property var askedOfYou: asks.filter(ask => ask.forYou)
   readonly property string answering: askedOfYou.length > 0 ? askedOfYou[0].id : node ? node.below : ""
   readonly property var notes: key !== "" ? Omunculus.unreadFrom(key) : []
   readonly property real now: Omunculus.tick
@@ -314,7 +314,7 @@ FocusScope {
             delegate: Value {
               required property var modelData
               text: "⇡ " + modelData.chain.join(" › ")
-              color: modelData.human ? Theme.warning : Theme.foreground
+              color: modelData.forYou ? Theme.warning : Theme.foreground
             }
           }
           Value {
@@ -481,7 +481,7 @@ FocusScope {
             Label {
               Layout.fillWidth: true
               text: "⇡ " + (ask.modelData.chain && ask.modelData.chain.length > 0 ? ask.modelData.chain.join(" › ") : ask.modelData.to)
-                + " · " + (ask.modelData.human ? "you decide" : ask.modelData.to + " decides")
+                + " · " + (ask.modelData.forYou ? "you decide" : ask.modelData.to + " decides")
               color: Theme.dim
               font.pixelSize: Theme.type.tab.size
               wrapMode: Text.Wrap

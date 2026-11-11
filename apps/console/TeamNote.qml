@@ -7,7 +7,7 @@ import "kit/ui"
 // quoted card, outlined, headed by the quote mark and NOTE FROM and the agent
 // in its tone, with the time at its right, and the note in the body's size
 // and full contrast. It is the team's news, not a message to you: only the
-// front agent talks to the client, in bubbles. A long note shows six lines
+// front agent talks to the person, in bubbles. A long note shows six lines
 // and unfolds by choosing its heading, or is unfolded by the thread. The
 // newest note of a done conversation is its result: DELIVERED BY and the
 // agent, in the success tone, whole and as wide as the thread. Its text is

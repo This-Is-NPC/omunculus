@@ -40,6 +40,8 @@ Singleton {
       root.loadCapabilities()
     }
   }
+  // Who the window acts as: the account whose requests wait on you.
+  readonly property var me: connection.identity
   // The project's client, for what the kit asks one of.
   readonly property Project client: connection
   // Whether the window is on no project yet, only on the server's registry.
@@ -215,7 +217,7 @@ Singleton {
   property var boardTones: ({})
 
   readonly property var running: runs.filter(run => run.status === "open")
-  readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
+  readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.forYou(request, me))
   readonly property var unread: inbox.filter(item => !item.read_at && !cardNotes[item.id])
   // What waits on you: requests to decide and notes to read.
   readonly property int pending: waiting.length + unread.length
@@ -299,12 +301,12 @@ Singleton {
     const base = "/v1/projects/" + place.id + "/conversations/" + ids[0]
     const keep = (data, ended) => {
       const next = Object.assign({}, summaries)
-      next[ids[0]] = Projects.summary(data, ended)
+      next[ids[0]] = Projects.summary(data, ended, me)
       summaries = next
       rest()
     }
     http.call(place.socket, "GET", base + "/snapshot", null, false, data => {
-      if (Projects.unsettled(Projects.summary(data)))
+      if (Projects.unsettled(Projects.summary(data, "", me)))
         lastEnd(place, base, "", "", ended => keep(data, ended))
       else
         keep(data, "")
@@ -567,7 +569,7 @@ Singleton {
       if (unsettled.length !== Object.keys(sending).length)
         sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
       const next = Object.assign({}, summaries)
-      next[id] = Projects.summary(data, lastEnded)
+      next[id] = Projects.summary(data, lastEnded, me)
       summaries = next
     })
   }
@@ -778,10 +780,10 @@ Singleton {
     const body = event.body || {}
     if (event.type === "request" && event.request_id) {
       questionsOf[event.request_id] = Events.questions(body.reason)
-      askersOf[event.request_id] = Events.party(body.requester)
+      askersOf[event.request_id] = Events.party(body.requester, me)
     }
     const failed = event.type === "break" || (event.type === "tool" && body.ok === false && !Phrases.missed(body.name, body.output)) || (event.type === "end-run" && !!body.error)
-    const who = event.type === "start-run" ? body.agent || "" : Progress.actorOf(event)
+    const who = event.type === "start-run" ? body.agent || "" : Progress.actorOf(event, me)
     eventLog.append({
       id: event.cursor || event.at + event.type,
       at: event.at,
@@ -792,10 +794,10 @@ Singleton {
       who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf, titles[event.work_id || ""] || ""),
+      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf, titles[event.work_id || ""] || "", me) + Events.released(event.released_by),
       ok: !failed,
       tool: event.type === "tool" && !Events.hook(body) ? body.name : event.type === "break" || event.type === "reopen" ? "break" : "",
-      request: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter) ? event.request_id : "",
+      request: event.type === "request" && Requests.isMe(body.arbiter, me) ? event.request_id : "",
       raw: JSON.stringify(event)
     })
   }
@@ -966,7 +968,7 @@ Singleton {
     if (next !== journeys)
       journeys = next
     const body = event.body || {}
-    const who = Progress.actorOf(event)
+    const who = Progress.actorOf(event, me)
     const stamp = Time.clock(event.at, Date.now())
     const at = Date.parse(event.at) / 1000
     const work = event.work_id || ""
@@ -1076,7 +1078,7 @@ Singleton {
     case "request":
       if (Requests.byHarness(event))
         keep("noted", event.request_id, true)
-      append(!body.arbiter || Requests.human(body.arbiter) ? "" : key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
+      append(!body.arbiter || Requests.isMe(body.arbiter, me) ? "" : key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "escalate":
       Object.values(body.origins || {}).forEach(origin => keep("gatheredBy", origin, event.request_id))
@@ -1128,7 +1130,7 @@ Singleton {
     progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
       works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, asked: pendingCalls, runStarts: runStarts,
-      journeys: journeys, rootAgent: agent || lastAgent, now: tick, usage: usage.works, calls: callsOf
+      journeys: journeys, rootAgent: agent || lastAgent, me: me, now: tick, usage: usage.works, calls: callsOf
     })
   }
   onWorksChanged: progressTimer.restart()

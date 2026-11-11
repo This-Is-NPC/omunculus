@@ -43,7 +43,7 @@ defmodule Omunculus.GuiTreeTest do
     const up = {id: "q3", status: "escalated", arbiter: agent("sales"), requester: agent("seller"), work_id: "w1", reason: "passed", origins: {p: mid}};
     const top = {id: "q4", status: "pending", arbiter: human, requester: agent("sales"), work_id: null, reason: "Which photos?", origins: {p: up}};
     const runs = [{id: "r1", agent: "sales", status: "done"}].concat(done ? [] : [{id: "r2", agent: "surgeon", work_id: "about", status: "open", depth: 3}]);
-    return Progress.build({works, lanes, runs, runStarts: {r2: 1900}, requests: done ? [] : [low, mid, up, top], rootAgent: "sales", now: 2000});
+    return Progress.build({me: human, works, lanes, runs, runStarts: {r2: 1900}, requests: done ? [] : [low, mid, up, top], rootAgent: "sales", now: 2000});
   };
   const live = agency(false);
   const delivered = agency(true);

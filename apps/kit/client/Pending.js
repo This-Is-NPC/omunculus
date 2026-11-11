@@ -6,25 +6,28 @@
 // What the chat and the pending queue say about requests and works, derived
 // from the requests and the progress and never stored. Times are in seconds.
 
-// The three kinds of item the queue holds, by Requests.kind: its word and icon.
+// The kinds of item the queue holds, by Requests.kind: its word and icon.
 const kinds = {
+  review: { word: "REVIEW", icon: "spark" },
   "needs-you": { word: "QUESTION", icon: "help" },
   decision: { word: "DECISION", icon: "diamond" },
   permission: { word: "PERMISSION", icon: "shield" }
 };
 
-// What a request asks, by its shape, whoever decides it: "permission" when a
-// decision grants, "decision" when it offers options, "needs-you" for a free
-// answer.
+// What a request asks, by its shape, whoever decides it: "review" when it holds
+// an action, "permission" when a decision grants, "decision" when it offers
+// options, "needs-you" for a free answer.
 function shape(request) {
+  if (Requests.review(request)) return "review";
   return Requests.granted(request) !== null ? "permission" : Requests.choices(request).length > 0 ? "decision" : "needs-you";
 }
 
-// The requests waiting on you, oldest first, none of which another request
-// gathers from below: one question climbing is one item, at its top.
-function queue(requests) {
+// The requests waiting on you, `me`, reviews included, oldest first, none of
+// which another request gathers from below: one question climbing is one item,
+// at its top.
+function queue(requests, me) {
   const hidden = Requests.contained(requests);
-  return requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter) && !hidden.has(request.id))
+  return requests.filter(request => Requests.pending(request) && Requests.forYou(request, me) && !hidden.has(request.id))
     .map((request, at) => ({ request: request, at: at }))
     .sort((a, b) => String(a.request.created_at || "").localeCompare(String(b.request.created_at || "")) || a.at - b.at)
     .map(each => each.request);
@@ -84,8 +87,9 @@ function path(request, input) {
   return agents.filter((name, at) => name && name !== agents[at - 1]);
 }
 
-// How a pending item reads: {id, kind, word, icon, asker, audience, path,
-// work, title, body, unblocks, grants, since, asks}. `input`: {flat (progress
+// How a pending item reads: {id, kind, word, icon, asker, line, path,
+// work, title, body, unblocks, grants, since, asks}; `line` says from whom
+// and for whom, as Requests.line does. `input`: {me (the viewer), flat (progress
 // nodes), front (the agent the person talks with), noted (request id -> true
 // for one the harness passed on), folder (the root of the work's workspace),
 // text (the question as its readers see it)}.
@@ -100,15 +104,16 @@ function describe(request, input) {
   const wanted = Requests.granted(request);
   const unlocks = wanted ? Requests.unlocks(wanted, input.folder) : "";
   const above = route.slice(0, -1);
-  const lead = wanted || form ? null : sentence(headline(input.text));
+  const held = request.interception;
+  const lead = wanted || form || held ? null : sentence(headline(input.text));
   const unblocks = [asker + " resumes " + (work !== "" ? work : "its work")]
     .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " are" : " is") + " waiting for it"] : []).join(" · ");
   return {
     id: request.id, kind: kind, word: look.word, icon: look.icon,
-    asker: asker, audience: Requests.audience(request), path: route, work: work,
-    title: wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
+    asker: asker, line: Requests.line(request, input.me), path: route, work: work,
+    title: held ? capital(asker) + " would " + held.summary : wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
     body: lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",
-    unblocks: unblocks,
+    unblocks: held ? asker + " waits for your review" : unblocks,
     grants: wanted && Object.keys(request.options || {}).includes("grant") ? unlocks + " · this work only" : unlocks,
     since: request.created_at || "",
     asks: form ? form.items.length : 1
@@ -133,6 +138,10 @@ function resolved(request, reply, input) {
   const where = node && node.title ? " (" + node.title + ")" : "";
   const option = reply.option || "";
   const wanted = Requests.granted(request);
+  if (Requests.review(request)) {
+    const words = { approve: ["check", "APPROVED", "approved"], edit: ["edit", "EDITED", "edited and approved"], deny: ["close", "DENIED", "denied"] }[option] || ["diamond", "ANSWERED", "answered"];
+    return { icon: words[0], word: words[1], sentence: "You " + words[2] + " " + possessive(asker) + " request to " + request.interception.summary + where };
+  }
   if (wanted) {
     const unlocks = Requests.unlocks(wanted, input.folder);
     if (Requests.guarded(option))

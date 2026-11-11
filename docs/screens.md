@@ -183,19 +183,21 @@ OPEN IN TREE (Alt+O) shows it on the tree page.
 
 ### 6. The pending queue
 
-Everything that waits on you, over any page of the conversation: a panel on
+Everything whose arbiter you are, reviews included, over any page of the conversation: a panel on
 the right, the whole page when narrow, headed "PENDING · 3" with a close
 button, the requests oldest first, from the top. It opens only while something
 waits and closes when you answer the last one. The keyboard starts in the first
-field, or on the recommended action. An item is one of three kinds, each with
-its icon and word: QUESTION, DECISION or PERMISSION. It says what it asks in a
+field, or on the recommended action. An item is one of four kinds, each with
+its icon and word: QUESTION, DECISION, PERMISSION or REVIEW. It says what it asks in a
 sentence, then who asks, the way down from the front desk, the work, what it
-unblocks and, for a permission, what it grants; every text wraps inside it. Its
+unblocks and, for a permission, what it grants or, for a review with several
+reviewers, its step; every text wraps inside it. Its
 actions are one group at its bottom: a box and ANSWER for a question; a button
 per option for a decision, the recommended one (APPROVE or ACCEPT) filled and
 the others outlined; GRANT · THIS WORK ONLY, filled, DENY and an ALWAYS… menu of
 the wider scopes (for the agent, the stage, the folder or the project, saved
-in the project settings) for a permission. A note, or the reason of a no, is
+in the project settings) for a permission; APPROVE, filled, EDIT (which opens
+the action's text to rewrite and SEND EDIT) and DENY for a review. A note, or the reason of a no, is
 behind ADD A NOTE, and the item's "more" menu holds ESCALATE. Acting on an
 item removes it and leaves its sentence in the chat.
 

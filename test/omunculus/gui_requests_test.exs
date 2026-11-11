@@ -15,7 +15,7 @@ defmodule Omunculus.GuiRequestsTest do
   test "a request's origin has no arbiter, which is no human" do
     run!(["Requests"], """
     if (Requests.human(undefined) || Requests.human(null)) throw Error("no participant is no human");
-    if (Requests.kind({status: "pending", options: {}, origins: {}}) !== "team") throw Error("a request without arbiter is the team's");
+    if (Requests.kind({status: "pending", options: {}, origins: {}}, human) !== "team") throw Error("a request without arbiter is the team's");
     """)
   end
 
@@ -27,7 +27,8 @@ defmodule Omunculus.GuiRequestsTest do
       {status: "closed", arbiter: owner}, {status: "escalated", arbiter: agent("worker")}
     ];
     if (requests.filter(Requests.pending).length !== 2) throw Error("pending requests missing");
-    if (requests.filter(r => Requests.pending(r) && Requests.human(r.arbiter)).length !== 1) throw Error("human count");
+    if (requests.filter(r => Requests.pending(r) && Requests.forYou(r, owner)).length !== 1) throw Error("for you count");
+    if (Requests.isMe(agent("worker"), owner) || Requests.isMe(owner, {kind: "human", issuer: "local", subject: "2000"}) || Requests.isMe(owner, null)) throw Error("isMe");
     if (JSON.stringify(Requests.answer("", "Logo attached")) !== JSON.stringify({body: "Logo attached"}))
       throw Error("text replies must omit option");
     if (JSON.stringify(Requests.answer("approve", "")) !== JSON.stringify({body: "approve", option: "approve"}))
@@ -36,16 +37,21 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
-  test "a request is for the owner, the client or agents by its destination" do
+  test "a request reads as a question or a review, for you or for another account" do
     run!(["Requests"], """
-    const ask = over => Object.assign({status: "pending", arbiter: human}, over);
-    const who = request => Requests.audience(request);
-    if (who(ask({destination: "owners"})) !== "owner") throw Error("owners destination");
-    if (who(ask({route: "owner", destination: "origin"})) !== "client") throw Error("a route name decides nothing");
-    if (who(ask({route: null, destination: "origin"})) !== "client") throw Error("default route");
-    if (who(ask({})) !== "client") throw Error("no destination");
-    if (who(ask({arbiter: agent("sales"), destination: "parent"})) !== "agents") throw Error("agent arbiter");
-    if (Requests.audiences.owner.text !== "OWNER DECISION" || Requests.audiences.client.text !== "CLIENT QUESTION") throw Error("words");
+    const ask = over => Object.assign({status: "pending", arbiter: human, requester: agent("seller"), options: {}, origins: {}}, over);
+    if (Requests.mark(ask({})).text !== "QUESTION" || Requests.mark(ask({})).icon !== "help") throw Error("question mark");
+    const held = {action: "ask", summary: 'ask test:client: "Ready?"', step: 1, of: 1};
+    const review = ask({interception: held, options: {approve: [], edit: [], deny: []}});
+    if (Requests.mark(review).text !== "REVIEW" || !Requests.review(review) || Requests.review(ask({}))) throw Error("review mark");
+    if (Requests.line(ask({}), human) !== "from seller for you") throw Error(Requests.line(ask({}), human));
+    if (Requests.line(ask({arbiter: agent("sales")}), human) !== "from seller to sales") throw Error("to another account");
+    if (Requests.line(review, human) !== 'of ask test:client: "Ready?" by seller for you') throw Error(Requests.line(review, human));
+    const second = ask({interception: Object.assign({}, held, {step: 2, of: 3}), arbiter: agent("sales")});
+    if (Requests.line(second, human) !== 'of ask test:client: "Ready?" by seller for sales \\u00b7 step 2 of 3') throw Error(Requests.line(second, human));
+    if (Requests.kind(review, human) !== "review" || Requests.kind(ask({}), human) !== "needs-you" || Requests.kind(review, {issuer: "local", subject: "2000"}) !== "team") throw Error("kinds");
+    if (Requests.editable(review) !== "Ready?" || Requests.editable(ask({interception: {summary: "run the tool promote with {}"}})) !== "") throw Error("editable text");
+    if (Requests.party(human, human) !== "you" || Requests.party(agent("sales"), human) !== "sales" || Requests.party(human, null) !== "local:1000") throw Error("party");
     """)
   end
 
@@ -83,7 +89,7 @@ defmodule Omunculus.GuiRequestsTest do
       options: {grant: [step], grant_agent: [step], grant_depth: [step], deny: []}};
     const top = {id: "t1", status: "pending", arbiter: human, options: {}, origins: {promote: origin}};
     const [choice] = Requests.choices(top);
-    if (Requests.kind(origin) !== "team") throw Error("an agent's request is the team's");
+    if (Requests.kind(origin, human) !== "team") throw Error("an agent's request is the team's");
     if (!Requests.grants(choice)) throw Error("grants");
     const parts = Pending.actions(choice.options, Requests.grants(choice));
     if (parts.once.join() !== "grant" || parts.always.join() !== "grant_agent") throw Error("scopes " + JSON.stringify(parts));
@@ -117,13 +123,13 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.asker(top) !== "designer" || Requests.asker(other) !== "sales") throw Error("asker");
     if (Requests.route(top, false).join() !== "designer,lead,seller" || Requests.route(top, true).join() !== "designer,lead") throw Error("route");
     if (Requests.route(other, false).join() !== "sales") throw Error("route alone");
-    if (Requests.kind(top) !== "needs-you" || Requests.kind(other) !== "needs-you") throw Error("needs-you");
-    if (Requests.kind(low) !== "team") throw Error("team");
-    if (Requests.kind(Object.assign({}, other, {status: "closed"})) !== "team") throw Error("closed");
+    if (Requests.kind(top, human) !== "needs-you" || Requests.kind(other, human) !== "needs-you") throw Error("needs-you");
+    if (Requests.kind(low, human) !== "team") throw Error("team");
+    if (Requests.kind(Object.assign({}, other, {status: "closed"}), human) !== "team") throw Error("closed");
     const options = {approve: [{name: "reply"}]};
-    if (Requests.kind(Object.assign({}, other, {options})) !== "decision") throw Error("decision");
+    if (Requests.kind(Object.assign({}, other, {options}), human) !== "decision") throw Error("decision");
     const grant = {approve: [{name: "grant", args: {kind: "tool", name: "write"}}]};
-    if (Requests.kind(Object.assign({}, other, {options: grant})) !== "permission") throw Error("permission");
+    if (Requests.kind(Object.assign({}, other, {options: grant}), human) !== "permission") throw Error("permission");
     """)
   end
 

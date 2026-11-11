@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
-import "kit/client/Requests.js" as Requests
 import "kit/client/Tree.js" as Tree
 import "kit/ui"
 
@@ -300,10 +299,10 @@ Item {
         model: branch.node ? branch.node.asks : []
         delegate: Chip {
           required property var modelData
-          icon: Requests.audiences[modelData.audience].icon
-          text: Requests.audiences[modelData.audience].text + "  ·  " + modelData.chain.join(" › ")
-          accent: modelData.human ? Theme.warning : Theme.primary
-          alert: modelData.human
+          icon: modelData.mark.icon
+          text: modelData.mark.text + "  ·  " + modelData.chain.join(" › ")
+          accent: modelData.forYou ? Theme.warning : Theme.primary
+          alert: modelData.forYou
           tip: modelData.question.split("\n")[0]
           onClicked: branch.requestPicked(modelData.id)
         }
@@ -312,7 +311,7 @@ Item {
         model: branch.askedBy
         delegate: Chip {
           required property var modelData
-          icon: Requests.audiences.agents.icon
+          icon: "branch"
           text: modelData.asks + (modelData.asks === 1 ? " question" : " questions") + " from " + modelData.from
           tip: modelData.requests[0].question.split("\n")[0]
           onClicked: branch.requestPicked(modelData.requests[0].id)
@@ -320,8 +319,8 @@ Item {
       }
       Chip {
         visible: !!branch.front && branch.front.asking !== ""
-        icon: branch.front && branch.front.audience !== "" ? Requests.audiences[branch.front.audience].icon : ""
-        text: branch.front ? (branch.front.audience !== "" ? Requests.audiences[branch.front.audience].text + "  ·  " : "") + branch.front.asker + " asks you " + branch.front.asking : ""
+        icon: branch.front && branch.front.mark ? branch.front.mark.icon : ""
+        text: branch.front ? (branch.front.mark ? branch.front.mark.text + "  ·  " : "") + branch.front.asker + " asks you " + branch.front.asking : ""
         accent: Theme.warning
         alert: true
         onClicked: branch.requestPicked(branch.front.ask)

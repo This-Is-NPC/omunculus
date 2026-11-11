@@ -223,8 +223,8 @@ FocusScope {
         Label {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
-          text: "? asked " + (ask.modelData.human ? "you" : ask.modelData.to) + ": \"" + ask.modelData.question.split("\n")[0] + "\""
-          color: ask.modelData.human ? Theme.warning : Theme.foreground
+          text: "? asked " + (ask.modelData.forYou ? "you" : ask.modelData.to) + ": \"" + ask.modelData.question.split("\n")[0] + "\""
+          color: ask.modelData.forYou ? Theme.warning : Theme.foreground
           font.pixelSize: Theme.type.tab.size
           elide: Text.ElideRight
         }
@@ -285,8 +285,8 @@ FocusScope {
       delegate: Label {
         required property var modelData
         Layout.fillWidth: true
-        text: "Asked " + (modelData.human ? "you" : modelData.to) + ": " + modelData.question
-        color: modelData.human ? Theme.warning : Theme.foreground
+        text: "Asked " + (modelData.forYou ? "you" : modelData.to) + ": " + modelData.question
+        color: modelData.forYou ? Theme.warning : Theme.foreground
         font.pixelSize: Theme.type.body.size
         wrapMode: Text.Wrap
       }

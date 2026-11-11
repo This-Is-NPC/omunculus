@@ -226,7 +226,7 @@ Singleton {
       sweep()
     }
     if (request !== "")
-      http.call(socket, "POST", base + "/requests/" + request + "/reply", Mailbox.answer(value), true, sent)
+      http.call(socket, "POST", base + "/requests/" + request + "/reply", Mailbox.answer(value, thread.messages.some(message => message.request === request && message.review)), true, sent)
     else
       http.post(socket, base + "/messages", { message: value, agent: thread.agent }, files, sent)
   }

@@ -103,7 +103,7 @@ Item {
   // What waits on you, oldest first, as [{id, at}], held by value so the
   // queue's items are not rebuilt by a refresh that changes none of them, and
   // whether the queue is open over the page.
-  readonly property string pendingJson: JSON.stringify(Pending.queue(Omunculus.requests).map(request => ({ id: request.id, at: request.created_at || "" })))
+  readonly property string pendingJson: JSON.stringify(Pending.queue(Omunculus.requests, Omunculus.me).map(request => ({ id: request.id, at: request.created_at || "" })))
   readonly property var pending: JSON.parse(pendingJson)
   property bool queueOpen: false
   onPendingChanged: {
@@ -403,8 +403,8 @@ Item {
   // waiting, those on you first, those on you alone, and its notes to you
   // unread.
   readonly property string node: pickedNode
-  readonly property var asked: node === "" ? [] : Omunculus.asked(node).slice().sort((a, b) => Requests.human(b.arbiter) - Requests.human(a.arbiter))
-  readonly property var askedOfYou: asked.filter(request => Requests.human(request.arbiter))
+  readonly property var asked: node === "" ? [] : Omunculus.asked(node).slice().sort((a, b) => Requests.forYou(b, Omunculus.me) - Requests.forYou(a, Omunculus.me))
+  readonly property var askedOfYou: asked.filter(request => Requests.forYou(request, Omunculus.me))
   readonly property var notesHere: node === "" ? [] : Omunculus.unreadFrom(node)
 
   // What the tree asks to be answered: what waits on you nearest the work
@@ -412,7 +412,7 @@ Item {
   // nothing. A work's page answers what its work asked you.
   readonly property string nearest: page === "tree" && tree ? tree.nearestForYou() : ""
   readonly property string replyTo: nearest !== "" ? nearest : asked.length > 0 ? asked[0].id : ""
-  readonly property var workAsks: page === "work" ? Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter)) : []
+  readonly property var workAsks: page === "work" ? Omunculus.asked(workKey).filter(request => Requests.forYou(request, Omunculus.me)) : []
 
   // What the page on screen counts, at the end of its bar, as its list says it.
   readonly property string readout: page === "projects" ? projectsList.readout
