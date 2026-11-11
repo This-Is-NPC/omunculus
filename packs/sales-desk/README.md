@@ -111,7 +111,12 @@ the production address.
 What reaches the client is only what the front desk addresses to them: its
 escalations, the documents it attaches and, when a result of the project
 manager comes back (the sale closed, the handover), its text relaying what
-concerns them. Every other reply of an agent acts through tools, and the
+concerns them, in the second person and in its own words: a report of the
+project manager is written between colleagues and never reaches the client
+as it is, and a result that only records what the client did leaves nothing
+to tell. The project manager's works for the teams carry the client's
+content word for word from the proposal, and the seller lists as pending,
+never asks again for, what the client said they do not have. Every other reply of an agent acts through tools, and the
 text a model writes beside a call is its own note, which the mailbox does
 not show ([the mailbox](../../docs/mailbox.md)). A client who answers a decision
 without making it, saying they will think the price over, has answered for
@@ -160,8 +165,10 @@ change the document, and `render_proposal` renders the latest data again as
 the next version of the document. The data artifact holds internal fields and
 is not for the client. When the seller asks the client to accept the price it
 ends the message with "Attach: proposal-<work id>.md"; the front desk
-attaches that artifact, which hands over the latest version, and says the
-document is attached.
+attaches that artifact, which hands over the latest version, under a
+readable file name in the client's language ("Proposal - <business name>.md",
+the `name` of `attach`), so the key `proposal-<work id>.md` stays the
+team's, and says the document is attached.
 
 Prices: a site of 4 pages is R$ 1,500, each page beyond 4 R$ 300, and the
 seller may give up to 10% off on its own.
