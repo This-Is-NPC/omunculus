@@ -26,7 +26,7 @@ person's own words for names, prices and contacts, since the team has not
 seen the conversation, and it says that the workspace's `AGENTS.md` is the
 rule for how the work is built. Three kinds of goal are understood:
 
-- **A build.** The goal gives what the site or app is for, what it must do
+- **A build.** The goal may hold, from the sales desk, a block from `=== PROPOSAL FACTS` to `=== END PROPOSAL FACTS ===` composed from the proposal (sections for the client, pages, products and prices, contacts with the WhatsApp number, hours and address, colours, fonts and style, texts, pending and the design), which the plan and each item's goal repeat verbatim; only its PENDING items are pending. The goal gives what the site or app is for, what it must do
   and contain, and who it is for, and states the design: either it names
   `design/handoff.md`, the approved design the builders build from, or it
   says the client waived the design, and the team builds from the scope in

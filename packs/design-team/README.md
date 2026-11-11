@@ -18,7 +18,7 @@ and the owner approve, the builders work from its `design/handoff.md`.
 
 The design lead takes a work from the project manager, in one of three forms:
 
-- **A design.** The goal is the briefing in full: the business, who
+- **A design.** The goal is the briefing in full, which the sales desk composes from the proposal as a block from `=== PROPOSAL FACTS` to `=== END PROPOSAL FACTS ===` (sections for the client, pages, products and prices, contacts with the WhatsApp number, hours and address, colours, fonts and style, texts, pending and the round) that the lead and the designer use verbatim: the business, who
   decides, what the site is for, the pages in scope, the audience, logo,
   colours and fonts, the content the client sends, references, tone and the
   main action (`templates/design-brief.md`), with the client's content word
