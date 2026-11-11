@@ -129,36 +129,31 @@ opens it at its team or its log.
 
 ### 5. Chat
 
-The chat between you and the root agent, read as a history from the top
-down, each kind of entry in a form of its own. What you said is a filled
-bubble on the right; what an agent says is a bubble on the left tinted with
-its colour, under its name and time. A note an agent of the team left is an
-outlined card headed NOTE FROM SELLER. The rest is the log, small, dim rows
-with an icon at the left: each run's tool calls, folded to one line that
-counts them and unfolding to one row per call, and a run that said nothing
-is that line alone, with its agent's name. A work handed down is a sub-work
-row where it was, which unfolds into its own transcript, changes and runs;
-each run of the works below leaves a row when it ends ("designer worked 4
-min · 12 steps"). A run of the thread's own that fails leaves a line too,
-with its error, in the error tone and the warning icon. A question for you
-is a card in the thread; a numbered list of questions keeps SEND and I CAN'T
-ANSWER THIS on the view's bottom edge, with how many questions are below,
-until the card's end comes into view. What an agent asked another is an exchange in the
-thread it was asked in, its question quoted in a frame, which DECIDE INSTEAD
-lets you answer. While an agent works, a live line at the end of the thread
-says who works, from the agent you wrote to down to the one at work, what it
-does and for how long, and leaves its row when that run ends. Over the tabs
-of every page of the conversation, a header strip says whom it is with, the
-stage, or that the conversation is starting, how long, and how many agents
-and replies, each count opening the team or the cost, with the chevron and
-ANSWER while a question waits on you; under it one line says the stages of
-the work in focus. The
-chevron or Alt+P open the progress: the works nested by stage and level, beside the
-thread from 1100 px, a card over it from 700 px, a sheet over the chat below.
-While a decision waits on you, its options are numbered chips over the
-composer, then PROGRESS; one pressed decides it. The clip in the composer
-attaches files. A conversation with no message yet, opened from the
-conversations, first asks whom it is with, on the cards of
+The chat is the dialogue between you and the root agent, read as a history
+from the top down. What you said is a filled bubble on the right; what an
+agent says is a bubble on the left tinted with its colour, under its name and
+time. A note an agent of the team left is an outlined card headed NOTE FROM
+SELLER. Each work handed down is one work card: WORK and its title, its state
+as an icon and a word (WORKING, WAITING FOR SURGEON, WAITING FOR YOU, DONE),
+how long, who works for it now and what they do, who it waits for, the stages
+of its workflow and OPEN IN TREE, which opens the team page on that work;
+narrow, the stages are a bar of one segment each and the button has its own
+line. What you answered, chose or granted is one sentence with its icon and
+word (ANSWERED, CHOSE, GRANTED, DENIED) and the time. There are no run rows,
+tool calls or exchanges between agents here: they are in the tree and the
+log. While the agent you write to works, a live line at the end of the thread
+says what it does and for how long. Over the tabs of every page of the
+conversation, a header strip says whom it is with, the stage, or that the
+conversation is starting, how long, and how many agents and replies, each
+count opening the team or the cost, with the chevron and ANSWER while
+something waits on you; under it one line says the stages of the work in
+focus; at the right of the tabs (above them when narrow), "⚠ 3 PENDING" opens
+the [pending queue](#6-the-pending-queue). The chevron or Alt+P open the
+progress: the works nested by stage and level, beside the thread from 1100 px,
+a card over it from 700 px, a sheet over the chat below. The composer is a
+line with a clip that attaches files and SEND; it has no options of a request
+above it. A conversation with no message yet, opened from the conversations,
+first asks whom it is with, on the cards of
 [a new conversation](#3-a-new-conversation) when several agents of depth 0
 may take it.
 
@@ -168,26 +163,35 @@ OPEN IN TEAM (Alt+O) shows it on the team page.
 
 | Keys | What they do |
 | --- | --- |
-| Alt+R | put the keyboard in the words of the newest question waiting on you |
+| Alt+R | open the pending queue |
 | Alt+P | open or close the progress, the keyboard in it |
-| Alt+1 … Alt+9 | the quick chip of that number: an option of the newest decision (with the card's note) when its card is out of view, then the progress |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
 | ↑ · ↓ · → · ←, in the progress | move, unfold, fold |
-| Esc, in a question's card or the progress | back to the composer; the sheet closes |
+| Esc, in the progress | back to the composer; the sheet closes |
 
-### 6. A request
+### 6. The pending queue
 
-A request's decision, over the page, as its card: who asked, what for and
-who decides, a field for words, and its options as buttons at the bottom
-left, with SEND while words are written and DENY last. The card's "more"
-menu holds ESCALATE, which makes the words the reason it goes up.
+Everything that waits on you, over any page of the conversation: a panel on
+the right, the whole page when narrow, headed "PENDING · 3" with a close
+button, the requests oldest first. An item is one of three kinds, each with
+its icon and word: QUESTION, DECISION or PERMISSION. It says what it asks in a
+sentence, then who asks, the way down from the front desk, the work, what it
+unblocks and, for a permission, what it grants; every text wraps inside it. Its
+actions are one group at its bottom: a box and ANSWER for a question; a button
+per option for a decision; GRANT · THIS WORK ONLY, DENY and an ALWAYS… menu of
+the wider scopes (for the agent, the stage, the folder or the project, saved
+in the project settings) for a permission. A note, or the reason of a no, is
+behind ADD A NOTE, and the item's "more" menu holds ESCALATE. Acting on an
+item removes it and leaves its sentence in the chat.
 
 | Keys | What they do |
 | --- | --- |
-| Enter | in its words: answer, or escalate when escalating |
+| Alt+R | open it |
+| Enter | in an answer's words: send it, or escalate when escalating |
+| Esc | close |
 
 ### 7. Team
 
