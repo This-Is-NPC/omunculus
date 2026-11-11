@@ -135,11 +135,11 @@ ShellRoot {
                 Layout.fillWidth: true
                 visible: window.narrow
                 Layout.topMargin: 6
-                spacing: 4
-                FolderTab { rail: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
-                FolderTab { rail: true; name: "sent"; icon: "send"; label: "Sent" }
-                FolderTab { rail: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
-                FolderTab { rail: true; name: "archive"; icon: "folder"; label: "Archive" }
+                spacing: 10
+                FolderTab { rail: true; named: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
+                FolderTab { rail: true; named: true; name: "sent"; icon: "send"; label: "Sent" }
+                FolderTab { rail: true; named: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
+                FolderTab { rail: true; named: true; name: "archive"; icon: "folder"; label: "Archive" }
               }
               Item { id: narrowSearch; visible: window.narrow; Layout.fillWidth: true; Layout.preferredHeight: 30 }
               ThreadList {

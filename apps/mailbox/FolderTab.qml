@@ -4,7 +4,8 @@ import "kit/ui"
 // FolderTab is one folder: its name, dim until hovered,
 // in the accent with an underline while current, and how many threads in it
 // want you, behind a dot when any does. Choosing it nudges it. Folded to a
-// rail, only its icon shows, the count on a badge.
+// rail, only its icon shows, the count on a badge, and with `named` the
+// current one also keeps its name beside its icon.
 Item {
   id: tab
 
@@ -14,11 +15,13 @@ Item {
   property int count: 0
   property color tone: Theme.primary
   property bool rail: false
+  property bool named: false
   readonly property bool current: Mail.folder === name
   readonly property bool hovered: pointer.containsMouse
 
   implicitHeight: rail ? 44 : 34
-  implicitWidth: rail ? 44 : row.implicitWidth + 28
+  readonly property bool showName: rail && named && current
+  implicitWidth: rail ? (showName ? 44 + 6 + railName.implicitWidth + 10 : 44) : row.implicitWidth + 28
 
   Row {
     id: row
@@ -54,13 +57,23 @@ Item {
 
   IconButton {
     visible: tab.rail
-    anchors.centerIn: parent
+    anchors { left: tab.showName ? parent.left : undefined; leftMargin: 6; verticalCenter: parent.verticalCenter; horizontalCenter: tab.showName ? undefined : parent.horizontalCenter }
     name: tab.icon
     tip: tab.label
     tone: tab.tone
     highlighted: tab.current
     count: tab.count
     onClicked: tab.choose()
+  }
+
+  Label {
+    id: railName
+    visible: tab.showName
+    anchors { left: parent.left; leftMargin: 44 + 6; verticalCenter: parent.verticalCenter }
+    text: tab.label.toUpperCase()
+    color: Theme.primary
+    font.pixelSize: 11
+    font.letterSpacing: 2
   }
 
   function choose() {
