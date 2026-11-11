@@ -48,4 +48,113 @@ defmodule Omunculus.Tools.OutTest do
            ) ==
              ~s(root left 2 questions unanswered: worker's on the work "Site": "Logo?"; worker's.)
   end
+
+  # Every reason the store can refuse a model's call with, by action.
+  @refusals [
+    {:reopen, {:only_person, "x"}},
+    {:reopen, {:cannot_grant, "x"}},
+    {:reopen, {:blocked, "x"}},
+    {:reopen, {:unknown_stage, "x"}},
+    {:reopen, {:stage_ahead, "publish"}},
+    {:reopen, {:invalid, "stage"}},
+    {:reopen, :agent_with_workflow},
+    {:reopen, {:agent_not_allowed, "x"}},
+    {:reopen, :agent_and_stage},
+    {:reopen, :no_workflow},
+    {:reopen, {:unknown_workflow, "x"}},
+    {:reopen, :no_body},
+    {:reopen, :no_past_limit},
+    {:reopen, :not_broken},
+    {:reopen, :not_a_child},
+    {:reopen, :no_work},
+    {:reopen, {:missing, :works, "w"}},
+    {:retire, :not_broken},
+    {:retire, :no_body},
+    {:retire, :not_a_child},
+    {:work, :no_report},
+    {:work, :no_delegate},
+    {:work, :one_root},
+    {:work, {:invalid, "works"}},
+    {:work, {:agent_not_allowed, "x"}},
+    {:work, :agent_with_workflow},
+    {:work, {:workflow_required, ["a"]}},
+    {:work, {:workflow_required, ["a", "b"]}},
+    {:work, {:workflow_not_allowed, "x", ["a"]}},
+    {:work, {:forbidden, "stage"}},
+    {:delegate, :no_title},
+    {:delegate, :no_goal},
+    {:delegate, {:broken_child, "w"}},
+    {:delegate, {:agent_not_allowed, "x"}},
+    {:delegate, :agent_with_workflow},
+    {:delegate, {:workflow_required, ["a"]}},
+    {:delegate, {:workflow_not_allowed, "x", ["a"]}},
+    {:delegate, {:forbidden, "stage"}},
+    {:reply, :no_request},
+    {:reply, :no_body},
+    {:reply, :closed},
+    {:reply, :escalated},
+    {:reply, :not_arbiter},
+    {:reply, :invalid_parts},
+    {:reply, {:unknown_option, "x", ["a"]}},
+    {:reply, {:unknown_option, "x", []}},
+    {:request, :no_reason},
+    {:request, :no_run},
+    {:request, :no_route},
+    {:request, :no_requester_run},
+    {:request, :asked_again},
+    {:request, :missing_participant},
+    {:request, {:blocked, "x"}},
+    {:request, {:already_have, "x"}},
+    {:request, {:unknown_route, "x", ["a"]}},
+    {:request, {:invalid, :options}},
+    {:request, {:missing, :runs, "r"}},
+    {:end, :no_run},
+    {:end, :work_open},
+    {:end, :root_open},
+    {:end, {:broken_child, "w"}},
+    {:break, :no_body},
+    {:break, :waiting_children},
+    {:break, :no_work},
+    {:break, :waiting},
+    {:break, {:not_open, "done"}},
+    {:break, {:missing, :works, "w"}},
+    {:continue, {:forbidden, "stage"}},
+    {:continue, :off_sequence},
+    {:continue, {:unknown_workflow, "x"}},
+    {:continue, {:broken_child, "w"}},
+    {:continue, :waiting},
+    {:escalate, :no_reason},
+    {:escalate, :asked_again},
+    {:escalate, :invalid_origin},
+    {:escalate, :invalid_origins},
+    {:escalate, :no_request}
+  ]
+
+  test "every refusal is said in words, never as an Elixir term" do
+    for reason <- @refusals do
+      message = Out.refused(reason)
+
+      assert String.starts_with?(message, "refused: ")
+      refute message =~ "{:", "#{inspect(reason)} reads as a term: #{message}"
+      refute message =~ "%{", "#{inspect(reason)} reads as a term: #{message}"
+      refute message =~ "[:", "#{inspect(reason)} reads as a term: #{message}"
+    end
+  end
+
+  test "a request with no option says to write the answer in body" do
+    assert Out.refused({:reply, {:unknown_option, "yes", []}}) ==
+             ~s(refused: "yes" is not an option: this request takes no option, write your answer in body)
+
+    assert Out.refused({:reply, {:unknown_option, "yes", ["a", "b"]}}) =~
+             "give option as one of: a, b"
+  end
+
+  test "a value the agent gave is quoted" do
+    assert Out.refused({:work, {:workflow_not_allowed, "page", ["site"]}}) =~
+             ~s("page" is not a workflow)
+
+    assert Out.refused({:delegate, {:agent_not_allowed, "ghost"}}) =~ ~s("ghost" is not an agent)
+    assert Out.refused({:request, {:blocked, "bash"}}) =~ ~s(grant "bash")
+    assert Out.not_yours("bash") =~ ~s("bash" is not one of your tools)
+  end
 end

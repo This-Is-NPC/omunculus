@@ -215,7 +215,7 @@ defmodule Omunculus.Tools.Out do
   @spec not_yours(String.t()) :: String.t()
   def not_yours(name),
     do:
-      "refused: #{name} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
+      "refused: #{inspect(name)} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
 
   @doc "What a model reads of a call once its run's context passed `limit` tokens."
   @spec context_full(pos_integer, pos_integer) :: String.t()
@@ -320,7 +320,7 @@ defmodule Omunculus.Tools.Out do
   @spec refused(term) :: String.t()
   def refused({:request, {:blocked, name}}),
     do:
-      "refused: no one can grant #{name} to this run: it is not in the catalog, or the configuration denies it; name a tool as your tool list writes it, with no prefix (bash, not functions.bash)"
+      "refused: no one can grant #{inspect(name)} to this run: it is not in the catalog, or the configuration denies it; name a tool as your tool list writes it, with no prefix (bash, not functions.bash)"
 
   def refused({:request, {:already_have, names}}),
     do: "refused: you already have #{names}; use it rather than asking"
@@ -355,7 +355,7 @@ defmodule Omunculus.Tools.Out do
 
   def refused({tag, {:agent_not_allowed, agent}}) when tag in [:work, :delegate],
     do:
-      "refused: #{agent} is not an agent a work can go to: name one under ## Agents as it is written there, or a workflow it shows"
+      "refused: #{inspect(agent)} is not an agent a work can go to: name one under ## Agents as it is written there, or a workflow it shows"
 
   def refused({tag, :agent_with_workflow}) when tag in [:work, :delegate],
     do: "refused: a work names an agent or a workflow, not both"
@@ -369,13 +369,17 @@ defmodule Omunculus.Tools.Out do
 
   def refused({tag, {:workflow_not_allowed, name, names}}) when tag in [:work, :delegate],
     do:
-      "refused: #{name} is not a workflow a work can go through there; name one of: #{Enum.join(names, ", ")}"
+      "refused: #{inspect(name)} is not a workflow a work can go through there; name one of: #{Enum.join(names, ", ")}"
 
   def refused({:request, {:unknown_route, name, names}}) do
     configured = if names == [], do: "none", else: Enum.join(names, ", ")
 
     "refused: #{inspect(name)} is not a configured request route; configured route names: #{configured}; omit to to follow the default request_routes route"
   end
+
+  def refused({:reply, {:unknown_option, option, []}}),
+    do:
+      "refused: #{inspect(option)} is not an option: this request takes no option, write your answer in body"
 
   def refused({:reply, {:unknown_option, option, options}}),
     do:
@@ -392,17 +396,118 @@ defmodule Omunculus.Tools.Out do
   def refused({:reply, :not_arbiter}),
     do: "refused: that request is not addressed to you; reply only to the requests you received"
 
+  def refused({:reopen, {:unknown_stage, stage}}),
+    do:
+      "refused: #{inspect(stage)} is not a stage of that work's workflow: name one of its stages as it is written there"
+
+  def refused({:reopen, {:stage_ahead, stage}}),
+    do:
+      "refused: that work has not reached #{inspect(stage)} yet: name the stage it broke at or an earlier one"
+
+  def refused({:reopen, :agent_with_workflow}),
+    do:
+      "refused: that work goes through a workflow, whose stages decide the agent: leave agent out and name a stage to send it back to"
+
+  def refused({:reopen, :agent_and_stage}),
+    do: "refused: name an agent or a stage to send the work back to, not both"
+
+  def refused({:reopen, :no_workflow}),
+    do: "refused: that work has no workflow, so it has no stages: leave stage out"
+
+  def refused({tag, {:unknown_workflow, name}}) when tag in [:reopen, :continue],
+    do:
+      "refused: the workflow #{inspect(name)} of that work is not configured, so #{tag} cannot place it"
+
+  def refused({tag, {:agent_not_allowed, agent}}) when tag in [:reopen],
+    do:
+      "refused: #{inspect(agent)} is not an agent that work can go back to: name one under ## Agents as it is written there"
+
+  def refused({tag, :waiting_children}),
+    do:
+      "refused: #{tag} cannot run while your work waits on the works below it: wait for them to hand back"
+
+  def refused({tag, :waiting}),
+    do: "refused: #{tag} cannot run: that work is waiting, not open"
+
+  def refused({tag, {:not_open, state}}),
+    do: "refused: #{tag} cannot run: that work is #{state}, not open"
+
+  def refused({tag, :not_a_child}),
+    do: "refused: #{tag} takes a work below yours: that one is not"
+
+  def refused({:work, :one_root}),
+    do: "refused: a work for the person goes out alone: give one work in works"
+
+  def refused({tag, {:invalid, field}}),
+    do: "refused: #{tag} cannot take #{field} as written: give it as the tool describes it"
+
+  def refused({tag, {:forbidden, field}}),
+    do: "refused: #{tag} takes no #{field}: the configuration decides it"
+
+  def refused({tag, {:missing, table, _id}}),
+    do: "refused: #{tag} names a #{table} entry that does not exist: use an id you were given"
+
+  def refused({tag, {:foreign, _target}}),
+    do: "refused: #{tag} names something outside your work: use only what your work holds"
+
+  def refused({tag, :foreign_work}),
+    do: "refused: #{tag} names a work that is not yours"
+
+  def refused({tag, reason}) when reason in [:no_run, :no_requester_run],
+    do: "refused: #{tag} needs a run of your own, and there is none"
+
+  def refused({tag, reason}) when reason in [:no_work, :no_request, :no_target],
+    do:
+      "refused: #{tag} needs the work or request it is about: name it, or call from a run that has one"
+
+  def refused({tag, :many_targets}),
+    do: "refused: #{tag} names more than one target: name one"
+
+  def refused({tag, :no_route}),
+    do: "refused: #{tag} has no route to anyone who can answer: ask the person in plain text"
+
+  def refused({tag, reason}) when reason in [:invalid_origin, :invalid_origins],
+    do: "refused: #{tag} takes the ids of requests you hold as origins: use ids you were given"
+
+  def refused({tag, :invalid_parts}),
+    do: "refused: #{tag} takes parts as the tool describes them: fix them and call again"
+
+  def refused({tag, :missing_participant}),
+    do: "refused: #{tag} came from no known participant"
+
+  def refused({tag, :not_human}),
+    do: "refused: #{tag} is for the person to decide"
+
+  def refused({tag, :not_authorized}),
+    do: "refused: #{tag} is not yours to decide"
+
+  def refused({tag, :off_sequence}),
+    do: "refused: #{tag} found the work at a stage its workflow does not list"
+
+  def refused({tag, :invalid_emit}),
+    do: "refused: #{tag} came in a form the harness does not accept"
+
+  def refused({tag, {:closed, state}}),
+    do: "refused: #{tag} cannot run: that work is already #{state}"
+
+  def refused({tag, reason}) when is_atom(reason) do
+    case Atom.to_string(reason) do
+      "no_" <> field -> "refused: #{tag} needs #{field}: give it as text"
+      other -> "refused: #{tag} failed: #{String.replace(other, "_", " ")}"
+    end
+  end
+
   def refused({:reopen, {:only_person, name}}),
     do:
-      "refused: only the person may grant #{name}: reopen without granting it and have the agent ask for it with request_access"
+      "refused: only the person may grant #{inspect(name)}: reopen without granting it and have the agent ask for it with request_access"
 
   def refused({:reopen, {:cannot_grant, name}}),
     do:
-      "refused: you cannot grant #{name}: reopen without granting it and have the agent ask for it with request_access"
+      "refused: you cannot grant #{inspect(name)}: reopen without granting it and have the agent ask for it with request_access"
 
   def refused({:reopen, {:blocked, name}}),
     do:
-      "refused: no one can grant #{name} to that agent: it is not in the catalog, or the configuration denies it"
+      "refused: no one can grant #{inspect(name)} to that agent: it is not in the catalog, or the configuration denies it"
 
   def refused(reason), do: "refused: #{inspect(reason)}"
 
