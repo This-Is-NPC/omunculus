@@ -108,6 +108,13 @@ review and the clerk's `publish` refuse a `design-<slug>` app, so the
 release never publishes the design preview. That rule belongs to the
 site's build; the design stage's own review requires `design-<slug>`.
 
+A defect in the approved design itself found while building (a pairing
+below WCAG AA, say) is a change to the build, never a design round: the
+design is made and published only before the build, and the root descriptor
+is the site's. The administrator hands it down as the item's own work, and
+the surgeon fixes `design/preview/system.css` and `design/handoff.md` in
+that item, so every page follows and the review checks it.
+
 The tools read the descriptor and the Dockerfile from the commit they
 publish (`git show HEAD:deploy.toml`), never from the working tree, so what
 is pushed is what was read. A key outside these two, a value that does not

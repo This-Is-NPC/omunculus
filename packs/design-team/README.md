@@ -62,6 +62,11 @@ moodboard and wireframes before the mockup, and the rounds of revision
 included are those `templates/design-brief.md` gives; a change of scope is
 not a round, and rounds beyond those are the owner's decision.
 
+A design round exists only before the build. In `page` and `accept`, a
+defect that comes from the approved design is sent back as a defect of the
+item that uses it, naming the change to `design/preview/system.css`, never
+as a request for a design round.
+
 The design reviewer is the team's QA. It changes no file and sends back
 only defects that block what the stage must deliver, against the briefing,
 the handoff, the plan's checks or the scope, each naming what is wrong, the

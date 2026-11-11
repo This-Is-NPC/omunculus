@@ -512,6 +512,37 @@ defmodule Omunculus.SalesDeskProposalTest do
                handoff("start_design", proposal_view(@facts, work, [open]), root, args)
     end
 
+    test "no design round once the build began", %{root: root} do
+      design = %{"id" => "d1", "assignee" => "design-lead", "state" => "done", "goal" => "x"}
+
+      build = %{
+        "id" => "b1",
+        "assignee" => "administrator",
+        "title" => "Doce Ana: build",
+        "state" => "waiting",
+        "goal" => "x"
+      }
+
+      assessment = %{build | "id" => "a1", "goal" => "Assessment only, build nothing: x"}
+      args = %{"round_of" => "d1", "changes" => "Contact: contrast of the band caption"}
+
+      # At stage build the stage refuses; at stage design the open build does.
+      for stage <- ~w(build design) do
+        work = %{"id" => "w1", "stage" => stage, "title" => "Doce Ana"}
+        view = proposal_view(@facts, work, [design, build])
+
+        assert %{"ok" => false, "output" => output} = handoff("start_design", view, root, args)
+
+        assert output =~ "start_design hands the design work at stage design" or
+                 output =~ "the build began"
+      end
+
+      # An assessment is not a build: the round goes down.
+      work = %{"id" => "w1", "stage" => "design", "title" => "Doce Ana"}
+      view = proposal_view(@facts, work, [assessment, design])
+      assert %{"agent" => "design-lead"} = delegated(handoff("start_design", view, root, args))
+    end
+
     test "the build goal holds the facts and the design as the proposal says", %{root: root} do
       work = %{"id" => "w1", "stage" => "build", "title" => "Doce Ana"}
 

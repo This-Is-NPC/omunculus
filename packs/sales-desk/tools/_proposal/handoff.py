@@ -110,6 +110,12 @@ def design(call):
     work, data = begin(view, "design", "start_design")
     if proposal.lookup(data, "design.state") == "waived":
         raise proposal.Refusal("the client waived the design: there is none to make")
+    builds = not_assessment(view, "administrator")
+    if builds:
+        raise proposal.Refusal(
+            f"the build began ({named(builds)}): the design is made and published only before it, and a change to "
+            "the design now is a change to the build, forwarded to the administrator's build work"
+        )
     earlier, round_of = not_assessment(view, "design-lead"), str(args.get("round_of") or "").strip()
     if not round_of:
         if earlier:

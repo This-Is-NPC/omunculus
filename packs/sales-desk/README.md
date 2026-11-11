@@ -99,7 +99,10 @@ stages, all the project manager's:
    and more are the owner's: the manager passes the owner's approval down
    with `extra_round`. Only the client waives the preview, by
    answering an explicit question the front desk puts to them; their answer
-   is recorded. The design is made and published only before the build.
+   is recorded. The design is made and published only before the build:
+   `start_design` refuses once a build exists, and a design defect found
+   in the build (a contrast, say) is a change to the build, which the
+   administrator hands to the item that uses it, never a design round.
 3. `build`: `start_build` hands the administrator the build with the same
    facts block, composed from the proposal, and the design as its
    `design.state` says: `design/handoff.md` (with the preview's address) when
