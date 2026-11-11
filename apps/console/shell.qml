@@ -73,7 +73,7 @@ ShellRoot {
         : "Switch to another project" }
       const board = { page: "board", text: "BOARD", detail: Omunculus.registry ? "The works of every project, by state" : "The works of this project, by state" }
       return Omunculus.registry ? [projects, board] : [
-        { page: "new", text: "NEW CONVERSATION", detail: "Choose whom to talk with and say what you need" },
+        { page: "new", text: "NEW CONVERSATION", detail: Omunculus.startAgent !== "" ? "Say what you need; it goes to " + Omunculus.startAgent + " unless you choose another" : "Say what you need and choose who gets it" },
         { page: "conversations", text: "CONVERSATIONS", detail: !row || row.reading ? "Reading the conversations…" : Projects.meta(row, "", 80, Theme.type.meta.separator) },
         board, projects
       ]
@@ -351,9 +351,8 @@ ShellRoot {
               }
             }
 
-            // The digit a page shows chooses it while a page is being navigated
-            // (the picker of a new conversation keeps its digits); Ctrl with
-            // it chooses it from a field being written too. Ctrl+Tab and
+            // The digit a page shows chooses it while a page is being navigated;
+            // Ctrl with it chooses it from a field being written too. Ctrl+Tab and
             // Ctrl+Shift+Tab go to the next or the previous page.
             Repeater {
               model: pagesView.pages.length
@@ -361,7 +360,7 @@ ShellRoot {
                 id: numbered
                 required property int index
                 Shortcut {
-                  enabled: panel.started && !panel.dialogOpen && frame.bare && !pagesView.digitsTaken
+                  enabled: panel.started && !panel.dialogOpen && frame.bare
                   sequence: Shortcuts.keys("page")[numbered.index]
                   onActivated: pagesView.choose(numbered.index)
                 }

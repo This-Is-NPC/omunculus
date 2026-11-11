@@ -40,9 +40,10 @@ ModalDialog {
       ["Enter", "open"]
     ].concat(Shortcuts.rows("conversations"))],
     ["new conversation", [
-      ["← · → · ↑ · ↓", "choose whom it is with"],
-      ["Enter", "start it with them"]
-    ].concat(Shortcuts.rows("new conversation"))],
+      ["Enter", "on TO, open the list; on a name, address it"],
+      ["↑ · ↓", "move along the list"],
+      ["Esc", "fold the list, then back"]
+    ]],
     ["chat", Shortcuts.rows("chat")],
     ["tree", [
       ["↑ · ↓", "move between the works"],

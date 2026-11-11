@@ -13,8 +13,9 @@ import "kit/ui"
 // conversations and NEW PROJECT registers another, and the board of all
 // their works. A project's: its conversations, and the board, its works
 // first, every project's one click away, where a card opens its work on a
-// page of its own, from where its conversation's tree opens; whom a new
-// conversation is with is chosen on a screen of the conversations. Each page
+// page of its own, from where its conversation's tree opens; a new
+// conversation is a screen of the conversations, where the first message,
+// to the project's default agent unless TO says another, makes it. Each page
 // of these two levels gives the commands of its bar and the count of its
 // readout. A conversation's, once one is open, in place of the project's,
 // under its head: the header strip, with the conversation's meta, whose
@@ -57,8 +58,8 @@ Item {
   // The pages of the level on screen, in their order.
   readonly property var pages: level === "conversation" ? (open ? inConversation : ["chat"])
     : level === "registry" ? ["projects", "board"] : ["conversations", "board"]
-  // The one on screen: a page, or "new", whom a new conversation is with,
-  // a screen of the conversations.
+  // The one on screen: a page, or "new", the first message of a new
+  // conversation, a screen of the conversations.
   property string page: "conversations"
   readonly property int tabIndex: pages.indexOf(({ new: "conversations", work: "board", thread: "chat" })[page] || page)
   // Whether a conversation's pages are on screen, under its head and tabs.
@@ -87,11 +88,6 @@ Item {
       subject.run = () => view.go("chat")
     return place.concat([subject], page === "thread" ? [{ text: Omunculus.titleOf(threadWork) }] : [])
   }
-  // Whether the chat asks whom an empty conversation is with.
-  readonly property bool asking: page === "chat" && Omunculus.whomAsked
-  // Whether the page takes the digits alone, as the pickers of whom a
-  // conversation is with do; Ctrl with them still chooses a page.
-  readonly property bool digitsTaken: page === "new" || asking
 
   // Whether the progress is open, as chosen on this conversation, or null
   // while it shows as its place has it: the dock open once there is a work,
@@ -117,8 +113,8 @@ Item {
     }
   }
 
-  // Whether the conversation has said nothing yet, or is not made.
-  readonly property bool fresh: Omunculus.drafting || (open && Omunculus.thread("").count === 0)
+  // Whether the conversation open has said nothing yet.
+  readonly property bool fresh: open && Omunculus.thread("").count === 0
 
   // Where the window was before each move, the last last, as {page, level,
   // project, socket, conversation, picked, work, thread}.
@@ -133,12 +129,14 @@ Item {
   function remember() { history = history.concat([here()]).slice(-50) }
 
   // Puts a page on screen, at its level: the projects on the registry's,
-  // the conversations and whom a new one is with on a project's, the pages
+  // the conversations and a new one's first message on a project's, the pages
   // of a conversation on its own; the board and a work's page on the level
   // they were reached from, a project's from a conversation.
   function show(name) {
     if (name === "conversations" && Omunculus.connected)
       Omunculus.loadConversations()
+    if (name === "new")
+      Omunculus.address()
     level = name === "projects" ? "registry"
       : ofConversation.includes(name) ? "conversation"
       : ["conversations", "new"].includes(name) || level === "conversation" ? "project"
@@ -170,9 +168,9 @@ Item {
     return last !== null && last.level === "conversation" && last.conversation === Omunculus.conversationId
   }
 
-  // Leaves the conversation, up one level: a fresh one for the picker it
-  // began on, one with something said for the list it was opened from, or,
-  // opened from nowhere, the project's.
+  // Leaves the conversation, up one level: an empty one for where it was
+  // opened from, one with something said for the list, or, opened from
+  // nowhere, the project's.
   function leave() {
     while (drilled())
       history = history.slice(0, -1)
@@ -229,14 +227,9 @@ Item {
   // Asks for a project to add to the server's registry.
   function newProject() { newProjectDialog.open() }
 
-  // Back to where the window was before its last move, or to the start. A
-  // conversation that has said nothing, or is not made yet, is left for the
-  // picker it began on; one that has is not returned to it. Leaving makes
-  // nothing.
+  // Back to where the window was before its last move, or to the start.
+  // Leaving makes nothing.
   function retreat() {
-    if (!fresh)
-      while (history.length > 0 && history[history.length - 1].page === "new")
-        history = history.slice(0, -1)
     if (history.length === 0) {
       if (startPlace)
         Omunculus.switchProject(startPlace)
@@ -270,8 +263,10 @@ Item {
     show(at || "chat")
   }
 
-  // Whom a new conversation is with.
+  // The first message of a new conversation, to the default agent.
   function newConversation() {
+    if (page === "new")
+      return
     remember()
     Omunculus.close()
     show("new")
@@ -508,7 +503,7 @@ Item {
 
   // The room a composer takes at the bottom of the page, which the toasts
   // stay above.
-  readonly property real bottomRoom: page === "chat" && !asking ? mainComposer.height + gap
+  readonly property real bottomRoom: page === "chat" ? mainComposer.height + gap
     : page === "thread" ? threadComposer.height + gap : 0
 
   // Whether the decision of a request, the pending queue or a new project is
@@ -525,7 +520,7 @@ Item {
     else if (page === "board")
       board.focusEntry()
     else if (page === "new")
-      picker.forceActiveFocus()
+      newPage.focusEntry()
     else if (page === "tree")
       treePage.forceActiveFocus()
     else if (page === "log")
@@ -538,8 +533,8 @@ Item {
       workPage.forceActiveFocus()
     else if (page === "thread")
       threadComposer.focusEntry()
-    else if (asking)
-      whom.forceActiveFocus()
+    else if (Omunculus.unaddressed && Omunculus.addressable)
+      chatRecipient.forceActiveFocus()
     else
       mainComposer.focusEntry()
   }
@@ -582,7 +577,22 @@ Item {
     }
     Qt.callLater(focusEntry)
   }
-  onAskingChanged: Qt.callLater(focusEntry)
+  // Once the first message makes the conversation, its chat takes the screen.
+  Connections {
+    target: Omunculus
+    function onConversationIdChanged() {
+      if (view.page === "new" && Omunculus.conversationId !== "")
+        view.show("chat")
+    }
+    function onWhomAskedChanged() {
+      if (Omunculus.whomAsked)
+        Omunculus.address()
+    }
+    function onStartAgentChanged() {
+      if (view.page === "new")
+        Omunculus.address()
+    }
+  }
   Connections {
     target: Omunculus
     function onLoadedChanged() {
@@ -603,11 +613,11 @@ Item {
   }
 
   // A conversation's head: its header strip and lines, and its tabs, which
-  // wrap on a narrow window. Asking whom it is with, it has none yet.
+  // wrap on a narrow window.
   ColumnLayout {
     id: head
     anchors { left: parent.left; right: parent.right; top: parent.top }
-    visible: view.inside && !view.asking
+    visible: view.inside
     spacing: view.gap
 
     ProgressStrip {
@@ -749,13 +759,12 @@ Item {
             id: cardLoader
             Layout.fillWidth: true
             visible: active
-            active: view.progressShown && chat.progressMode === "card" && !view.asking
+            active: view.progressShown && chat.progressMode === "card"
             sourceComponent: progressView
           }
 
           TimelineView {
             id: timeline
-            visible: !view.asking
             Layout.fillWidth: true
             Layout.fillHeight: true
             thread: ""
@@ -764,19 +773,16 @@ Item {
             onOpenLog: work => view.showLog(work)
           }
 
-          // An empty conversation opened from the list names no agent yet.
-          AgentPicker {
-            id: whom
-            visible: view.asking
+          // An empty conversation may still be addressed to another agent.
+          Recipient {
+            id: chatRecipient
+            visible: Omunculus.addressable
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            onPicked: name => Omunculus.agent = name
-            onBack: view.back()
+            onPicked: mainComposer.focusEntry()
           }
 
           Composer {
             id: mainComposer
-            visible: !view.asking
             Layout.fillWidth: true
           }
         }
@@ -788,7 +794,7 @@ Item {
           z: 2
           anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
           width: chat.progressMode === "dock" ? 380 : chat.width
-          active: view.progressShown && chat.progressMode !== "card" && !view.asking
+          active: view.progressShown && chat.progressMode !== "card"
           visible: active
           sourceComponent: progressView
         }
@@ -856,22 +862,41 @@ Item {
       }
     }
 
-    // Whom a new conversation is with.
+    // The first message of a new conversation, to whom TO says.
     Stage {
       anchors.fill: parent
       shown: view.page === "new"
 
-      AgentPicker {
-        id: picker
+      ColumnLayout {
+        id: newPage
         anchors.fill: parent
-        focus: parent.shown
-        // The conversation is made by its first message, not by the pick.
-        onPicked: name => {
-          view.remember()
-          Omunculus.agent = name
-          view.show("chat")
+        spacing: view.gap
+
+        function focusEntry() {
+          if (Omunculus.unaddressed)
+            newRecipient.forceActiveFocus()
+          else
+            newComposer.focusEntry()
         }
-        onBack: view.back()
+
+        Label {
+          Layout.fillWidth: true
+          text: Omunculus.agent !== "" ? "Say what you need; it goes to " + Omunculus.agent + " unless you choose another." : "Say what you need, and choose who gets it."
+          color: Theme.foreground
+          font.pixelSize: Theme.type.cardBody.size
+          wrapMode: Text.Wrap
+        }
+        Recipient {
+          id: newRecipient
+          Layout.fillWidth: true
+          onPicked: newComposer.focusEntry()
+        }
+        Composer {
+          id: newComposer
+          Layout.fillWidth: true
+          starting: true
+        }
+        Item { Layout.fillHeight: true }
       }
     }
 

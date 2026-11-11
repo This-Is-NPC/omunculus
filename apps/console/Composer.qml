@@ -23,11 +23,16 @@ ColumnLayout {
   property bool compact: Breakpoints.tight(width)
   // The work written to, or "" for the main thread.
   property string work: ""
+  // Whether this is the first message of a new conversation, whose words are
+  // kept by no conversation yet.
+  property bool starting: false
   // Whether the agent written to has a run open: the front agent's own,
   // in the main thread; the work's own in a work.
   readonly property bool busy: work === "" ? Omunculus.busy("") : Omunculus.busy(work)
   // The agent written to, "" when none is known yet.
   readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
+  // Whether the message has no agent to go to yet.
+  readonly property bool unaddressed: work === "" && Omunculus.unaddressed
   // Whether the box holds nothing to send.
   readonly property bool empty: entry.text.trim() === ""
   // Whether a message is on its way to the server: the box is already empty
@@ -44,7 +49,7 @@ ColumnLayout {
   // A message on its way is not in the box, whatever opens.
   Connections {
     target: Omunculus
-    enabled: composer.work === ""
+    enabled: composer.work === "" && !composer.starting
     function onConversationIdChanged() {
       if (!composer.sending)
         entry.text = Omunculus.composerDrafts[Omunculus.conversationId] || ""
@@ -67,7 +72,7 @@ ColumnLayout {
 
   function submit() {
     const value = entry.text.trim()
-    if (!value || composer.sending)
+    if (!value || composer.sending || composer.unaddressed)
       return
     const picked = files.take()
     entry.clear()
@@ -122,7 +127,7 @@ ColumnLayout {
         framed: false
         placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
-        onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
+        onTextChanged: if (composer.work === "" && !composer.starting && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {
           if (composer.noting)
             composer.noting = false
@@ -159,7 +164,7 @@ ColumnLayout {
         implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 86
         busy: composer.busy || composer.sending
         allowClickWhileBusy: true
-        reason: composer.empty ? "write something first" : ""
+        reason: composer.empty ? "write something first" : composer.unaddressed ? "choose who it goes to" : ""
         icon: "enter"
         text: composer.compact ? "" : "SEND"
         tip: composer.busy ? (composer.addressee || "the agent") + " is working; SEND still sends" : "SEND"

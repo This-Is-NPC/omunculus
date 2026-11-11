@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "kit/client"
 import "kit/client/Events.js" as Events
+import "kit/client/Mailbox.js" as Mailbox
 import "kit/client/Model.js" as Model
 import "kit/client/Phrases.js" as Phrases
 import "kit/client/Projects.js" as Projects
@@ -63,6 +64,12 @@ Singleton {
   property string lastAgent: ""
   // Whom a new conversation may be with: the agents of depth 0 not only in workflows.
   readonly property var talkable: setup ? setup.agents.filter(each => each.depth === 0 && !each.workflow_only) : []
+  // Whom a new conversation starts with: the project's default agent, else
+  // its only talkable agent; "" when the person must choose.
+  readonly property string startAgent: {
+    const named = Mailbox.defaultAgent(setup)
+    return named !== "" ? named : talkable.length === 1 ? talkable[0].name : ""
+  }
   readonly property var conversation: conversations.find(item => item.id === conversationId) || null
   readonly property string title: conversationId === "" ? "" : (summaries[conversationId] || {}).title || "new conversation"
   // What the conversation is called: its first root work's title, else what
@@ -98,12 +105,19 @@ Singleton {
   // in, keyed by its id; a request for you, and every note to you, in the
   // main thread.
   property var threads: ({})
-  // Whether the first message will make the conversation: it is with an agent
-  // picked and none exists on the server yet.
-  readonly property bool drafting: conversationId === "" && agent !== ""
   // Whether the conversation on screen is empty and several agents could take
   // it, so the first message must say which. With one, the server names it.
   readonly property bool whomAsked: loaded && agent === "" && talkable.length > 1 && thread("").count === 0
+  // Whether the person may still choose whom the first message goes to: a
+  // conversation not made yet, or an empty one that several agents could take.
+  readonly property bool addressable: conversationId === "" || (loaded && talkable.length > 1 && thread("").count === 0)
+  // Whether the next message has no agent to go to, none being picked.
+  readonly property bool unaddressed: agent === "" && (conversationId === "" || whomAsked)
+  // Addresses the next message to the start agent when it has none.
+  function address() {
+    if (agent === "")
+      agent = startAgent
+  }
   // Run id -> {thread, row}.
   property var rows: ({})
   // Work id -> the work it was handed down from, and run id -> its thread.
