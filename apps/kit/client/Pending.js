@@ -157,22 +157,13 @@ function stateWord(node) {
   return Progress.word(node.state).toUpperCase();
 }
 
-// A work as its card in the chat reads: {work, title, state, word, now,
-// waits, stage, steps, round, elapsed}. `now` is who works for it at the
-// moment, {agent, doing}, or null; `waits` who it waits for, as a sentence,
-// or ""; `stage` {at, count, name} its place in the workflow, or null. `at`
-// is the clock in seconds.
+// A work as its card in the chat reads: {work, title, state, word, waits,
+// elapsed}. `waits` is who it waits for, as a sentence, or ""; `at` is the
+// clock in seconds.
 function workCard(node, at) {
-  const under = node.state === "working" ? [node] : Progress.underway(node);
-  const worker = under.length > 0 ? under[under.length - 1] : null;
-  const current = node.steps.findIndex(step => step.status === "current");
-  const done = node.steps.filter(step => step.status === "done").length;
   return {
     work: node.work, title: node.title, state: node.state, word: stateWord(node),
-    now: worker ? { agent: worker.agent, doing: lower(Progress.lively(worker.doing, worker.since, at)) } : null,
     waits: node.state === "waiting" && node.waitingOn ? node.agent + " is waiting for " + node.waitingOn : "",
-    stage: node.steps.length === 0 ? null : { at: current >= 0 ? current + 1 : done, count: node.steps.length, name: current >= 0 ? node.steps[current].name : "" },
-    steps: node.steps, round: node.round,
     elapsed: Progress.span(Progress.closed(node.state) ? node.own.seconds : Math.max(0, at - node.created))
   };
 }

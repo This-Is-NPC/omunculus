@@ -68,6 +68,8 @@ ColumnLayout {
     : phase === "working" ? "AT WORK"
     : phase === "needs-you" ? "WAITING FOR YOU"
     : phase === "waiting" && standing.waits !== "" ? "WAITING FOR " + standing.waits.toUpperCase() : ""
+  // What the agent at work does, in a plain verb ("Running a command").
+  readonly property string verb: phase === "working" && progress.now.doing ? Progress.lively(progress.now.doing, progress.now.since, tick) : ""
   // How long the agent at work has been on it.
   readonly property string clock: phase === "working" && progress.now.since !== null && progress.now.since !== undefined ? Progress.clock(Math.max(0, tick - progress.now.since)) : ""
 
@@ -309,7 +311,7 @@ ColumnLayout {
     Layout.fillWidth: true
     Layout.leftMargin: Theme.space.line
     visible: strip.moving && steps.length > 0
-    size: 12
+    size: 14
     steps: strip.focusNode ? strip.focusNode.steps : []
     round: strip.focusNode ? strip.focusNode.round : 0
     tip: strip.focusNode ? strip.focusNode.title : ""
@@ -348,16 +350,22 @@ ColumnLayout {
         Label {
           text: link.modelData
           color: Omunculus.toneOf(link.modelData)
-          font.pixelSize: Theme.type.body.size
+          font.pixelSize: Theme.type.cardBody.size
           font.bold: link.modelData === strip.standing.agent
         }
         Label {
           visible: link.modelData !== strip.standing.agent
           text: "›"
           color: Theme.dim
-          font.pixelSize: Theme.type.body.size
+          font.pixelSize: Theme.type.cardBody.size
         }
       }
+    }
+    Label {
+      visible: strip.verb !== ""
+      text: Theme.type.meta.separator.trim() + " " + strip.verb.toLowerCase()
+      color: Theme.dim
+      font.pixelSize: Theme.type.cardBody.size
     }
     Label {
       visible: strip.clock !== ""
@@ -373,6 +381,6 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: strip.said && !(strip.moving && ((strip.focusNode && strip.focusNode.steps.length > 0) || strip.title !== ""))
     implicitHeight: stageLine.height
-    FontMetrics { id: stageLine; font.family: Theme.fontFamily; font.pixelSize: 12 }
+    FontMetrics { id: stageLine; font.family: Theme.fontFamily; font.pixelSize: 14 }
   }
 }

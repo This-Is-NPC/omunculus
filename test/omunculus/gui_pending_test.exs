@@ -117,21 +117,17 @@ defmodule Omunculus.GuiPendingTest do
     """)
   end
 
-  test "a work card says its state in the tree's words, who works now and its stage" do
+  test "a work card says its state in the tree's words and what it waits for" do
     run!("""
     const working = build([], [run("r1", "surgeon", "w2")]);
     const card = Pending.workCard(working.flat.find(node => node.work === "w1"), 2000);
     check(card.title === "Doce Ana: site" && card.state === "waiting" && card.word === "WAITING FOR SURGEON", "word", card);
-    check(card.now.agent === "surgeon" && card.now.doing === "thinking", "who works", card.now);
     check(card.waits === "seller is waiting for surgeon", "waits", card.waits);
-    check(card.stage.at === 3 && card.stage.count === 3 && card.stage.name === "build" && card.steps.length === 3, "stage", card.stage);
     check(card.elapsed === "16 min", "elapsed", card.elapsed);
     const leaf = Pending.workCard(working.flat.find(node => node.work === "w2"), 2000);
-    check(leaf.word === "WORKING" && leaf.now.agent === "surgeon" && leaf.waits === "" && leaf.stage === null, "leaf", leaf);
+    check(leaf.word === "WORKING" && leaf.waits === "", "leaf", leaf);
     const asking = build([question]);
     check(Pending.workCard(asking.flat.find(node => node.work === "w2"), 2000).word === "WAITING FOR YOU", "needs you", "");
-    const idle = Pending.workCard(build([]).flat.find(node => node.work === "w2"), 2000);
-    check(idle.now === null, "no one works", idle);
     """)
   end
 
