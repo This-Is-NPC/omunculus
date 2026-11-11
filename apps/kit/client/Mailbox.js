@@ -5,8 +5,7 @@
 // conversation of one project, with the agent of depth 0 the person first
 // wrote to; its e-mails are what the person wrote, what that agent
 // explicitly addressed to them (its comments on the root work and the files it
-// attached) and the requests it addressed to them, never anything of another
-// agent. Everything here is pure: the window feeds it snapshots and events.
+// attached) and every question addressed to them, from its own requester. Everything here is pure: the window feeds it snapshots and events.
 
 const labels = { progress: "In progress", stuck: "Stuck", cancelled: "Cancelled" };
 
@@ -138,6 +137,14 @@ function label(snapshot, events, waiting) {
   return snapshot.works.some(work => work.state === "open" || work.state === "waiting") ? "stuck" : "";
 }
 
+// A request's requester as a person: an agent with its own address, any
+// other account by its name.
+function requester(request, projectId) {
+  const who = request.requester;
+  return who && who.agent ? person(who.agent, projectId)
+    : { agent: "", project: projectId, name: Requests.label(who), address: "", text: Requests.label(who) };
+}
+
 // The reviews waiting on the person in a conversation, which the Pending
 // folder lists and mail never holds: {key, project, conversation, request,
 // from (the requester as a person), summary, text (what the action holds, ""
@@ -146,8 +153,7 @@ function reviews(projectId, id, snapshot, me) {
   return snapshot.requests.filter(request => Requests.review(request) && Requests.pending(request) && Requests.forYou(request, me))
     .map(request => ({
       key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
-      from: request.requester && request.requester.agent ? person(request.requester.agent, projectId)
-        : { agent: "", project: projectId, name: Requests.label(request.requester), address: "", text: Requests.label(request.requester) },
+      from: requester(request, projectId),
       summary: request.interception.summary, text: Requests.editable(request), step: request.interception.step, of: request.interception.of,
       reason: String(request.reason || ""), at: request.created_at
     }));
@@ -196,17 +202,17 @@ function build(projectId, id, snapshot, events, me) {
     }
   }
   const notes = noted(events);
-  // What reaches the person: the requests whose arbiter they are, whoever
-  // else a review or question was written for stays off their mail.
+  // What reaches the person: every question whose arbiter they are, from its
+  // own requester; whoever else a question was written for stays off their mail.
   const asked = snapshot.requests.filter(request => Requests.forYou(request, me) && !Requests.review(request)
-    && !(notes[request.id] && Requests.passedOn(request).length === 0)
-    && (!!notes[request.id] || (!!request.requester && request.requester.agent === agent)));
+    && !(notes[request.id] && Requests.passedOn(request).length === 0));
   const held = reviews(projectId, id, snapshot, me);
   const waiting = asked.filter(request => Requests.pending(request)).map(request => request.id);
   for (const request of asked) {
-    messages.push({ key: request.id, mine: false, from: agentPerson, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
+    const sender = requester(request, projectId);
+    messages.push({ key: request.id, mine: false, from: sender, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
     const reply = replies[request.id];
-    if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: agentPerson, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
+    if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: sender, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
   }
   // A file belongs to the e-mail of its own run: the request that run raised
   // when it raised one, else its comments, else an e-mail of its own.

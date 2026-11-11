@@ -34,15 +34,17 @@ The e-mails of a thread, oldest first, are:
   conversation's root work and the files it attached, one e-mail per run. A
   file shows on the e-mail of its own run: the request that run raised, else
   its comments, else an e-mail of its own with no text;
-- each question (a request that is not a review) whose requester is the
-  thread's agent and whose arbiter is you, as an e-mail from that agent whose body is the request's reason, in the
-  agent's own words. The questions of the request's origins are other agents'
-  text and never appear;
-- your answers to those requests, as e-mails of yours.
+- each question (a request that is not a review) whose arbiter is you, in
+  the thread of its conversation, as an e-mail from its own requester (its
+  name, its address and portrait: the thread's agent or any other agent) whose
+  body is the request's reason, in the requester's own words. The questions of
+  the request's origins are other agents' text and never appear;
+- your answers to those requests, as e-mails of yours to their requester.
 
 What reaches you is what is addressed to you: a request is mail only when you
-are its arbiter. A request for another account is never shown, and a thread
-whose only pending requests are another account's reads in progress. A review
+are its arbiter. An account is an account, agent or human: a question an agent asks you
+reaches you whoever it is, and a request for another account is never shown.
+A thread whose only pending requests are another account's reads in progress. A review
 of a held action ([interception](requests.md#interception)) is not mail: the
 Pending folder holds it, and no thread shows it.
 
@@ -51,10 +53,11 @@ request to you (`ask`, or `escalate` to the origin), a `comment` on the
 conversation's root work and `attach`. What a model writes in plain text, beside
 a call or with none, is the agent's own narration: the console shows it, the
 mailbox never does. A comment on any other work, and the note of an `attach`,
-are not shown either. Nothing of another agent is shown: not its words, not
-requests it raised, not a note the harness opened between agents (a request the
-harness opened that passes on no question). A request the harness opened that
-passes on a question shows that question as the thread's agent's.
+are not shown either. Nothing else of another agent is shown: not its words, not
+requests for other accounts, not a note the harness opened between agents (a
+request the harness opened that passes on no question). A request the harness
+opened that passes on a question shows that question, from the request's
+requester.
 
 A conversation has no title in the core: its subject is the first line of its
 first message of yours, cut at 90 characters. The compose window's Subject is

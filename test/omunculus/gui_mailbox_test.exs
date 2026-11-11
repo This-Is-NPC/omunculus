@@ -86,14 +86,15 @@ defmodule Omunculus.GuiMailboxTest do
     const t = build(snapshot, events);
     if (t.agent !== "sales" || t.with.text !== "Sales <sales@agency>") throw Error("agent");
     if (t.subject !== "Website") throw Error("subject " + t.subject);
-    const shown = t.messages.map(m => (m.mine ? "me:" : "sales:") + m.text);
+    const shown = t.messages.filter(m => m.request !== "q3").map(m => (m.mine ? "me:" : "sales:") + m.text);
     const want = ["me:I need a site.", "sales:Thanks, one question coming.", "sales:Which pages?", "me:Home and Menu", "sales:Which colour?"];
     if (JSON.stringify(shown) !== JSON.stringify(want)) throw Error(JSON.stringify(shown));
-    if (t.pending.join() !== "q2") throw Error("pending " + t.pending);
-    if (t.messages.some(m => m.text.includes("seller") || m.text.includes("owner"))) throw Error("another agent leaked");
-    if (t.received !== 3 || t.sent !== 2) throw Error("counts");
-    if (t.parties !== "Sales, me (5)") throw Error(t.parties);
-    if (t.at !== "2026-01-01T10:04:00Z" || t.heard !== "2026-01-01T10:04:00Z") throw Error("times");
+    if (t.messages.some(m => m.text.includes("seller"))) throw Error("another agent's comment leaked");
+    const owner = t.messages.find(m => m.request === "q3");
+    if (!owner || owner.from.address !== "seller@agency" || owner.text !== "owner approval" || !t.pending.includes("q3")) throw Error("a question to the viewer from another agent is mail, from that agent");
+    if (t.messages.some(m => m.request === "q4")) throw Error("a question to another account is not mail");
+    if (t.received !== 4 || t.sent !== 2) throw Error("counts");
+    if (t.pending.join() !== "q3,q2") throw Error("pending " + t.pending);
     """)
   end
 
