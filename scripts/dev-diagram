@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Draws a conversation of a dev project as a sequence diagram, read-only
-from its store: people's messages and answers, works handed down, requests,
-grants, stage moves, breaks, reopens, retires, works done, artifacts and the
-hand-off and deploy tools, each step tagged with its work (W1, W2, ...). A
-work shows where it began, as a card with how it ended. Writes
-dev/diagrams/<conversation>.mmd (Mermaid) and .svg.
+from its store: people's messages and answers, works handed down and moved
+between stages, requests and their escalations, grants, breaks, reopens,
+retires, works done, artifacts, refused protocol calls and the deploy tools,
+each step tagged with its work (W1, W2, ...). A work shows where it began, as
+a card with how it ended. Writes dev/diagrams/<conversation>.mmd (Mermaid)
+and .svg.
 
 Usage: dev-diagram [--project agency|dev] [conversation id], or through
 mise run dev:diagram.
@@ -18,15 +19,23 @@ import re
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime
 
 STORES = {"agency": "dev/agency/.omunculus/store.sqlite3", "dev": "dev/.omunculus/store.sqlite3"}
-TOOLS = {"deploy_preview", "promote", "start_design", "start_build", "start_sale", "request_golive", "wait_client"}
-CLIENT, OWNER = "Client", "Owner"
-COL, TOP, ROW, LEFT = 150, 70, 26, 40
-COLOURS = {CLIENT: "#b5651d", OWNER: "#7a1f1f"}
+# Tools drawn when they ran; the protocol tools are drawn only when refused.
+TOOLS = {"deploy_preview", "promote", "request_golive", "wait_client"}
+PROTOCOL = {"work", "delegate", "end", "reopen", "reply", "continue", "break", "retire", "escalate", "ask"}
+CLIENT, OWNER, HARNESS = "Client", "Owner", "harness"
+ROLES = {"origin": CLIENT, "owners": OWNER}
+COLOURS = {CLIENT: "#b5651d", OWNER: "#7a1f1f", HARNESS: "#7b4bb0"}
+PLAIN, REFUSED = "#333333", "#c0392b"
 # A work card's border and fill by how the work ended; any other state is open.
 STATES = {"done": ("#3d7a3d", "#e6f2e6"), "cancelled": ("#888888", "#eeeeee")}
 OPEN = ("#c0392b", "#fbe3e0")
+FONT = "Noto Sans, DejaVu Sans, Liberation Sans, sans-serif"
+CW, CWB = 6.6, 7.2  # Text width per character at 11 px, regular and bold.
+COL, TOP, ROW, LEFT, MSG = 170, 70, 24, 40, 100
+GAP = 60  # Seconds of silence that earn a separator row.
 
 
 def short(text, n=90):
@@ -34,22 +43,52 @@ def short(text, n=90):
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+def fit(text, px, bold=False):
+    return short(text, max(int(px / (CWB if bold else CW)), 4))
+
+
+def width(text, bold=False):
+    return len(text) * (CWB if bold else CW)
+
+
+def seconds(iso):
+    return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+
+
 def steps_of(db, conv, client_agent):
-    """The diagram's steps, in event order: (kind, from, to, text, dashed); a
-    work's beginning is the kind "work", whose last item is the work."""
+    """The diagram's steps in event order, as dicts: shape (arrow or note),
+    a, b, the tag, the kind shown on the line, the message shown to the right,
+    and the style (dashed, colour, tone, card, mark)."""
     works = {r["id"]: r for r in db.execute("select * from works where conversation_id = ?", (conv,))}
     by_event = {r["event_id"]: r for r in works.values()}
     requests = {r["id"]: r for r in db.execute("select * from requests")}
-    req_by_event = {r["event_id"]: r for r in requests.values()}
     events = list(db.execute("select * from events where conversation_id = ? order by sequence", (conv,)))
+    bodies = {e["id"]: json.loads(e["body"] or "{}") for e in events}
+    escalations = [dict(r) for r in db.execute("select * from request_escalations")]
+    by_escalated, by_origin = {}, {}
+    for r in escalations:
+        by_escalated.setdefault(r["escalated_id"], []).append(r)
+        by_origin.setdefault(r["origin_id"], []).append(r)
 
-    # A work's first agent and its last end, from the runs it had.
-    first_agent, last_end = {}, {}
+    # What a request's opening event recorded: its role, work and step.
+    opening = {e["request_id"]: e for e in events if e["type"] == "request"}
+    grant_of = {}
     for e in events:
-        if e["type"] == "start-run" and e["work_id"] and e["work_id"] not in first_agent:
-            first_agent[e["work_id"]] = json.loads(e["body"]).get("agent")
-        if e["type"] == "end" and e["work_id"]:
-            last_end[e["work_id"]] = e["id"]
+        if e["type"] == "grant":
+            grant_of.setdefault(e["request_id"], []).append(e)
+    grants_drawn = set()
+    comments = [e for e in events if e["type"] == "comment"]
+    runs_of, run_agents, tool_names, creators = {}, {}, {}, {}
+    for e in events:
+        if e["type"] == "start-run":
+            run_agents[e["run_id"]] = bodies[e["id"]].get("agent")
+            if e["work_id"]:
+                runs_of.setdefault(e["work_id"], []).append((e["sequence"], run_agents[e["run_id"]]))
+        elif e["type"] == "tool":
+            tool_names.setdefault(e["run_id"], set()).add(bodies[e["id"]].get("name"))
+        if e["id"] in by_event:
+            creators[by_event[e["id"]]["id"]] = e["actor_id"]
+    via = {r["id"]: r["via"] for r in db.execute("select id, via from runs where conversation_id = ?", (conv,))}
 
     # Each work's tag, in the order the works began.
     tags = {}
@@ -57,126 +96,364 @@ def steps_of(db, conv, client_agent):
         if e["id"] in by_event:
             tags[by_event[e["id"]]["id"]] = f"W{len(tags) + 1}"
 
-    def tag(work_id):
-        return f"{tags[work_id]} " if work_id in tags else ""
+    def first_agent(work_id):
+        return runs_of[work_id][0][1] if runs_of.get(work_id) else works[work_id]["assignee"]
 
-    def person(requester):
-        # A person answers for the agent that talks with the client, else as the owner.
-        return CLIENT if requester.get("agent") == client_agent else OWNER
+    def next_agent(work_id, seq):
+        """The agent of the first run a work gets after an event."""
+        return next((a for s, a in runs_of.get(work_id, []) if s > seq), None)
 
-    steps = []
+    def role(request_id):
+        """The person a request goes to, from the destination its opening event recorded."""
+        o = opening.get(request_id)
+        return ROLES.get(bodies[o["id"]].get("destination") if o else None, OWNER)
+
+    def requester(request_id):
+        return json.loads(requests[request_id]["requester"]).get("agent", CLIENT)
+
+    def report(work_id, actor, seq):
+        mine = [bodies[c["id"]].get("body") for c in comments if c["work_id"] == work_id and c["actor_id"] == actor and c["sequence"] < seq]
+        return mine[-1] if mine else works[work_id]["title"]
+
+    # The last continue to nothing completes a work; the last retire cancels it.
+    ended = {}
     for e in events:
-        kind, actor, at = e["type"], e["actor_id"], e["at"][11:16]
-        body = json.loads(e["body"] or "{}")
+        if e["type"] == "continue" and not bodies[e["id"]].get("to") or e["type"] == "cancel":
+            ended[e["work_id"]] = e["id"]
+
+    steps, art = [], {}
+
+    def add(e, shape, a, b, kind, msg, work_id=None, **style):
+        step = {"shape": shape, "a": a, "b": b, "kind": kind, "msg": msg, "seq": e["sequence"], "at": e["at"],
+                "tag": tags.get(work_id or e["work_id"], ""), **style}
+        steps.append(step)
+        return step
+
+    def between(e, a, b, kind, msg, **style):
+        """An arrow, or a note when it would go from an agent to itself."""
+        return add(e, "note" if a == b else "arrow", a, b, kind, msg, **style)
+
+    for e in events:
+        kind, actor, body = e["type"], e["actor_id"], bodies[e["id"]]
         if kind == "prompt":
-            steps.append(("arrow", CLIENT, body.get("agent") or client_agent, f"{at} {body.get('message', '')}", False))
+            head, _, rest = (body.get("message") or "").strip().partition("\n")
+            add(e, "arrow", CLIENT, body.get("agent") or client_agent, "message", f"{head.strip()} — {' '.join(rest.split())}" if rest.strip() else head)
         elif kind in ("delegate", "work") and e["id"] in by_event:
             w = by_event[e["id"]]
             flow = f"[{w['workflow']}] " if w["workflow"] else ""
-            text = f"{at} {tag(w['id'])}{flow}{w['title']} · {state_of(w)}"
-            steps.append(("work", actor, first_agent.get(w["id"]) or w["assignee"], text, w))
-        elif kind == "request" and e["id"] in req_by_event:
-            r = req_by_event[e["id"]]
+            if w["state"] in STATES:
+                state = f"ended: {w['state']}"
+            else:
+                state = "open" + (f": waiting for {w['waiting_for'] or w['waiting']}" if w["waiting"] else "")
+            between(e, actor, first_agent(w["id"]), "hand-off", f"{flow}{w['title']} ({state})", work_id=w["id"], card=STATES.get(w["state"], OPEN), state=state, title=w["title"])
+        elif kind == "request" and e["request_id"] in requests:
+            r = requests[e["request_id"]]
             arbiter = json.loads(r["arbiter"])
-            to = arbiter.get("agent") if arbiter.get("kind") == "agent" else person(json.loads(r["requester"]))
-            steps.append(("arrow", actor, to, f"{at} {tag(e['work_id'])}ask: {body.get('reason', '')}", False))
+            to = arbiter["agent"] if arbiter.get("kind") == "agent" else role(e["request_id"])
+            work_id, label, msg = e["work_id"], "ask", body.get("reason", "")
+            options = body.get("options") or {}
+            names = sorted({c["args"].get("name") for calls in options.values() for c in calls if c.get("name") == "grant"})
+            if names:
+                label, msg = "request access", f"request access: {', '.join(names)} — {msg}"
+            for esc in by_escalated.get(e["request_id"], []):
+                # An escalation points at the request it passes on, and belongs to its work.
+                work_id = work_id or opening[esc["origin_id"]]["work_id"]
+                label, msg = f"escalates #{{{esc['origin_id']}}}", f"escalates #{{{esc['origin_id']}}} [{esc['part']}]: {msg}"
+            between(e, actor, to, label, msg, work_id=work_id)
+            steps[-1]["rid"] = e["request_id"]
         elif kind == "reply" and e["request_id"] in requests:
-            requester = json.loads(requests[e["request_id"]]["requester"])
-            sender = actor if e["actor_kind"] == "agent" else person(requester)
-            option = f" {body['option']}" if body.get("option") else ""
-            steps.append(("arrow", sender, requester.get("agent", "?"), f"{at} answer{option}: {body.get('body', '')}", True))
-        elif kind == "grant":
-            steps.append(("arrow", OWNER, body.get("agent", "?"), f"{at} GRANT {body.get('name')} ({body.get('scope') or 'this work'})", False))
+            rid = e["request_id"]
+            answer = body.get("option") or body.get("body", "")
+            text = body.get("body", "")
+            option = body.get("option")
+            msg = f"answer {option}" if text in (option, "") else f"answer {option}: {text}" if option else f"answer: {text}"
+            for g in grant_of.get(rid, []):
+                grants_drawn.add(g["id"])
+                gb = bodies[g["id"]]
+                msg += f" -> GRANT {gb['name']} to {gb['agent']}"
+            if e["actor_kind"] == "agent":
+                between(e, actor, requester(rid), "answer", msg, dashed=True, open=True)
+            elif rid in by_origin:
+                # The part of a human answer passed on through the escalating agent.
+                esc = by_origin[rid][0]
+                between(e, requester(esc["escalated_id"]), requester(rid), f"part {esc['part']}", f"part {esc['part']}: {msg.removeprefix('answer ')}", dashed=True, open=True, colour=COLOURS[role(esc["escalated_id"])])
+            else:
+                between(e, role(rid), requester(rid), "answer", msg, dashed=True, open=True)
+        elif kind == "grant" and e["id"] not in grants_drawn:
+            add(e, "arrow", OWNER, body.get("agent", "?"), "grant", f"GRANT {body.get('name')} to {body.get('agent')} ({body.get('scope') or 'this work'})")
         elif kind == "continue" and body.get("to"):
-            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}stage {body.get('from')} → {body.get('to')}", False))
-        elif kind == "break" and e["work_id"] in works:
-            parent = works.get(works[e["work_id"]]["parent_id"])
-            steps.append(("arrow", actor, parent["assignee"] if parent else actor, f"{at} {tag(e['work_id'])}BREAK: {body.get('body', '')}", True))
-        elif kind == "reopen":
-            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}reopen at {body.get('stage')}", False))
-        elif kind == "cancel":
-            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}retired: {body.get('body', '')}", False))
-        elif kind == "end" and last_end.get(e["work_id"]) == e["id"]:
+            to = next_agent(e["work_id"], e["sequence"])
+            msg = f"stage {body.get('from')} -> {body['to']}"
+            between(e, actor, to or actor, f"-> {body['to']}", msg)
+        elif kind == "continue" and e["work_id"] in works:
             w = works[e["work_id"]]
-            parent = works.get(w["parent_id"])
-            if parent and w["state"] == "done":
-                steps.append(("arrow", w["assignee"], parent["assignee"], f"{at} {tag(w['id'])}done: {w['title']}", True))
+            last = ended.get(w["id"]) == e["id"] and w["state"] == "done"
+            between(e, actor, creators.get(w["id"]) or actor, "done", f"done: {short(report(w['id'], actor, e['sequence']), 200)}", dashed=True, open=True, mark="check" if last else None)
+        elif kind == "break" and e["work_id"] in works:
+            w = works[e["work_id"]]
+            to = creators.get(w["id"]) or actor
+            if via.get(e["run_id"]) == "retry" or "break" not in tool_names.get(e["run_id"], ()):
+                between(e, HARNESS, to, "harness stop", f"harness: stopped {body.get('body', '')}", dashed=True, open=True, tone="harness")
+            else:
+                between(e, actor, to, "break", f"BREAK: {body.get('body', '')}", dashed=True, open=True)
+        elif kind == "reopen":
+            stage = body.get("stage")
+            to = next_agent(e["work_id"], e["sequence"]) or actor
+            between(e, actor, to, "reopen", f"reopen at {stage}" if stage else "reopen")
+        elif kind == "cancel" and e["work_id"] in works:
+            agent = ([a for s, a in runs_of.get(e["work_id"], []) if s < e["sequence"]] or [works[e["work_id"]]["assignee"]])[-1]
+            between(e, actor, agent, "retired", f"retired: {body.get('body', '')}", mark="x")
         elif kind == "artifact":
-            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}artifact {body.get('name')} v{body.get('version')} ({body.get('kind')})", False))
-        elif kind == "tool" and body.get("name") in TOOLS:
-            ok = "ok" if body.get("ok") else "REFUSED"
-            steps.append(("note", actor, None, f"{at} {body['name']} {ok}: {body.get('output', '')}", False))
-    return steps
+            name = re.sub(r"-[0-9a-f]{32}", "", body.get("name") or "")
+            ext = name.rpartition(".")[2] if "." in name else ""
+            base = name[: -len(ext) - 1] if ext else name
+            key = (e["work_id"], body.get("version"), e["at"][:19])
+            if key in art:
+                art[key]["exts"].append(ext)
+                art[key]["msg"] = f"artifact {base} v{body.get('version')} (+{', '.join(art[key]['exts'])})"
+            else:
+                art[key] = add(e, "note", actor, actor, "artifact", f"artifact {base} v{body.get('version')}", exts=[])
+        elif kind == "comment" and e["request_id"] and actor:
+            add(e, "note", actor, actor, "comment", f"comment: {body.get('body', '')}")
+        elif kind == "tool" and body.get("name") in TOOLS | PROTOCOL:
+            out = str(body.get("output") or "").removeprefix("refused: ")
+            if body.get("ok") is False:
+                add(e, "note", actor, actor, f"refused {body['name']}", f"refused: {body['name']}: {out}", tone="refused")
+            elif body["name"] in TOOLS:
+                add(e, "note", actor, actor, body["name"], f"{body['name']}: {out}" if out else body["name"])
+    steps = [s for s in steps if s["a"] and s["b"]]
+
+    # A step to resolve: the number of the request an escalation came from.
+    number = {s["rid"]: i + 1 for i, s in enumerate(steps) if "rid" in s}
+    for s in steps:
+        for field in ("kind", "msg"):
+            s[field] = re.sub(r"#\{(\w+)\}", lambda m: f"#{number.get(m.group(1), '?')}", s[field])
+
+    # Where each work ended: the check or cross goes on its lifeline.
+    for s in steps:
+        s["mark_on"] = s["a"] if s.get("mark") == "check" else s["b"]
+    runs = []
+    for e in events:
+        if e["type"] == "start-run":
+            end = next((x["sequence"] for x in events if x["type"] == "end-run" and x["run_id"] == e["run_id"]), float("inf"))
+            runs.append((bodies[e["id"]].get("agent"), e["sequence"], end))
+    return steps, runs
 
 
-def state_of(work):
-    """A work's final state, with what it waits for when it waits."""
-    if work["waiting"]:
-        return f"{work['state']}, waiting for {work['waiting_for'] or work['waiting']}"
-    return work["state"]
+def participants(steps, seed):
+    """The people at the ends; between them the agents seeded in the order of
+    the work tree, then adjacent swaps that shorten the arrows."""
+    used = {n for s in steps for n in (s["a"], s["b"])}
+    middle = []
+    for n in seed + [n for s in steps for n in (s["a"], s["b"])]:
+        if n in used and n not in middle and n not in (CLIENT, OWNER):
+            middle.append(n)
+    arrows = [(s["a"], s["b"]) for s in steps if s["shape"] == "arrow"]
+
+    def cost(mid):
+        pos = {n: i for i, n in enumerate([CLIENT] + mid + [OWNER])}
+        return sum(abs(pos[a] - pos[b]) for a, b in arrows)
+
+    improved = True
+    while improved:
+        improved = False
+        for i in range(len(middle) - 1):
+            swapped = middle[:i] + [middle[i + 1], middle[i]] + middle[i + 2:]
+            if cost(swapped) < cost(middle):
+                middle, improved = swapped, True
+    return [n for n in [CLIENT] + middle + [OWNER] if n in used]
 
 
-def participants(steps):
-    """People first, then agents in the order they first appear."""
-    order = [CLIENT]
-    for _, a, b, _, _ in steps:
-        for name in (a, b):
-            if name and name not in order:
-                order.append(name)
-    return [CLIENT] + ([OWNER] if OWNER in order else []) + [n for n in order if n not in (CLIENT, OWNER)]
+def tree_order(db, conv):
+    """The agents in depth-first order over the works, to seed the layout."""
+    works = list(db.execute("select id, parent_id, assignee from works where conversation_id = ? order by rowid", (conv,)))
+    kids = {}
+    for w in works:
+        kids.setdefault(w["parent_id"], []).append(w)
+    order = []
+
+    def visit(w):
+        if w["assignee"] and w["assignee"] not in order:
+            order.append(w["assignee"])
+        for k in kids.get(w["id"], []):
+            visit(k)
+
+    for w in kids.get(None, []):
+        visit(w)
+    return order
 
 
-def mermaid(parts, steps):
-    clean = lambda text: short(text).replace(";", ",").replace("#", "")
-    lines = ["sequenceDiagram", "    autonumber"]
-    lines += [f"    {'actor' if p in COLOURS else 'participant'} {p}" for p in parts]
-    for kind, a, b, text, dashed in steps:
-        if kind == "note":
-            lines.append(f"    Note over {a}: {clean(text)}")
-        elif kind == "work":
-            lines.append(f"    {a}->>{b}: {clean(text)}")
+def colour_of(s):
+    if s.get("tone") == "refused":
+        return REFUSED
+    if s.get("tone") == "harness":
+        return COLOURS[HARNESS]
+    if s.get("card"):
+        return s["card"][0]
+    return s.get("colour") or COLOURS.get(s["a"]) or COLOURS.get(s["b"]) or PLAIN
+
+
+def label_of(n, s):
+    return f"{n}. {s['at'][11:19]} {s['tag']} {s['kind']}".replace("  ", " ")
+
+
+def rows_of(steps):
+    """Rows in order: a step, or a separator after a gap of silence."""
+    rows, last = [], None
+    for i, s in enumerate(steps):
+        t = seconds(s["at"])
+        if last is not None and t - last > GAP:
+            m = round((t - last) / 60)
+            rows.append(("gap", f"{m // 60} h {m % 60} min" if m >= 60 else f"{m} min"))
+        rows.append(("step", i))
+        last = t
+    return rows
+
+
+def run_spans(steps, runs):
+    """Each run's first and last step on its agent's lifeline."""
+    spans = []
+    for agent, start, end in runs:
+        hit = [i for i, s in enumerate(steps) if start <= s["seq"] <= end and agent in (s["a"], s["b"])]
+        if hit:
+            spans.append((agent, hit[0], hit[-1]))
+    return spans
+
+
+def mermaid(parts, steps, runs):
+    clean = lambda text: re.sub(r"[#;]", lambda m: f"#{ord(m.group())};", short(text, 120))
+    ids = {p: f"P{i}" for i, p in enumerate(parts)}
+    spans = run_spans(steps, runs)
+    lines = ["sequenceDiagram"]
+    lines += [f"    {'actor' if p in (CLIENT, OWNER) else 'participant'} {ids[p]} as {p}" for p in parts]
+    for i, s in enumerate(steps):
+        a, b, n = ids[s["a"]], ids[s["b"]], i + 1
+        lines += [f"    activate {ids[agent]}" for agent, first, _ in spans if first == i]
+        text = clean(f"{n}. {s['at'][11:19]} {s['tag']} {s['msg']}".replace("  ", " "))
+        if s.get("tone") == "refused":
+            lines.append(f"    {a}-x{a}: {text}")
+        elif s["shape"] == "note":
+            lines.append(f"    Note over {a}: {text}")
+        elif s.get("tone") == "harness" or s["kind"] == "break":
+            lines.append(f"    {a}--x{b}: {text}")
+        elif s.get("mark") == "x":
+            lines.append(f"    {a}-x{b}: {text}")
         else:
-            lines.append(f"    {a}{'-->>' if dashed else '->>'}{b}: {clean(text)}")
+            lines.append(f"    {a}{'-->>' if s.get('dashed') else '->>'}{b}: {text}")
+        if s.get("card"):
+            lines.append(f"    Note over {a},{b}: {s['tag']} {s['state']}" if a != b else f"    Note over {a}: {s['tag']} {s['state']}")
+        lines += [f"    deactivate {ids[agent]}" for agent, _, last in spans if last == i]
     return "\n".join(lines) + "\n"
 
 
-def svg(parts, steps):
+def svg(parts, steps, runs):
+    n = len(parts)
     x = {name: LEFT + COL // 2 + i * COL for i, name in enumerate(parts)}
-    width, height = LEFT * 2 + COL * len(parts), TOP + ROW * (len(steps) + 2)
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="sans-serif" font-size="11">',
-           '<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
-           '<path d="M0,0 L8,4 L0,8 z" fill="#333"/></marker></defs>',
-           f'<rect width="{width}" height="{height}" fill="#fffdf8"/>']
+    last_x = x[parts[-1]]
+    msg_x = last_x + COL // 2 + 20
+    rows = rows_of(steps)
+    y_of = {i: TOP + ROW * (r + 1) for r, (kind, i) in enumerate(rows) if kind == "step"}
+    msgs = [fit(s["msg"], MSG * CW, s.get("card") is not None) for s in steps]
+    canvas = int(msg_x + max([width(m, True) for m in msgs] + [0]) + 40)
+    legend_y = TOP + ROW * (len(rows) + 2)
+    canvas = max(canvas, LEFT + 760)
+    height = legend_y + 230
+    markers = {}
+
+    def marker(colour, open_head):
+        key = (colour, open_head)
+        if key not in markers:
+            markers[key] = f"m{len(markers)}"
+        return markers[key]
+
+    body = []
+    for r, (kind, i) in enumerate(rows):
+        y = TOP + ROW * (r + 1)
+        if kind == "gap":
+            body.append(f'<line x1="{LEFT}" y1="{y}" x2="{canvas - LEFT}" y2="{y}" stroke="#bbb" stroke-dasharray="1 4"/>')
+            body.append(f'<text x="{(LEFT + canvas) // 2}" y="{y + 4}" text-anchor="middle" fill="#888" stroke="#fffdf8" stroke-width="3" paint-order="stroke">... {i} ...</text>')
+        elif i % 2:
+            body.append(f'<rect x="0" y="{y - ROW // 2}" width="{canvas}" height="{ROW}" fill="#f7f3e8"/>')
+    # Activation bars of the runs, under the arrows.
+    for agent, first, last in run_spans(steps, runs):
+        body.append(f'<rect x="{x[agent] - 3}" y="{y_of[first] - 9}" width="6" height="{y_of[last] - y_of[first] + 18}" fill="#d9e2ec" fill-opacity="0.8" stroke="#9fb3c8"/>')
+    for i, s in enumerate(steps):
+        y, colour = y_of[i], colour_of(s)
+        label = label_of(i + 1, s)
+        full = f"{label}: {s['msg']}"
+        halo = 'stroke="#fffdf8" stroke-width="3" paint-order="stroke"'
+        title = f"<title>{html.escape(full)}</title>"
+        if s["shape"] == "note":
+            w = width(label) + 12
+            fill, edge, ink = ("#fbe3e0", REFUSED, "#8a1f14") if s.get("tone") == "refused" else ("#f3eed2", "#d8cf9a", "#555")
+            body.append(f'<rect x="{x[s["a"]] - w / 2:.0f}" y="{y - 10}" width="{w:.0f}" height="18" fill="{fill}" stroke="{edge}">{title}</rect>')
+            body.append(f'<text x="{x[s["a"]]}" y="{y + 3}" fill="{ink}" text-anchor="middle" font-style="italic">{html.escape(label)}{title}</text>')
+        else:
+            left = min(x[s["a"]], x[s["b"]])
+            dash = ' stroke-dasharray="1 3"' if s.get("tone") == "harness" else ' stroke-dasharray="5 3"' if s.get("dashed") else ""
+            head = marker(colour, bool(s.get("open")))
+            width_ = 2 if s.get("card") or s.get("tone") == "harness" else 1
+            body.append(f'<line x1="{x[s["a"]]}" y1="{y}" x2="{x[s["b"]]}" y2="{y}" stroke="{colour}" stroke-width="{width_}"{dash} marker-end="url(#{head})">{title}</line>')
+            body.append(f'<text x="{left + 6}" y="{y - 4}" fill="{colour}" {halo}>{html.escape(fit(label, last_x + COL // 3 - left))}{title}</text>')
+        mark = s.get("mark")
+        if mark == "x":
+            cx = x[s["mark_on"]]
+            body.append(f'<path d="M{cx - 6},{y - 6} l12,12 m0,-12 l-12,12" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
+        elif mark == "check":
+            cx = x[s["mark_on"]] + (14 if x[s["b"]] < x[s["a"]] else -14)
+            body.append(f'<path d="M{cx - 5},{y} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
+        # The message column: the card of a work, or plain text.
+        if s.get("card"):
+            line, fill = s["card"]
+            body.append(f'<rect x="{msg_x - 6}" y="{y - 10}" width="{width(msgs[i], True) + 12:.0f}" height="18" rx="9" fill="{fill}" stroke="{line}">{title}</rect>')
+            body.append(f'<text x="{msg_x}" y="{y + 3}" fill="{line}" font-weight="bold">{html.escape(msgs[i])}{title}</text>')
+        else:
+            body.append(f'<text x="{msg_x}" y="{y + 3}" fill="{colour}">{html.escape(msgs[i])}{title}</text>')
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{canvas}" height="{height}" font-family="{FONT}" font-size="11">',
+           f'<rect width="{canvas}" height="{height}" fill="#fffdf8"/>']
+    defs = "".join(
+        f'<marker id="{mid}" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">'
+        + (f'<path d="M0,0 L10,4 L0,8" fill="none" stroke="{c}"/>' if o else f'<path d="M0,0 L10,4 L0,8 z" fill="{c}"/>')
+        + "</marker>" for (c, o), mid in markers.items())
+    out.append(f"<defs>{defs}</defs>")
     for name in parts:
-        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{height - 10}" stroke="#ccc" stroke-dasharray="4 4"/>')
-        out.append(f'<rect x="{x[name] - 68}" y="10" width="136" height="30" rx="{15 if name in COLOURS else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
+        bw = min(max(width(name, True) + 24, 100), COL - 12)
+        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{legend_y - 20}" stroke="#ccc" stroke-dasharray="4 4"/>')
+        out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="10" width="{bw:.0f}" height="30" rx="{15 if name in (CLIENT, OWNER) else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
         out.append(f'<text x="{x[name]}" y="30" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
-    for i, (kind, a, b, text, dashed) in enumerate(steps):
-        y = TOP + ROW * (i + 1)
-        # The full text shows on hover; the line shows it short.
-        label = f"<title>{html.escape(text)}</title>{html.escape(f'{i + 1}. {short(text)}')}"
-        if kind == "note":
-            out.append(f'<rect x="{x[a] - 4}" y="{y - 13}" width="{min(6 * len(short(text)) + 40, 560)}" height="18" fill="#f3eed2" stroke="#d8cf9a"/>')
-            out.append(f'<text x="{x[a] + 2}" y="{y}" fill="#555" font-style="italic">{label}</text>')
-            continue
-        if kind == "work":
-            # A card on the arrow from who began the work to whom it went.
-            line, fill = STATES.get(dashed["state"], OPEN)
-            left, size = min(x[a], x[b]), min(6 * len(short(text)) + 40, 640)
-            out.append(f'<line x1="{x[a]}" y1="{y}" x2="{x[b]}" y2="{y}" stroke="{line}" stroke-width="2" marker-end="url(#a)"/>')
-            out.append(f'<rect x="{left + 4}" y="{y - 17}" width="{size}" height="15" rx="7" fill="{fill}" stroke="{line}"/>')
-            out.append(f'<text x="{left + 12}" y="{y - 6}" fill="{line}" font-weight="bold">{label}</text>')
-            continue
-        colour = COLOURS.get(a, COLOURS.get(b, "#333"))
-        if a == b:
-            out.append(f'<path d="M{x[a]},{y - 8} h30 v12 h-28" fill="none" stroke="{colour}" marker-end="url(#a)"/>')
-            out.append(f'<text x="{x[a] + 36}" y="{y}" fill="{colour}">{label}</text>')
-            continue
-        dash = ' stroke-dasharray="5 3"' if dashed else ""
-        out.append(f'<line x1="{x[a]}" y1="{y}" x2="{x[b]}" y2="{y}" stroke="{colour}"{dash} marker-end="url(#a)"/>')
-        out.append(f'<text x="{min(x[a], x[b]) + 6}" y="{y - 4}" fill="{colour}">{label}</text>')
+    out.append(f'<line x1="{msg_x - 12}" y1="{TOP - 20}" x2="{msg_x - 12}" y2="{legend_y - 20}" stroke="#ddd"/>')
+    out.append(f'<text x="{msg_x}" y="30" fill="#555" font-weight="bold">message</text>')
+    out += body
+    out += legend(LEFT, legend_y)
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+def legend(x, y):
+    """A key to the drawing's conventions, one row each."""
+    box = [f'<rect x="{x}" y="{y}" width="720" height="206" fill="#fff" stroke="#ccc"/>']
+    row = lambda i: y + 22 + i * 21
+    text = lambda i, t, dx=62: box.append(f'<text x="{x + dx}" y="{row(i) + 4}" fill="#333">{html.escape(t)}</text>')
+    for i, dash in ((0, ""), (1, ' stroke-dasharray="5 3"')):
+        box.append(f'<line x1="{x + 12}" y1="{row(i)}" x2="{x + 52}" y2="{row(i)}" stroke="#333"{dash}/>')
+    text(0, "solid arrow: request or hand-off (a work handed down, a stage move, a reopen, a retire)")
+    text(1, "dashed arrow: answer, work done, break; purple dotted: stopped by the harness")
+    for i, (name, (edge, fill)) in enumerate((("done", STATES["done"]), ("cancelled", STATES["cancelled"]), ("open", OPEN))):
+        box.append(f'<rect x="{x + 12 + i * 70}" y="{row(2) - 8}" width="62" height="16" rx="8" fill="{fill}" stroke="{edge}"/>')
+        box.append(f'<text x="{x + 43 + i * 70}" y="{row(2) + 4}" fill="{edge}" text-anchor="middle" font-weight="bold">{name}</text>')
+    text(2, "work card (right column): how the work ended; open shows what it waits for", 230)
+    box.append(f'<rect x="{x + 12}" y="{row(3) - 8}" width="40" height="16" fill="#f3eed2" stroke="#d8cf9a"/>')
+    text(3, "yellow note: stage move kept by the same agent, artifact, tool, comment")
+    box.append(f'<rect x="{x + 12}" y="{row(4) - 8}" width="40" height="16" fill="#fbe3e0" stroke="{REFUSED}"/>')
+    text(4, "red note: a refused call")
+    box.append(f'<rect x="{x + 29}" y="{row(5) - 8}" width="6" height="16" fill="#d9e2ec" stroke="#9fb3c8"/>')
+    text(5, "bar on a lifeline: a run of the agent")
+    box.append(f'<path d="M{x + 14},{row(6) - 6} l12,12 m0,-12 l-12,12" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
+    box.append(f'<path d="M{x + 34},{row(6)} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
+    text(6, "cross: work retired here; check: work done here")
+    text(7, "Wn: the work of a step; N.: event order; HH:MM:SS: time; ... N min ...: silence over a minute", 12)
+    text(8, "Client and Owner by the destination a request recorded (origin: Client, owners: Owner)", 12)
+    return box
 
 
 def main():
@@ -199,12 +476,12 @@ def main():
     # The agent the person's first message went to is the one that talks with them.
     first = db.execute("select body from events where conversation_id = ? and type = 'prompt' order by sequence limit 1", (conv,)).fetchone()
     client_agent = json.loads(first["body"]).get("agent") if first else None
-    steps = steps_of(db, conv, client_agent)
-    parts = participants(steps)
+    steps, runs = steps_of(db, conv, client_agent)
+    parts = participants(steps, [client_agent] + tree_order(db, conv))
 
     out = os.path.join(root, "dev", "diagrams")
     os.makedirs(out, exist_ok=True)
-    for ext, text in (("mmd", mermaid(parts, steps)), ("svg", svg(parts, steps))):
+    for ext, text in (("mmd", mermaid(parts, steps, runs)), ("svg", svg(parts, steps, runs))):
         with open(os.path.join(out, f"{conv}.{ext}"), "w") as f:
             f.write(text)
     print(os.path.join(out, f"{conv}.svg"))
