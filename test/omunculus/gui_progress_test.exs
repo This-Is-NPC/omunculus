@@ -456,7 +456,7 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build(base);
     const here = Progress.standing(out, "sales");
     check(JSON.stringify(here) === JSON.stringify({workflow: "sale", stage: "design", step: 2, steps: 6,
-      chain: ["sales", "seller", "design-lead", "designer"], agent: "designer", state: "working", waits: "", asker: ""}), "working", here);
+      chain: ["sales", "seller", "design-lead", "designer"], agent: "designer", state: "working", waits: "", head: "seller", asker: ""}), "working", here);
     check(out.flat[0].workflow === "sale" && out.flat[1].workflow === "", "a node names its workflow", out.flat.map(node => node.workflow));
     const idle = Progress.build(Object.assign({}, base, {runs: []}));
     const waiting = Progress.standing(idle, "sales");

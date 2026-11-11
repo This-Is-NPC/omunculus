@@ -309,7 +309,7 @@ forms as the width shrinks, down to one dot per stage and the current name), or
 its title when it has no stages and the masthead does not already say it; and,
 while the conversation works or waits, the line of who: what it is doing — AT
 WORK, "SELLER IS WAITING FOR YOU" (the deepest agent that asks you), or
-"FRONT-DESK IS WAITING FOR SELLER" (the end of the chain, waiting for what its
+"FRONT-DESK IS WAITING FOR SELLER" (the work in focus, waiting for what its
 work card says it waits for) — and the chain
 of agents from the one you talk with down to the one at work or waited for,
 each in its tone and the last in bold, "front-desk › project-manager ›

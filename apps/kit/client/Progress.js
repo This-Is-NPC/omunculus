@@ -494,7 +494,7 @@ function track(node) {
 // agents from the front one down to the one at work or waited for, each once,
 // and `agent`, the one it ends on; `waits`, what a conversation that waits
 // waits on: "you", or what the work in focus waits for, as its card says it,
-// "" otherwise; `asker`, the deepest agent that asks you. null before any
+// "" otherwise; `head`, the agent of that work; `asker`, the deepest agent that asks you. null before any
 // work.
 function standing(progress, front) {
   const focus = progress ? progress.focus : null;
@@ -508,7 +508,7 @@ function standing(progress, front) {
   const waits = state === "needs-you" ? "you"
     : state === "waiting" ? focus.waitingOn || Array.from(new Set(progress.flat.filter(node => !closed(node.state) && node.waitingOn).map(node => node.waitingOn))).join(", ")
     : "";
-  return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits, asker: asking ? asking.agent : "" });
+  return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits, head: focus.agent || "", asker: asking ? asking.agent : "" });
 }
 
 // How many answers of yours a reply passes on: 0 when you answered none, else

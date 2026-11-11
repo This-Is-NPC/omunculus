@@ -64,7 +64,7 @@ ColumnLayout {
   readonly property string doing: !standing ? ""
     : phase === "working" ? "AT WORK"
     : phase === "needs-you" ? (standing.asker !== "" ? standing.asker.toUpperCase() + " IS WAITING FOR YOU" : "WAITING FOR YOU")
-    : phase === "waiting" && standing.waits !== "" ? (standing.agent !== "" ? standing.agent.toUpperCase() + " IS WAITING FOR " : "WAITING FOR ") + standing.waits.toUpperCase() : ""
+    : phase === "waiting" && standing.waits !== "" ? (standing.head !== "" ? standing.head.toUpperCase() + " IS WAITING FOR " : "WAITING FOR ") + standing.waits.toUpperCase() : ""
   // What the agent at work does, in a plain verb ("Running a command").
   readonly property string verb: phase === "working" && progress.now.doing ? Progress.lively(progress.now.doing, progress.now.since, tick) : ""
   // How long the agent at work has been on it.
