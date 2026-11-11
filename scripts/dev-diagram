@@ -28,9 +28,12 @@ STORES = {"agency": "dev/agency/.omunculus/store.sqlite3", "dev": "dev/.omunculu
 # Tools drawn when they ran; the protocol tools are drawn only when refused.
 TOOLS = {"deploy_preview", "promote", "request_golive", "wait_client"}
 PROTOCOL = {"work", "delegate", "end", "reopen", "reply", "continue", "break", "retire", "escalate", "ask"}
-CLIENT, OWNER, HARNESS = "Client", "Owner", "harness"
-ROLES = {"origin": CLIENT, "owners": OWNER}
-COLOURS = {CLIENT: "#b5651d", OWNER: "#7a1f1f", HARNESS: "#7b4bb0"}
+HARNESS = "harness"
+# The human accounts of the conversation in order of appearance, set by main:
+# the first stands at the left edge, the others at the right.
+PEOPLE = []
+PERSON_COLOURS = ["#b5651d", "#7a1f1f", "#2e7d6b", "#8a5a2f"]
+HARNESS_COLOUR = "#7b4bb0"
 PLAIN, REFUSED = "#333333", "#c0392b"
 # A work card's border and fill by how the work ended; any other state is open.
 STATES = {"done": ("#3d7a3d", "#e6f2e6"), "cancelled": ("#888888", "#eeeeee")}
@@ -75,10 +78,12 @@ def seconds(iso):
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
 
 
-def steps_of(db, conv, client_agent):
+def steps_of(db, conv, client_agent, accounts):
     """The diagram's steps in event order, as dicts: shape (arrow or note),
     a, b, the tag, the kind shown on the line, the message shown to the right,
-    and the style (dashed, colour, tone, card, mark)."""
+    and the style (dashed, colour, tone, card, mark). `accounts` names the
+    humans, {(issuer, subject): name}; an unnamed one is shown as issuer:subject.
+    The human accounts met are listed in PEOPLE."""
     works = {r["id"]: r for r in db.execute("select * from works where conversation_id = ?", (conv,))}
     by_event = {r["event_id"]: r for r in works.values()}
     requests = {r["id"]: r for r in db.execute("select * from requests")}
@@ -120,13 +125,27 @@ def steps_of(db, conv, client_agent):
         """The agent of the first run a work gets after an event."""
         return next((a for s, a in runs_of.get(work_id, []) if s > seq), None)
 
-    def role(request_id):
-        """The person a request goes to, from the destination its opening event recorded."""
-        o = opening.get(request_id)
-        return ROLES.get(bodies[o["id"]].get("destination") if o else None, OWNER)
+    def account(identity):
+        """An account as the diagram names it: an agent by its name, a human by
+        its [accounts] name, else issuer:subject; humans are collected as people."""
+        if identity.get("kind") == "agent":
+            return identity["agent"]
+        name = accounts.get((identity["issuer"], identity["subject"])) or f"{identity['issuer']}:{identity['subject']}"
+        if name not in PEOPLE:
+            PEOPLE.append(name)
+        return name
+
+    def actor_of(e):
+        """The account an event is authored by."""
+        if e["actor_kind"] == "human":
+            return account({"kind": "human", "issuer": e["actor_issuer"], "subject": e["actor_subject"]})
+        return e["actor_id"]
+
+    def arbiter(request_id):
+        return account(json.loads(requests[request_id]["arbiter"]))
 
     def requester(request_id):
-        return json.loads(requests[request_id]["requester"]).get("agent", CLIENT)
+        return account(json.loads(requests[request_id]["requester"]))
 
     def last_comment(work_id, actor, seq):
         mine = [c for c in comments if c["work_id"] == work_id and c["actor_id"] == actor and c["sequence"] < seq]
@@ -149,6 +168,8 @@ def steps_of(db, conv, client_agent):
     steps, art = [], {}
 
     def add(e, shape, a, b, kind, msg, work_id=None, **style):
+        if e["released_by"]:
+            msg += f" (released by review #{{{e['released_by']}}})"
         step = {"shape": shape, "a": a, "b": b, "kind": kind, "msg": msg, "seq": e["sequence"], "at": e["at"],
                 "tag": tags.get(work_id or e["work_id"], ""), **style}
         steps.append(step)
@@ -162,7 +183,7 @@ def steps_of(db, conv, client_agent):
         kind, actor, body = e["type"], e["actor_id"], bodies[e["id"]]
         if kind == "prompt":
             head, _, rest = (body.get("message") or "").strip().partition("\n")
-            add(e, "arrow", CLIENT, body.get("agent") or client_agent, "message", f"{head.strip()} — {' '.join(rest.split())}" if rest.strip() else head)
+            add(e, "arrow", actor_of(e), body.get("agent") or client_agent, "message", f"{head.strip()} — {' '.join(rest.split())}" if rest.strip() else head)
         elif kind in ("delegate", "work") and e["id"] in by_event:
             w = by_event[e["id"]]
             flow = f"[{w['workflow']}] " if w["workflow"] else ""
@@ -173,9 +194,12 @@ def steps_of(db, conv, client_agent):
             between(e, actor, first_agent(w["id"]), "hand-off", f"{flow}{w['title']} ({state})", work_id=w["id"], card=STATES.get(w["state"], OPEN), state=state, title=w["title"])
         elif kind == "request" and e["request_id"] in requests:
             r = requests[e["request_id"]]
-            arbiter = json.loads(r["arbiter"])
-            to = arbiter["agent"] if arbiter.get("kind") == "agent" else role(e["request_id"])
+            to = arbiter(e["request_id"])
             work_id, label, msg = e["work_id"], "ask", body.get("reason", "")
+            held = body.get("interception")
+            if held:
+                of = f" · step {held['step']} of {held['of']}" if held["of"] > 1 else ""
+                label, msg = "review", f"REVIEW of {held['summary']} by {requester(e['request_id'])} for {to}{of}"
             options = body.get("options") or {}
             names = sorted({c["args"].get("name") for calls in options.values() for c in calls if c.get("name") == "grant"})
             if names:
@@ -203,13 +227,17 @@ def steps_of(db, conv, client_agent):
             if e["actor_kind"] == "agent":
                 between(e, actor, requester(rid), "answer", msg, dashed=True, open=True, **style)
             elif rid in by_origin:
-                # The harness applied the person's part to the origin request directly.
+                # The harness applied the account's part to the origin request directly.
                 esc = by_origin[rid][0]
-                between(e, role(esc["escalated_id"]), requester(rid), f"part {esc['part']}", f"part {esc['part']}: {msg.removeprefix('answer ')}", dashed=True, open=True, colour=COLOURS[role(esc["escalated_id"])], **style)
+                between(e, arbiter(esc["escalated_id"]), requester(rid), f"part {esc['part']}", f"part {esc['part']}: {msg.removeprefix('answer ')}", dashed=True, open=True, **style)
             else:
-                between(e, role(rid), requester(rid), "answer", msg, dashed=True, open=True, **style)
+                between(e, arbiter(rid), requester(rid), "answer", msg, dashed=True, open=True, **style)
+        elif kind == "release":
+            # An approval: the held action goes ahead, as its actor, released by the review.
+            add(e, "note", requester(e["request_id"]), requester(e["request_id"]), "release", f"released: {body.get('summary')}"
+                f" ({body.get('option')}; review #{{{e['request_id']}}})")
         elif kind == "grant" and e["id"] not in grants_drawn:
-            add(e, "arrow", OWNER, body.get("agent", "?"), "grant", f"GRANT {body.get('name')} to {body.get('agent')} ({body.get('scope') or 'this work'})")
+            add(e, "arrow", actor_of(e), body.get("agent", "?"), "grant", f"GRANT {body.get('name')} to {body.get('agent')} ({body.get('scope') or 'this work'})")
         elif kind == "continue" and body.get("to"):
             to = next_agent(e["work_id"], e["sequence"])
             msg = f"stage {body.get('from')} -> {body['to']}"
@@ -275,6 +303,16 @@ def steps_of(db, conv, client_agent):
     return steps, runs, info
 
 
+def accounts_of(config):
+    """The human accounts the project's config names, as {(issuer, subject): name}."""
+    try:
+        with open(config, "rb") as f:
+            named = tomllib.load(f).get("accounts", {})
+    except FileNotFoundError:
+        return {}
+    return {(a["issuer"], a["subject"]): name for name, a in named.items() if a.get("kind") == "human"}
+
+
 def teams_of(config):
     """The agent of each pack in the project's config, as {agent: team} with the teams in pack order."""
     team = {}
@@ -295,14 +333,14 @@ def teams_of(config):
 
 
 def participants(steps, seed, team):
-    """The people at the ends, the harness before the Owner, and between them the
-    teams in pack order. Agents are seeded in the order of the work tree, then
+    """The first human account at the left end, the others at the right, the
+    harness before them, and between them the teams in pack order. Agents are seeded in the order of the work tree, then
     adjacent swaps, of agents and of whole teams, shorten the arrows. Returns the
     names and the team of each agent."""
     used = {n for s in steps for n in (s["a"], s["b"])}
     group = {}
     for n in seed + [n for s in steps for n in (s["a"], s["b"])]:
-        if n in used and n not in group and n not in (CLIENT, OWNER, HARNESS):
+        if n in used and n not in group and n not in PEOPLE and n != HARNESS:
             group[n] = team.get(n, OTHER)
     order = [t for t in dict.fromkeys([*team.values(), OTHER]) if t in group.values()]
     blocks = [[n for n in group if group[n] == t] for t in order]
@@ -311,7 +349,7 @@ def participants(steps, seed, team):
     arrows = [(s["a"], s["b"]) for s in steps if s["shape"] == "arrow"]
 
     def cost(bs):
-        pos = {n: i for i, n in enumerate([CLIENT] + [n for b in bs for n in b] + [OWNER])}
+        pos = {n: i for i, n in enumerate(PEOPLE[:1] + [n for b in bs for n in b] + PEOPLE[1:])}
         return sum(abs(pos[a] - pos[b]) for a, b in arrows)
 
     def variants(bs):
@@ -328,7 +366,7 @@ def participants(steps, seed, team):
             if cost(v) < cost(blocks):
                 blocks, improved = v, True
                 break
-    return [n for n in [CLIENT] + [n for b in blocks for n in b] + [OWNER] if n in used], group
+    return [n for n in PEOPLE[:1] + [n for b in blocks for n in b] + PEOPLE[1:] if n in used], group
 
 def episodes(steps, info):
     """What the steps tell, by step index: the phases of the root work's stages,
@@ -373,7 +411,7 @@ def episodes(steps, info):
     # A request to a person, with the answer and the parts passed back: a decision and a wait.
     asked = {s["rid"]: i for i, s in enumerate(steps) if "rid" in s}
     for i, s in enumerate(steps):
-        if s.get("rid") and s["b"] in (CLIENT, OWNER):
+        if s.get("rid") and s["b"] in PEOPLE:
             answer = next((j for j in range(i + 1, n) if steps[j].get("reply_to") == s["rid"] and steps[j]["a"] == s["b"]), None)
             if answer is None:
                 continue
@@ -417,7 +455,7 @@ def episodes(steps, info):
             return sum(1 for s in mine if test(s))
 
         facts = [(count(lambda s: s.get("card")), "works begun"), (count(lambda s: s.get("mark") == "check"), "works done"), (count(lambda s: s.get("mark") == "x"), "works retired")]
-        facts += [(count(lambda s, who=who: s["kind"] == "answer" and s["a"] == who), f"{who} answers") for who in (CLIENT, OWNER)]
+        facts += [(count(lambda s, who=who: s["kind"] == "answer" and s["a"] == who), f"{who} answers") for who in PEOPLE]
         facts += [(count(lambda s: s.get("tone") == "refused"), "refused calls"), (count(lambda s: s["kind"] == "break"), "breaks"), (count(lambda s: s["kind"] == "harness stop"), "harness stops")]
         p["caption"] = " · ".join(f"{what}: {k}" for k, what in facts if k)
         p["title"] = f"{str(p['name']).upper()} · {mine[0]['at'][11:19]}–{mine[-1]['at'][11:19]} · {duration(seconds(mine[-1]['at']) - seconds(mine[0]['at']))}"
@@ -443,14 +481,19 @@ def tree_order(db, conv):
     return order
 
 
+def person_colour(name):
+    """A human account's colour, by its place among the people; None for any other."""
+    return PERSON_COLOURS[PEOPLE.index(name) % len(PERSON_COLOURS)] if name in PEOPLE else None
+
+
 def colour_of(s):
     if s.get("tone") == "refused":
         return REFUSED
     if s.get("tone") == "harness":
-        return COLOURS[HARNESS]
+        return HARNESS_COLOUR
     if s.get("card"):
         return s["card"][0]
-    return s.get("colour") or COLOURS.get(s["a"]) or COLOURS.get(s["b"]) or PLAIN
+    return s.get("colour") or person_colour(s["a"]) or person_colour(s["b"]) or PLAIN
 
 
 def rows_of(steps):
@@ -491,7 +534,7 @@ def mermaid(parts, steps, runs, group, phases, frames, waits):
             j += 1
         if team:
             lines.append(f"    box {'rgb(228,235,242)' if teams.index(team) % 2 == 0 else 'transparent'} {team}")
-        lines += [f"    {'actor' if p in (CLIENT, OWNER) else 'participant'} {ids[p]} as {p}" for p in parts[i : j + 1]]
+        lines += [f"    {'actor' if p in PEOPLE else 'participant'} {ids[p]} as {p}" for p in parts[i : j + 1]]
         if team:
             lines.append("    end")
         i = j + 1
@@ -790,8 +833,8 @@ def svg(parts, steps, runs, group, phases, frames, waits):
             out.append(f'<text x="{(x0 + x1) / 2}" y="{hy + band_h - (5 if full else 2.5)}" fill="#fff" text-anchor="middle" font-weight="bold" font-size="{size}">{html.escape(team)}</text>')
         for name in parts:
             bw = min(max(width(name, True) + 24, 100), COL - 12) if full else min(max(width(name, True) + 14, 70), COL - 12)
-            fill = COLOURS.get(name) or team_colour.get(group.get(name), "#2f4858")
-            out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="{hy + box_y}" width="{bw:.0f}" height="{box_h}" rx="{15 if name in (CLIENT, OWNER) else 4}" fill="{fill}"/>')
+            fill = person_colour(name) or team_colour.get(group.get(name), "#2f4858")
+            out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="{hy + box_y}" width="{bw:.0f}" height="{box_h}" rx="{15 if name in PEOPLE else 4}" fill="{fill}"/>')
             out.append(f'<text x="{x[name]}" y="{hy + box_y + box_h / 2 + 4}" fill="#fff" text-anchor="middle" font-weight="bold"{"" if full else " font-size=\"10\""}>{html.escape(name)}</text>')
         return out + ([] if full else ["</g>"])
 
@@ -857,7 +900,7 @@ def legend(x, y):
         f"faded header: the participants again at each phase start and every {HEAD} steps")
     text("each text sits on its arrow: N. HH:MM:SS Wn (event order, time, work); a step by an agent to itself is a loop arrow", 12)
     rows.append("")
-    text("... N min ...: silence over a minute; Client and Owner by the destination a request recorded", 12)
+    text("... N min ...: silence over a minute; people are the human accounts, named by the project's [accounts] else issuer:subject; REVIEW is an action held for an account, released by it", 12)
     rows.append("")
     h = 22 + len(rows) * 21
     return [f'<rect x="{x}" y="{y}" width="760" height="{h - 8}" fill="#fff" stroke="#ccc"/>'] + box, h - 8
@@ -883,9 +926,10 @@ def main():
     # The agent the person's first message went to is the one that talks with them.
     first = db.execute("select body from events where conversation_id = ? and type = 'prompt' order by sequence limit 1", (conv,)).fetchone()
     client_agent = json.loads(first["body"]).get("agent") if first else None
-    steps, runs, info = steps_of(db, conv, client_agent)
+    config = os.path.join(root, os.path.dirname(os.path.dirname(STORES[args.project])), "omunculus.toml")
+    steps, runs, info = steps_of(db, conv, client_agent, accounts_of(config))
     # The project's config names the packs, and each pack its agents: the teams.
-    team = teams_of(os.path.join(root, os.path.dirname(os.path.dirname(STORES[args.project])), "omunculus.toml"))
+    team = teams_of(config)
     parts, group = participants(steps, [client_agent] + tree_order(db, conv), team)
     phases, frames, waits = episodes(steps, info)
 
