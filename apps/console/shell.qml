@@ -356,7 +356,7 @@ ShellRoot {
               }
             }
             // The chords of the page's commands and of its other chords, Alt+R
-            // to answer, Alt and a quick chip's number and the like, which a
+            // to answer and the like, which a
             // field being written leaves to them. They have no bare key: what
             // is typed never runs one.
             Repeater {

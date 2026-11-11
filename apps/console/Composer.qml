@@ -1,23 +1,19 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "kit/client/Requests.js" as Requests
-import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run,
-// which Enter leaves while the box is noting. Over the box, the quick chips
-// it is given, numbered as Alt and the number choose them, then the files
-// the message carries; the clip in the box picks more, and a note carries
-// none. In the main thread, the words not sent are kept for the conversation
+// which Enter leaves while the box is noting. Over the box, the files the
+// message carries; the clip in the box picks more, and a note carries none.
+// It has no options of a request: those are answered in the pending queue.
+// In the main thread, the words not sent are kept for the conversation
 // they were written in, and come back when it is open again.
 // SEND keeps its caption over the trace while the agent you write to is
 // working, says so on hover, and still sends; the agents below it never
-// hold it. It is dim while the box is empty. While a form waits, the
-// keyboard goes to the form, and the box offers to say something else. The
-// box empties at once and the words show in the thread, dim, until the
+// hold it. It is dim while the box is empty. The box empties at once and the words show in the thread, dim, until the
 // server's copy takes their place; they come back to the box to be sent
 // again if the server refused them. Under 420 px of its own width its buttons show their icons
 // only.
@@ -27,19 +23,11 @@ ColumnLayout {
   property bool compact: Breakpoints.tight(width)
   // The work written to, or "" for the main thread.
   property string work: ""
-  // The quick chips over the box, [{text, tip, run}]; the chords that choose
-  // them are the window's. `chipsShown` false keeps their room, not their keys.
-  property var quick: []
-  property bool chipsShown: true
   // Whether the agent written to has a run open: the front agent's own,
   // in the main thread; the work's own in a work.
   readonly property bool busy: work === "" ? Omunculus.busy("") : Omunculus.busy(work)
   // The agent written to, "" when none is known yet.
   readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
-  // Whether a question waits on you in the main thread: its answer goes in
-  // its card, so the box does not invite it.
-  readonly property bool answerWaits: work === "" && Omunculus.waiting.some(request => Requests.kind(request) === "needs-you")
-
   // Whether the box holds nothing to send.
   readonly property bool empty: entry.text.trim() === ""
   // Whether a message is on its way to the server: the box is already empty
@@ -103,24 +91,6 @@ ColumnLayout {
     noting = false
   }
 
-  Flow {
-    Layout.fillWidth: true
-    visible: composer.chipsShown && composer.quick.length > 0
-    spacing: Theme.space.tight
-    Repeater {
-      model: composer.quick
-      delegate: Chip {
-        required property var modelData
-        required property int index
-        readonly property var keys: Shortcuts.keys("quick")
-        // Its number is its key among others; alone, it would read as a count.
-        text: (composer.quick.length > 1 && index < keys.length ? (index + 1) + "  " : "") + modelData.text
-        tip: modelData.tip + (index < keys.length ? "  " + keys[index] : "")
-        onClicked: modelData.run()
-      }
-    }
-  }
-
   FilePicker {
     id: files
     Layout.fillWidth: true
@@ -150,7 +120,7 @@ ColumnLayout {
         id: entry
         Layout.fillWidth: true
         framed: false
-        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.answerWaits ? "or say something else" + (composer.addressee ? " to " + composer.addressee : "") : composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
         onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {
