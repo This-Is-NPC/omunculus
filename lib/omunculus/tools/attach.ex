@@ -5,7 +5,7 @@ defmodule Omunculus.Tools.Attach do
   the same checks as `read` and kept by `Omunculus.Attachments` with the
   media type its name suggests, or by reference a version of an artifact
   (the `artifacts` view), the latest unless `version` names one, which is
-  exactly that file. Either is emitted as an `attach`.
+  exactly that file, which `name` may show under another file name. Either is emitted as an `attach`.
   """
 
   alias Omunculus.{Artifacts, Attachments, Config}
@@ -35,8 +35,9 @@ defmodule Omunculus.Tools.Attach do
   defp file(%{args: %{"artifact" => name} = args, view: view}, _policy) do
     with {:ok, number} <- Args.count(args, "version"),
          %{} = version <- Artifacts.find(view["artifacts"] || [], name, number) || :unknown do
-      {:ok, Map.take(version, ~w(name media_type bytes sha256)),
-       "#{name} version #{version["version"]}"}
+      meta = Map.take(version, ~w(name media_type bytes sha256))
+      shown = Args.present(args, "name") || name
+      {:ok, %{meta | "name" => shown}, "#{name} version #{version["version"]}"}
     else
       :unknown -> {:error, "no such version of #{name} in this conversation"}
       error -> error

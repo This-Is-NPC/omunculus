@@ -245,7 +245,9 @@ media type its name suggests and an optional `note`; the conversation
 keeps it as it was then, whatever the workspace does after. Or it hands
 over an artifact by reference: `artifact` names it and `version` the
 number, the latest when omitted; the person receives exactly that
-version, with the note `<name> version <n>` unless one is given. It takes
+version, with the note `<name> version <n>` unless one is given, and under
+the file name `name` gives when it does (the artifact's own otherwise; the
+artifact keeps its key). It takes
 `path` or `artifact`, never both.
 
 ## Artifacts

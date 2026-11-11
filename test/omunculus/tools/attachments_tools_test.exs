@@ -37,6 +37,20 @@ defmodule Omunculus.Tools.AttachmentsToolsTest do
     assert {:ok, [^meta]} = Attachments.check(ctx.store, [meta])
   end
 
+  test "attach shows an artifact under the name it is given, the artifact keeping its key", ctx do
+    {:ok, kept} = Attachments.put(ctx.store, "doc-w1.md", "text/markdown", "# Proposal")
+    view = %{"artifacts" => [Map.merge(kept, %{"version" => 1})]}
+    input = %{args: %{"artifact" => "doc-w1.md", "name" => "Proposal - Ana.md"}, view: view}
+
+    assert %{"ok" => true, "emit" => [%{"body" => %{"attachments" => [meta], "note" => note}}]} =
+             Attach.run(input, ExecutionPolicyFixtures.policy([ctx.root]))
+
+    assert %{"name" => "Proposal - Ana.md", "sha256" => sha256} = meta
+    assert sha256 == kept["sha256"]
+    assert note == "doc-w1.md version 1"
+    assert {:ok, [^meta]} = Attachments.check(ctx.store, [meta])
+  end
+
   test "attach refuses a path outside the roots and a file past attachment_bytes",
        %{root: root} = ctx do
     assert attach(%{"path" => "../omunculus.toml"}, ctx) ==
