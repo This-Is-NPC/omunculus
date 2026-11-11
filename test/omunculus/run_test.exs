@@ -69,6 +69,163 @@ defmodule Omunculus.RunTest do
     assert run.status == "done"
   end
 
+  describe "a tool a review released" do
+    setup %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["held"]
+
+      [accounts]
+      owner = { kind = "human", issuer = "local", subject = "owner" }
+
+      [[interceptors]]
+      action = "tool"
+      tool = "held"
+      accounts = ["owner"]
+      """)
+
+      File.write!(
+        Fixtures.config_path(dir),
+        String.replace(File.read!(Fixtures.config_path(dir)), "[execution]\n", """
+        [execution]
+        variables = { OMX_TEST = "set" }
+        """)
+      )
+
+      :ok
+    end
+
+    defp write_held(dir, script) do
+      write_tool(
+        dir,
+        "held",
+        """
+        name = "held"
+        kind = "tool"
+        triggers = ["model"]
+        command = ["./run"]
+        """,
+        script
+      )
+    end
+
+    # Holds a call of `held`, approves or denies its review as the owner and
+    # opens the run that answers it; returns what that run's model saw.
+    defp review_and_rerun(project, option) do
+      test_pid = self()
+
+      Fixtures.use_model(project, fn _assembled, _tools, call ->
+        send(test_pid, {:first, call.("held", %{"x" => 1})})
+        {:ok, "waiting"}
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
+      assert_received {:first, {:ok, held}}
+      assert held =~ "not done yet"
+      assert {:ok, [review]} = Query.all(project.conn, "SELECT id FROM requests")
+
+      owner = %{
+        trigger: "cli",
+        run_id: nil,
+        author: "human",
+        agent: nil,
+        issuer: "local",
+        subject: "owner",
+        execution: Omunculus.ExecutionPolicyFixtures.policy(project.dir, network: "host")
+      }
+
+      assert {:ok, _out, events} =
+               Harness.dispatch(
+                 project,
+                 "reply",
+                 %{"request_id" => review.id, "option" => option, "body" => "Go."},
+                 owner
+               )
+
+      refute Enum.any?(events, &(&1.type == "tool" and &1.released_by))
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        send(test_pid, {:second, assembled, call})
+        {:ok, "done"}
+      end)
+
+      assert {:ok, run} =
+               Run.open(
+                 project,
+                 opening(nil, nil, %{request_id: review.id, agent: "concierge"})
+               )
+
+      {review.id, run}
+    end
+
+    test "runs once in the actor's run, with its roots and environment, and reaches it",
+         %{dir: dir} do
+      write_held(dir, """
+      #!/bin/sh
+      in=$(cat | tr -d '"\\\\\n')
+      printf '{"ok": true, "output": "%s env=%s", "emit": []}' "$in" "$OMX_TEST"
+      """)
+
+      project = open_project(dir)
+      {review_id, run} = review_and_rerun(project, "approve")
+      assert_received {:second, assembled, _call}
+
+      assert assembled =~ "The review released your call of held: it ran and succeeded, once."
+      assert assembled =~ "roots:["
+      assert assembled =~ "env=set"
+      assert assembled =~ "calling it again opens a new review"
+
+      assert {:ok, [tool]} =
+               Query.all(
+                 project.conn,
+                 "SELECT run_id, released_by FROM events WHERE type = 'tool' AND released_by IS NOT NULL"
+               )
+
+      assert tool.run_id == run.id
+      assert tool.released_by == review_id
+      assert {:ok, [_one]} = Query.all(project.conn, "SELECT id FROM requests")
+      Project.close(project)
+    end
+
+    test "a failure reaches the actor once and opens no new review", %{dir: dir} do
+      write_held(dir, """
+      #!/bin/sh
+      echo '{"ok": false, "output": "nothing was published", "emit": []}'
+      """)
+
+      project = open_project(dir)
+      {_review_id, _run} = review_and_rerun(project, "approve")
+      assert_received {:second, assembled, _call}
+      assert assembled =~ "it ran and failed, once"
+      assert assembled =~ "nothing was published"
+
+      assert {:ok, [_one]} = Query.all(project.conn, "SELECT id FROM requests")
+
+      assert {:ok, [_held, _released]} =
+               Query.all(
+                 project.conn,
+                 "SELECT id FROM events WHERE type = 'tool' AND body LIKE '%\"held\"%'"
+               )
+
+      Project.close(project)
+    end
+
+    test "a denied review runs nothing", %{dir: dir} do
+      write_held(dir, "#!/bin/sh\necho '{\"ok\": true, \"output\": \"ran\", \"emit\": []}'\n")
+      project = open_project(dir)
+      review_and_rerun(project, "deny")
+      assert_received {:second, assembled, _call}
+      refute assembled =~ "released your call"
+
+      assert {:ok, []} =
+               Query.all(project.conn, "SELECT id FROM events WHERE released_by IS NOT NULL")
+
+      Project.close(project)
+    end
+  end
+
   test "a model that fails leaves the run done and returns its error", %{dir: dir} do
     write_config(dir, """
     [agents.concierge]

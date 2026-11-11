@@ -12,7 +12,7 @@ defmodule Omunculus.Store do
   """
 
   alias Omunculus.Store.Actions.Helpers
-  alias Omunculus.Store.{Connection, Query, Runs, Schema, View}
+  alias Omunculus.Store.{Connection, Interception, Query, Runs, Schema, View}
 
   @spec open(String.t()) :: {:ok, Connection.t()} | {:error, term}
   def open(path) do
@@ -54,6 +54,7 @@ defmodule Omunculus.Store do
   defdelegate received_inbox(conn, run_id), to: View
   defdelegate descends?(conn, work_id, ancestor_id), to: View
   defdelegate replay(conn, scope), to: View
+  defdelegate released_call(conn, request_id), to: Interception
   defdelegate attachments(conn, conversation_id), to: View
   defdelegate artifacts(conn, conversation_id), to: View
   defdelegate work_depth(conn, work), to: View

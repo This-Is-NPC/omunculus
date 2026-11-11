@@ -125,14 +125,23 @@ must name one:
 | `edit` | The action is performed with the reply's body in place of its text: a question's reason, a comment's body, an attachment's note. A tool or a grant has no text: `edit` approves, and the body is a note. |
 | `deny` | Nothing is performed. The reply goes back to the actor as the answer to its request. |
 
-An approval writes a `release` event, then performs the action as the
-original actor: the events it writes are authored by that agent and carry
-`released_by`, the id of the review request that released them. A released
-tool is run by the harness right after the release, as that agent, under the
-execution policy a command tool gets outside a run; the ceiling is not asked
-again, since the agent had the tool when it called it. A released action is
-not held again by the rule that held it, but may match another rule, which
-opens its own review.
+An approval writes a `release` event. A comment, question, attachment or
+grant is then performed at once as the original actor: the events it writes
+are authored by that agent and carry `released_by`, the id of the review
+request that released them. These need no run, only the store.
+
+A released tool needs the actor's run, so the reply does not run it. The
+reply opens the actor's next run on the review, and that run calls the tool
+first, before the model: the same agent, work, workspace roots, sandbox,
+environment and read, write and variables policy as any call of that run.
+The ceiling is not asked again, since the agent had the tool when it called
+it. The tool's event carries `released_by`, and its output, a success or a
+failure, opens what the model reads in that run, as the outcome of its held
+call. It runs once; a failure is shown to the agent, which decides, and a
+new review opens only if it calls the tool again. When the work is no longer
+open, no run opens and the tool does not run. A released action is not held
+again by the rule that held it, but may match another rule, which opens its
+own review.
 
 With several `accounts`, the reviewers answer one after another. An approval
 or an edit that is not the last opens a new review request to the next

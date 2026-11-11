@@ -156,42 +156,47 @@ defmodule Omunculus.Harness do
            }),
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
-         {:ok, released} <- run_released(project, events),
-         events = events ++ released,
          {:ok, hook_events} <-
            maybe_react(project, events, [], Map.get(ctx, :execution), Map.get(ctx, :prepared)) do
       {:ok, out, events ++ hook_events}
     end
   end
 
-  # A tool a review released runs now, as the agent whose call it held.
-  defp run_released(project, events) do
-    events
-    |> Enum.filter(&(&1.type == "release"))
-    |> Enum.map(&{&1, Jason.decode!(&1.body)})
-    |> Enum.filter(fn {_event, body} -> is_binary(body["tool"]) end)
-    |> Enum.reduce_while({:ok, []}, fn {event, body}, {:ok, acc} ->
-      with {:ok, request} <- Store.view(project.conn, "request", event.request_id),
-           actor = request.interception.actor,
-           ctx = %{
-             trigger: "model",
-             run_id: actor.run_id,
-             author: "agent",
-             agent: actor.agent,
-             issuer: Map.get(actor, :issuer),
-             subject: Map.get(actor, :subject),
-             origin_issuer: Map.get(actor, :origin_issuer),
-             origin_subject: Map.get(actor, :origin_subject),
-             conversation_id: Map.get(actor, :conversation_id),
-             released_by: event.request_id,
-             passed: body["passed"]
-           },
-           {:ok, _out, released} <- dispatch(project, body["tool"], body["args"], ctx) do
-        {:cont, {:ok, acc ++ released}}
-      else
-        error -> {:halt, error}
+  @doc """
+  Runs, first in `run`, the tool the review the run answers released, as the
+  run's own call: its execution, its prepared config, `released_by` on its
+  events. Returns what the model reads about it, or nil when the run answers
+  no released tool.
+  """
+  @spec run_released(Project.t(), map, Policy.t(), map) ::
+          {:ok, String.t() | nil} | {:error, term}
+  def run_released(_project, %{request_id: nil}, _execution, _prepared), do: {:ok, nil}
+
+  def run_released(project, run, execution, prepared) do
+    with {:ok, released} <- Store.released_call(project.conn, run.request_id) do
+      case released do
+        nil -> {:ok, nil}
+        body -> call_released(project, run, body, execution, prepared)
       end
-    end)
+    end
+  end
+
+  defp call_released(project, run, body, execution, prepared) do
+    ctx = %{
+      trigger: "model",
+      run_id: run.id,
+      author: "agent",
+      agent: run.agent,
+      execution: execution,
+      prepared: prepared,
+      released_by: run.request_id,
+      passed: body["passed"]
+    }
+
+    case dispatch(project, body["tool"], body["args"], ctx) do
+      {:ok, out, _events} -> {:ok, Out.released(body["tool"], out.ok, out.output)}
+      {:error, reason} -> {:ok, Out.released(body["tool"], false, inspect(reason))}
+    end
   end
 
   @doc """

@@ -531,6 +531,15 @@ defmodule Omunculus.Tools.Out do
     do:
       "not done yet: it would #{summary}. It was sent to #{reviewer} for review, and their answer comes back to you; do not do it again"
 
+  @doc "What a model reads first in the run that follows the review that released its tool call."
+  @spec released(String.t(), boolean, String.t()) :: String.t()
+  def released(name, ok, output) do
+    state = if ok, do: "ran and succeeded", else: "ran and failed"
+
+    "The review released your call of #{name}: it #{state}, once. Its output:\n#{output}\n" <>
+      "Decide from this result; calling it again opens a new review."
+  end
+
   @spec chain_failed(String.t(), term) :: String.t()
   def chain_failed(name, reason), do: "chain failed at #{name}: #{chain_reason(reason)}"
 

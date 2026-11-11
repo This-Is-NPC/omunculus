@@ -285,6 +285,7 @@ defmodule Omunculus.Run do
              cause_id: Map.get(opening, :cause_id),
              tools: names
            }),
+         prepared = Harness.prepared(run.id, config, catalog),
          {:ok, run, assembled} <-
            invoke_assemble(
              project,
@@ -293,11 +294,11 @@ defmodule Omunculus.Run do
              assemble_args(config, name, text, Map.get(opening, :inbox_id)),
              message_prompt_id,
              Map.get(opening, :inbox_id),
-             execution
+             execution,
+             prepared
            ),
          cursor = :atomics.new(1, []),
          context = context_watch(Config.handoff_tokens(config, name), agent, work),
-         prepared = Harness.prepared(run.id, config, catalog),
          call = build_call(project, run, names, config, prepared, execution, cursor, context) do
       run_model(
         project,
@@ -430,7 +431,7 @@ defmodule Omunculus.Run do
     |> Map.merge(%{"text" => text, "agent" => agent})
   end
 
-  defp invoke_assemble(project, run, name, args, prompt_id, inbox_id, execution) do
+  defp invoke_assemble(project, run, name, args, prompt_id, inbox_id, execution, prepared) do
     ctx = %{
       trigger: "harness",
       run_id: run.id,
@@ -451,6 +452,8 @@ defmodule Omunculus.Run do
         }
 
         with :ok <- assembled_output(out.ok, Prompt.text(prompt)),
+             {:ok, released} <- Harness.run_released(project, run, execution, prepared),
+             prompt = with_released(prompt, released),
              {:ok, run} <- Store.attach_assembled(project.conn, run.id, Prompt.text(prompt)),
              :ok <- continues(project, run, out.session) do
           {:ok, run, prompt}
@@ -462,6 +465,9 @@ defmodule Omunculus.Run do
         fail_run(project, run, error)
     end
   end
+
+  defp with_released(prompt, nil), do: prompt
+  defp with_released(prompt, text), do: %{prompt | context: prompt.context <> "\n\n" <> text}
 
   # A run that continues its agent's session says which run it continues
   # and what it was told had happened since, so the next can rebuild it.

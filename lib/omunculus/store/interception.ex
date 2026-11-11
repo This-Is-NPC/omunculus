@@ -262,7 +262,31 @@ defmodule Omunculus.Store.Interception do
   defp release_body(review, _emit, option, released),
     do: %{action: review.action, option: option, summary: review.summary, passed: released.passed}
 
-  # The harness runs a tool: it is not a store action.
+  @doc """
+  The tool a review released that has not run yet: the body of its `release`
+  event (`"tool"`, `"args"`, `"passed"`), or nil.
+  """
+  @spec released_call(Omunculus.Store.Connection.t(), String.t()) ::
+          {:ok, map | nil} | {:error, term}
+  def released_call(conn, request_id) do
+    with {:ok, row} <-
+           Query.one(
+             conn,
+             """
+             SELECT body FROM events
+             WHERE type = 'release' AND request_id = ?
+               AND NOT EXISTS (SELECT 1 FROM events WHERE released_by = ? AND type = 'tool')
+             """,
+             [request_id, request_id]
+           ) do
+      case row && Jason.decode!(row.body) do
+        %{"tool" => tool} = body when is_binary(tool) -> {:ok, body}
+        _other -> {:ok, nil}
+      end
+    end
+  end
+
+  # The actor's next run runs a tool: it is not a store action.
   defp perform(_conn, %{"type" => "tool"}, _released), do: {:ok, []}
   defp perform(conn, emit, released), do: Actions.run(conn, [emit], released)
 

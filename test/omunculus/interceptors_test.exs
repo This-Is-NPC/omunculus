@@ -2,6 +2,7 @@ defmodule Omunculus.InterceptorsTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Interceptors, Participant, Project}
+  alias Omunculus.Store
   alias Omunculus.Store.Query
 
   import Omunculus.Fixtures, only: [open_project: 1, write_tool: 4]
@@ -138,7 +139,7 @@ defmodule Omunculus.InterceptorsTest do
       )
     end
 
-    test "is not run until the reviewer approves, then runs as its agent", %{dir: dir} do
+    test "is not run by the approval: it releases the call for the actor's next run", %{dir: dir} do
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{assignee: "concierge"})
       run_id = Fixtures.insert(project.conn, :runs, %{work_id: work_id, agent: "concierge"})
@@ -183,15 +184,13 @@ defmodule Omunculus.InterceptorsTest do
                )
 
       release = Enum.find(events, &(&1.type == "release"))
-      tool = Enum.find(events, &(&1.type == "tool" and &1.released_by))
-      comment = Enum.find(events, &(&1.type == "comment"))
       assert %{"tool" => "promote", "args" => %{"to" => "prod"}} = Jason.decode!(release.body)
-      assert tool.released_by == review.request_id
-      assert tool.actor_id == "concierge"
-      assert comment.released_by == review.request_id
+      refute Enum.any?(events, &(&1.type == "tool" and &1.released_by))
 
-      # The released call is not held again by the rule that held it.
-      assert {:ok, [_only]} = Query.all(project.conn, "SELECT id FROM requests")
+      assert {:ok, []} =
+               Query.all(project.conn, "SELECT id FROM comments WHERE body = 'promoted'")
+
+      assert {:ok, %{"tool" => "promote"}} = Store.released_call(project.conn, review.request_id)
 
       Project.close(project)
     end
