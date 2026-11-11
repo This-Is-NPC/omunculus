@@ -202,7 +202,7 @@ The routes. The logical `owner` route reaches the project's owners, never
 the client: the seller's requests go straight to them, and the teams' go to
 the project manager first (the requester is skipped, so the project
 manager's own go on to the owners). `pm` is the seller's way to its parent;
-the release's `promote` request goes to the project manager; the seller's
+the release's `promote` request goes to the project manager, then to the owners, even when the manager escalates it without `to`; the seller's
 questions to the client go to the front desk, then to the conversation
 origin; every other request goes to its parent, then the project manager,
 then the front desk, so no depth-3 request skips the manager:
@@ -215,7 +215,7 @@ request_routes = [
   { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners"] },
   { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners"] },
   { name = "pm", via = ["parent"] },
-  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }] },
+  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, "owners"] },
   { from = { kind = "agent", agent = "seller" }, via = [{ kind = "agent", agent = "front-desk" }, "origin"] },
   { via = ["parent", { kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, "origin"] },
 ]

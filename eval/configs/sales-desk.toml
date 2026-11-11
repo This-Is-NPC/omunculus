@@ -39,7 +39,7 @@ request_routes = [
   { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners", "origin"] },
   { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners", "origin"] },
   { name = "pm", via = ["parent"] },
-  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }] },
+  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, "owners", "origin"] },
   { from = { kind = "agent", agent = "seller" }, via = [{ kind = "agent", agent = "front-desk" }, "origin"] },
   { via = ["parent", { kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, "origin"] },
 ]
