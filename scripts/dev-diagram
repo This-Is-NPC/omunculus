@@ -2,8 +2,8 @@
 """Draws a conversation of a dev project as a sequence diagram, read-only
 from its store: people's messages and answers, works handed down, requests,
 grants, stage moves, breaks, reopens, retires, works done, artifacts and the
-hand-off and deploy tools, each step tagged with its work (W1, W2, ...), and
-under it every work with its final state. Writes
+hand-off and deploy tools, each step tagged with its work (W1, W2, ...). A
+work shows where it began, as a card with how it ended. Writes
 dev/diagrams/<conversation>.mmd (Mermaid) and .svg.
 
 Usage: dev-diagram [--project agency|dev] [conversation id], or through
@@ -24,7 +24,9 @@ TOOLS = {"deploy_preview", "promote", "start_design", "start_build", "start_sale
 CLIENT, OWNER = "Client", "Owner"
 COL, TOP, ROW, LEFT = 150, 70, 26, 40
 COLOURS = {CLIENT: "#b5651d", OWNER: "#7a1f1f"}
-STATES = {"done": "#3d7a3d", "cancelled": "#888888"}
+# A work card's border and fill by how the work ended; any other state is open.
+STATES = {"done": ("#3d7a3d", "#e6f2e6"), "cancelled": ("#888888", "#eeeeee")}
+OPEN = ("#c0392b", "#fbe3e0")
 
 
 def short(text, n=90):
@@ -33,8 +35,8 @@ def short(text, n=90):
 
 
 def steps_of(db, conv, client_agent):
-    """The diagram's steps, in event order: (kind, from, to, text, dashed), and
-    the works as (tag, work), in the order they began."""
+    """The diagram's steps, in event order: (kind, from, to, text, dashed); a
+    work's beginning is the kind "work", whose last item is the work."""
     works = {r["id"]: r for r in db.execute("select * from works where conversation_id = ?", (conv,))}
     by_event = {r["event_id"]: r for r in works.values()}
     requests = {r["id"]: r for r in db.execute("select * from requests")}
@@ -71,7 +73,8 @@ def steps_of(db, conv, client_agent):
         elif kind in ("delegate", "work") and e["id"] in by_event:
             w = by_event[e["id"]]
             flow = f"[{w['workflow']}] " if w["workflow"] else ""
-            steps.append(("arrow", actor, first_agent.get(w["id"]) or w["assignee"], f"{at} {tag(w['id'])}{flow}{w['title']}", False))
+            text = f"{at} {tag(w['id'])}{flow}{w['title']} · {state_of(w)}"
+            steps.append(("work", actor, first_agent.get(w["id"]) or w["assignee"], text, w))
         elif kind == "request" and e["id"] in req_by_event:
             r = req_by_event[e["id"]]
             arbiter = json.loads(r["arbiter"])
@@ -103,7 +106,7 @@ def steps_of(db, conv, client_agent):
         elif kind == "tool" and body.get("name") in TOOLS:
             ok = "ok" if body.get("ok") else "REFUSED"
             steps.append(("note", actor, None, f"{at} {body['name']} {ok}: {body.get('output', '')}", False))
-    return steps, [(tags[i], works[i]) for i in tags]
+    return steps
 
 
 def state_of(work):
@@ -123,32 +126,29 @@ def participants(steps):
     return [CLIENT] + ([OWNER] if OWNER in order else []) + [n for n in order if n not in (CLIENT, OWNER)]
 
 
-def mermaid(parts, steps, works):
+def mermaid(parts, steps):
     clean = lambda text: short(text).replace(";", ",").replace("#", "")
     lines = ["sequenceDiagram", "    autonumber"]
     lines += [f"    {'actor' if p in COLOURS else 'participant'} {p}" for p in parts]
     for kind, a, b, text, dashed in steps:
         if kind == "note":
             lines.append(f"    Note over {a}: {clean(text)}")
+        elif kind == "work":
+            lines.append(f"    {a}->>{b}: {clean(text)}")
         else:
             lines.append(f"    {a}{'-->>' if dashed else '->>'}{b}: {clean(text)}")
-    for t, w in works:
-        flow = f"[{w['workflow']}/{w['stage'] or '-'}] " if w["workflow"] else ""
-        lines.append(f"    Note over {parts[0]},{parts[-1]}: {t} {state_of(w).upper()} · {w['assignee']} · {clean(flow + w['title'])}")
     return "\n".join(lines) + "\n"
 
 
-def svg(parts, steps, works):
+def svg(parts, steps):
     x = {name: LEFT + COL // 2 + i * COL for i, name in enumerate(parts)}
-    width = LEFT * 2 + COL * len(parts)
-    table = TOP + ROW * (len(steps) + 2)
-    height = table + ROW * (len(works) + 2)
+    width, height = LEFT * 2 + COL * len(parts), TOP + ROW * (len(steps) + 2)
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="sans-serif" font-size="11">',
            '<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
            '<path d="M0,0 L8,4 L0,8 z" fill="#333"/></marker></defs>',
            f'<rect width="{width}" height="{height}" fill="#fffdf8"/>']
     for name in parts:
-        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{table - ROW}" stroke="#ccc" stroke-dasharray="4 4"/>')
+        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{height - 10}" stroke="#ccc" stroke-dasharray="4 4"/>')
         out.append(f'<rect x="{x[name] - 68}" y="10" width="136" height="30" rx="{15 if name in COLOURS else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
         out.append(f'<text x="{x[name]}" y="30" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
     for i, (kind, a, b, text, dashed) in enumerate(steps):
@@ -159,6 +159,14 @@ def svg(parts, steps, works):
             out.append(f'<rect x="{x[a] - 4}" y="{y - 13}" width="{min(6 * len(short(text)) + 40, 560)}" height="18" fill="#f3eed2" stroke="#d8cf9a"/>')
             out.append(f'<text x="{x[a] + 2}" y="{y}" fill="#555" font-style="italic">{label}</text>')
             continue
+        if kind == "work":
+            # A card on the arrow from who began the work to whom it went.
+            line, fill = STATES.get(dashed["state"], OPEN)
+            left, size = min(x[a], x[b]), min(6 * len(short(text)) + 40, 640)
+            out.append(f'<line x1="{x[a]}" y1="{y}" x2="{x[b]}" y2="{y}" stroke="{line}" stroke-width="2" marker-end="url(#a)"/>')
+            out.append(f'<rect x="{left + 4}" y="{y - 17}" width="{size}" height="15" rx="7" fill="{fill}" stroke="{line}"/>')
+            out.append(f'<text x="{left + 12}" y="{y - 6}" fill="{line}" font-weight="bold">{label}</text>')
+            continue
         colour = COLOURS.get(a, COLOURS.get(b, "#333"))
         if a == b:
             out.append(f'<path d="M{x[a]},{y - 8} h30 v12 h-28" fill="none" stroke="{colour}" marker-end="url(#a)"/>')
@@ -167,16 +175,6 @@ def svg(parts, steps, works):
         dash = ' stroke-dasharray="5 3"' if dashed else ""
         out.append(f'<line x1="{x[a]}" y1="{y}" x2="{x[b]}" y2="{y}" stroke="{colour}"{dash} marker-end="url(#a)"/>')
         out.append(f'<text x="{min(x[a], x[b]) + 6}" y="{y - 4}" fill="{colour}">{label}</text>')
-    # The works, as they ended: done, retired, or still open.
-    out.append(f'<text x="{LEFT}" y="{table}" font-weight="bold" font-size="13">Works</text>')
-    for i, (t, w) in enumerate(works):
-        y = table + ROW * (i + 1)
-        colour = STATES.get(w["state"], "#c0392b")
-        flow = f"{w['workflow']}/{w['stage'] or '-'}" if w["workflow"] else "-"
-        cells = [(LEFT, t, "bold"), (LEFT + 40, state_of(w), "bold"), (LEFT + 300, w["assignee"], "normal"),
-                 (LEFT + 450, flow, "normal"), (LEFT + 600, w["title"], "normal")]
-        for cx, text, weight in cells:
-            out.append(f'<text x="{cx}" y="{y}" fill="{colour}" font-weight="{weight}">{html.escape(short(str(text)))}</text>')
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
@@ -201,12 +199,12 @@ def main():
     # The agent the person's first message went to is the one that talks with them.
     first = db.execute("select body from events where conversation_id = ? and type = 'prompt' order by sequence limit 1", (conv,)).fetchone()
     client_agent = json.loads(first["body"]).get("agent") if first else None
-    steps, works = steps_of(db, conv, client_agent)
+    steps = steps_of(db, conv, client_agent)
     parts = participants(steps)
 
     out = os.path.join(root, "dev", "diagrams")
     os.makedirs(out, exist_ok=True)
-    for ext, text in (("mmd", mermaid(parts, steps, works)), ("svg", svg(parts, steps, works))):
+    for ext, text in (("mmd", mermaid(parts, steps)), ("svg", svg(parts, steps))):
         with open(os.path.join(out, f"{conv}.{ext}"), "w") as f:
             f.write(text)
     print(os.path.join(out, f"{conv}.svg"))
