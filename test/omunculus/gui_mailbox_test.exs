@@ -189,22 +189,43 @@ defmodule Omunculus.GuiMailboxTest do
     run!("""
     const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];
     const other = {kind: "human", issuer: "local", subject: "2000"};
-    const held = (summary, step, of) => ({action: "ask", summary, step, of});
+    const held = (summary, step, of, args) => ({action: "ask", summary, step, of, args: args || []});
     const options = {approve: [], edit: [], deny: []};
     const t = build(snap({runs: [run("r1", "sales", "closed")], requests: [
       request("c"),
-      request("v1", {requester: agent("seller"), reason: "Seller would ask", options, interception: held('ask local:1000: "Ready?"', 1, 2), created_at: "2026-01-01T10:03:00Z"}),
-      request("v2", {options, interception: held('comment: "Done"', 1, 1), created_at: "2026-01-01T10:04:00Z"}),
-      request("v3", {options, interception: held("tool x", 1, 1), arbiter: other}),
+      request("v1", {requester: agent("seller"), reason: "Seller would ask", options, interception: held('seller wants to ask local:1000: "Ready?"', 1, 2), created_at: "2026-01-01T10:03:00Z"}),
+      request("v2", {options, interception: held('sales wants to comment: "Done"', 1, 1), created_at: "2026-01-01T10:04:00Z"}),
+      request("v3", {options, interception: held("sales wants to run x", 1, 1, [{name: "to", value: "prod"}]), arbiter: other}),
       request("v4", {options, interception: held("tool y", 1, 1), status: "answered"})
     ]}), events);
     if (t.reviews.map(review => review.request).join() !== "v1,v2") throw Error("only pending reviews for the person: " + t.reviews.map(review => review.request));
     const first = t.reviews[0];
-    if (first.from.address !== "seller@agency" || first.text !== "Ready?" || first.step !== 1 || first.of !== 2 || first.key !== "agency/c1/v1") throw Error(JSON.stringify(first));
+    if (first.from.address !== "seller@agency" || first.text !== "Ready?" || first.summary !== 'Seller wants to ask local:1000: "Ready?"' || "step" in first || "of" in first || first.key !== "agency/c1/v1") throw Error(JSON.stringify(first));
+    if (first.outcome !== "If you approve: Seller goes ahead as written. Edit changes its text. Deny tells Seller no.") throw Error(first.outcome);
+    const tool = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("v9", {options, interception: held("sales wants to run promote", 1, 1, [{name: "to", value: "prod"}])})]}), events).reviews[0];
+    if (tool.args.length !== 1 || tool.args[0].value !== "prod" || tool.text !== "" || !tool.outcome.includes("Edit approves with your note")) throw Error(JSON.stringify(tool));
     if (t.reviews[1].from.name !== "Sales" || build(snap(), events).reviews.length !== 0) throw Error("none without reviews");
     const all = [first, t.reviews[1]];
     if (Mailbox.reviewMatches(first, "ready") !== true || Mailbox.reviewMatches(first, "zebra") !== false || all.filter(review => Mailbox.reviewMatches(review, "seller")).length !== 1) throw Error("search");
     if (Mailbox.inFolder(t, "pending", {})) throw Error("pending holds reviews, not threads");
+    """)
+  end
+
+  test "an answer to a review is mail you sent, in Sent, with the words that went with it" do
+    run!("""
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi"),
+      {type: "reply", cursor: "9", at: "2026-01-01T10:06:00Z", request_id: "v1", actor: human, body: {body: "Not yet", option: "deny"}},
+      {type: "reply", cursor: "8", at: "2026-01-01T10:05:00Z", request_id: "v2", actor: human, body: {body: "approve", option: "approve"}}];
+    const options = {approve: [], edit: [], deny: []};
+    const held = summary => ({action: "tool", summary, step: 1, of: 1, args: []});
+    const t = build(snap({runs: [run("r1", "sales", "closed")], requests: [
+      request("v1", {status: "closed", options, interception: held("sales wants to run promote")}),
+      request("v2", {status: "closed", options, interception: held("sales wants to run deploy")})
+    ]}), events);
+    const sent = t.messages.filter(message => message.mine && message.request !== "");
+    if (sent.map(message => message.text).join("|") !== "Approved: Sales wants to run deploy|Denied: Sales wants to run promote\\n\\nNot yet") throw Error(JSON.stringify(sent.map(message => message.text)));
+    if (t.reviews.length !== 0 || !Mailbox.inFolder(t, "sent", {}) || sent[0].to.address !== "sales@agency") throw Error("it is in Sent");
+    if (Mailbox.decided.approve !== "Approved" || Mailbox.decided.edit !== "Edited" || Mailbox.decided.deny !== "Denied") throw Error("words");
     """)
   end
 

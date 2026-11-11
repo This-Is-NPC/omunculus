@@ -4,9 +4,10 @@ import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import "kit/ui"
 
-// ReviewView reads one review as a message: who acted, what the action is, the
-// text it holds and its step, then APPROVE (the one filled action), EDIT and
-// DENY. EDIT and DENY open the reply box under it, as a reply is written: EDIT
+// ReviewView reads one review as a message: its subject is what the actor
+// wants to do, its body the arguments as lines, the text it holds and what
+// each answer does, then APPROVE (the one filled action), EDIT and DENY.
+// While an answer is on its way the buttons are off and SENDING shows. EDIT and DENY open the reply box under it, as a reply is written: EDIT
 // holds the text to rewrite and sends `edit` with the new words; DENY takes an
 // optional reason and sends `deny`.
 Item {
@@ -21,6 +22,7 @@ Item {
   property bool escapes: true
 
   readonly property bool writing: mode !== ""
+  readonly property bool sending: Mail.answering[review.key] !== undefined
 
   function start(option) {
     mode = option
@@ -53,7 +55,7 @@ Item {
         spacing: 6
         Label {
           Layout.fillWidth: true
-          text: "Review of " + view.review.summary
+          text: view.review.summary
           font.pixelSize: 16
           font.bold: true
           wrapMode: Text.Wrap
@@ -65,7 +67,7 @@ Item {
           Icon { anchors.verticalCenter: parent.verticalCenter; name: "spark"; size: 11; color: Theme.primary }
           Label {
             anchors.verticalCenter: parent.verticalCenter
-            text: "REVIEW" + (view.review.of > 1 ? "  ·  step " + view.review.step + " of " + view.review.of : "")
+            text: "REVIEW"
             color: Theme.primary
             font.pixelSize: 10
             font.letterSpacing: 1
@@ -124,14 +126,23 @@ Item {
             Label { text: Mail.stamp(view.review.at); color: Theme.dim; font.pixelSize: 10 }
           }
 
-          Prose {
-            Layout.fillWidth: true
-            plain: true
-            source: view.review.summary
-            color: Theme.foreground
-            font.pixelSize: 13
-            lineHeight: 1.25
-            wrapMode: Text.Wrap
+          Repeater {
+            model: view.review.args
+            delegate: ColumnLayout {
+              id: line
+              required property var modelData
+              Layout.fillWidth: true
+              spacing: 2
+              Label { text: line.modelData.name.toUpperCase(); color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 2 }
+              Prose {
+                Layout.fillWidth: true
+                source: line.modelData.value
+                color: Theme.foreground
+                font.pixelSize: 13
+                lineHeight: 1.25
+                wrapMode: Text.Wrap
+              }
+            }
           }
 
           ColumnLayout {
@@ -150,12 +161,21 @@ Item {
             }
           }
 
+          Label {
+            Layout.fillWidth: true
+            text: view.review.outcome
+            color: Theme.dim
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+          }
+
           Flow {
             Layout.fillWidth: true
             spacing: 8
             TraceButton {
               dense: true
               role: "primary"
+              enabled: !view.sending
               filled: !view.writing
               icon: "check"
               text: "APPROVE"
@@ -165,6 +185,7 @@ Item {
             TraceButton {
               dense: true
               role: "action"
+              enabled: !view.sending
               icon: "edit"
               text: "EDIT"
               tip: "rewrite the text, then send it in place of the held one"
@@ -173,10 +194,18 @@ Item {
             TraceButton {
               dense: true
               role: "action"
+              enabled: !view.sending
               icon: "close"
               text: "DENY"
               tip: "refuse the action, with a reason if you like"
               onClicked: view.start("deny")
+            }
+            Row {
+              visible: view.sending
+              height: Theme.size.control
+              spacing: 6
+              Icon { anchors.verticalCenter: parent.verticalCenter; name: "send"; size: 12; color: Theme.primary }
+              Label { anchors.verticalCenter: parent.verticalCenter; text: "SENDING…"; color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 2 }
             }
           }
         }

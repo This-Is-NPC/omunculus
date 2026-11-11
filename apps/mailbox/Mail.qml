@@ -34,7 +34,7 @@ Singleton {
   readonly property var blank: ({ key: "", project: "", id: "", agent: "", with: { agent: "", project: "", name: "", address: "", text: "" },
     subject: "", label: "", messages: [], pending: [], reviews: [], at: "", heard: "", received: 0, sent: 0, parties: "", snippet: "" })
   // A review with nothing in it, for a view whose review has just gone.
-  readonly property var blankReview: ({ key: "", project: "", conversation: "", request: "", summary: "", text: "", step: 1, of: 1, reason: "", at: "",
+  readonly property var blankReview: ({ key: "", project: "", conversation: "", request: "", summary: "", args: [], text: "", outcome: "", reason: "", at: "",
     from: { agent: "", project: "", name: "", address: "", text: "" } })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
@@ -54,7 +54,13 @@ Singleton {
     || [draft.subject, draft.body, draft.agent].some(word => String(word).toLowerCase().includes(query)))
   // The reviews waiting on you, newest first: what the Pending folder lists.
   readonly property var reviews: all.reduce((list, thread) => list.concat(thread.reviews), [])
-    .sort((a, b) => b.at.localeCompare(a.at))
+    .filter(review => !given[review.key]).sort((a, b) => b.at.localeCompare(a.at))
+  // Review key -> the option of its answer on the way; the review stays on
+  // screen, its buttons off, until the server has taken it.
+  property var answering: ({})
+  // Review key -> true once its answer was taken: it leaves Pending at once,
+  // not at the next sweep.
+  property var given: ({})
   readonly property var shownReviews: reviews.filter(review => Mailbox.reviewMatches(review, query))
   property string selected: ""
   readonly property var thread: threads[selected] || null
@@ -268,10 +274,24 @@ Singleton {
   // edited text or the reason.
   function decide(review, option, text) {
     const place = projectOf(review.project)
-    if (!place)
+    if (!place || answering[review.key])
       return
+    answering = Object.assign({}, answering, { [review.key]: option })
+    const settle = () => {
+      const left = Object.assign({}, answering)
+      delete left[review.key]
+      answering = left
+    }
     http.call(place.socket, "POST", "/v1/projects/" + review.project + "/conversations/" + review.conversation + "/requests/" + review.request + "/reply",
-      Mailbox.decision(option, text), true, () => sweep())
+      Mailbox.decision(option, text), true, () => {
+        given = Object.assign({}, given, { [review.key]: true })
+        settle()
+        tell(Mailbox.decided[option] + ": " + review.summary, false)
+        sweep()
+      }, reason => {
+        settle()
+        tell("The answer was not sent: " + reason, true)
+      })
   }
 
   // Saves a file attached in a thread to the downloads directory and opens it.

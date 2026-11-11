@@ -39,7 +39,10 @@ The e-mails of a thread, oldest first, are:
   name, its address and portrait: the thread's agent or any other agent) whose
   body is the request's reason, in the requester's own words. The questions of
   the request's origins are other agents' text and never appear;
-- your answers to those requests, as e-mails of yours to their requester.
+- your answers to those requests, as e-mails of yours to their requester;
+- your answers to reviews, as e-mails of yours to the account that acted:
+  "Approved: <what it wanted to do>", with the words of an edit or a denial.
+  They put the thread in Sent.
 
 What reaches you is what is addressed to you: a request is mail only when you
 are its arbiter. An account is an account, agent or human: a question an agent asks you
@@ -132,9 +135,13 @@ FORWARD opens the compose window with `Fwd:` and the message quoted.
 
 ## Reviews
 
-A review opens in the right pane as a message from the agent that acted: who
-acted, a summary of the action, the text it holds, and its step ("step 1 of 2")
-when the review has several. It offers three actions:
+A review opens in the right pane as a message from the agent that acted. Its
+subject is the sentence of what it wants to do ("Seller wants to run promote").
+Its body is the action's arguments, one `name: value` line each, with the web
+addresses they hold as links; the text the action holds; and a last line that
+says what each answer does ("If you approve: Seller goes ahead as written. Edit
+changes its text. Deny tells Seller no."). The step of a review among several
+reviewers shows in the console, not here. It offers three actions:
 
 - APPROVE, the one filled action, lets the action go ahead as it is
   (`POST .../requests/{id}/reply` with `{"option": "approve", "body": "approve"}`);
@@ -144,6 +151,11 @@ when the review has several. It offers three actions:
 - DENY opens the reply box for a reason, which may stay empty. SEND replies
   with option `deny` (`{"option": "deny", "body": reason}`, the body being
   `deny` when empty).
+
+Once you answer, the three buttons turn off and SENDING shows. When the
+server has taken the answer, the review leaves Pending and a line confirms
+it ("Approved: ..." or "Edited: ...", "Denied: ..."); if it did not, a line
+says so and the buttons come back.
 
 A review that is not yours to decide is not listed. The console's pending
 queue holds the same reviews.

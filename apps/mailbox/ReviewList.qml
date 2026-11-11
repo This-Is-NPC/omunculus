@@ -5,7 +5,7 @@ import QtQuick.Controls.Basic as C
 import "kit/ui"
 
 // ReviewList is the Pending folder: the reviews waiting on you, newest first,
-// each a row with who acted, its step, the time and what it would do. Empty,
+// each a row with who acted, the time and what it would do. Empty,
 // it says so.
 Item {
   id: list
@@ -55,7 +55,7 @@ Item {
           Label {
             Layout.fillWidth: true
             Layout.minimumWidth: 0
-            text: row.modelData.from.name + (row.modelData.of > 1 ? "  ·  step " + row.modelData.step + " of " + row.modelData.of : "")
+            text: row.modelData.from.name
             font.pixelSize: 12
             font.bold: true
             elide: Text.ElideRight

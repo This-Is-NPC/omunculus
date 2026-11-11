@@ -145,18 +145,49 @@ function requester(request, projectId) {
     : { agent: "", project: projectId, name: Requests.label(who), address: "", text: Requests.label(who) };
 }
 
+// How a decision on a review reads once made.
+const decided = { approve: "Approved", edit: "Edited", deny: "Denied" };
+
+// What each answer to a review does, as the review's last line tells it;
+// `who` is the one who acted, `text` what the action holds ("" for a tool or
+// a grant, which edit approves with a note).
+function outcome(who, text) {
+  return "If you approve: " + who + " goes ahead as written. Edit " + (text !== "" ? "changes its text" : "approves with your note")
+    + ". Deny tells " + who + " no.";
+}
+
 // The reviews waiting on the person in a conversation, which the Pending
 // folder lists and mail never holds: {key, project, conversation, request,
-// from (the requester as a person), summary, text (what the action holds, ""
-// for a tool or a grant), step, of, reason, at}.
+// from (the requester as a person), summary (a sentence, the subject), args
+// (the {name, value} lines of a tool's arguments), text (what the action
+// holds, "" for a tool or a grant), outcome, reason, at}.
 function reviews(projectId, id, snapshot, me) {
   return snapshot.requests.filter(request => Requests.review(request) && Requests.pending(request) && Requests.forYou(request, me))
-    .map(request => ({
-      key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
-      from: requester(request, projectId),
-      summary: request.interception.summary, text: Requests.editable(request), step: request.interception.step, of: request.interception.of,
-      reason: String(request.reason || ""), at: request.created_at
-    }));
+    .map(request => {
+      const from = requester(request, projectId);
+      const text = Requests.editable(request);
+      return {
+        key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
+        from: from, summary: sentence(request.interception.summary), args: request.interception.args || [],
+        text: text, outcome: outcome(from.name, text),
+        reason: String(request.reason || ""), at: request.created_at
+      };
+    });
+}
+
+// A summary as a subject: its first letter in capitals.
+function sentence(text) {
+  const value = String(text || "");
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// The record of an answer to a review, as the mail you sent: "Approved: <the
+// sentence>", then the words that went with an edit or a denial.
+function answered(request, reply) {
+  const option = (reply.body || {}).option || "";
+  const words = String((reply.body || {}).body || "");
+  const more = words !== "" && words !== option ? "\n\n" + words : "";
+  return (decided[option] || "Answered") + ": " + sentence(request.interception.summary) + more;
 }
 
 // The thread a conversation's snapshot and events make:
@@ -213,6 +244,11 @@ function build(projectId, id, snapshot, events, me) {
     messages.push({ key: request.id, mine: false, from: sender, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
     const reply = replies[request.id];
     if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: sender, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
+  }
+  // An answer you gave to a review is mail you sent to its requester.
+  for (const request of snapshot.requests.filter(each => Requests.review(each) && Requests.isMe(each.arbiter, me) && replies[each.id])) {
+    const reply = replies[request.id];
+    messages.push({ key: reply.cursor, mine: true, from: you, to: requester(request, projectId), text: answered(request, reply), at: reply.at, files: [], request: request.id, pending: false, open: false });
   }
   // A file belongs to the e-mail of its own run: the request that run raised
   // when it raised one, else its comments, else an e-mail of its own.
