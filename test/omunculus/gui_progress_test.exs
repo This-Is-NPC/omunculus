@@ -100,7 +100,7 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build(Object.assign({}, base, {requests: [ask]}));
     check(out.state === "needs-you" && nodes(out).w1.state === "needs-you" && nodes(out).w1.doing === "Waiting for your answer", "needs-you", out.state);
     check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", audience: "client", asks: 1}]), "forYou", out.forYou);
-    const owned = Progress.build(Object.assign({}, base, {requests: [Object.assign({}, ask, {route: "owner", destination: "owners"})]}));
+    const owned = Progress.build(Object.assign({}, base, {requests: [Object.assign({}, ask, {route: "boss", destination: "owners"})]}));
     check(owned.forYou[0].audience === "owner", "owner decision", owned.forYou);
     check(out.spoken === "seller asks you: What is the bakery called?", "spoken", out.spoken);
     check(out.path.map(each => each.agent).join() === "seller,design-lead,designer", "path keeps going down", out.path);

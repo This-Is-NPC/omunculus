@@ -36,15 +36,14 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
-  test "a request is for the owner, the client or agents by its route and destination" do
+  test "a request is for the owner, the client or agents by its destination" do
     run!(["Requests"], """
     const ask = over => Object.assign({status: "pending", arbiter: human}, over);
     const who = request => Requests.audience(request);
-    if (who(ask({route: "owner", destination: "owners"})) !== "owner") throw Error("owner route");
     if (who(ask({destination: "owners"})) !== "owner") throw Error("owners destination");
-    if (who(ask({route: "owner", destination: "origin"})) !== "owner") throw Error("owner route to the origin");
+    if (who(ask({route: "owner", destination: "origin"})) !== "client") throw Error("a route name decides nothing");
     if (who(ask({route: null, destination: "origin"})) !== "client") throw Error("default route");
-    if (who(ask({})) !== "client") throw Error("an older server's request has neither");
+    if (who(ask({})) !== "client") throw Error("no destination");
     if (who(ask({arbiter: agent("sales"), destination: "parent"})) !== "agents") throw Error("agent arbiter");
     if (Requests.audiences.owner.text !== "OWNER DECISION" || Requests.audiences.client.text !== "CLIENT QUESTION") throw Error("words");
     """)

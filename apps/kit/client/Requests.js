@@ -198,11 +198,10 @@ function kind(request) {
   return choices(request).length > 0 ? "decision" : "needs-you";
 }
 
-// Whether a request is an owner's decision: put on the owner route or sent to
-// the project's owners. A request without that information (an older server's)
-// is not one.
+// Whether a request is an owner's decision: its destination is the project's
+// owners, whatever the route that led there is called.
 function owned(request) {
-  return request.route === "owner" || request.destination === "owners";
+  return request.destination === "owners";
 }
 
 // Whom a request is for: "owner" for an owner's decision, "agents" when an

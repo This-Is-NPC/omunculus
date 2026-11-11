@@ -139,7 +139,7 @@ defmodule Omunculus.GuiProjectsTest do
     check(Projects.waitsFor(summary.asks) === "CLIENT QUESTION · A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
     check(Projects.waitsFor({questions: 1, decisions: 2, permissions: 0}) === "2 DECISIONS · A QUESTION", "plural");
     const owned = Projects.summary({prompts: [], runs: [], works: [], requests: [
-      request("o", "2026-11-03T10:00:00Z", {reason: "Approve?", options: {approve: []}, route: "owner", destination: "owners"}),
+      request("o", "2026-11-03T10:00:00Z", {reason: "Approve?", options: {approve: []}, route: "boss", destination: "owners"}),
       request("d", "2026-11-03T10:01:00Z", {reason: "Approve too?", options: {approve: []}, destination: "owners"}),
       request("c", "2026-11-03T10:02:00Z", {reason: "Which?", route: null, destination: "origin"})
     ]});

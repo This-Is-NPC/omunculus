@@ -35,11 +35,9 @@ The e-mails of a thread, oldest first, are:
 - each request whose requester is the thread's agent, whose arbiter is you and
   that is not an owner's decision, as an e-mail from that agent whose body is the request's reason, in the
   agent's own words. The questions of the request's origins are other agents'
-  text and never appear. An owner's decision (`route = "owner"` or `destination
-  = "owners"`, [requests](requests.md#client-and-owner)) is the operator's, not
-  yours, and never appears either, even when you are its arbiter. A request
-  without `route` and `destination`, as an older server records it, follows the
-  rest of the rule;
+  text and never appear. An owner's decision (`destination = "owners"`,
+  [requests](requests.md#client-and-owner)) is the operator's, not yours, and
+  never appears either, even when you are its arbiter;
 - your answers to those requests, as e-mails of yours.
 
 A model reply that calls a tool is the agent acting, and its text narrates the
