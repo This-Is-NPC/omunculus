@@ -89,27 +89,16 @@ sets it for the works in that workspace.
 times in a row a parent may send one work below it back with `reopen`.
 The rounds counted are the work's reopens since an answer to a request
 of the parent's work last came. Once they reach `max_reopens`, the next
-`reopen` does not send the work back: the parent asks instead, on the
-`[policy] harness_route` where the project declares one, else along the
-default route, with a question naming the work and the instructions it
+`reopen` does not send the work back: the parent asks instead, whoever gave
+it its work ([requests](requests.md#who-a-request-goes-to)), with a question naming the work and the instructions it
 would have gone back with, and waits on the answer, the broken work still
 waiting on it ([the cycle](cycle.md#work)). Without it a parent reopens
 a work as often as it likes. A workspace sets it the same way as
 `max_retries`.
 
-`[policy] harness_route` is optional: the name of a rule of
-`request_routes`. It is the route of the harness's own requests: a root
-work stopped past `max_retries`, a `reopen` past `max_reopens`, and the
-proposals of `propose_config` and `propose_pack`. They are the project's to
-decide, so the project says where they go; absent, they take the default
-route, as any request that names none. A name no rule carries is refused at
-load with `{:policy, {:invalid, :harness_route}}`. A pack's prompts may
-name a route of their own with `to`; the project declares it in
-`request_routes`, and names it here when it should take these requests too.
-
 `[policy] default_agent` is optional: the name of an agent of depth 0
 that is not `workflow_only`, the front desk that receives a new
-conversation when the person names no agent, and routes the request on.
+conversation when the person names no agent.
 Messages do not change: a client still names the agent in each `POST`
 message, and reads this key to know whom to address by default, as
 `default_agent` under `policy` in `GET /config/policy`. It is absent
@@ -118,37 +107,6 @@ agent below depth 0 or a workflow-only agent refuses with
 `{:policy, {:invalid, :default_agent}}`. It belongs to the project: set
 it in `omunculus.toml` only. A pack's `policy` holds depth layers only,
 and a workspace's policy does not change whom a new conversation goes to.
-
-`[policy] request_routes` is mandatory and nonempty. Loading a config without
-it refuses with `{:policy, {:required, :request_routes}}`. Malformed routes return
-`{:policy, {:invalid, :request_routes}}`. Routes are parsed
-once into `Config.request_routes`, including workspace overlays. For example:
-
-```toml
-[policy]
-request_routes = [
-  { name = "owner", via = ["owners", "origin"] },
-  { via = ["parent", "origin"] },
-]
-```
-
-The first rule matching the optional logical route name (`to`), authenticated
-`from` identity, `workflow` and `stage` selects its `via` list. Unnamed requests
-match unnamed rules. A stage filter requires its workflow; both must exist.
-Destinations are `parent` (the parent work's assignee), `origin` (the authenticated
-conversation creator, or the run/command origin when there is no conversation:
-the client), `owners` (the humans whose project role grants `project.own`; none
-without `[access]` or members, see [requests](requests.md#client-and-owner)),
-or an identity `{ kind = "agent", agent = "name" }` / `{ kind = "human",
-issuer = "issuer", subject = "subject" }`. A named agent must be an ancestor's
-assignee or a configured depth-0 agent that can run without a workflow. Missing contextual destinations and
-participants already in the linked request's origins are skipped within that
-explicit list. If none resolves, the action refuses with `{:request, :no_route}`
-and changes nothing. There is no implicit human fallback. Routing does not
-authorize grants; sealed capabilities and permanent scopes still need a human's
-selected option on the original request. Escalation resolves a new route from
-the receiving participant's context. Presets, Amestris and the benchmark declare
-`parent` then `origin` in TOML; eval overlays inherit those routes.
 
 `[policy] last_run_output_bytes` is optional: a positive integer, how
 many bytes of each tool call's output the `## Last run` section of the
@@ -398,6 +356,24 @@ credential = { access = "access_token", refresh = "refresh_token", expires = "ex
 refresh = { token_url = "https://console.anthropic.com/v1/oauth/token" }
 ```
 
+## Accounts
+
+`[accounts]` is optional. It names the identities a request can be addressed
+to with `to`: each name maps to `{ kind = "agent", agent = "<name>" }`, an
+agent of the project, or `{ kind = "human", issuer = "<issuer>", subject =
+"<subject>" }`.
+
+```toml
+[accounts]
+owner = { kind = "human", issuer = "local", subject = "1000" }
+```
+
+The names are the project's own; the core knows none. A name cannot be an
+agent's, so `to` never reads two ways. Without `to`, a request goes to the
+account that gave the asker its work, and needs no entry here
+([requests](requests.md#who-a-request-goes-to)). `[accounts]` is edited in the
+file only, like `[project]` and `[store]`.
+
 ## Agents, policy, workflow
 
 ```toml
@@ -405,7 +381,6 @@ refresh = { token_url = "https://console.anthropic.com/v1/oauth/token" }
 mode = "auto"
 assemble = "assemble"
 max_retries = 3
-request_routes = [{ via = ["parent", "origin"] }]
 
 [agents.concierge]
 depth = 0
@@ -606,9 +581,9 @@ needs what is missing:
 | `omunculus.toml is missing [store]` | no store path |
 | `omunculus.toml agent <name> is missing model` | agent without `model` |
 | `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
-| `omunculus.toml [policy] request_routes is required, a nonempty list of routes` | `request_routes` absent |
-| `omunculus.toml [policy] request_routes must be a nonempty list of valid routes` | `request_routes` invalid |
-| `omunculus.toml [policy] harness_route must name a rule of [[policy.request_routes]]` | `harness_route` names no `request_routes` rule |
+| `omunculus.toml [accounts] must map names to …` | `[accounts]` is not a table |
+| `omunculus.toml [accounts.<name>] must be {kind = "agent", agent = <an agent>} or {kind = "human", …}` | an account is not an identity, or names an absent agent |
+| `omunculus.toml [accounts.<name>] is also the name of an agent: pick another name` | an account named like an agent |
 | `omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only` | `default_agent` names no such agent |
 | `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
 | `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |

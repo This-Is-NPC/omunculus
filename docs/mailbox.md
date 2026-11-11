@@ -34,12 +34,10 @@ The e-mails of a thread, oldest first, are:
   conversation's root work and the files it attached, one e-mail per run. A
   file shows on the e-mail of its own run: the request that run raised, else
   its comments, else an e-mail of its own with no text;
-- each request whose requester is the thread's agent, whose arbiter is you and
-  that is not an owner's decision, as an e-mail from that agent whose body is the request's reason, in the
+- each request whose requester is the thread's agent and whose arbiter is you,
+  as an e-mail from that agent whose body is the request's reason, in the
   agent's own words. The questions of the request's origins are other agents'
-  text and never appear. An owner's decision (`destination = "owners"`,
-  [requests](requests.md#client-and-owner)) is the operator's, not yours, and
-  never appears either, even when you are its arbiter;
+  text and never appear;
 - your answers to those requests, as e-mails of yours.
 
 The channel to the person is explicit. An agent speaks to you only through a

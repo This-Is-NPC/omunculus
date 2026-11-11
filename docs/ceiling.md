@@ -49,21 +49,20 @@ a granted name blocked
 only grant calls, every name have
             → refused: you already have <names>; use it rather than asking;
               no REQUESTS row
-otherwise   → resolve the configured request route
+otherwise   → resolve who the request goes to
 ```
 
 A refused request refuses the call that emitted it: the call is recorded
 as failed, its output the refusal, and none of its actions apply.
 
 `auto` only moves the unnamed bucket to askable. It does not skip
-`REQUESTS` and does not write a grant on its own. Routing follows the
-first matching `[policy] request_routes` rule, independently of whether
-the receiving participant can authorize the option. A receiver answers
+`REQUESTS` and does not write a grant on its own. The arbiter is whoever gave the asker its work,
+independently of whether it can authorize the option. A receiver answers
 or escalates through the same linked request path. A sealed grant climbs
-that route; only an authorized human may choose its grant option on the
+the parents; only an authorized human may choose its grant option on the
 original request, directly or through named reply parts. The arbiter's
 `reply` chains chosen option calls under its ceiling; an agent needs each
-of them as have in its run. See [request routing](config.md).
+of them as have in its run. See [who a request goes to](requests.md#who-a-request-goes-to).
 
 `pinned` intersects the same way `granted` does: an empty list on a layer
 does not restrict. Tools in `pinned` ∩ effective become cards; the rest
@@ -112,7 +111,7 @@ lists `deny = ["fs.write"]`.
 `sandbox.write` and `sandbox.network` are ceiling resources. They are
 separate from the right to *call* a tool of a similar name. The worker in
 the default preset has `request_access` in `tools` and `sandbox.write` in
-`human`: it may ask through the configured route, and it may not write
+`human`: it may ask whoever gave it its work, and it may not write
 the workspace until a grant.
 
 | Resource state | What the executor does |

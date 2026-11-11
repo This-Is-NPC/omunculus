@@ -69,7 +69,7 @@ Each command is a builtin tool whose manifest lists the `cli` trigger.
 omunculus ask <question> [--options <options>] [--to <to>]
 ```
 
-Asks a question or decision through configured request routing. question says what is needed and why, written to the receiver in their language as it should reach them, without request or work IDs, stage names or notes for agents; when the receiver is to pick one of named answers, name each in options (approve, deny, revise, ...), in the receiver's language, and say what each means in question: they get them as choices, and may still answer in words; never list the choices only in question. Omit options for a free-text answer. Optional to names a route in the project's request_routes; omit to to follow the default route. The run ends and resumes when the request is answered.
+Asks a question or decision to whoever gave you your work (a root work: the person who opened the conversation), or to the account or agent named in to. question says what is needed and why, written to the receiver in their language as it should reach them, without request or work IDs, stage names or notes for agents; when the receiver is to pick one of named answers, name each in options (approve, deny, revise, ...), in the receiver's language, and say what each means in question: they get them as choices, and may still answer in words; never list the choices only in question. Omit options for a free-text answer. Optional to names an account of the project or an agent; omit to to ask whoever gave you your work. The run ends and resumes when the request is answered.
 
 Also called by a model.
 
@@ -77,7 +77,7 @@ Also called by a model.
 | --- | --- | --- | --- |
 | `question` | string | yes |  |
 | `options` | JSON array | no |  |
-| `to` | string | no | Optional name of a route in the project's request_routes. Omit to to follow the default route. |
+| `to` | string | no | Optional name of an account of the project or of an agent. Omit to to ask whoever gave you your work. |
 
 ### `omunculus changes`
 
@@ -158,7 +158,7 @@ Opens Cursor's browser login and stores the resulting credential: the login tool
 omunculus escalate <reason> --origins <origins> [--to <to>]
 ```
 
-Raises received requests you cannot answer as one question. origins maps each distinct part name to its received request ID; the receiver sees each origin's question and who asked it. reason is what the receiver is asked, written to them in their language as it should reach them: the merged question alone, without request or work IDs, stage or part names, or notes for agents. Optional to names a route in the project's request_routes; omit to to follow the default route. Routing chooses the next receiver. The run ends; the answer returns with the linked origins for distribution.
+Raises received requests you cannot answer as one question. origins maps each distinct part name to its received request ID; the receiver sees each origin's question and who asked it. reason is what the receiver is asked, written to them in their language as it should reach them: the merged question alone, without request or work IDs, stage or part names, or notes for agents. Optional to names an account of the project or an agent; omit to to raise it to whoever gave you your work. The run ends; the answer returns with the linked origins for distribution.
 
 Also called by a model.
 
@@ -166,7 +166,7 @@ Also called by a model.
 | --- | --- | --- | --- |
 | `reason` | string | yes |  |
 | `origins` | JSON object | yes |  |
-| `to` | string | no | Optional name of a route in the project's request_routes. Omit to to follow the default route. |
+| `to` | string | no | Optional name of an account of the project or of an agent. Omit to to raise it to whoever gave you your work. |
 
 ### `omunculus inbox`
 

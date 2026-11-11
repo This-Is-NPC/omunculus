@@ -20,7 +20,7 @@ event
     → reaction runs of hooks with an agent
     → if the model stopped by itself or failed on a work still open: a retry run of
       that work, or, once max_retries is used up, a break (a child) or a
-      request along the configured route (a root)
+      request to the conversation's requester (a root)
 ```
 
 `end` is the only action that ends a run. `delegate`, `request`,
@@ -103,7 +103,7 @@ close (end, or the model stopped or failed)
     next runs the ending call's actions asked for, then hooks of end,
       then reaction runs of hooks with an agent
     the model stopped by itself or failed on a work still open: retry, break, or a
-      request along the configured route
+      request to the conversation's requester
 ```
 
 The TOML is read again at this opening. `RUNS.tools` is a snapshot of the
@@ -164,9 +164,8 @@ reach `max_retries` (`[policy]`, or the work's workspace), the harness
 does not open another run. A work with a parent gets `break` with the
 comment `<agent> stopped the work "<title>" without a report after N
 runs.`, authored by the harness (actor `harness`, no id), which parks it
-and wakes the parent waiting on it, whose run opens. A root work gets a request instead, on the
-project's `[policy] harness_route` where it declares one and along the
-default route otherwise, opened by the harness with that sentence as its reason and the options
+and wakes the parent waiting on it, whose run opens. A root work gets a request instead, to the account that
+opened the conversation, opened by the harness with that sentence as its reason and the options
 `retry` (no call) and `cancel`, and an inbox note, the sentence followed
 by `Answer it with cancel or retry.`; the work waits on it. `reply --option retry`
 opens another run of the work; `reply --option cancel` cancels it. The
@@ -313,8 +312,8 @@ every work still open whose last own run closed without end, no run of
   past max_retries the break or the request
 every request still pending at an agent whose last run for it closed,
   and no answer to the request it escalated came after that run began
-  (the answer's run, found above, resumes the agent): on along its
-  route, as an unanswered one goes
+  (the answer's run, found above, resumes the agent): on to its
+  parent, as an unanswered one goes
 then the runs found are due, the reopened message runs first
 ```
 
@@ -363,9 +362,7 @@ A work that keeps breaking does not go round for ever. With `[policy]
 max_reopens`, once a parent has sent one work back that many times in a
 row — its reopens since an answer to a request of the parent's work last
 came — its next `reopen` sends nothing back: the store opens a request
-instead, on the project's `[policy]
-harness_route` where it declares one and along the default route
-otherwise, its reason the question the `reopen`
+instead, to whoever gave the parent its work, its reason the question the `reopen`
 tool wrote (`past_limit`: the work, that it went back as often as the
 limit allows, and the instructions it would have gone back with), and
 the parent waits on it, the broken work still waiting on the parent. The
@@ -411,7 +408,7 @@ already have <names>; use it rather than asking`. A granted name that is
 blocked refuses the call too, with `refused: no one can grant <name> to
 this run: …`. Otherwise a request opens, its
 reason the first comment on it; if a work is attached it becomes
-`waiting = request`. [Request routing](config.md) resolves its arbiter independently of grant authority.
+`waiting = request`. [Who a request goes to](requests.md#who-a-request-goes-to) resolves its arbiter independently of grant authority.
 The request tool ends the asking run; an agent arbiter's run opens on
 the parent work after it closes.
 
@@ -440,8 +437,8 @@ work still waits on children. A cancelled origin work never runs again.
 An agent receiver that closes without answering a pending request uses the
 same linked escalation action. So does an intermediary resumed by a text
 answer that closes leaving pending the origins the answer returned to it:
-they go on together, under the part names they had, to the next route
-destination: an agent they were already escalated to that answered them with
+they go on together, under the part names they had, to the escalator's
+parent: an agent they were already escalated to that answered them with
 text alone, naming no part, without escalating them further is skipped. At the root it reaches
 the authenticated human and writes an inbox notification naming that
 upstream request. An already escalated origin does not trigger a second

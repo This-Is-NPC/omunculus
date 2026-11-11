@@ -11,7 +11,7 @@ bootstrap_role = "admin"
 
 [access.roles.admin]
 scope = "project"
-capabilities = ["project.manage_access", "project.manage_config", "project.own", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
+capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
 
 [access.roles.participant]
 scope = "conversation"
@@ -22,7 +22,7 @@ scope = "conversation"
 capabilities = ["conversation.read"]
 ```
 
-The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `project.own`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. `project.own` marks a role's members as the project's owners, the destination of the `owners` request route ([requests](requests.md#client-and-owner)). A role granting `project.own` must grant `conversation.reply` too. A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
+The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
 
 Before starting the server, seed the first project administrator. For the local user, the principal is issuer `local` and the numeric user ID as subject, the same principal the direct CLI acts as:
 
@@ -170,7 +170,7 @@ calls. It requires conversation send access. `POST` at the same path followed
 by `/escalate` takes `{reason, origins, to?}`, where origins maps distinct part
 names to pending received request IDs. It requires conversation reply access;
 every origin must belong to the URL's conversation and its recorded arbiter
-must be the caller. Optional `to` names a configured logical route.
+must be the caller. Optional `to` names an `[accounts]` name or an agent.
 
 Both commands require `Idempotency-Key`, return 202 with the accepted command
 receipt, and reuse the shared CLI/model tools, store actions and reply path.

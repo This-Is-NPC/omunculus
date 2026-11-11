@@ -44,7 +44,7 @@ depth, stage, agent — narrows the tools a run has; what is left out is
 blocked, or asked for through a request. [The ceiling](docs/ceiling.md).
 
 **Questions are requests.** An agent asks a question, or for a permission,
-through a request routed by the TOML to another agent or to you; the
+through a request to whoever gave it its work or to an account the TOML names; the
 answer resumes it. [Requests](docs/requests.md).
 
 **Everything else is a tool.** Searching, filtering, assembling the prompt

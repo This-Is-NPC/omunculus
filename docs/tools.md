@@ -452,9 +452,8 @@ the work is cancelled with the report as its comment and the run goes
 on — the parent, free of the broken work, may hand out what must come
 first and a new work after it, or waits on its other children when some
 are not back. `break` passes the parent's own work up. With `[policy]
-max_reopens`, a `reopen` past the limit opens a request instead, on the
-project's `[policy] harness_route` where it declares one and along the
-default route otherwise, its reason the `past_limit` text the tool wrote,
+max_reopens`, a `reopen` past the limit opens a request instead, to
+whoever gave the parent its work, its reason the `past_limit` text the tool wrote,
 and the parent waits on the answer ([the cycle](cycle.md#work)). Only a work that
 broke can be reopened or retired: a work that is done stays done, and
 what it did is changed by a new work. Either refuses any other work with
@@ -533,8 +532,7 @@ and optional named options, the answers the receiver is to pick among, which
 an escalation keeps on its origin (omit them for a free-text answer). The CLI supplies
 an existing `conversation_id` and may spell options as a JSON array.
 `escalate` takes reason and a JSON/object map of named origins. Optional `to`
-on `ask`, `request_access` or `escalate` names a configured logical route,
-never a recipient type. The same actions authenticate human authors from the
+on `ask`, `request_access` or `escalate` names an `[accounts]` name or an agent. The same actions authenticate human authors from the
 command context and agent authors from their run. Their manifest `end` step
 ends model runs; with no run, that step emits nothing. Human request creation
 needs send access, escalation needs reply access and matching received origins.

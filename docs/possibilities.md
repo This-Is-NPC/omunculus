@@ -6,7 +6,7 @@ and models that file names. These are shapes the file will load today. None of
 them invent a table [the TOML](config.md) does not already have.
 
 Each snippet sits on the required tables — `[execution]`, `[execution.sandbox]`,
-`[store]`, `[models]`, `[policy] assemble`, `max_retries` and `request_routes` — and on `[tools] paths` pointing at
+`[store]`, `[models]`, `[policy] assemble` and `max_retries` — and on `[tools] paths` pointing at
 the folders you mean to call. The snippets below omit those tables unless they change. A missing
 required table is still a refusal, not an implied default.
 
@@ -44,7 +44,6 @@ You are a Pi-style agent: compact, direct, and without shell access.
 """
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 ```
@@ -112,7 +111,6 @@ You are the worker. Complete the assigned work and call done with a report when 
 """
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 ```
@@ -164,7 +162,6 @@ steps = [
 ]
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 workflows = ["delivery"]
@@ -236,7 +233,6 @@ tools = ["comment", "continue", "done", "end", "fs.read", "fs.write", "request_a
 negotiable = ["sandbox.write"]
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 mode = "auto"
@@ -248,8 +244,8 @@ negotiable = ["fs.write", "sandbox.write"]
 ```
 
 `auto` on `[policy]` puts everything uncited in askable. The depth-2 allowlist
-then blocks whatever that floor did not name. The declared route tries the
-parent work and then the authenticated origin; it does not change grant authority.
+then blocks whatever that floor did not name. A request goes to whoever gave the asker its work, the parent work's
+assignee or, at the root, the person who opened the conversation; that does not change grant authority.
 
 ## 5. Two trees, one store
 
@@ -301,7 +297,6 @@ tools = ["catalog", "fs.read", "store"]
 text = "global"
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 workspace = "app"
@@ -370,7 +365,6 @@ tools = ["catalog", "fs.read", "fs.write"]
 negotiable = ["sandbox.write"]
 
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 mode = "allowlist"
@@ -389,7 +383,7 @@ flowchart TB
     call --> classify{ceiling}
     classify -->|have| granted["already granted"]
     classify -->|blocked| deny["EVENTS deny"]
-    classify -->|askable or sealed| route["configured request route"]
+    classify -->|askable or sealed| route["whoever gave the work"]
     route --> receiver["resolved participant"]
     receiver --> reply["reply text or selected option"]
     receiver --> escalate["escalate with linked origins"]
@@ -401,7 +395,6 @@ asked:
 
 ```toml
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 mode = "allowlist"
@@ -605,7 +598,6 @@ An agent may name a different assemble tool than `[policy]`:
 
 ```toml
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 

@@ -113,10 +113,8 @@ The default preset imports the system team (`priv/packs/system`):
 The auditor and the refiner are granted `config`, `overview` and
 `propose_config` but not `propose_pack`: importing a pack is the steward's.
 
-Their proposals go on the project's `[policy] harness_route`, which a project
-importing the team declares, as the default preset does with
-`harness_route = "owner"` and `{ name = "owner", via = ["owners", "origin"] }`;
-see [requests](requests.md).
+Their proposals go to whoever gave the agent its work; see
+[requests](requests.md#who-a-request-goes-to).
 
 Their portraits and their skills (`team-design`, `team-composition`,
 `configure`, `audit`, `refine`) are in the pack; see

@@ -20,7 +20,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [Possibilities](possibilities.md) | What shapes can a project take? |
 | [The cycle](cycle.md) | What does a send do to the store, run by run? |
 | [The ceiling](ceiling.md) | Who may call what, and how is it granted? |
-| [Requests](requests.md) | How are questions and decisions routed, answered and escalated? |
+| [Requests](requests.md) | Who does a question go to, and how is it answered and escalated? |
 | [Tools](tools.md) | How do I write a tool, and what do the builtin ones do? |
 | [Packs](packs.md) | What is a pack, and how do teams work together? |
 | [The server](server.md) | What is the `/v1` contract, and how is it served? |
