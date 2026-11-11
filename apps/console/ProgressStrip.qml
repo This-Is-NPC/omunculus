@@ -119,13 +119,16 @@ ColumnLayout {
       // through a long call.
       const took = (focus.finishedIn !== null && !working) || phase === "done"
       const open = !Progress.closed(focus.state) || working
-      const lasted = Progress.duration(focus.finishedIn !== null && !working ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
+      const seconds = focus.finishedIn !== null && !working ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds
+      const lasted = Progress.duration(seconds).toUpperCase()
+      // The short form: "5 H 04 MIN".
+      const brief = Progress.span(seconds).toUpperCase()
       // Waiting on you stops the clock: it says since when, in the warning tone.
       const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
       if (focus.state === "needs-you" || focus.waitingOn === "you")
         segments.push({ text: "WAITING FOR YOU" + since, short: "WAITING", tone: Theme.warning, keep: true })
       else
-        segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true,
+        segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: brief, keep: true,
           tone: phase === "done" ? Theme.success : undefined })
     }
     const separator = Theme.type.meta.separator

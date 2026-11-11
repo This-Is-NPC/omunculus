@@ -388,16 +388,23 @@ Item {
                 font.bold: stage.now
                 elide: Text.ElideRight
               }
+              // The agent gives way; the time never does.
               Label {
-                Layout.maximumWidth: stage.width * 0.55
-                text: {
-                  const said = stage.now ? (stage.time !== "" ? stage.time + " so far" : "")
-                    : stage.step.again ? stage.time + ", due again" : stage.step.status === "done" ? stage.time : ""
-                  return stage.step.agent + (said !== "" ? " · " + said : "")
-                }
+                Layout.maximumWidth: stage.width * 0.4
+                text: stage.step.agent
                 color: Theme.dim
                 font.pixelSize: 11
                 elide: Text.ElideRight
+              }
+              Label {
+                text: {
+                  const said = stage.now ? (stage.time !== "" ? stage.time + " so far" : "")
+                    : stage.step.again ? stage.time + ", due again" : stage.step.status === "done" ? stage.time : ""
+                  return said !== "" ? "· " + said : ""
+                }
+                visible: text !== ""
+                color: Theme.dim
+                font.pixelSize: 11
               }
               Icon {
                 visible: entry.modelData.folds
