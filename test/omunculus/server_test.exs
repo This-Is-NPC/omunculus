@@ -1018,6 +1018,22 @@ defmodule Omunculus.ServerTest do
     assert {:ok, %{status: "closed", answer: nil}} =
              Store.view(reader.conn, "request", request_id)
 
+    late = local.(:post, reply_url, headers: [{"idempotency-key", "late"}], json: %{body: "Again."})
+    assert {late.status, late.body["error"]} == {409, "request_not_pending"}
+
+    escalated_id =
+      Fixtures.insert(reader.conn, :requests, %{run_id: run["id"], status: "escalated"})
+
+    passed_up =
+      local.(
+        :post,
+        "/v1/projects/solo/conversations/#{conversation_id}/requests/#{escalated_id}/reply",
+        headers: [{"idempotency-key", "passed-up"}],
+        json: %{body: "Too late."}
+      )
+
+    assert {passed_up.status, passed_up.body["error"]} == {409, "request_not_pending"}
+
     assert {:ok, [%{body: "Use blue."}]} = Store.comments(reader.conn, :request, request_id)
 
     assert {:ok, [%{body: reply_body}]} =

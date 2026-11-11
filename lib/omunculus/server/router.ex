@@ -751,8 +751,17 @@ defmodule Omunculus.Server.Router do
   defp error_reply(conn, {:error, :last_administrator}),
     do: reply(conn, 409, %{error: "last_administrator"})
 
-  defp error_reply(conn, {:error, {action, _reason}}) when action in [:request, :escalate],
-    do: reply(conn, 422, %{error: "request_refused"})
+  # A reply to a request that is no longer pending conflicts with its state.
+  defp error_reply(conn, {:error, {:reply, reason}}) when reason in [:escalated, :closed],
+    do:
+      reply(conn, 409, %{
+        error: "request_not_pending",
+        message: Errors.format({:reply, reason})
+      })
+
+  defp error_reply(conn, {:error, {action, _reason}})
+       when action in [:request, :escalate, :reply, :grant],
+       do: reply(conn, 422, %{error: "request_refused"})
 
   defp error_reply(conn, {:error, {:attachment, reason}}),
     do: reply(conn, 422, %{error: "attachment_refused", message: inspect(reason)})

@@ -177,7 +177,7 @@ receipt, and reuse the shared CLI/model tools, store actions and reply path.
 Replaying the same key and body returns its receipt; changing the body conflicts.
 The verified principal supplies authorship. Unknown body fields and malformed
 required fields return 400; hidden conversations or cross-conversation targets
-return 404; a request/escalation domain refusal returns 422. Human requests
+return 404; a request/escalation domain refusal returns 422. A reply to a request that is closed or already passed up returns `409 request_not_pending` with the reason in `message`; any other reply refusal returns `422 request_refused`. Human requests
 have no requester run. Configured agent receivers open runs, and human
 receivers get the request without a synthetic run. Snapshot request reads retain
 the original identities, questions and linked origins.
