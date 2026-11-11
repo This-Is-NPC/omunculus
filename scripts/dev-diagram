@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""Draws a conversation of a dev project as a sequence diagram, read-only
+from its store: people's messages and answers, works handed down, requests,
+grants, stage moves, breaks, reopens, retires, works done and the hand-off
+and deploy tools. Writes dev/diagrams/<conversation>.mmd (Mermaid) and .svg.
+
+Usage: dev-diagram [--project agency|dev] [conversation id], or through
+mise run dev:diagram.
+The latest conversation of the project when no id is given.
+"""
+import argparse
+import html
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+
+STORES = {"agency": "dev/agency/.omunculus/store.sqlite3", "dev": "dev/.omunculus/store.sqlite3"}
+TOOLS = {"deploy_preview", "promote", "start_design", "start_build", "start_sale", "request_golive", "wait_client"}
+CLIENT, OWNER = "Client", "Owner"
+COL, TOP, ROW, LEFT = 150, 70, 26, 40
+COLOURS = {CLIENT: "#b5651d", OWNER: "#7a1f1f"}
+
+
+def short(text, n=90):
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def steps_of(db, conv, client_agent):
+    """The diagram's steps, in event order: (kind, from, to, text, dashed)."""
+    works = {r["id"]: r for r in db.execute("select * from works where conversation_id = ?", (conv,))}
+    by_event = {r["event_id"]: r for r in works.values()}
+    requests = {r["id"]: r for r in db.execute("select * from requests")}
+    req_by_event = {r["event_id"]: r for r in requests.values()}
+    events = list(db.execute("select * from events where conversation_id = ? order by sequence", (conv,)))
+
+    # A work's first agent and its last end, from the runs it had.
+    first_agent, last_end = {}, {}
+    for e in events:
+        if e["type"] == "start-run" and e["work_id"] and e["work_id"] not in first_agent:
+            first_agent[e["work_id"]] = json.loads(e["body"]).get("agent")
+        if e["type"] == "end" and e["work_id"]:
+            last_end[e["work_id"]] = e["id"]
+
+    def person(requester):
+        # A person answers for the agent that talks with the client, else as the owner.
+        return CLIENT if requester.get("agent") == client_agent else OWNER
+
+    steps = []
+    for e in events:
+        kind, actor, at = e["type"], e["actor_id"], e["at"][11:16]
+        body = json.loads(e["body"] or "{}")
+        if kind == "prompt":
+            steps.append(("arrow", CLIENT, body.get("agent") or client_agent, f"{at} {body.get('message', '')}", False))
+        elif kind in ("delegate", "work") and e["id"] in by_event:
+            w = by_event[e["id"]]
+            flow = f"[{w['workflow']}] " if w["workflow"] else ""
+            steps.append(("arrow", actor, first_agent.get(w["id"]) or w["assignee"], f"{at} {flow}{w['title']}", False))
+        elif kind == "request" and e["id"] in req_by_event:
+            r = req_by_event[e["id"]]
+            arbiter = json.loads(r["arbiter"])
+            to = arbiter.get("agent") if arbiter.get("kind") == "agent" else person(json.loads(r["requester"]))
+            steps.append(("arrow", actor, to, f"{at} ask: {body.get('reason', '')}", False))
+        elif kind == "reply" and e["request_id"] in requests:
+            requester = json.loads(requests[e["request_id"]]["requester"])
+            sender = actor if e["actor_kind"] == "agent" else person(requester)
+            option = f" {body['option']}" if body.get("option") else ""
+            steps.append(("arrow", sender, requester.get("agent", "?"), f"{at} answer{option}: {body.get('body', '')}", True))
+        elif kind == "grant":
+            steps.append(("arrow", OWNER, body.get("agent", "?"), f"{at} GRANT {body.get('name')} ({body.get('scope') or 'this work'})", False))
+        elif kind == "continue" and body.get("to"):
+            steps.append(("note", actor, None, f"{at} stage {body.get('from')} → {body.get('to')}", False))
+        elif kind == "break" and e["work_id"] in works:
+            parent = works.get(works[e["work_id"]]["parent_id"])
+            steps.append(("arrow", actor, parent["assignee"] if parent else actor, f"{at} BREAK: {body.get('body', '')}", True))
+        elif kind == "reopen":
+            steps.append(("note", actor, None, f"{at} reopen at {body.get('stage')}", False))
+        elif kind == "cancel":
+            steps.append(("note", actor, None, f"{at} retire: {body.get('body', '')}", False))
+        elif kind == "end" and last_end.get(e["work_id"]) == e["id"]:
+            w = works[e["work_id"]]
+            parent = works.get(w["parent_id"])
+            if parent and w["state"] == "done":
+                steps.append(("arrow", w["assignee"], parent["assignee"], f"{at} done: {w['title']}", True))
+        elif kind == "tool" and body.get("name") in TOOLS:
+            ok = "ok" if body.get("ok") else "REFUSED"
+            steps.append(("note", actor, None, f"{at} {body['name']} {ok}: {body.get('output', '')}", False))
+    return steps
+
+
+def participants(steps):
+    """People first, then agents in the order they first appear."""
+    order = [CLIENT]
+    for _, a, b, _, _ in steps:
+        for name in (a, b):
+            if name and name not in order:
+                order.append(name)
+    return [CLIENT] + ([OWNER] if OWNER in order else []) + [n for n in order if n not in (CLIENT, OWNER)]
+
+
+def mermaid(parts, steps):
+    clean = lambda text: short(text).replace(";", ",").replace("#", "")
+    lines = ["sequenceDiagram", "    autonumber"]
+    lines += [f"    {'actor' if p in COLOURS else 'participant'} {p}" for p in parts]
+    for kind, a, b, text, dashed in steps:
+        if kind == "note":
+            lines.append(f"    Note over {a}: {clean(text)}")
+        else:
+            lines.append(f"    {a}{'-->>' if dashed else '->>'}{b}: {clean(text)}")
+    return "\n".join(lines) + "\n"
+
+
+def svg(parts, steps):
+    x = {name: LEFT + COL // 2 + i * COL for i, name in enumerate(parts)}
+    width, height = LEFT * 2 + COL * len(parts), TOP + ROW * (len(steps) + 2)
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="sans-serif" font-size="11">',
+           '<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
+           '<path d="M0,0 L8,4 L0,8 z" fill="#333"/></marker></defs>',
+           f'<rect width="{width}" height="{height}" fill="#fffdf8"/>']
+    for name in parts:
+        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{height - 10}" stroke="#ccc" stroke-dasharray="4 4"/>')
+        out.append(f'<rect x="{x[name] - 68}" y="10" width="136" height="30" rx="{15 if name in COLOURS else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
+        out.append(f'<text x="{x[name]}" y="30" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
+    for i, (kind, a, b, text, dashed) in enumerate(steps):
+        y = TOP + ROW * (i + 1)
+        # The full text shows on hover; the line shows it short.
+        label = f"<title>{html.escape(text)}</title>{html.escape(f'{i + 1}. {short(text)}')}"
+        if kind == "note":
+            out.append(f'<rect x="{x[a] - 4}" y="{y - 13}" width="{min(6 * len(short(text)) + 40, 560)}" height="18" fill="#f3eed2" stroke="#d8cf9a"/>')
+            out.append(f'<text x="{x[a] + 2}" y="{y}" fill="#555" font-style="italic">{label}</text>')
+            continue
+        colour = COLOURS.get(a, COLOURS.get(b, "#333"))
+        if a == b:
+            out.append(f'<path d="M{x[a]},{y - 8} h30 v12 h-28" fill="none" stroke="{colour}" marker-end="url(#a)"/>')
+            out.append(f'<text x="{x[a] + 36}" y="{y}" fill="{colour}">{label}</text>')
+            continue
+        dash = ' stroke-dasharray="5 3"' if dashed else ""
+        out.append(f'<line x1="{x[a]}" y1="{y}" x2="{x[b]}" y2="{y}" stroke="{colour}"{dash} marker-end="url(#a)"/>')
+        out.append(f'<text x="{min(x[a], x[b]) + 6}" y="{y - 4}" fill="{colour}">{label}</text>')
+    out.append("</svg>")
+    return "\n".join(out) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Draw a dev project's conversation as a sequence diagram")
+    # mise passes the task's usage as usage_* variables.
+    parser.add_argument("--project", choices=sorted(STORES), default=os.environ.get("usage_project") or "agency")
+    parser.add_argument("conversation", nargs="?", default=os.environ.get("usage_conversation") or None)
+    args = parser.parse_args()
+
+    root = os.environ.get("MISE_PROJECT_ROOT") or subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+    store = os.path.join(root, STORES[args.project])
+    if not os.path.exists(store):
+        sys.exit(f"no store at {store}: run the dev server on the {args.project} project first")
+    db = sqlite3.connect(f"file:{store}?mode=ro", uri=True)
+    db.row_factory = sqlite3.Row
+    conv = args.conversation or (db.execute("select id from conversations order by rowid desc limit 1").fetchone() or [None])[0]
+    if not conv or not db.execute("select 1 from conversations where id = ?", (conv,)).fetchone():
+        sys.exit(f"no conversation {conv} in {store}" if conv else f"no conversations in {store}")
+
+    # The agent the person's first message went to is the one that talks with them.
+    first = db.execute("select body from events where conversation_id = ? and type = 'prompt' order by sequence limit 1", (conv,)).fetchone()
+    client_agent = json.loads(first["body"]).get("agent") if first else None
+    steps = steps_of(db, conv, client_agent)
+    parts = participants(steps)
+
+    out = os.path.join(root, "dev", "diagrams")
+    os.makedirs(out, exist_ok=True)
+    for ext, text in (("mmd", mermaid(parts, steps)), ("svg", svg(parts, steps))):
+        with open(os.path.join(out, f"{conv}.{ext}"), "w") as f:
+            f.write(text)
+    print(os.path.join(out, f"{conv}.svg"))
+
+
+main()

@@ -67,6 +67,16 @@ run = "scripts/dev-bootstrap"
 description = "Open the console on the dev project of a running server"
 run = "scripts/dev-console"
 
+[tasks."dev:diagram"]
+description = "Draw a dev project's conversation as a sequence diagram (dev/diagrams/<id>.svg and .mmd); the latest one unless an id is given"
+run = "scripts/dev-diagram"
+usage = '''
+flag "--project <project>" help="the dev project" default="agency" {
+  choices "agency" "dev"
+}
+arg "[conversation]" help="the conversation id; the latest one when left out"
+'''
+
 [tasks."dev:mailbox"]
 description = "Open the mailbox on the dev project of a running server"
 run = "scripts/dev-mailbox"
