@@ -63,9 +63,14 @@ included are those `templates/design-brief.md` gives; a change of scope is
 not a round, and rounds beyond those are the owner's decision.
 
 The design reviewer is the team's QA. It changes no file and sends back
-only defects against the briefing, the handoff, the plan's checks or the
-scope, each naming what is wrong, the item to fix and what it must show;
-taste goes in its report as a note. When the client waived the design, the
+only defects that block what the stage must deliver, against the briefing,
+the handoff, the plan's checks or the scope, each naming what is wrong, the
+item to fix and what it must show; taste and minor content or specimen
+issues go in its report as notes, fixed in the next pass, never a reopen.
+The deploy descriptor rule depends on the stage: in the design review the
+root `deploy.toml` must name `app = "design-<client-slug>"` and the
+`Dockerfile` must serve `design/preview`; in `page`, `accept` and the
+release the app is the client's slug, never `design-*`. When the client waived the design, the
 plan says "Design: waived by the client" and there is no `design/handoff.md`:
 it then checks each page and the whole site against the scope and the plan,
 and a missing approved design never blocks it.

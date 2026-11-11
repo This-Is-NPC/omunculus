@@ -105,7 +105,8 @@ When the workspace's root already holds a design preview's two files (app
 `design-<slug>`, serving `design/preview`, from the design team), the base
 item replaces both with the site's own, the client's slug as the app, and the
 review and the clerk's `publish` refuse a `design-<slug>` app, so the
-release never publishes the design preview.
+release never publishes the design preview. That rule belongs to the
+site's build; the design stage's own review requires `design-<slug>`.
 
 The tools read the descriptor and the Dockerfile from the commit they
 publish (`git show HEAD:deploy.toml`), never from the working tree, so what
@@ -209,7 +210,7 @@ with `mise link` (`mise link --force node@<version> /usr` for the
 `/usr/bin/node` the runtimes give), so `mise install` downloads nothing.
 
 A review sends back only a defect against the goal, the plan or the
-handoff, naming the item to fix; wording and taste are notes. When the
+handoff, naming the item to fix; wording, taste and minor content issues are notes for the next pass. When the
 same item comes back from review twice with the same defect, the
 administrator asks the owner (`to = "owner"`) rather than reopening it
 again. Operational and internal decisions that must reach a human (a
