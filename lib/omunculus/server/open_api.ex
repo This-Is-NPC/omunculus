@@ -578,6 +578,20 @@ defmodule Omunculus.Server.OpenAPI do
             workflow: nullable_string(),
             stage: nullable_string(),
             arbiter: %{type: "object"},
+            interception: %{
+              oneOf: [
+                object(
+                  %{
+                    action: %{type: "string", enum: ~w(ask comment attach grant tool)},
+                    summary: string(),
+                    step: %{type: "integer"},
+                    of: %{type: "integer"}
+                  },
+                  ~w(action summary step of)
+                ),
+                %{type: "null"}
+              ]
+            },
             status: %{type: "string", enum: ~w(pending escalated closed)},
             created_at: string()
           },
@@ -637,6 +651,7 @@ defmodule Omunculus.Server.OpenAPI do
             run_id: nullable_string(),
             work_id: nullable_string(),
             request_id: nullable_string(),
+            released_by: nullable_string(),
             inbox_id: nullable_string(),
             prompt_id: nullable_string(),
             comment_id: nullable_string(),

@@ -48,6 +48,7 @@ defmodule Omunculus.Server.Contract do
       run_id: event.run_id,
       work_id: event.work_id,
       request_id: event.request_id,
+      released_by: event.released_by,
       inbox_id: event.inbox_id,
       prompt_id: event.prompt_id,
       comment_id: event.comment_id,
@@ -89,11 +90,12 @@ defmodule Omunculus.Server.Contract do
   def item(:requests, row) do
     row
     |> Map.take(
-      ~w(id run_id requester work_id options arbiter status created_at reason workflow stage origins)a
+      ~w(id run_id requester work_id options arbiter status created_at reason workflow stage origins interception)a
     )
     |> Map.update!(:options, &body/1)
     |> Map.update!(:requester, &body/1)
     |> Map.update!(:arbiter, &body/1)
+    |> Map.update(:interception, nil, &interception/1)
     |> Map.update(
       :origins,
       %{},
@@ -103,6 +105,16 @@ defmodule Omunculus.Server.Contract do
 
   def item(:inbox, row),
     do: Map.take(row, ~w(id run_id agent work_id read_at created_at)a)
+
+  defp interception(nil), do: nil
+
+  defp interception(review),
+    do: %{
+      action: review.action,
+      summary: review.summary,
+      step: review.step + 1,
+      of: length(review.reviewers)
+    }
 
   def member(row), do: Map.take(row, ~w(issuer subject role updated_at)a)
 

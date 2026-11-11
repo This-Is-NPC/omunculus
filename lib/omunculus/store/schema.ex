@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Schema do
   @moduledoc """
-  DDL for prompts, events, runs, comments, works, requests, request escalations, inbox,
+  DDL for prompts, events, runs, comments, works, requests, request escalations, interceptions, inbox,
   conversations, memberships and command receipts. It also enforces the
   store rules at the database level: events and escalation links are append only, request options and participant identities are immutable, and the
   system columns — `runs.tools`, `runs.prompt_id`,
@@ -79,6 +79,7 @@ defmodule Omunculus.Store.Schema do
       comment_id TEXT,
       request_id TEXT REFERENCES requests (id) DEFERRABLE INITIALLY DEFERRED,
       inbox_id TEXT REFERENCES inbox (id) DEFERRABLE INITIALLY DEFERRED,
+      released_by TEXT REFERENCES requests (id) DEFERRABLE INITIALLY DEFERRED,
       body TEXT NOT NULL,
       at TEXT NOT NULL
     )
@@ -166,6 +167,21 @@ defmodule Omunculus.Store.Schema do
       PRIMARY KEY (origin_id, escalated_id),
       CHECK (origin_id <> escalated_id),
       UNIQUE (escalated_id, part)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS interceptions (
+      request_id TEXT PRIMARY KEY REFERENCES requests (id),
+      rule INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      target TEXT CHECK (target IS NULL OR json_valid(target)),
+      reviewers TEXT NOT NULL CHECK (json_valid(reviewers)),
+      step INTEGER NOT NULL,
+      passed TEXT NOT NULL CHECK (json_valid(passed)),
+      actor TEXT NOT NULL CHECK (json_valid(actor)),
+      emit TEXT NOT NULL CHECK (json_valid(emit)),
+      next_id TEXT REFERENCES requests (id)
     )
     """,
     """

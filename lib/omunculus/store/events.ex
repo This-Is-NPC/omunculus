@@ -17,7 +17,15 @@ defmodule Omunculus.Store.Events do
 
       Process.put(
         @actor_key,
-        Map.take(ctx, [:author, :agent, :issuer, :subject, :origin_issuer, :origin_subject])
+        Map.take(ctx, [
+          :author,
+          :agent,
+          :issuer,
+          :subject,
+          :origin_issuer,
+          :origin_subject,
+          :released_by
+        ])
       )
 
       try do
@@ -44,6 +52,7 @@ defmodule Omunculus.Store.Events do
       |> Map.put_new(:actor_subject, Map.get(actor, :subject))
       |> Map.put_new(:origin_issuer, Map.get(actor, :origin_issuer) || Map.get(actor, :issuer))
       |> Map.put_new(:origin_subject, Map.get(actor, :origin_subject) || Map.get(actor, :subject))
+      |> Map.put_new(:released_by, Map.get(actor, :released_by))
       |> run_context(conn)
       |> conversation_context(conn)
       |> harness_has_no_id()

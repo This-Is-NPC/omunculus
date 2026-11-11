@@ -40,10 +40,10 @@ defmodule Omunculus.Store.Actions.Sequence do
   broken child gone it may delegate.
   """
 
-  alias Omunculus.{Ceiling, Config}
+  alias Omunculus.{Ceiling, Config, Participant}
   alias Omunculus.Id
   alias Omunculus.Store.Actions.{Helpers, Requests}
-  alias Omunculus.Store.{Events, Query, View}
+  alias Omunculus.Store.{Events, Interception, Query, View}
 
   @spec continue(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
   def continue(conn, ctx) do
@@ -135,8 +135,17 @@ defmodule Omunculus.Store.Actions.Sequence do
       if past_limit?(ctx.config.max_reopens, rounds) do
         ask_instead(conn, body, ctx)
       else
-        with {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, {stage, assignee}),
-             do: give_all(conn, ctx, child, assignee, grants, event)
+        case hold_grants(conn, ctx, body, grants, assignee) do
+          :pass ->
+            with {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, {stage, assignee}),
+                 do: give_all(conn, ctx, child, assignee, grants, event)
+
+          {:held, event} ->
+            {:ok, [event]}
+
+          {:error, _reason} = error ->
+            error
+        end
       end
     end
   end
@@ -193,6 +202,17 @@ defmodule Omunculus.Store.Actions.Sequence do
       end)
     end
   end
+
+  defp hold_grants(_conn, _ctx, _body, [], _assignee), do: :pass
+
+  defp hold_grants(conn, ctx, body, _grants, assignee),
+    do:
+      Interception.hold(
+        conn,
+        ctx,
+        %{"type" => "reopen", "body" => body},
+        Participant.agent(assignee)
+      )
 
   defp give_all(conn, ctx, child, assignee, grants, event) do
     Enum.reduce_while(grants, {:ok, [event]}, fn grant, {:ok, events} ->

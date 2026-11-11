@@ -55,7 +55,7 @@ defmodule Omunculus.Store.View do
              """,
              [id]
            ) do
-      request_origins(conn, request)
+      with {:ok, request} <- request_origins(conn, request), do: with_interception(conn, request)
     end
   end
 
@@ -439,6 +439,33 @@ defmodule Omunculus.Store.View do
          events: events
        })}
     end
+  end
+
+  defp with_interception(_conn, nil), do: {:ok, nil}
+
+  defp with_interception(conn, request) do
+    with {:ok, review} <-
+           Query.one(conn, "SELECT * FROM interceptions WHERE request_id = ?", [request.id]) do
+      {:ok, Map.put(request, :interception, review && decode_interception(review))}
+    end
+  end
+
+  defp decode_interception(review) do
+    %{
+      rule: review.rule,
+      action: review.action,
+      summary: review.summary,
+      target: review.target && Jason.decode!(review.target),
+      reviewers: Jason.decode!(review.reviewers),
+      step: review.step,
+      passed: Jason.decode!(review.passed),
+      actor:
+        review.actor
+        |> Jason.decode!()
+        |> Map.new(fn {k, v} -> {String.to_existing_atom(k), v} end),
+      emit: Jason.decode!(review.emit),
+      next_id: review.next_id
+    }
   end
 
   defp request_origins(_conn, nil), do: {:ok, nil}

@@ -13,6 +13,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "reply" => ~w(request_id option body parts),
     "escalate" => ~w(reason origins to),
     "grant" => ~w(request_id name kind scope),
+    "hold" => ~w(tool args),
     "cancel" => ~w(request_id),
     "continue" => [],
     "end" => [],
@@ -75,6 +76,7 @@ defmodule Omunculus.Store.Actions.Contract do
   defp valid_value?("ids", ids), do: is_list(ids) and Enum.all?(ids, &is_binary/1)
   defp valid_value?(key, value) when key in ~w(origins parts), do: is_map(value)
   defp valid_value?("options", options), do: is_map(options)
+  defp valid_value?("args", args), do: is_map(args)
   defp valid_value?("works", works), do: is_list(works)
   defp valid_value?("attachments", list), do: is_list(list) and Enum.all?(list, &is_map/1)
 

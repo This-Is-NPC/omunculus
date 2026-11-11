@@ -61,8 +61,8 @@ assignee, or an arbiter already excluded as below), the action refuses with
 
 Each request exposes its `requester` and its `arbiter`, the accounts it came
 from and goes to. Nothing else about how it was addressed is stored.
-Interceptors, which turn an action into a request to a reviewing account, come
-in a later section of this design.
+Interceptors, which turn an action into a request to a reviewing account, are
+described under [Interception](#interception).
 
 Addressing chooses responsibility; it does not grant authority. Blocked
 grants and requests containing only grants the requester already has are
@@ -88,6 +88,62 @@ carrying the origins and their parts. The escalator's `to` overrides it. A
 request never goes to its requesters or to the participants already in the
 linked origins, and an origin never goes again to an agent that answered it
 with text alone (see below).
+
+## Interception
+
+`[[interceptors]]` ([config](config.md#interceptors)) hold an action of an
+agent until an account reviews it. Nothing is hidden: the harness does not
+perform the action, and writes a request instead.
+
+An action is held when it matches a rule, before it is performed:
+
+| `action` | What is held | `to` matches |
+| --- | --- | --- |
+| `ask` | A `request` (`ask`, `request_access`), once its arbiter is resolved. Escalations and requests the harness raises are not held. | The request's arbiter. |
+| `comment` | A comment on a work, request or inbox note. | On the root work, the requester; on another work, its assignee; on a request, its arbiter. |
+| `attach` | An attachment. | The requester. |
+| `grant` | A `grant` reply, or a `reopen` that gives names. | The agent that receives the grant. |
+| `tool` | The execution of the tool named by `tool`, before it runs, as a model call or as a step of a chain. | A tool has no target. |
+
+The harness then opens a request from the acting account to the first
+reviewer. Its reason says what would be done, quoting the text, for example
+`seller would ask test:client: "Can we ship on Friday?"`. Its options are
+`approve`, `edit` and `deny`. The acting run waits on it as on any request it
+raised: the work waits on the request, and an agent reviewer finds it in its
+inbox like any other. The model that made the call is told it is not done yet
+and who reviews it. A reviewer who is the acting agent itself is left out; a
+rule with no other reviewer does not apply.
+
+A review request has an `interception` in the API: `action`, the `summary` of
+what would be done, `step` and `of` for its place among the reviewers. Its
+`requester` is the actor and its `options` are the three above. The reply
+must name one:
+
+| Option | Effect |
+| --- | --- |
+| `approve` | The action is performed as the actor, as written. |
+| `edit` | The action is performed with the reply's body in place of its text: a question's reason, a comment's body, an attachment's note. A tool or a grant has no text: `edit` approves, and the body is a note. |
+| `deny` | Nothing is performed. The reply goes back to the actor as the answer to its request. |
+
+An approval writes a `release` event, then performs the action as the
+original actor: the events it writes are authored by that agent and carry
+`released_by`, the id of the review request that released them. A released
+tool is run by the harness right after the release, as that agent, under the
+execution policy a command tool gets outside a run; the ceiling is not asked
+again, since the agent had the tool when it called it. A released action is
+not held again by the rule that held it, but may match another rule, which
+opens its own review.
+
+With several `accounts`, the reviewers answer one after another. An approval
+or an edit that is not the last opens a new review request to the next
+reviewer, written from the actor, whose reason shows the action as the
+previous reviewer left it; the actor keeps waiting, now on that request. The
+action is performed when the last one approves. A `deny` at any reviewer
+stops it, and that reply is the actor's answer.
+
+The ceiling is unchanged. A `grant` is an action like another, so a rule can
+hold it; who may grant a sealed name or a permanent scope stays with the
+capabilities, as in [Forms and effects](#forms-and-effects).
 
 ## Forms and effects
 

@@ -72,6 +72,7 @@ defmodule Omunculus.Server.OpenAPITest do
       run_id: "r",
       work_id: "w",
       request_id: nil,
+      released_by: nil,
       inbox_id: nil,
       prompt_id: nil,
       comment_id: nil,

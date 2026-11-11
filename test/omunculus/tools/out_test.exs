@@ -51,6 +51,9 @@ defmodule Omunculus.Tools.OutTest do
 
   # Every reason the store can refuse a model's call with, by action.
   @refusals [
+    {:reply, :review_option},
+    {:interception, {:reviewer, "owner"}},
+    {:hold, :invalid_emit},
     {:reopen, {:only_person, "x"}},
     {:reopen, {:cannot_grant, "x"}},
     {:reopen, {:blocked, "x"}},
@@ -149,6 +152,11 @@ defmodule Omunculus.Tools.OutTest do
 
     assert Out.refused({:reply, {:unknown_option, "yes", ["a", "b"]}}) =~
              "give option as one of: a, b"
+  end
+
+  test "a held action says what waits and who reviews it" do
+    assert Out.held(~s(ask test:client: "Ship?"), "owner") ==
+             ~s(not done yet: it would ask test:client: "Ship?". It was sent to owner for review, and their answer comes back to you; do not do it again)
   end
 
   test "a value the agent gave is quoted" do

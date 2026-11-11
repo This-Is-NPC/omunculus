@@ -12,7 +12,7 @@ defmodule Omunculus.Store.SchemaTest do
       )
 
     assert Enum.map(rows, & &1.name) ==
-             ~w(command_receipts comments conversation_members conversations events inbox project_members prompts request_escalations requests runs works)
+             ~w(command_receipts comments conversation_members conversations events inbox interceptions project_members prompts request_escalations requests runs works)
   end
 
   test "foreign keys are enforced", %{conn: conn} do

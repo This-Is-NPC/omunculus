@@ -326,7 +326,7 @@ of calling hooks are not recovered.
 ```text
 open:     action work (root) or delegate (child); stage = first of the TOML
 open → waiting:  break, request (waiting = request, waiting_for = the request; on a work already waiting on children the child wait stays and the request waits beside it), delegate (waiting = child), or wait on a root (waiting = message)
-waiting → open:    reply to the request it waits on (a child wait kept beside a request is not reopened by the reply: the work's agent runs by name on the answer and the work reopens when its children close), all its children done or cancelled, the last child a finished run opened to answer its pending request done or cancelled, or a child on break — same stage
+waiting → open:    reply to the request it waits on (a review approved with reviewers left does not reopen it: the wait moves to the next review request) (a child wait kept beside a request is not reopened by the reply: the work's agent runs by name on the answer and the work reopens when its children close), all its children done or cancelled, the last child a finished run opened to answer its pending request done or cancelled, or a child on break — same stage
 waiting → open:    send / prompt on a work waiting on a request, parked by break or waiting on a message — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or on a work in no workflow

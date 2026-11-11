@@ -297,7 +297,10 @@ to attach that.
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
 `attach`, `artifact`, `inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
-`continue`, `break`, `wait`, `reopen`, `retire`, `end`, `compact`, `comment.delete`. A `request`
+`continue`, `break`, `wait`, `reopen`, `retire`, `end`, `compact`, `comment.delete`, and `hold`, which the
+harness writes to open the review of a tool call an
+[interceptor](requests.md#interception) holds and a tool's own emit does not
+need. A `request`
 carries a `reason` and `options`, a map from option name to a list of
 `{name, args}` tool calls. Options made only of `grant` calls whose
 names the run already has do not open a row — the output is

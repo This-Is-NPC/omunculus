@@ -17,7 +17,7 @@ defmodule Omunculus.Store.Actions.Requests do
 
   alias Omunculus.{Ceiling, Config, Id, Participant}
   alias Omunculus.Store.Actions.{Contract, Helpers}
-  alias Omunculus.Store.{Destination, Events, Query, View}
+  alias Omunculus.Store.{Destination, Events, Interception, Query, View}
   alias Omunculus.Tool.Invoke
 
   @scopes ~w(agent depth stage workspace)
@@ -32,7 +32,8 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, participant} <- Participant.from_context(ctx),
          :ok <- classify_options(conn, run, options),
          {:ok, arbiter, arbiter_work_id} <-
-           Destination.resolve(conn, ctx, run, work, participant, body["to"], []) do
+           Destination.resolve(conn, ctx, run, work, participant, body["to"], []),
+         :pass <- Interception.hold(conn, ctx, %{"type" => "request", "body" => body}, arbiter) do
       create(
         conn,
         ctx,
@@ -45,6 +46,9 @@ defmodule Omunculus.Store.Actions.Requests do
         arbiter_work_id,
         not waiting_on_children?(work)
       )
+    else
+      {:held, event} -> {:ok, event}
+      {:error, _reason} = error -> error
     end
   end
 
@@ -96,11 +100,14 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, request} <- Helpers.fetch_request(:reply, conn, body["request_id"]),
          :ok <- Omunculus.RequestOptions.validate(request, body, linked?),
          :ok <- Helpers.ensure_text(:reply, body, "body"),
+         :ok <- Interception.validate_reply(request, body),
          :ok <- Omunculus.RequestOptions.authorize(request, body, ctx.author == "human"),
          :ok <- if(linked?, do: :ok, else: authorize_reply(request, ctx)),
          {:ok, events} <- apply_reply(conn, ctx, request, body),
-         {:ok, returned} <- return_parts(conn, request, body, ctx) do
-      {:ok, events ++ returned}
+         {:ok, returned} <- return_parts(conn, request, body, ctx),
+         {:ok, settled} <- Interception.settle(conn, ctx, request, body),
+         :ok <- reopen_requester(conn, request) do
+      {:ok, events ++ returned ++ settled}
     end
   end
 
@@ -172,18 +179,23 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp create(
-         conn,
-         ctx,
-         run,
-         work,
-         participant,
-         reason,
-         options,
-         arbiter,
-         arbiter_work_id,
-         park?
-       ) do
+  @doc """
+  Opens a request from `participant` to `arbiter`, with `extra` fields in
+  the event's body, and parks the work on it when `park?`.
+  """
+  def create(
+        conn,
+        ctx,
+        run,
+        work,
+        participant,
+        reason,
+        options,
+        arbiter,
+        arbiter_work_id,
+        park?,
+        extra \\ %{}
+      ) do
     request_id = Id.new()
     comment_id = Id.new()
 
@@ -196,6 +208,8 @@ defmodule Omunculus.Store.Actions.Requests do
       workflow: work && work.workflow,
       stage: work && work.stage
     }
+
+    body = Map.merge(body, extra)
 
     with {:ok, event} <-
            Events.append(conn, %{
@@ -230,8 +244,9 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp waiting_on_children?(%{state: "waiting", waiting: "child"}), do: true
-  defp waiting_on_children?(_work), do: false
+  @doc false
+  def waiting_on_children?(%{state: "waiting", waiting: "child"}), do: true
+  def waiting_on_children?(_work), do: false
 
   defp mark_waiting(_conn, nil, _request_id, _participant), do: :ok
 
@@ -358,8 +373,7 @@ defmodule Omunculus.Store.Actions.Requests do
              ctx
            ),
          :ok <-
-           Query.exec(conn, "UPDATE requests SET status = 'closed' WHERE id = ?", [request.id]),
-         :ok <- reopen_requester(conn, request) do
+           Query.exec(conn, "UPDATE requests SET status = 'closed' WHERE id = ?", [request.id]) do
       {:ok, [event]}
     end
   end
@@ -415,6 +429,13 @@ defmodule Omunculus.Store.Actions.Requests do
          :ok <- ensure_scope(body["scope"], ctx),
          {:ok, depth} <- run_depth(conn, request.run_id),
          :ok <- authorize_grant(conn, request, body, ctx),
+         :pass <-
+           Interception.hold(
+             conn,
+             ctx,
+             %{"type" => "grant", "body" => body},
+             Jason.decode!(request.requester)
+           ),
          {:ok, work} <- Helpers.fetch_work(conn, request.work_id),
          :ok <- grant_work(conn, work, body["name"], body["scope"]) do
       grant_event(conn, ctx, work, request.id, %{
@@ -424,6 +445,9 @@ defmodule Omunculus.Store.Actions.Requests do
         depth: depth,
         scope: body["scope"]
       })
+    else
+      {:held, event} -> {:ok, event}
+      {:error, _reason} = error -> error
     end
   end
 

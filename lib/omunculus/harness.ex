@@ -40,6 +40,8 @@ defmodule Omunculus.Harness do
     Config,
     ConversationRoot,
     Cycle,
+    Interceptors,
+    Participant,
     Project,
     Secrets,
     Skills,
@@ -154,10 +156,42 @@ defmodule Omunculus.Harness do
            }),
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
+         {:ok, released} <- run_released(project, events),
+         events = events ++ released,
          {:ok, hook_events} <-
            maybe_react(project, events, [], Map.get(ctx, :execution), Map.get(ctx, :prepared)) do
       {:ok, out, events ++ hook_events}
     end
+  end
+
+  # A tool a review released runs now, as the agent whose call it held.
+  defp run_released(project, events) do
+    events
+    |> Enum.filter(&(&1.type == "release"))
+    |> Enum.map(&{&1, Jason.decode!(&1.body)})
+    |> Enum.filter(fn {_event, body} -> is_binary(body["tool"]) end)
+    |> Enum.reduce_while({:ok, []}, fn {event, body}, {:ok, acc} ->
+      with {:ok, request} <- Store.view(project.conn, "request", event.request_id),
+           actor = request.interception.actor,
+           ctx = %{
+             trigger: "model",
+             run_id: actor.run_id,
+             author: "agent",
+             agent: actor.agent,
+             issuer: Map.get(actor, :issuer),
+             subject: Map.get(actor, :subject),
+             origin_issuer: Map.get(actor, :origin_issuer),
+             origin_subject: Map.get(actor, :origin_subject),
+             conversation_id: Map.get(actor, :conversation_id),
+             released_by: event.request_id,
+             passed: body["passed"]
+           },
+           {:ok, _out, released} <- dispatch(project, body["tool"], body["args"], ctx) do
+        {:cont, {:ok, acc ++ released}}
+      else
+        error -> {:halt, error}
+      end
+    end)
   end
 
   @doc """
@@ -631,7 +665,9 @@ defmodule Omunculus.Harness do
       config: config,
       groups: Catalog.groups(catalog),
       request_id: Map.get(ctx, :request_id),
-      inbox_id: Map.get(ctx, :inbox_id)
+      inbox_id: Map.get(ctx, :inbox_id),
+      released_by: Map.get(ctx, :released_by),
+      passed: Map.get(ctx, :passed, [])
     }
 
   # Where a call's views start, and the values the harness computes for it.
@@ -700,15 +736,21 @@ defmodule Omunculus.Harness do
     }
 
     with {:ok, before} <- snapshot(env),
-         {:ok, out} <- invoke(env, manifest, args) do
+         {:ok, out} <- invoke_or_hold(env, manifest, args) do
       {out, calls} =
-        case chain(env, manifest, out, [manifest.name], [call_entry(manifest, args, out, nil)]) do
-          {:ok, calls} ->
-            {out, calls}
+        case out do
+          {:held, held} ->
+            {held, [call_entry(manifest, args, held, nil)]}
 
-          {:error, {:chain, name, reason}} ->
-            failed = %{out | ok: false, output: Out.chain_failed(name, reason)}
-            {failed, [call_entry(manifest, args, failed, nil)]}
+          out ->
+            case chain(env, manifest, out, [manifest.name], [call_entry(manifest, args, out, nil)]) do
+              {:ok, calls} ->
+                {out, calls}
+
+              {:error, {:chain, name, reason}} ->
+                failed = %{out | ok: false, output: Out.chain_failed(name, reason)}
+                {failed, [call_entry(manifest, args, failed, nil)]}
+            end
         end
 
       store_ctx = store_ctx(ctx, work_id, config, catalog)
@@ -716,7 +758,7 @@ defmodule Omunculus.Harness do
       with {:ok, changes} <- changed(env, before) do
         case Store.record_tools(project.conn, ctx.run_id, with_changes(calls, changes), store_ctx) do
           {:ok, events} ->
-            {:ok, out, events}
+            {:ok, noted(out, events, ctx.run_id), events}
 
           # A model's call the store refuses is recorded as failed, with why,
           # and writes none of its emits: the model reads why and goes on.
@@ -788,6 +830,67 @@ defmodule Omunculus.Harness do
   defp with_changes([{call, emits} | steps], changes),
     do: [{Map.put(call, :changes, changes), emits} | steps]
 
+  # A call a rule holds is not run: its emit opens the review.
+  defp invoke_or_hold(env, manifest, args) do
+    case held(env, manifest) do
+      nil ->
+        invoke(env, manifest, args)
+
+      _rule ->
+        {:ok,
+         {:held,
+          %{
+            ok: true,
+            output: "",
+            emit: [%{"type" => "hold", "body" => %{"tool" => manifest.name, "args" => args}}],
+            chain: [],
+            instructions: "",
+            session: nil
+          }}}
+    end
+  end
+
+  defp held(
+         %{ctx: %{author: "agent", trigger: trigger} = ctx} = env,
+         %Manifest{kind: "tool"} = manifest
+       )
+       when trigger in ["model", "chain"] do
+    if Interceptors.any?(env.config, "tool") do
+      {:ok, work} = fetch_work(env.project, env.work_id)
+
+      Interceptors.find(
+        env.config,
+        "tool",
+        ctx.agent,
+        %{tool: manifest.name, workflow: work && work.workflow, stage: work && work.stage},
+        Map.get(ctx, :passed, [])
+      )
+    end
+  end
+
+  defp held(_env, _manifest), do: nil
+
+  # What the model reads of a call that waited for a review.
+  defp noted(out, events, run_id) do
+    Enum.find_value(events, out, fn
+      %{type: "request", run_id: ^run_id, body: body} ->
+        case Jason.decode!(body) do
+          %{"interception" => %{"summary" => summary}, "arbiter" => arbiter} ->
+            %{
+              out
+              | output:
+                  String.trim(out.output <> "\n" <> Out.held(summary, Participant.label(arbiter)))
+            }
+
+          _plain ->
+            nil
+        end
+
+      _other ->
+        nil
+    end)
+  end
+
   defp invoke(env, manifest, args) do
     with {:ok, execution} <-
            execution_context(
@@ -850,15 +953,22 @@ defmodule Omunculus.Harness do
          {:ok, manifest} <- chain_manifest(env.catalog, name),
          :ok <- chain_check(name, Manifest.triggered_by?(manifest, "chain"), :not_triggered),
          :ok <- chain_check(name, run_has?(env, name), :not_have),
-         {:ok, out} <- chain_invoke(step_env, manifest, args),
-         :ok <- chain_check(name, out.ok, {:failed, out.output}) do
-      chain(
-        step_env,
-        manifest,
-        out,
-        [name | active],
-        calls ++ [call_entry(manifest, args, out, parent.name)]
-      )
+         {:ok, result} <- chain_invoke(step_env, manifest, args) do
+      case result do
+        {:held, held} ->
+          {:ok, calls ++ [call_entry(manifest, args, held, parent.name)]}
+
+        out ->
+          with :ok <- chain_check(name, out.ok, {:failed, out.output}) do
+            chain(
+              step_env,
+              manifest,
+              out,
+              [name | active],
+              calls ++ [call_entry(manifest, args, out, parent.name)]
+            )
+          end
+      end
     end
   end
 
@@ -875,7 +985,7 @@ defmodule Omunculus.Harness do
   end
 
   defp chain_invoke(env, manifest, args) do
-    case invoke(env, manifest, args) do
+    case invoke_or_hold(env, manifest, args) do
       {:ok, _out} = ok -> ok
       {:error, reason} -> {:error, {:chain, manifest.name, reason}}
     end
@@ -1076,6 +1186,10 @@ defmodule Omunculus.Harness do
 
       cond do
         requester["kind"] == "human" ->
+          {:ok, []}
+
+        # An approval handed on to the next reviewer: the requester still waits.
+        request.interception && request.interception.next_id ->
           {:ok, []}
 
         work && work.state in ~w(done cancelled) ->

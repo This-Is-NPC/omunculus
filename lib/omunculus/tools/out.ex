@@ -401,6 +401,14 @@ defmodule Omunculus.Tools.Out do
   def refused({:reply, :not_arbiter}),
     do: "refused: that request is not addressed to you; reply only to the requests you received"
 
+  def refused({:reply, :review_option}),
+    do:
+      "refused: this request is a review of an action: give option as approve, edit or deny, with your decision in body"
+
+  def refused({:interception, {:reviewer, name}}),
+    do:
+      "refused: this needs the review of #{inspect(name)}, who cannot be reached from this work; the review is configured wrongly, so ask the person in plain text"
+
   def refused({:reopen, {:unknown_stage, stage}}),
     do:
       "refused: #{inspect(stage)} is not a stage of that work's workflow: name one of its stages as it is written there"
@@ -516,6 +524,12 @@ defmodule Omunculus.Tools.Out do
       "refused: no one can grant #{inspect(name)} to that agent: it is not in the catalog, or the configuration denies it"
 
   def refused(reason), do: "refused: #{inspect(reason)}"
+
+  @doc "What a model reads when an action of its own waits for a review."
+  @spec held(String.t(), String.t()) :: String.t()
+  def held(summary, reviewer),
+    do:
+      "not done yet: it would #{summary}. It was sent to #{reviewer} for review, and their answer comes back to you; do not do it again"
 
   @spec chain_failed(String.t(), term) :: String.t()
   def chain_failed(name, reason), do: "chain failed at #{name}: #{chain_reason(reason)}"

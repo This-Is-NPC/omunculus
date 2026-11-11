@@ -235,6 +235,7 @@ defmodule Omunculus.Store.Runs do
              work_id: ctx.work_id,
              request_id: Map.get(ctx, :request_id),
              inbox_id: Map.get(ctx, :inbox_id),
+             released_by: Map.get(ctx, :released_by),
              body: Jason.encode!(call)
            }),
          {:ok, emit_events} <- Actions.run(conn, emits, Map.put(ctx, :tool, call.name)) do

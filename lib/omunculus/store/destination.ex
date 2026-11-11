@@ -21,6 +21,21 @@ defmodule Omunculus.Store.Destination do
     end
   end
 
+  @doc "The identity of the conversation's requester for the action of `ctx`, or nil."
+  @spec requester_identity(map, map) :: map | nil
+  def requester_identity(conn, ctx) do
+    with {:ok, run} <- optional(conn, "run", Map.get(ctx, :run_id)),
+         {:ok, work} <- optional(conn, "work", Map.get(ctx, :work_id)),
+         {:ok, identity, _work_id} <- requester(conn, ctx, run, work) do
+      identity
+    else
+      _none -> nil
+    end
+  end
+
+  defp optional(_conn, _view, nil), do: {:ok, nil}
+  defp optional(conn, view, id), do: View.view(conn, view, id)
+
   defp destination(conn, ctx, run, work, nil), do: giver(conn, ctx, run, work)
 
   defp destination(conn, ctx, _run, work, name) do

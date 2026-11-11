@@ -25,9 +25,9 @@ defmodule Omunculus.Store.Actions do
   `compact` and `comment.delete` to `Actions.Comments`.
   """
 
-  alias Omunculus.{Artifacts, Attachments, Ceiling, Config, Id}
+  alias Omunculus.{Artifacts, Attachments, Ceiling, Config, Id, Participant}
   alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Requests, Sequence}
-  alias Omunculus.Store.{Events, Query, View}
+  alias Omunculus.Store.{Destination, Events, Interception, Query, View}
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
 
@@ -78,6 +78,9 @@ defmodule Omunculus.Store.Actions do
   defp dispatch(conn, %{"type" => "grant"} = emit, ctx),
     do: Requests.grant(conn, Map.get(emit, "body", %{}), ctx)
 
+  defp dispatch(conn, %{"type" => "hold"} = emit, ctx),
+    do: Interception.hold_tool(conn, Map.get(emit, "body", %{}), ctx)
+
   defp dispatch(conn, %{"type" => "cancel"} = emit, ctx),
     do: Sequence.cancel(conn, Map.get(emit, "body", %{}), ctx)
 
@@ -121,9 +124,37 @@ defmodule Omunculus.Store.Actions do
     with :ok <- Helpers.ensure_text(:comment, body, "body"),
          :ok <- ensure_target(targets),
          :ok <- Helpers.tag_error(:comment, Helpers.ensure_exist(conn, Map.to_list(targets))) do
-      write_comment(conn, body, targets, ctx)
+      case Interception.hold(
+             conn,
+             ctx,
+             %{"type" => "comment", "body" => body},
+             fn -> comment_target(conn, ctx, targets) end
+           ) do
+        :pass -> write_comment(conn, body, targets, ctx)
+        {:held, event} -> {:ok, event}
+        {:error, _reason} = error -> error
+      end
     end
   end
+
+  # Who a comment reaches: the requester on the root work, else the work's
+  # assignee; a request's arbiter; nobody for an inbox note.
+  defp comment_target(conn, ctx, %{works: id}) when is_binary(id) do
+    case View.view(conn, "work", id) do
+      {:ok, %{parent_id: nil}} -> Destination.requester_identity(conn, ctx)
+      {:ok, %{assignee: agent}} when is_binary(agent) -> Participant.agent(agent)
+      _none -> nil
+    end
+  end
+
+  defp comment_target(conn, _ctx, %{requests: id}) when is_binary(id) do
+    case View.view(conn, "request", id) do
+      {:ok, %{arbiter: arbiter}} -> Jason.decode!(arbiter)
+      _none -> nil
+    end
+  end
+
+  defp comment_target(_conn, _ctx, _targets), do: nil
 
   defp ensure_target(targets) do
     if Enum.any?(targets, fn {_table, id} -> not is_nil(id) end) do
@@ -168,7 +199,22 @@ defmodule Omunculus.Store.Actions do
       {run_id, %{"attachments" => [_ | _] = list}} ->
         with {:ok, checked} <- Attachments.check(ctx.config.store, list) do
           body = Map.put(body, "attachments", checked)
-          Events.append(conn, %{type: "attach", run_id: run_id, body: Jason.encode!(body)})
+
+          case Interception.hold(
+                 conn,
+                 ctx,
+                 %{"type" => "attach", "body" => body},
+                 fn -> Destination.requester_identity(conn, ctx) end
+               ) do
+            :pass ->
+              Events.append(conn, %{type: "attach", run_id: run_id, body: Jason.encode!(body)})
+
+            {:held, event} ->
+              {:ok, event}
+
+            {:error, _reason} = error ->
+              error
+          end
         end
 
       _invalid ->
