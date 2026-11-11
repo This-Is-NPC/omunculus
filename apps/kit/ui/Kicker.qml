@@ -9,6 +9,9 @@ Item {
   Label {
     id: label
     anchors { left: parent.left; bottom: parent.bottom; bottomMargin: Theme.space.line }
+    // Never wider than its row: a long title is cut, not run off the edge.
+    width: Math.min(implicitWidth, kicker.width)
+    elide: Text.ElideRight
     text: kicker.text.toUpperCase()
     color: kicker.tone
     font.pixelSize: 10
@@ -16,6 +19,7 @@ Item {
   }
   Rectangle {
     anchors { left: label.right; leftMargin: Theme.space.gap; right: parent.right; verticalCenter: label.verticalCenter }
+    visible: width > 0
     height: 1
     color: Theme.line
   }

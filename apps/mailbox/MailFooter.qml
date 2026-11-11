@@ -28,7 +28,13 @@ RowLayout {
   }
   FilePicker { id: files; Layout.fillWidth: true; visible: footer.attachable && paths.length > 0 }
   Item { Layout.fillWidth: true }
-  Chip { text: "DISCARD"; onClicked: footer.discarded() }
+  TraceButton {
+    dense: true
+    role: "action"
+    icon: "close"
+    text: "DISCARD"
+    onClicked: footer.discarded()
+  }
   TraceButton {
     dense: true
     role: "primary"

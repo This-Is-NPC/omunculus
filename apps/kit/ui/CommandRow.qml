@@ -11,7 +11,8 @@ import "Breakpoints.js" as Breakpoints
 // the short names still too wide, every action but the main one shows only its
 // icon, its name in the tip. With `overflows`, the actions that do not fit even
 // so leave the row, the lowest ranked first, a group as one, for `overflow`,
-// whose holder takes `reserve` of the room. The main action never leaves.
+// whose holder takes `reserve` of the room. The main action never leaves, and
+// with no room for its short name it is only its icon.
 Item {
   id: row
 
@@ -157,7 +158,11 @@ Item {
         model: run.modelData
         delegate: TraceButton {
           required property var modelData
-          readonly property bool iconOnly: row.iconOnly(modelData)
+          // The main action never leaves; with no room for even its short
+          // name it shows its icon, rather than a name cut to a dash.
+          readonly property bool crowded: row.isMain(modelData) && !!modelData.icon && row.measured
+            && (row.widths[row.commands.indexOf(modelData)] || { brief: 0 }).brief > row.room - (row.overflow.length > 0 ? row.reserve : 0)
+          readonly property bool iconOnly: row.iconOnly(modelData) || crowded
           dense: true
           implicitHeight: row.control
           role: modelData.group ? (modelData.checked ? "primary" : "action")

@@ -9,7 +9,7 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 // (from, to, date), its text, the files it carries, each a chip that saves
 // the file to the downloads directory and opens it, and Reply, Reply all and
 // Forward. The latest message's Reply is the screen's solid action while no
-// reply is being written.
+// reply is being written, unless that message is your own.
 SurfaceFrame {
   id: mail
 
@@ -22,6 +22,9 @@ SurfaceFrame {
   property bool replying: false
 
   readonly property bool agent: !message.mine
+  // The latest message is the one the screen's solid action answers, unless it
+  // is your own.
+  readonly property bool answerable: latest && !replying && !message.mine
 
   signal toggled()
   signal replyTo()
@@ -39,7 +42,7 @@ SurfaceFrame {
 
     Item {
       Layout.fillWidth: true
-      implicitHeight: head.implicitHeight
+      implicitHeight: Math.max(head.implicitHeight, Breakpoints.target(Window.width))
       MouseArea {
         anchors.fill: parent
         anchors.margins: -6
@@ -126,8 +129,8 @@ SurfaceFrame {
       spacing: 8
       TraceButton {
         dense: true
-        role: mail.latest && !mail.replying ? "primary" : "action"
-        filled: mail.latest && !mail.replying
+        role: mail.answerable ? "primary" : "action"
+        filled: mail.answerable
         icon: "enter"
         text: "REPLY"
         tip: "reply  ctrl+r"

@@ -10,7 +10,7 @@ defmodule Omunculus.GuiBreakpointsTest do
     expect(Breakpoints.tight(420), false, "tight 420");
     [[360, 8], [420, 10], [699, 10], [700, 16], [1099, 16], [1100, 20]]
       .forEach(([width, margin]) => expect(Breakpoints.margin(width), margin, "margin " + width));
-    [[699, 32], [700, 28], [1280, 28]].forEach(([width, target]) => expect(Breakpoints.target(width), target, "target " + width));
+    [[699, 44], [700, 28], [1280, 28]].forEach(([width, target]) => expect(Breakpoints.target(width), target, "target " + width));
     [[699, 12], [700, 16]].forEach(([width, indent]) => expect(Breakpoints.indent(width), indent, "indent " + width));
     """
 

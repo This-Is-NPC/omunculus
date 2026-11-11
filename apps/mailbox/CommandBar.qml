@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
+import "kit/ui/Breakpoints.js" as Breakpoints
 
 // CommandBar is the mailbox's one row of actions, under the masthead, as a
 // mail client keeps them, ranked: on the list COMPOSE is the solid action,
@@ -23,7 +24,7 @@ Item {
 
   signal compose()
 
-  implicitHeight: 40
+  implicitHeight: Math.max(40, Breakpoints.target(Window.width) + 12)
 
   readonly property var newMessage: ({ text: "COMPOSE", icon: "plus", tip: "new message  ctrl+n", enabled: Mail.connected, run: () => bar.compose() })
   // The actions of where you are, in order of importance.

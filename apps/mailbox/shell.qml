@@ -136,12 +136,12 @@ ShellRoot {
                 Layout.fillWidth: true
                 visible: window.narrow
                 Layout.topMargin: 6
-                spacing: 10
-                FolderTab { rail: true; named: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
-                FolderTab { rail: true; named: true; name: "sent"; icon: "send"; label: "Sent" }
-                FolderTab { rail: true; named: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
-                FolderTab { rail: true; named: true; name: "pending"; icon: "spark"; label: "Pending"; count: Mail.reviews.length }
-                FolderTab { rail: true; named: true; name: "archive"; icon: "folder"; label: "Archive" }
+                spacing: 2
+                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
+                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "sent"; icon: "send"; label: "Sent" }
+                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
+                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "pending"; icon: "spark"; label: "Pending"; count: Mail.reviews.length }
+                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "archive"; icon: "folder"; label: "Archive" }
               }
               Item { id: narrowSearch; visible: window.narrow; Layout.fillWidth: true; Layout.preferredHeight: 30 }
               ThreadList {

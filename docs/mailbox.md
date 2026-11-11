@@ -83,7 +83,8 @@ capitalised: `Front-desk <front-desk@agency>`.
   archived returns to the inbox.
 
 The folders show their names, with the unread count on Inbox and the review count on Pending. Ctrl+B folds them
-to icons, and a window narrower than 760 px shows icons only.
+to icons, and a window narrower than 760 px shows icons only, in one row that
+shows every folder without scrolling, the current one keeping its name.
 
 Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
 list. A row shows who wrote ("Front-desk, me (5)") and the time, then the subject
@@ -211,7 +212,11 @@ name; Esc clears it.
 | Esc | close the reply, then the thread |
 
 A narrow window shows one pane at a time; the thread's head has a way back to
-the list.
+the list. Under 700 px every button and icon button is 44 px tall (`Theme.size.control`),
+and a link shows no address box, which only a pointer reads; wider, the box sits
+under the pointer's line, inside the window. Only the latest message from the
+agent has the filled REPLY. A thread's participants name everyone who wrote
+in it.
 
 IPC (`quickshell ipc --path apps/mailbox call mailbox <function>`): `compose`,
 `open <key>`, `search <query>`, `fold folders|list` and `reply`.

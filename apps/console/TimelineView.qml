@@ -483,7 +483,8 @@ Item {
       Kicker {
         id: mark
         width: parent.width
-        text: "Start of the conversation" + (began !== "" ? Theme.type.meta.separator + began : "")
+        // Short where the line would not fit.
+        text: (width < 460 ? "Started" : "Start of the conversation") + (began !== "" ? Theme.type.meta.separator + began : "")
       }
     }
   }

@@ -8,8 +8,9 @@ const narrowBelow = 700, wideFrom = 1100, tightBelow = 420;
 function size(width) { return width >= wideFrom ? "wide" : width >= narrowBelow ? "medium" : "narrow"; }
 function tight(width) { return width < tightBelow; }
 function margin(width) { return width < tightBelow ? 8 : width < narrowBelow ? 10 : width < wideFrom ? 16 : 20; }
-// The height of a dense control: taller where it is touched rather than pointed at.
-function target(width) { return width < narrowBelow ? 32 : 28; }
+// The height of a dense control: taller where it is touched rather than
+// pointed at, the 44 px of `Theme.size.control`.
+function target(width) { return width < narrowBelow ? 44 : 28; }
 function indent(width) { return width < narrowBelow ? 12 : 16; }
 
 // The most a control may be wide inside `parent`: the parent's width, unless

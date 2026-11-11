@@ -18,6 +18,9 @@ Singleton {
   })
   // The hint on screen, so that only one shows at a time.
   property var shownHint: null
+  // Every hint closes and stays closed until its pointer leaves and comes
+  // back, as when a dialog closes under a pointer that did not move.
+  signal hintsDismissed()
   property string mode: "dark"
   property var palette: ({})
   property color background: fallback.background

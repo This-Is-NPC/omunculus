@@ -15,6 +15,9 @@ C.ToolTip {
   id: hint
 
   property bool active: false
+  // The pointer's y within the control, when the hint belongs under that line
+  // of it (a link in a paragraph) rather than under the whole control; -1 else.
+  property real below: -1
   // Closed by a press or Esc until the pointer or focus leaves.
   property bool dismissed: false
   readonly property bool wanted: active && !dismissed && said.length > 0 && parent.visible && parent.enabled
@@ -35,7 +38,9 @@ C.ToolTip {
   readonly property string said: narrow ? text.replace(/ {2,}\S.*$/, "") : text
   // Under its control's left edge, moved to stay 12 px inside the window.
   x: Math.max(12, Math.min(left, overlay ? overlay.width - 12 - width : left)) - left
-  y: parent.height + 6
+  // Under the control, or under the line, kept inside the window.
+  readonly property real top: visible && overlay && parent ? parent.mapToItem(overlay, 0, 0).y : 0
+  y: below >= 0 ? Math.max(0, Math.min(below + 22, overlay ? overlay.height - 12 - height - top : below + 22)) : parent.height + 6
   visible: wanted
   onActiveChanged: if (!active) dismissed = false
   onVisibleChanged: {
@@ -43,6 +48,10 @@ C.ToolTip {
       Theme.shownHint = hint
     else if (Theme.shownHint === hint)
       Theme.shownHint = null
+  }
+  Connections {
+    target: Theme
+    function onHintsDismissed() { hint.dismiss() }
   }
   Component.onDestruction: if (Theme.shownHint === hint) Theme.shownHint = null
 

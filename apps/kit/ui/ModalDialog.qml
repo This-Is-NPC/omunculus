@@ -21,6 +21,10 @@ C.Popup {
   width: Math.min(parent.width - (parent.width < 480 ? 16 : 48), maxWidth)
   onAboutToShow: openedTop = -1
   onOpened: openedTop = y
+  // A hint under a pointer that did not move must not come back: now, and once
+  // the pointer's hover is delivered again.
+  onClosed: { Theme.hintsDismissed(); quiet.restart() }
+  Timer { id: quiet; interval: 250; onTriggered: Theme.hintsDismissed() }
   modal: true
   focus: true
   FocusKeeper { popup: modal }
