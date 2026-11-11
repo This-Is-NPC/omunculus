@@ -1,0 +1,23 @@
+name = "wait_client"
+kind = "tool"
+triggers = ["model"]
+description = "Parks the engagement until the client's next message reopens it, with the report as its comment: the project manager's wait. In stage sale it is refused until the seller's sale work broke because the client will decide later; before that, the sale is handed to the seller with work."
+tags = ["sales", "sequence"]
+command = ["./run"]
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["report"]
+
+[parameters.properties.report]
+type = "string"
+description = "An internal report for the front desk, plain: what the client is to decide, and that they can write whenever they want."
+
+[views.work]
+source = "works"
+
+[views.children]
+source = "works"
+relation = "children"

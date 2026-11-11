@@ -230,6 +230,57 @@ defmodule Omunculus.SalesDeskProposalTest do
     end
   end
 
+  describe "wait_client" do
+    test "the manifest loads and ends the run" do
+      catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
+      assert %{"wait_client" => %{then: ["end"]}} = catalog
+    end
+
+    defp wait(stage, children, root) do
+      view = %{"work" => %{"id" => "w1", "stage" => stage}, "children" => children}
+      call("wait_client", %{"report" => "The client will decide later."}, view, root)
+    end
+
+    defp sale(state, waiting \\ nil),
+      do: %{"workflow" => "sale", "assignee" => "seller", "state" => state, "waiting" => waiting}
+
+    test "at sale it is refused until the seller's work broke, guiding the manager", %{root: root} do
+      assert %{
+               "ok" => false,
+               "output" => "wait refused at stage sale: no sale work exists" <> guide
+             } =
+               wait("sale", [], root)
+
+      assert guide =~ "call work with one work naming the workflow sale"
+
+      for child <- [
+            sale("open"),
+            sale("waiting", "child"),
+            sale("waiting", "request"),
+            sale("done")
+          ] do
+        assert %{
+                 "ok" => false,
+                 "output" =>
+                   "wait refused at stage sale: the seller's sale work is not broken" <> _
+               } =
+                 wait("sale", [child], root)
+      end
+
+      assert %{
+               "ok" => true,
+               "emit" => [
+                 %{"type" => "wait", "body" => %{"body" => "The client will decide later."}}
+               ]
+             } =
+               wait("sale", [sale("waiting")], root)
+    end
+
+    test "other stages wait freely", %{root: root} do
+      assert %{"ok" => true, "emit" => [%{"type" => "wait"}]} = wait("design", [], root)
+    end
+  end
+
   describe "next_stage" do
     defp stage(stage, view, root) do
       view = Map.put(view, "work", %{"id" => "w1", "stage" => stage})
@@ -381,7 +432,10 @@ defmodule Omunculus.SalesDeskProposalTest do
 
       assessment = done.("administrator", "Assessment only, build nothing: pages")
       build = done.("administrator", "Build the site")
-      accepted = write(%{"delivery" => %{"address" => "http://h", "accepted" => "accepted"}}, %{}, root)
+
+      accepted =
+        write(%{"delivery" => %{"address" => "http://h", "accepted" => "accepted"}}, %{}, root)
+
       unaccepted = write(%{"client" => "Ana"}, %{}, root)
 
       assert %{"ok" => false, "output" => "stage build does not hold yet: hand the dev team" <> _} =

@@ -111,7 +111,7 @@ text a model writes beside a call is its own note, which the mailbox does
 not show ([the mailbox](../../docs/mailbox.md)). A client who answers a decision
 without making it, saying they will think the price over, has answered for
 now: the front desk passes their words down in text, the seller records them
-and breaks its work, and the project manager calls `wait`; their next
+and breaks its work, and the project manager calls `wait_client`, which the sale stage refuses until the seller has broken its work; their next
 message, forwarded by the front desk, resumes the sale. A client who refuses
 has decided: the seller marks the proposal `refused` and breaks, and the
 project manager closes the request.
