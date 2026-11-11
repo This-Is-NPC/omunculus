@@ -96,7 +96,12 @@ stages, all the project manager's:
    items are redone. The base item replaces the design preview's root
    `Dockerfile` and `deploy.toml` (app `design-<slug>`) with the site's own,
    and the reviews check it.
-4. `handover`: gives the client where the site is.
+4. `handover`: writes the production address, then tells the client the
+   site is live with an `ask` (options `works` and `problem`) that the front
+   desk escalates in the client's language, with the address and what is still
+   pending. `next_stage` is refused until the client answered `works`, so the
+   engagement never closes before they heard; `problem` goes back to the
+   project manager, who fixes it and asks again.
 
 `next_stage` is the tool both workflows move on with. It refuses until the
 stage holds, saying what is missing: after `qualify` the client's content;
@@ -106,7 +111,7 @@ work done with the proposal approved; after `design` an approved preview with
 its address, or a waiver with the client's own answer; after `build` a
 build done and the client's acceptance of the built site (`delivery.accepted`
 is the word `accepted`); after `handover`
-the production address.
+the production address and the client's `works` answer to the live notice.
 
 What reaches the client is only what the front desk addresses to them: its
 escalations, the documents it attaches and, when a result of the project

@@ -97,6 +97,9 @@ def run(call):
     elif stage == "handover":
         if filled(data, ["delivery.production"]):
             refuse(stage, "write the production address in delivery.production once the site is live")
+        cause = view.get("cause") or {}
+        if cause.get("type") != "reply" or body(cause).get("option") != "works":
+            refuse(stage, "tell the client the site is live: ask them, with ask, the options works and problem, giving the production address; call next_stage in the run their works answer opens")
 
     return "", [], [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}]
 

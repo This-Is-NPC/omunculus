@@ -550,7 +550,26 @@ defmodule Omunculus.SalesDeskProposalTest do
                stage("handover", view_after(accepted), root)
 
       live = write(%{"delivery" => %{"production" => "http://p"}}, %{}, root)
-      assert %{"ok" => true} = stage("handover", view_after(live), root)
+
+      assert %{
+               "ok" => false,
+               "output" => "stage handover does not hold yet: tell the client" <> _
+             } =
+               stage("handover", view_after(live), root)
+
+      reply = fn option -> %{"type" => "reply", "body" => ~s({"option":"#{option}"})} end
+
+      assert %{
+               "ok" => false,
+               "output" => "stage handover does not hold yet: tell the client" <> _
+             } =
+               stage("handover", Map.put(view_after(live), "cause", reply.("problem")), root)
+
+      assert %{"ok" => false, "output" => "stage handover does not hold yet: write the" <> _} =
+               stage("handover", Map.put(view_after(accepted), "cause", reply.("works")), root)
+
+      assert %{"ok" => true} =
+               stage("handover", Map.put(view_after(live), "cause", reply.("works")), root)
     end
 
     test "malformed data refuses instead of crashing", %{root: root} do
