@@ -5,14 +5,14 @@ team of *The Mythical Man-Month*, ch. 3: one surgeon designs and writes what
 matters, the others free them of the rest. The administrator asks until the
 request is clear and plans it, the surgeon builds each item of the plan with
 the helpers below, the copilot reviews each, and the clerk publishes the
-whole to homologation, then to production once the person grants `promote`.
+whole to homologation, then to production once the person approves the review of `promote`.
 
 | Agent | Depth | Role |
 |---|---|---|
 | administrator | 0 | talks with the person until the work is ready, plans it and hands down each item |
 | surgeon | 1 | builds each item of the plan, writing the code that matters |
 | copilot | 1, workflow only | reviews each item, independently of the surgeon, against its goal, the plan's checks and AGENTS.md; with a design, against its handoff; without one, against the scope |
-| clerk | 1, workflow only | publishes the whole to homologation, then to production once the person grants promote |
+| clerk | 1, workflow only | publishes the whole to homologation, then to production once the review of promote is approved |
 | toolsmith | 2 | mise, scripts, the means to check and publish |
 | tester | 2 | writes and runs the tests |
 | editor | 2 | README.md and docs/ |
@@ -206,7 +206,7 @@ operation's calls and that the answers stay neutral.
 a builder's `request_access` for it goes to its parent (the toolsmith's,
 tester's, editor's and language lawyer's to the surgeon, the surgeon's to
 the administrator), which holds `grant` and answers with the grant. Only
-a request routed to `owner` reaches the person. A tool the person's mise
+a request the project addresses to a person's account (`to`) reaches them. A tool the person's mise
 already installed needs no network: with `[execution] read` naming the
 mise installs folder and `[execution] variables` setting
 `MISE_SHARED_INSTALL_DIRS` to it, a command resolves the pinned version
@@ -219,10 +219,11 @@ with `mise link` (`mise link --force node@<version> /usr` for the
 A review sends back only a defect against the goal, the plan or the
 handoff, naming the item to fix; wording, taste and minor content issues are notes for the next pass. When the
 same item comes back from review twice with the same defect, the
-administrator asks the owner (`to = "owner"`) rather than reopening it
-again. Operational and internal decisions that must reach a human (a
-build that will not converge, a tool or login the machine lacks)
-use that route; the default route ends at the client.
+administrator asks whoever gave it the work rather than reopening it
+again. Operational and internal decisions (a build that will not converge,
+a tool or login the machine lacks) go the same way, with no `to`: the
+request reaches the account that gave the asker its work, up to the person
+who asked for the work.
 
 The names come from the root, so two projects publish apps of their
 own, and, with `[project] conversations`, so do two conversations of one
@@ -235,13 +236,30 @@ where it is published: `deploy_preview` has the preview environment build it and
 answers with the build's output when it fails, which the clerk brings
 back for the build to be fixed.
 
-`promote` is in the clerk's `human` list: only the person grants it, once
-they have seen the app in homologation. That grant is their approval of
-it, the only one: the administrator asks for none after the release. The
-clerk's request for it gives, written out, the homologation address
-`deploy_preview` gave, since those who pass it on know no other address of
-the built site; an answer in words without the grant is a question to the
-clerk, which asks again with the address.
+`promote` is in the clerk's tools. The project declares who reviews it with
+an interceptor on the tool ([config](../../docs/config.md#interceptors)); the
+review is the person's approval, the only one: the administrator asks for
+none after the release. Without the interceptor the clerk publishes to
+production with nobody's review, so declare it before importing the pack:
+
+```toml
+[accounts]
+owner = { kind = "human", issuer = "local", subject = "1000" }
+
+[[interceptors]]
+action = "tool"
+tool = "promote"
+workflow = "release"
+stage = "promote"
+accounts = ["owner"]
+```
+
+The clerk calls `promote` with `homologation`, written out: the address
+`deploy_preview` gave and what the person finds there. The review shows
+that argument and nothing else, since the reviewers know no other address of
+the built site. `approve` publishes; `deny` goes back to the clerk as an
+answer, and it breaks with the reason; an answer in words is a question to
+the clerk, which calls `promote` again with the address.
 
 `deploy_preview` concludes the stage `publish` the same way: once it
 publishes, it comments the homologation address and the commit on the
@@ -255,18 +273,11 @@ clerk's `break` saying why not; a project that composes its own
 
 Questions use `ask`. What only the machine's operator can settle — a
 tool, a login or a setting the machine lacks, as git's author identity —
-the administrator and the surgeon ask through the logical route `owner`,
-never toward whoever asked for the work, so the project configures it,
-for example (`harness_route` sends the harness's own requests the same way):
+the administrator and the surgeon ask with no `to`, so it reaches whoever
+gave the work: the person, or the project manager of a desk above, which
+decides or passes it up. Name an account with `to` to reach it directly.
 
-```toml
-[policy]
-harness_route = "owner"
-request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]
-```
-
-Replace its destination with the participant who runs the machine when
-that is not the conversation's origin. The administrator answers received
+The administrator answers received
 requests from the work goal, the plan and the answers it knows and
 escalates all remaining questions together, preserving named origins;
 returned text is distributed with `reply`. Requests preserve waits on

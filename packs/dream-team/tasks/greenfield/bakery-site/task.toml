@@ -2,14 +2,14 @@ scenario = "greenfield"
 critical = false
 configurations = ["dream-team"]
 deploy = true
-needs = ["sandbox.write", "promote"]
+needs = ["sandbox.write"]
 
 [expect]
 outcome = ["done"]
 
 [human]
 "sandbox.write" = "grant"
-"promote" = "grant"
+decision = "approve"
 
 [person]
 facts = """

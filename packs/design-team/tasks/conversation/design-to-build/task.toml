@@ -2,20 +2,19 @@ scenario = "conversation"
 critical = false
 configurations = ["agency"]
 deploy = true
-needs = ["sandbox.write", "promote"]
+needs = ["sandbox.write"]
 
 # The whole way from a vague request to a site in production: the seller
 # qualifies the client, the design team shows a preview and takes a
 # round of changes, the builders assess it, the client accepts the price,
 # the owner approves with ask, and the builders build and publish it, to
 # production once the client has accepted it in homologation and the owner
-# grants promote.
+# approves the review of promote.
 [expect]
 outcome = ["answer", "done"]
 
 [human]
 "sandbox.write" = "grant"
-"promote" = "grant"
 decision = "approve"
 
 [person]

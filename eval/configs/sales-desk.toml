@@ -23,3 +23,13 @@ key = "$OMUNCULUS_PRODUCTION_KEY"
 
 [policy]
 default_agent = "front-desk"
+
+# What goes to production is held for review: the project manager's, then the owner's. The eval's one person is
+# the owner, as well as the client (EquivalentExchange.Project adds the
+# account).
+[[interceptors]]
+action = "tool"
+tool = "promote"
+workflow = "release"
+stage = "promote"
+accounts = ["project-manager", "owner"]

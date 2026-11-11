@@ -5,7 +5,7 @@ system (`design/preview/system.css`: colours, fonts, type scale, spacing
 and components), a moodboard, and the wireframes and a mockup of each
 page in scope — and publishes it to homologation, where the
 project manager shows it to the client before anything is built. It builds no site: once the client
-and the owner approve, the builders work from its `design/handoff.md`.
+approves it, the builders work from its `design/handoff.md`.
 
 | Agent | Depth | Does |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ The design lead takes a work from the project manager, in one of three forms:
 - **A round.** The goal names the earlier design (title and id) and what
   the client asked to change. A page or feature outside the briefing's
   scope is not a round, and with the rounds used up the lead starts none,
-  unless the goal says the owner approved an extra round, which it then
+  unless the goal says an extra round was approved, which it then
   starts.
 - **An assessment.** The goal begins `Assessment only, build nothing:`. The
   lead answers it itself, never through the workflow `design`, in writing:
@@ -60,7 +60,7 @@ designer's depth and the design lead names it, so another team's workflow
 at that depth sits beside it. A briefing comes before any design, the
 moodboard and wireframes before the mockup, and the rounds of revision
 included are those `templates/design-brief.md` gives; a change of scope is
-not a round, and rounds beyond those are the owner's decision.
+not a round, and rounds beyond those are a decision above the team.
 
 A design round exists only before the build. In `page` and `accept`, a
 defect that comes from the approved design is sent back as a defect of the

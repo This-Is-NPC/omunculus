@@ -126,8 +126,9 @@ the text a model writes beside its calls — and answers what it asks with only 
 it asks nothing; then each follow-up is sent. Only the timeout bounds it. A
 task with `deploy` publishes to the dream team's deploy environment, which
 `packs/dream-team/environment/up` starts and `down` stops: two Dokku instances, homologation, which agents reach with
-`deploy_preview`, and production, which only `promote` reaches, a tool the
-person alone grants once they have seen homologation. The tools name each
+`deploy_preview`, and production, which only `promote` reaches, a tool whose call
+the configuration's interceptor holds for the person's review once they have
+seen homologation. The tools name each
 project's apps apart; afterwards what production serves for the app an
 execution published is copied for the check and the app is removed; the
 copy saves an extensionless page URL as `<path>/index.html` and keeps an

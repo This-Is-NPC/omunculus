@@ -1,7 +1,7 @@
 name = "promote"
 kind = "tool"
 triggers = ["model"]
-description = "Publishes to production the very image the preview built for the workspace's app, the one the person saw there, and concludes the release: comments the production address on the work and continues it, ending the run."
+description = "Publishes to production the very image the preview built for the workspace's app, the one the person saw there, and concludes the release: comments the production address on the work and continues it, ending the run. The project may hold the call for review: the reviewers read only its `homologation` argument."
 tags = ["deploy", "sequence"]
 command = ["./run"]
 secrets = ["DEPLOY_KEY"]
@@ -10,4 +10,8 @@ then = ["end"]
 
 [parameters]
 type = "object"
-required = []
+required = ["homologation"]
+
+[parameters.properties.homologation]
+type = "string"
+description = "What the reviewers see: the homologation address deploy_preview gave in publish, copied exactly, and what the person finds there."

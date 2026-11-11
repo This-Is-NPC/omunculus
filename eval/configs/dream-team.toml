@@ -17,3 +17,13 @@ key = "$OMUNCULUS_HOMOLOGATION_KEY"
 [auth.production]
 kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
+
+# What goes to production is held for review: the owner's. The eval's one person is
+# the owner, as well as the client (EquivalentExchange.Project adds the
+# account).
+[[interceptors]]
+action = "tool"
+tool = "promote"
+workflow = "release"
+stage = "promote"
+accounts = ["owner"]
