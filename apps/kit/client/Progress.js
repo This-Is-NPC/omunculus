@@ -81,6 +81,15 @@ function live(progress, thread, front) {
     ? { chain: [], agent: node.agent, doing: node.doing, since: node.since, round: node.round || 0 } : null;
 }
 
+// How a run reads in one line, from its status and the lines the runs command
+// printed under it: {state, text} in the words of a work's state and capitals.
+function outcome(status, lines) {
+  if (status === "open") return { state: "working", text: "RUNNING" };
+  if (lines.includes("ended: stopped without end")) return { state: "stopped", text: "STOPPED WITHOUT END" };
+  const failed = lines.filter(line => line.startsWith("failed:")).length;
+  return { state: "done", text: "ENDED" + (failed > 0 ? " · " + failed + (failed === 1 ? " FAILED CALL" : " FAILED CALLS") : "") };
+}
+
 // A running clock: "0:42", "12:05", "1:02:03".
 function clock(total) {
   const s = Math.max(0, Math.floor(total));
@@ -330,7 +339,7 @@ function build(input) {
     const made = {
       work: id, title: work.title || "", level: level, parent: work.parent_id || "", agent: agent,
       state: state, word: word(state), waitingOn: waitingOn, since: since, doing: doing,
-      lastCall: calling[id] ? { name: calling[id], brief: Phrases.brief(calling[id], callArgs[id]) } : null,
+      lastStep: calling[id] ? Phrases.said(calling[id], callArgs[id]) : "",
       workflow: lane ? lane.name : "", steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
       round: journey && journey.rounds > 0 ? journey.rounds + 1 : 0,
       sentBack: journey ? journey.sentBack : null, stopped: state === "stopped" ? stopped : null,

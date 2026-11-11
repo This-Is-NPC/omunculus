@@ -208,14 +208,21 @@ function step(name, args) {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-// A failed call as the log's plain sentence, before the reason ("could not
-// read design/rounds.md").
+// A finished call as a sentence of its own ("Read design/rounds.md"): a verb
+// and its object, never the command that ran.
+function said(name, args) {
+  const text = step(name, args);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 // A tool as a verb phrase the person reads ("publish the site to
 // production"); "" for a tool not in the table.
 function act(name) {
   return tools[name] ? tools[name].act : "";
 }
 
+// A failed call as the log's plain sentence, before the reason ("could not
+// read design/rounds.md").
 function stepFailure(name, args) {
   const tool = tools[name];
   if (!tool) return "could not make a call";

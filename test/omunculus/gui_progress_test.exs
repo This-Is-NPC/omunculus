@@ -81,7 +81,7 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w1.state === "waiting" && n.w1.waitingOn === "design-lead" && n.w1.agent === "seller" && n.w1.at === 1 && n.w1.count === 6, "w1", n.w1);
     check(n.w2.state === "waiting" && n.w2.waitingOn === "designer" && n.w2.doing === "Waiting for designer", "w2", n.w2);
     check(n.w3.state === "working" && n.w3.word === "Working" && n.w3.since === 1900 && n.w3.doing === "Thinking · wrote files", "w3", n.w3);
-    check(JSON.stringify(n.w3.lastCall) === JSON.stringify({name: "write", brief: "site/index.html"}), "lastCall", n.w3.lastCall);
+    check(n.w3.lastStep === "Wrote site/index.html", "lastStep", n.w3.lastStep);
     check(n.w3.round === 2 && n.w3.sentBack.by === "design-reviewer" && n.w3.stopped === null, "round", n.w3);
     check(JSON.stringify(n.w3.team) === JSON.stringify([{agent: "designer", current: true}, {agent: "design-reviewer", current: false}, {agent: "publisher", current: false}]), "team", n.w3.team);
     check(JSON.stringify(n.w2.team) === JSON.stringify([{agent: "design-lead", current: true}]), "team of one", n.w2.team);
@@ -449,6 +449,18 @@ defmodule Omunculus.GuiProgressTest do
     check(asked.waits === "you" && asked.step === 0 && asked.stage === "", "waiting for you, no workflow", asked);
     check(JSON.stringify(Progress.track(out.flat[0])) === JSON.stringify({workflow: "sale", step: 2, steps: 6, stage: "design"}) && Progress.track(out.flat[1]) === null, "track", "");
     check(Progress.standing(null, "sales") === null && Progress.standing({focus: null}, "sales") === null, "none before a work", "");
+    """)
+  end
+
+  test "a run reads as one line, a call as a verb and its object" do
+    run!("""
+    const out = (status, lines) => JSON.stringify(Progress.outcome(status, lines));
+    check(out("open", []) === JSON.stringify({state: "working", text: "RUNNING"}), "open", out("open", []));
+    check(out("closed", ["ended: start_sale", "calls: 3"]) === JSON.stringify({state: "done", text: "ENDED"}), "ended", 0);
+    check(out("closed", ["failed: read", "failed: bash"]) === JSON.stringify({state: "done", text: "ENDED \u00b7 2 FAILED CALLS"}), "failed calls", 0);
+    check(out("closed", ["failed: read", "ended: stopped without end"]) === JSON.stringify({state: "stopped", text: "STOPPED WITHOUT END"}), "stopped", 0);
+    check(Phrases.said("bash", {command: "cat > /tmp/gen.py <<'EOF'\\nimport json\\nEOF"}) === "Ran a command", "no shell text", Phrases.said("bash", {command: "cat > /tmp/gen.py <<'EOF'"}));
+    check(Phrases.said("delegate", {title: "x"}) === "Handed work down", "tool as a verb", 0);
     """)
   end
 end

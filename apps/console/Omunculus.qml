@@ -907,7 +907,7 @@ Singleton {
       failed: was.failed + (fails ? 1 : 0),
       open: open,
       retried: retried,
-      last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
+      last: line.hook ? was.last : { text: line.outcome ? line.text : Phrases.said(line.name, line.args), at: line.at }
     })
     const place = rows[runId]
     if (place === undefined)
