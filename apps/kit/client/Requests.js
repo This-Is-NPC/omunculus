@@ -72,6 +72,12 @@ function optionLabel(option, of) {
 // A no or a cancel: given last, apart from the choices that go ahead.
 function guarded(option) { return option === "deny" || option === "cancel"; }
 
+// Whether an option says no, or asks for something else: never the filled one
+// of a decision. The API marks no option recommended, so the words decide.
+function negative(option) {
+  return /(^|[-_ ])(deny|refuse|reject|decline|cancel|stop|abort|no|problem|problems|change|changes|adjust|revise|hold|wait)([-_ ]|$)/i.test(option);
+}
+
 // Whether an option is a scope a grant is saved for: only a permission's
 // grant_* options are; a decision may name its own options so.
 function scoped(option, permission) { return !!permission && option.startsWith("grant_"); }

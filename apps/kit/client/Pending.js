@@ -106,11 +106,12 @@ function describe(request, input) {
 
 // A request's options split as its action group shows them: the ones given
 // once, the no or cancel, and, for a permission, the wider scopes behind
-// "Always…". `primary` is the one given once that is recommended, the card's
-// filled button: a grant, an approval or an acceptance; "" when none is.
+// "Always…". `primary` is the card's filled button, one of those given once:
+// a grant, an approval or an acceptance, else the first that does not say no
+// or ask for changes (Requests.negative); "" only when every one does.
 function actions(options, permission) {
   const once = Requests.once(options, permission);
-  return { once: once, primary: once.find(option => ["grant", "approve", "accept"].includes(option)) || "", denies: options.filter(Requests.guarded), always: Requests.always(options, permission) };
+  return { once: once, primary: once.find(option => ["grant", "approve", "accept"].includes(option)) || once.find(option => !Requests.negative(option)) || "", denies: options.filter(Requests.guarded), always: Requests.always(options, permission) };
 }
 
 // What you did to a request, as one line of the chat: {icon, word, sentence}.

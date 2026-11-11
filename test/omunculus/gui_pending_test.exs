@@ -94,7 +94,11 @@ defmodule Omunculus.GuiPendingTest do
     const pick = Pending.actions(["accept", "keep", "cancel"], false);
     check(pick.once.join() === "accept,keep" && pick.denies.join() === "cancel" && pick.always.length === 0, "decision", pick);
     check(all.primary === "grant" && pick.primary === "accept", "primary", [all.primary, pick.primary]);
-    check(Pending.actions(["keep", "refuse"], false).primary === "" && Pending.actions(["approve", "deny"], false).primary === "approve", "no recommendation", 0);
+    check(Pending.actions(["keep", "refuse"], false).primary === "keep" && Pending.actions(["approve", "deny"], false).primary === "approve", "keep fills, refuse never", 0);
+    const fine = Pending.actions(["problem", "works", "changes", "hold"], false);
+    check(fine.primary === "works", "the first that is not deny-like fills", fine);
+    check(Pending.actions(["problem", "adjust", "hold"], false).primary === "", "never a deny-like option", 0);
+    check(Pending.actions(["use_it", "cancel"], false).primary === "use_it" && Requests.negative("grant_stage") === false, "words", 0);
     """)
   end
 

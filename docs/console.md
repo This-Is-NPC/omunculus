@@ -469,11 +469,13 @@ kept in `Omunculus.drafts` by request, so a form rebuilt takes both back. A line
 after a blank one ends the list, and the closing paragraph shows after the
 last box and is not sent.
 
-While it is pending it has its options as buttons, the recommended one filled
-and the rest outlined: GRANT · THIS WORK ONLY for a permission, APPROVE or
-ACCEPT for a decision that offers one (`Pending.actions`, its `primary`); a
-decision with none of them has no filled option, and DENY or REFUSE stay
-outlined. So are those of
+While it is pending it has its options as buttons, one filled and the rest
+outlined: GRANT · THIS WORK ONLY for a permission, APPROVE or ACCEPT for a
+decision that offers one, else the first option that does not say no or ask
+for changes (deny, refuse, cancel, stop, problem, changes, adjust, hold, ...;
+`Pending.actions`, its `primary`). The API marks no option recommended. A
+deny-like option is never filled; a decision whose options all are has none
+filled. So are those of
 every decision it gathers from below — an origin still waiting whose options
 are named, as an escalation keeps a decision's options on its origin — each
 under its part name and who asked it, a grant's scopes read for that
