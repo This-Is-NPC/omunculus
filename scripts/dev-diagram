@@ -98,17 +98,14 @@ def steps_of(db, conv, client_agent):
             grant_of.setdefault(e["request_id"], []).append(e)
     grants_drawn = set()
     comments = [e for e in events if e["type"] == "comment"]
-    runs_of, run_agents, tool_names, creators = {}, {}, {}, {}
+    runs_of, run_agents, creators = {}, {}, {}
     for e in events:
         if e["type"] == "start-run":
             run_agents[e["run_id"]] = bodies[e["id"]].get("agent")
             if e["work_id"]:
                 runs_of.setdefault(e["work_id"], []).append((e["sequence"], run_agents[e["run_id"]]))
-        elif e["type"] == "tool":
-            tool_names.setdefault(e["run_id"], set()).add(bodies[e["id"]].get("name"))
         if e["id"] in by_event:
             creators[by_event[e["id"]]["id"]] = e["actor_id"]
-    via = {r["id"]: r["via"] for r in db.execute("select id, via from runs where conversation_id = ?", (conv,))}
 
     # Each work's tag, in the order the works began.
     tags = {}
@@ -224,7 +221,7 @@ def steps_of(db, conv, client_agent):
         elif kind == "break" and e["work_id"] in works:
             w = works[e["work_id"]]
             to = creators.get(w["id"]) or actor
-            if via.get(e["run_id"]) == "retry" or "break" not in tool_names.get(e["run_id"], ()):
+            if e["actor_kind"] == "harness":
                 between(e, HARNESS, to, "harness stop", f"harness: {body.get('body', '')}", dashed=True, open=True, tone="harness")
             else:
                 between(e, actor, to, "break", f"BREAK: {body.get('body', '')}", dashed=True, open=True)
