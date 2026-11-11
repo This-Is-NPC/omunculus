@@ -57,6 +57,31 @@ defmodule Omunculus.Server.OpenAPITest do
              })
   end
 
+  test "an event of the harness has the harness as its actor, with no id" do
+    schemas = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
+    kinds = schemas["components"]["schemas"]["Event"]["properties"]["actor"]["anyOf"]
+    assert %{"properties" => %{"kind" => %{"const" => "harness"}}} = Enum.at(kinds, 2)
+
+    event = %{
+      sequence: 1,
+      conversation_id: "c",
+      type: "break",
+      at: "now",
+      actor_kind: "harness",
+      actor_id: nil,
+      run_id: "r",
+      work_id: "w",
+      request_id: nil,
+      inbox_id: nil,
+      prompt_id: nil,
+      comment_id: nil,
+      body: "{}"
+    }
+
+    assert %{actor: %{kind: "harness"} = actor} = Omunculus.Server.Contract.event("p", event)
+    assert actor == %{kind: "harness"}
+  end
+
   test "a project lists its works by state and streams its conversations' events" do
     document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
     works = document["paths"]["/v1/projects/{project_id}/works"]["get"]

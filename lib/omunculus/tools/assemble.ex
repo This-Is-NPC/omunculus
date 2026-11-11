@@ -210,6 +210,9 @@ defmodule Omunculus.Tools.Assemble do
     if lines == [], do: [], else: ["## Results\n" <> Enum.join(lines, "\n")]
   end
 
+  defp broken(%{type: "break", actor_kind: "harness", body: body}),
+    do: ["- harness: #{Jason.decode!(body)["body"]}"]
+
   defp broken(%{type: "break", actor_id: agent, work_id: work_id, body: body}),
     do: ["- #{agent} broke its work #{work_id}: #{Jason.decode!(body)["body"]}"]
 

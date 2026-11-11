@@ -192,6 +192,22 @@ defmodule Omunculus.Tools.AssembleTest do
              "## Results\n- Answer (worker, done, work w1): said hi\n- Skip (worker, cancelled, work w2)\n- worker broke its work w3: no access"
   end
 
+  test "a break by the harness is reported as the harness's, not an agent's" do
+    view = %{
+      "results" => [],
+      "cause" => %{
+        type: "break",
+        actor_kind: "harness",
+        actor_id: nil,
+        work_id: "w3",
+        body: ~s({"body":"worker stopped the work \\"x\\" without a report after 2 runs."})
+      }
+    }
+
+    assert whole(%{@input | view: view}) =~
+             ~s(- harness: worker stopped the work "x" without a report after 2 runs.)
+  end
+
   test "children list every work handed down as it stands, one that broke waiting on the run, one done with its report" do
     child = fn attrs ->
       Map.merge(

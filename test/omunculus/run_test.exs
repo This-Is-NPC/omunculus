@@ -1433,6 +1433,17 @@ defmodule Omunculus.RunTest do
       assert [_parent_run] = runs_of(project, parent_id)
       assert breaks_of(project, parent_id) == ["passed up"]
 
+      # The harness gave up, not the agent: the stop is its own, with no agent id.
+      assert {:ok, [%{actor_kind: "harness", actor_id: nil}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT actor_kind, actor_id FROM events WHERE type = 'break' AND work_id = ?",
+                 [child_id]
+               )
+
+      assert {:ok, [%{author: "harness"}]} =
+               Query.all(project.conn, "SELECT author FROM comments WHERE work_id = ?", [child_id])
+
       Project.close(project)
     end
 

@@ -511,7 +511,7 @@ defmodule Omunculus.Store.Runs do
   end
 
   defp stop_work(conn, run, _child, text, _inbox_text, _config) do
-    ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "harness", agent: run.agent}
     Actions.run(conn, [%{"type" => "break", "body" => %{"body" => text}}], ctx)
   end
 

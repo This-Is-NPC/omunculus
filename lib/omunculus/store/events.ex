@@ -46,6 +46,7 @@ defmodule Omunculus.Store.Events do
       |> Map.put_new(:origin_subject, Map.get(actor, :origin_subject) || Map.get(actor, :subject))
       |> run_context(conn)
       |> conversation_context(conn)
+      |> harness_has_no_id()
 
     id = Id.new()
 
@@ -57,6 +58,10 @@ defmodule Omunculus.Store.Events do
       View.view(conn, "event", id)
     end
   end
+
+  # The harness is one author: the agent of the run it acts for is not its id.
+  defp harness_has_no_id(%{actor_kind: "harness"} = fields), do: %{fields | actor_id: nil}
+  defp harness_has_no_id(fields), do: fields
 
   defp run_context(%{run_id: run_id} = fields, conn) when not is_nil(run_id) do
     case Query.one(
