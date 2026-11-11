@@ -6,7 +6,7 @@ import "kit/ui"
 // HistoryView filters the project's conversations — those needing you,
 // those agents work in, those not started, and their titles and what was
 // first said in them — and opens a selected row, at its chat or, from its
-// menu, its team or its log. ALL lists every one, and its readout, for the
+// menu, its tree or its log. ALL lists every one, and its readout, for the
 // bar, counts what it lists. `/` goes to the search; ↓ or
 // Enter back to the rows, ↑ on the first row back to the search; Esc on
 // them leaves.
@@ -18,7 +18,7 @@ ColumnLayout {
   // "", or a state of the table: "needs-you", "working" or "not-started".
   property string filter: ""
   property string search: ""
-  // The page it opens at: "" for the chat, "map" or "log".
+  // The page it opens at: "" for the chat, "tree" or "log".
   signal opened(string id, string page)
   signal leave()
 

@@ -313,7 +313,7 @@ ShellRoot {
                 id: rail
                 // Over the bar and the page while it unfolds, opaque.
                 z: 1
-                tabs: pagesView.pages.map(name => ({ name: pagesView.nameOf(name) }))
+                tabs: pagesView.pages.map(name => ({ name: name }))
                 current: pagesView.tabIndex
                 onChosen: index => pagesView.choose(index)
                 onEscaped: pagesView.focusEntry()
@@ -443,7 +443,7 @@ ShellRoot {
         panel.enterProject(place)
     }
     // A page by its name: projects, conversations or board, or, with a
-    // conversation open, chat, map, log, cost or artifacts.
+    // conversation open, chat, tree, log, cost or artifacts.
     function page(name: string): void {
       if (!["projects", "conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
         return
@@ -464,7 +464,7 @@ ShellRoot {
         panel.enter("board")
       pagesView.showWork(found)
     }
-    function agents(): void { page("map") }
+    function tree(): void { page("tree") }
     function log(): void { page("log") }
     function board(): void { page("board") }
     function back(): void { pagesView.back() }

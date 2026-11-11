@@ -45,12 +45,12 @@ ModalDialog {
       ["Enter", "start it with them"]
     ].concat(Shortcuts.rows("new conversation"))],
     ["chat", Shortcuts.rows("chat")],
-    ["team", [
-      ["↑ · ↓", "move between the works; the detail follows"],
+    ["tree", [
+      ["↑ · ↓", "move between the works"],
       ["→ · ←", "unfold, fold; on a folded work, go to its parent"],
-      ["Enter", "open its detail, or its tabs beside the outline"]
-    ].concat(Shortcuts.rows("team"), [
-      ["Esc", "the detail, then the outline, then back"]
+      ["Enter", "show its runs and steps; again, open it in full"]
+    ].concat(Shortcuts.rows("tree"), [
+      ["Esc", "the detail, then the tree, then back"]
     ])],
     ["work", Shortcuts.rows("work").concat([["Esc", "back"]])],
     ["thread", Shortcuts.rows("thread").concat([["Esc", "back"]])],

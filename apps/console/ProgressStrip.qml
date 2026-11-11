@@ -45,7 +45,7 @@ ColumnLayout {
   // The result of a done conversation is wanted.
   signal openResult()
   // The agents counted, or the cost, are wanted.
-  signal openTeam()
+  signal openTree()
   signal openCost()
 
   readonly property string phase: progress ? progress.state : "idle"
@@ -272,7 +272,7 @@ ColumnLayout {
           visible: strip.agents.length > 1
           text: strip.agents.length + " AGENTS"
           tip: strip.agents.slice(0, -1).join(", ") + " and " + strip.agents[strip.agents.length - 1] + " ran here; open the team"
-          onChosen: strip.openTeam()
+          onChosen: strip.openTree()
         }
         Count {
           visible: !!strip.usage && strip.usage.priced > 0
