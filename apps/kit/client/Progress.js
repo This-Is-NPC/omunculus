@@ -493,7 +493,8 @@ function track(node) {
 // chain, agent, state, waits}: the track of the work in focus; `chain`, the
 // agents from the front one down to the one at work or waited for, each once,
 // and `agent`, the one it ends on; `waits`, what a conversation that waits
-// waits on: "you", or the agents it waits for, "" otherwise. null before any
+// waits on: "you", or what the work in focus waits for, as its card says it,
+// "" otherwise; `asker`, the deepest agent that asks you. null before any
 // work.
 function standing(progress, front) {
   const focus = progress ? progress.focus : null;
@@ -502,10 +503,12 @@ function standing(progress, front) {
   const names = working ? working.chain.concat([working.agent]) : [front].concat(progress.path.map(step => step.agent));
   const chain = names.filter((name, index, all) => name && all.indexOf(name) === index);
   const state = progress.state;
+  const asking = progress.flat.filter(node => node.state === "needs-you").sort((a, b) => b.level - a.level)[0];
+  // What the work in focus waits on, as its card says it; else, what any waits on.
   const waits = state === "needs-you" ? "you"
-    : state === "waiting" ? Array.from(new Set(progress.flat.filter(node => !closed(node.state) && node.waitingOn).map(node => node.waitingOn))).join(", ")
+    : state === "waiting" ? focus.waitingOn || Array.from(new Set(progress.flat.filter(node => !closed(node.state) && node.waitingOn).map(node => node.waitingOn))).join(", ")
     : "";
-  return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits });
+  return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits, asker: asking ? asking.agent : "" });
 }
 
 // How many answers of yours a reply passes on: 0 when you answered none, else

@@ -293,9 +293,9 @@ the work's start while anything runs, with no event needed; `Progress.standing`
 and `Progress.track` give the workflow and the step, and the step is the last
 once the work is done). The state is WORKING, WAITING, STOPPED, "✓ DONE" in the
 success tone, "✕ FAILED" in the error tone, or "NEEDS YOUR ANSWER" in the
-warning tone; once done, "TOOK 3 MINUTES" replaces the clock; "WAITING FOR YOU
-SINCE 22:43", in the warning tone, replaces it while a question waits on you,
-also when the work asking is a sub-work; before any work, "STARTING" while the
+warning tone; once done, "TOOK 3 MINUTES" replaces the clock; while a question waits on you,
+also when the work asking is a sub-work, the clock goes on and the state says
+it, so the time is never replaced by a word; before any work, "STARTING" while the
 first run goes or the person has written, NOT STARTED before any. As the width
 shrinks the workflow and the count of what is left give way first, then the
 step to "4/5". From 700 px of its own width the counts follow: "· 2 AGENTS ·
@@ -308,7 +308,9 @@ root work, at 14 px, the largest line of the head (`Stepper`: "✓ qualify › �
 forms as the width shrinks, down to one dot per stage and the current name), or
 its title when it has no stages and the masthead does not already say it; and,
 while the conversation works or waits, the line of who: what it is doing — AT
-WORK, WAITING FOR YOU, or WAITING FOR the agents it waits for — and the chain
+WORK, "SELLER IS WAITING FOR YOU" (the deepest agent that asks you), or
+"FRONT-DESK IS WAITING FOR SELLER" (the end of the chain, waiting for what its
+work card says it waits for) — and the chain
 of agents from the one you talk with down to the one at work or waited for,
 each in its tone and the last in bold, "front-desk › project-manager ›
 administrator › design-reviewer", then, while it works, a plain verb ("· running

@@ -456,14 +456,17 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build(base);
     const here = Progress.standing(out, "sales");
     check(JSON.stringify(here) === JSON.stringify({workflow: "sale", stage: "design", step: 2, steps: 6,
-      chain: ["sales", "seller", "design-lead", "designer"], agent: "designer", state: "working", waits: ""}), "working", here);
+      chain: ["sales", "seller", "design-lead", "designer"], agent: "designer", state: "working", waits: "", asker: ""}), "working", here);
     check(out.flat[0].workflow === "sale" && out.flat[1].workflow === "", "a node names its workflow", out.flat.map(node => node.workflow));
     const idle = Progress.build(Object.assign({}, base, {runs: []}));
     const waiting = Progress.standing(idle, "sales");
-    check(waiting.state === "waiting" && waiting.waits === "design-lead, designer" && waiting.chain.join() === "sales,seller,design-lead,designer", "waiting", waiting);
+    check(waiting.state === "waiting" && waiting.waits === idle.focus.waitingOn && waiting.waits !== "" && waiting.chain.join() === "sales,seller,design-lead,designer", "waiting", waiting);
     const done = Progress.standing({state: "done", path: [], flat: [], focus: {workflow: "sale", count: 6, at: 5, state: "done", steps: sale.steps}}, "sales");
     check(done.step === 6 && done.stage === "build" && done.chain.join() === "sales", "done is at the last step", done);
     const asked = Progress.standing({state: "needs-you", path: [], flat: [], focus: {workflow: "", count: 0, at: -1, state: "needs-you", steps: []}}, "sales");
+    const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("designer"), work_id: "w3", reason: "Which logo?"};
+    const needed = Progress.standing(Progress.build(Object.assign({}, base, {runs: [], requests: [ask]})), "sales");
+    check(needed.waits === "you" && needed.asker === "designer", "the agent that asks you heads the wait", needed);
     check(asked.waits === "you" && asked.step === 0 && asked.stage === "", "waiting for you, no workflow", asked);
     check(JSON.stringify(Progress.track(out.flat[0])) === JSON.stringify({workflow: "sale", step: 2, steps: 6, stage: "design"}) && Progress.track(out.flat[1]) === null, "track", "");
     check(Progress.standing(null, "sales") === null && Progress.standing({focus: null}, "sales") === null, "none before a work", "");

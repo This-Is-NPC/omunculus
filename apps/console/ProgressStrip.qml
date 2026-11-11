@@ -4,7 +4,6 @@ import QtQuick.Layouts
 import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/client/Progress.js" as Progress
-import "kit/client/Time.js" as Time
 import "kit/client/Shortcuts.js" as Shortcuts
 
 // ProgressStrip is the conversation's head, which says where it stands: a
@@ -23,15 +22,13 @@ import "kit/client/Shortcuts.js" as Shortcuts
 // line is hidden while nothing was handed to anyone and no agent runs, and
 // keeps its room once the person has written, so the tabs under it never move
 // for it. Waiting on you, the meta says so, in the warning tone, in place of
-// the clock, which stops.
+// the clock, which goes on.
 ColumnLayout {
   id: strip
 
   // Omunculus.progress, or null; whether the full view is open.
   property var progress: null
   property bool expanded: false
-  // The time of the conversation's newest event, in seconds; 0 when unknown.
-  property real lastEvent: 0
   // How many requests wait on you.
   property int waiting: 0
   // What the conversation's model calls used and cost, as the cost view tallies it.
@@ -66,8 +63,8 @@ ColumnLayout {
   // nothing to say.
   readonly property string doing: !standing ? ""
     : phase === "working" ? "AT WORK"
-    : phase === "needs-you" ? "WAITING FOR YOU"
-    : phase === "waiting" && standing.waits !== "" ? "WAITING FOR " + standing.waits.toUpperCase() : ""
+    : phase === "needs-you" ? (standing.asker !== "" ? standing.asker.toUpperCase() + " IS WAITING FOR YOU" : "WAITING FOR YOU")
+    : phase === "waiting" && standing.waits !== "" ? (standing.agent !== "" ? standing.agent.toUpperCase() + " IS WAITING FOR " : "WAITING FOR ") + standing.waits.toUpperCase() : ""
   // What the agent at work does, in a plain verb ("Running a command").
   readonly property string verb: phase === "working" && progress.now.doing ? Progress.lively(progress.now.doing, progress.now.since, tick) : ""
   // How long the agent at work has been on it.
@@ -123,13 +120,10 @@ ColumnLayout {
       const lasted = Progress.duration(seconds).toUpperCase()
       // The short form: "5 H 04 MIN".
       const brief = Progress.span(seconds).toUpperCase()
-      // Waiting on you stops the clock: it says since when, in the warning tone.
-      const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
-      if (focus.state === "needs-you" || focus.waitingOn === "you")
-        segments.push({ text: "WAITING FOR YOU" + since, short: "WAITING", tone: Theme.warning, keep: true })
-      else
-        segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: brief, keep: true,
-          tone: phase === "done" ? Theme.success : undefined })
+      // The time is always there; who waits for what is the state's and the
+      // chain's to say, never the clock's place.
+      segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: brief, keep: true,
+        tone: phase === "done" ? Theme.success : undefined })
     }
     const separator = Theme.type.meta.separator
     const shown = segments.filter(segment => segment.text !== "")
