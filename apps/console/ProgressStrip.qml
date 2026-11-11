@@ -225,7 +225,7 @@ ColumnLayout {
         }
       }
     }
-    Hint { active: pointer.containsMouse || count.activeFocus; text: count.tip }
+    Hint { active: pointer.containsMouse; text: count.tip }
   }
 
   // The strip: the meta, its counts, and the chevron and the action at its right.

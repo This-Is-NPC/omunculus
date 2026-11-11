@@ -3,9 +3,9 @@ import QtQuick.Controls.Basic as C
 import "Breakpoints.js" as Breakpoints
 
 // Hint is the hover tooltip: monospace text in a frame of the accent, below
-// its control. `active` says the pointer is over the control or Tab focus is
-// on it; after the delay the hint shows, unless the control is hidden or
-// disabled. `dismiss()` closes it, and it stays closed until `active` turns
+// its control. `active` says the pointer is over the control, never that the
+// keyboard is on it, so a control focused by the program shows no hint; after
+// the delay the hint shows, unless the control is hidden or disabled. `dismiss()` closes it, and it stays closed until `active` turns
 // false and true again. One hint shows at a time. It stays inside the
 // window: at most the window's width less 24 px, wrapping, and moved left
 // when its control is near the right edge. On a narrow window, where the

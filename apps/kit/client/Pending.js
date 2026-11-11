@@ -43,6 +43,13 @@ function rest(text) {
   return at < 0 ? "" : lines.slice(at + 1).join("\n").trim();
 }
 
+// A headline split after its first sentence: {first, more}, `more` being "" for
+// a headline that is one sentence.
+function sentence(line) {
+  const found = /^(.+?[.?!])\s+(\S.*)$/.exec(line);
+  return found ? { first: found[1], more: found[2] } : { first: line, more: "" };
+}
+
 function capital(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
 
 function lower(text) { return text.charAt(0).toLowerCase() + text.slice(1); }
@@ -93,13 +100,14 @@ function describe(request, input) {
   const wanted = Requests.granted(request);
   const unlocks = wanted ? Requests.unlocks(wanted, input.folder) : "";
   const above = route.slice(0, -1);
+  const lead = wanted || form ? null : sentence(headline(input.text));
   const unblocks = [asker + " resumes " + (work !== "" ? work : "its work")]
-    .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " wait" : " waits") + " on it"] : []).join(" · ");
+    .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " are" : " is") + " waiting for it"] : []).join(" · ");
   return {
     id: request.id, kind: kind, word: look.word, icon: look.icon,
     asker: asker, audience: Requests.audience(request), path: route, work: work,
-    title: wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : headline(input.text),
-    body: wanted || form ? "" : rest(input.text),
+    title: wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
+    body: lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",
     unblocks: unblocks,
     grants: wanted && Object.keys(request.options || {}).includes("grant") ? unlocks + " · this work only" : unlocks,
     since: request.created_at || "",
@@ -109,9 +117,11 @@ function describe(request, input) {
 
 // A request's options split as its action group shows them: the ones given
 // once, the no or cancel, and, for a permission, the wider scopes behind
-// "Always…".
+// "Always…". `primary` is the one given once that is recommended, the card's
+// filled button: a grant, an approval or an acceptance; "" when none is.
 function actions(options, permission) {
-  return { once: Requests.once(options, permission), denies: options.filter(Requests.guarded), always: Requests.always(options, permission) };
+  const once = Requests.once(options, permission);
+  return { once: once, primary: once.find(option => ["grant", "approve", "accept"].includes(option)) || "", denies: options.filter(Requests.guarded), always: Requests.always(options, permission) };
 }
 
 // What you did to a request, as one line of the chat: {icon, word, sentence}.
