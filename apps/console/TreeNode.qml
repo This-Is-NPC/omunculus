@@ -16,7 +16,8 @@ import "kit/ui"
 // At the right, in columns, its stages as a track (`StageTrack`), its state
 // in words (WORKING, WAITING FOR <child or who>, WAITING FOR YOU, DONE) and
 // how long it has run; narrow, the track and the state go under the title and
-// the time ends the agent's line. Opened, its runs, one line each, show
+// the time ends the agent's line. Under the title go what it does now, its
+// steps and, priced, its cost; its tokens are the cost page's. Opened, its runs, one line each, show
 // inside it, with the ways on to its detail and its log; the rail of its
 // mark ends at the mark unless rows hang under it.
 Item {
@@ -59,20 +60,19 @@ Item {
   readonly property var said: front ? Tree.frontState(front) : node ? Tree.stateOf(node) : null
   readonly property real seconds: front ? Tree.frontElapsed(Omunculus.progress, now) : node ? Tree.elapsed(node, now) : 0
 
-  // A tally's money when the provider priced it, else its tokens, worded as
-  // the cost page does.
+  // A tally's money when the provider priced it; tokens are the cost page's.
   function spent(usage) {
-    if (usage.calls === 0)
-      return ""
-    return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input) + " read" + Theme.type.meta.separator + Omunculus.tokens(usage.output) + " written"
+    return usage.calls > 0 && usage.priced > 0 ? Omunculus.money(usage.cost) : ""
   }
 
-  // What it handed down while folded, its own steps and its branch's cost, as
-  // parts that give way whole, last first.
+  // What it does now while it works, what it handed down while folded, its own
+  // steps and its branch's cost, as parts that give way whole, last first.
   readonly property var totals: {
     if (!node)
       return front ? [front.agents + (front.agents === 1 ? " agent" : " agents")] : []
-    const parts = row.kids > 0 && !row.open ? [Progress.below(Progress.kidsOf(node))] : []
+    const parts = node.state === "working" && node.doing ? [node.doing] : []
+    if (row.kids > 0 && !row.open)
+      parts.push(Progress.below(Progress.kidsOf(node)))
     if (node.calls > 0)
       parts.push(node.calls + (node.calls === 1 ? " step" : " steps"))
     const money = spent(node.branch.usage)
@@ -336,7 +336,7 @@ Item {
       spacing: Theme.space.tight
       Loader {
         Layout.fillWidth: true
-        Layout.preferredHeight: active ? 260 : 0
+        Layout.preferredHeight: active && item ? Math.min(260, item.implicitHeight) : 0
         active: branch.expanded && !!branch.node
         sourceComponent: WorkRuns { key: branch.node ? branch.node.work : "" }
       }

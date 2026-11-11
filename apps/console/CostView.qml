@@ -9,7 +9,7 @@ import "kit/ui"
 // agent, the busiest first, its name in its colour and the same figures in
 // columns, or, under 700 px, on lines of their own, never cut; its cost at the
 // top right, "-" for an agent none priced. When no provider reported a price
-// there is no cost anywhere, only one note saying so. Esc leaves.
+// there is no cost anywhere, only one kicker, NO PRICE REPORTED. Esc leaves.
 FocusScope {
   id: view
 
@@ -74,9 +74,10 @@ FocusScope {
     Label {
       Layout.fillWidth: true
       visible: view.unpriced
-      text: "The provider sends no price."
+      text: "NO PRICE REPORTED"
       color: Theme.dim
-      font.pixelSize: Theme.type.tab.size
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: Theme.type.meta.tracking
       wrapMode: Text.Wrap
     }
 

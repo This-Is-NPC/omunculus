@@ -131,7 +131,12 @@ Item {
     back()
   }
 
+  // As tall as the list of runs, or room for a run opened call by call.
+  readonly property real callsRoom: 260
+  implicitHeight: opened === "" ? runList.implicitHeight : callsRoom
+
   ColumnLayout {
+    id: runList
     anchors.fill: parent
     spacing: Theme.space.gap
     visible: runsPane.opened === ""
@@ -163,6 +168,7 @@ Item {
       id: list
       Layout.fillWidth: true
       Layout.fillHeight: true
+      Layout.preferredHeight: contentHeight
       clip: true
       spacing: Theme.space.row
       boundsBehavior: Flickable.StopAtBounds

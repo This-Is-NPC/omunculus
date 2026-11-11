@@ -236,7 +236,7 @@ FocusScope {
       currentIndex: -1
       Accessible.role: Accessible.Tree
       Accessible.name: "the works"
-      readonly property real unit: Breakpoints.size(Window.width) === "narrow" ? Theme.space.block : Theme.size.gutter
+      readonly property real unit: Breakpoints.size(Window.width) === "narrow" ? Theme.space.section : Theme.size.gutter
       delegate: TreeNode {
         required property var modelData
         required property int index
