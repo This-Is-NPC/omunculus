@@ -91,7 +91,7 @@ and the studio ask for `--project`:
 
 | App | Is |
 | --- | --- |
-| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs with their tool calls and the works they handed down, the progress of its works, and the team page, its agents as a tree of who handed work to whom with their works and requests; and a board of the works of every project of the registry, by state |
+| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs with their tool calls and the works they handed down, the progress of its works, and the tree page, its agents as a tree of who handed work to whom with their works and requests; and a board of the works of every project of the registry, by state |
 | [`apps/mailbox`](mailbox.md) | an e-mail client over every project: a thread is a conversation with one agent of depth 0, and its requests to you are e-mails you reply to |
 | [`apps/studio`](studio.md) | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
 
