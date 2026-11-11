@@ -144,6 +144,13 @@ the owner. It refuses until the proposal holds `delivery.address` and
 `delivery.accepted` as `accepted`, and then escalates the request on the
 `owner` route, so the owner cannot be asked before the client accepted.
 
+The owner's grant of that request is the one decision on the go-live. The
+project manager's prompt keeps it out of the owner's questions: nothing
+about publishing or going live is asked of the owner before or after the
+grant, and the handover tells the client without another approval. The
+pack cannot refuse an `ask` to the owner, which is a core tool, so this
+rests on the prompt.
+
 What reaches the client is only what the front desk addresses to them: its
 escalations, the documents it attaches and, when a result of the project
 manager comes back (the sale closed, the handover), its comment relaying what
