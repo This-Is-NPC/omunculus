@@ -338,7 +338,7 @@ function build(input) {
       work: id, title: work.title || "", level: level, parent: work.parent_id || "", agent: agent,
       state: state, word: word(state), waitingOn: waitingOn, since: since, doing: doing,
       lastCall: calling[id] ? { name: calling[id], brief: Phrases.brief(calling[id], callArgs[id]) } : null,
-      steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
+      workflow: lane ? lane.name : "", steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
       round: journey && journey.rounds > 0 ? journey.rounds + 1 : 0,
       sentBack: journey ? journey.sentBack : null, stopped: state === "stopped" ? stopped : null,
       asks: [], asked: [], below: "", calls: tally.count, failed: tally.failed,
@@ -474,6 +474,33 @@ function build(input) {
     : null;
 
   return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };
+}
+
+// Where a work is in its workflow: {workflow, step, steps, stage}, the step
+// counted from 1 and the last once the work is done; null in none.
+function track(node) {
+  if (node.count === 0) return null;
+  const at = Math.min(Math.max(node.at, 0), node.count - 1);
+  return { workflow: node.workflow, step: node.state === "done" ? node.count : at + 1, steps: node.count, stage: node.steps[at].name };
+}
+
+// Where the conversation stands, for its head: {workflow, stage, step, steps,
+// chain, agent, state, waits}: the track of the work in focus; `chain`, the
+// agents from the front one down to the one at work or waited for, each once,
+// and `agent`, the one it ends on; `waits`, what a conversation that waits
+// waits on: "you", or the agents it waits for, "" otherwise. null before any
+// work.
+function standing(progress, front) {
+  const focus = progress ? progress.focus : null;
+  if (!focus) return null;
+  const working = live(progress, "", front);
+  const names = working ? working.chain.concat([working.agent]) : [front].concat(progress.path.map(step => step.agent));
+  const chain = names.filter((name, index, all) => name && all.indexOf(name) === index);
+  const state = progress.state;
+  const waits = state === "needs-you" ? "you"
+    : state === "waiting" ? Array.from(new Set(progress.flat.filter(node => !closed(node.state) && node.waitingOn).map(node => node.waitingOn))).join(", ")
+    : "";
+  return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits });
 }
 
 // How many answers of yours a reply passes on: 0 when you answered none, else
