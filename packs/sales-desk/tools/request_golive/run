@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""The project manager's way to pass the release's request to grant promote up
+to the owner: refused until the client accepted the built site, as the
+proposal records (delivery.accepted, with the homologation address). The
+escalation is the tool's own, so the owner cannot be reached before the client
+accepted, whatever the model does."""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "_proposal"))
+import proposal  # noqa: E402
+
+
+def run(call):
+    view = call.get("view") or {}
+    args = call.get("args") or {}
+    reason = str(args.get("reason") or "").strip()
+    request_id = str(args.get("request_id") or "").strip()
+    if not reason or not request_id:
+        raise proposal.Refusal("reason and request_id required")
+
+    request = view.get("request") or {}
+    if request.get("id") != request_id or request.get("workflow") != "release" or request.get("stage") != "promote":
+        raise proposal.Refusal("request_id must be the release's request to grant promote that you received")
+    if request.get("status") != "pending":
+        raise proposal.Refusal(f"that request is {request.get('status')}, not pending: it is no longer waiting for you")
+
+    data = proposal.current(view, proposal.engagement(view.get("work") or {}))
+    if data is None:
+        raise proposal.Refusal("write the proposal with the proposal tool")
+    accepted = str(proposal.lookup(data, "delivery.accepted") or "").strip().lower() == "accepted"
+    if not accepted or not str(proposal.lookup(data, "delivery.address") or "").strip():
+        raise proposal.Refusal(
+            "the client has not accepted the built site: ask them, with ask, the options accept and changes, "
+            "giving the homologation address, and write delivery.address and delivery.accepted (the word accepted) "
+            "with the proposal tool once they accepted; then call request_golive again"
+        )
+
+    body = {"reason": reason, "origins": {"promote": request_id}, "to": "owner"}
+    return "", [{"type": "escalate", "body": body}], []
+
+
+proposal.tool(run)

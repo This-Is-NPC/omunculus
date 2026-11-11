@@ -90,8 +90,8 @@ stages, all the project manager's:
    proposal: `design/handoff.md` when it was approved, "the client waived the
    design" when it was waived, as the administrator requires. When the site is in homologation the release's
    request to grant `promote` comes to the project manager, who has the
-   client accept the built site and only then escalates the request to
-   the owner, who promotes. Changes the client then asks go, with
+   client accept the built site and only then passes the request to
+   the owner with `request_golive`, who promotes. Changes the client then asks go, with
    `forward`, to the administrator's open build work, so only the changed
    items are redone. The base item replaces the design preview's root
    `Dockerfile` and `deploy.toml` (app `design-<slug>`) with the site's own,
@@ -112,6 +112,11 @@ its address, or a waiver with the client's own answer; after `build` a
 build done and the client's acceptance of the built site (`delivery.accepted`
 is the word `accepted`); after `handover`
 the production address and the client's `works` answer to the live notice.
+
+`request_golive` is the only way the release's `promote` request goes up to
+the owner. It refuses until the proposal holds `delivery.address` and
+`delivery.accepted` as `accepted`, and then escalates the request on the
+`owner` route, so the owner cannot be asked before the client accepted.
 
 What reaches the client is only what the front desk addresses to them: its
 escalations, the documents it attaches and, when a result of the project
@@ -217,7 +222,7 @@ The routes. The logical `owner` route reaches the project's owners, never
 the client: the seller's requests go straight to them, and the teams' go to
 the project manager first (the requester is skipped, so the project
 manager's own go on to the owners). `pm` is the seller's way to its parent;
-the release's `promote` request goes to the project manager, then to the owners, even when the manager escalates it without `to`; the seller's
+the release's `promote` request goes to the project manager alone: it reaches the owners only through the manager's `request_golive` (below), and stays pending with the manager while unanswered; the seller's
 questions to the client go to the front desk, then to the conversation
 origin; every other request goes to its parent, then the project manager,
 then the front desk, so no depth-3 request skips the manager:
@@ -230,7 +235,7 @@ request_routes = [
   { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners"] },
   { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners"] },
   { name = "pm", via = ["parent"] },
-  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, "owners"] },
+  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }] },
   { from = { kind = "agent", agent = "seller" }, via = [{ kind = "agent", agent = "front-desk" }, "origin"] },
   { via = ["parent", { kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, "origin"] },
 ]
