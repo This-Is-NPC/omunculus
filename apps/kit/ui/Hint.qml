@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic as C
+import "Breakpoints.js" as Breakpoints
 
 // Hint is the hover tooltip: monospace text in a frame of the accent, below
 // its control. `active` says the pointer is over the control or Tab focus is
@@ -7,7 +8,9 @@ import QtQuick.Controls.Basic as C
 // disabled. `dismiss()` closes it, and it stays closed until `active` turns
 // false and true again. One hint shows at a time. It stays inside the
 // window: at most the window's width less 24 px, wrapping, and moved left
-// when its control is near the right edge.
+// when its control is near the right edge. On a narrow window, where the
+// content under a control is close, it shows beside the control instead,
+// when it fits there, so it never covers what is below.
 C.ToolTip {
   id: hint
 
@@ -25,15 +28,21 @@ C.ToolTip {
   delay: 450
   padding: 8
   width: overlay ? Math.min(implicitWidth, overlay.width - 24) : implicitWidth
-  // Under its control's left edge, moved to stay 12 px inside the window,
-  // where the control is when it shows.
-  x: {
-    if (!visible || !overlay || !parent)
+  // Where the control is in the window when it shows.
+  readonly property real left: visible && overlay && parent ? parent.mapToItem(overlay, 0, 0).x : 0
+  // Narrow, beside the control, on the right or else the left, when there is
+  // room for it; else under it.
+  readonly property real side: {
+    if (!visible || !overlay || !parent || Breakpoints.size(overlay.width) !== "narrow")
       return 0
-    const left = parent.mapToItem(overlay, 0, 0).x
-    return Math.max(12, Math.min(left, overlay.width - 12 - width)) - left
+    if (left + parent.width + 6 + width <= overlay.width - 12)
+      return 1
+    return left - 6 - width >= 12 ? -1 : 0
   }
-  y: parent.height + 6
+  // Under its control's left edge, moved to stay 12 px inside the window.
+  x: side > 0 ? parent.width + 6 : side < 0 ? -width - 6
+    : Math.max(12, Math.min(left, overlay ? overlay.width - 12 - width : left)) - left
+  y: side !== 0 ? (parent.height - height) / 2 : parent.height + 6
   visible: wanted
   onActiveChanged: if (!active) dismissed = false
   onVisibleChanged: {
