@@ -311,9 +311,13 @@ How it maps a conversation to e-mail is in [the mailbox](mailbox.md).
 
 ### 13. The folders
 
-Inbox (with its unread count), Sent, Drafts and Archive, named, and the
+Inbox (with its unread count), Sent, Drafts, Pending (with its review count)
+and Archive, named, and the
 threads of the folder, newest first, each with its sender, subject, snippet, label and time;
-unread ones in bold. A command bar holds COMPOSE and MARK ALL READ.
+unread ones in bold. Pending lists instead the reviews that wait on you, newest
+first, each with the agent that acted, its step and what it would do. At phone
+width the folders are icons, the current one keeping its name. A command bar
+holds COMPOSE and MARK ALL READ.
 
 | Keys | What they do |
 | --- | --- |
@@ -328,6 +332,11 @@ unread ones in bold. A command bar holds COMPOSE and MARK ALL READ.
 One conversation with an agent of depth 0, stacked oldest first, the latest
 message open, with its label in the head. Each open message offers REPLY,
 REPLY ALL and FORWARD; a reply is written under the messages.
+
+A review opened from Pending reads as a message in the same pane: who acted, the
+action, the text it holds and its step when it has several. APPROVE is the
+filled action; EDIT opens the reply box with the held text and sends your words
+in its place; DENY opens it for an optional reason.
 
 | Keys | What they do |
 | --- | --- |

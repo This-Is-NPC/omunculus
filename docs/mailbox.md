@@ -34,8 +34,8 @@ The e-mails of a thread, oldest first, are:
   conversation's root work and the files it attached, one e-mail per run. A
   file shows on the e-mail of its own run: the request that run raised, else
   its comments, else an e-mail of its own with no text;
-- each request whose requester is the thread's agent and whose arbiter is you,
-  as an e-mail from that agent whose body is the request's reason, in the
+- each question (a request that is not a review) whose requester is the
+  thread's agent and whose arbiter is you, as an e-mail from that agent whose body is the request's reason, in the
   agent's own words. The questions of the request's origins are other agents'
   text and never appear;
 - your answers to those requests, as e-mails of yours.
@@ -43,9 +43,8 @@ The e-mails of a thread, oldest first, are:
 What reaches you is what is addressed to you: a request is mail only when you
 are its arbiter. A request for another account is never shown, and a thread
 whose only pending requests are another account's reads in progress. A review
-of a held action ([interception](requests.md#interception)) addressed to you
-is a request like another, and shows as an e-mail from the agent whose action
-it holds, with the reason of the review as its body.
+of a held action ([interception](requests.md#interception)) is not mail: the
+Pending folder holds it, and no thread shows it.
 
 The channel to the person is explicit. An agent speaks to you only through a
 request to you (`ask`, or `escalate` to the origin), a `comment` on the
@@ -70,10 +69,14 @@ capitalised: `Front-desk <front-desk@agency>`.
   type mark a thread with unread mail; the count is how many.
 - **Sent**: threads with a message of yours.
 - **Drafts**: what you left unsent.
+- **Pending**: the reviews of held actions that wait on you, whoever acted,
+  newest first, with their count on the folder. Opening one reads it as a
+  message ([Reviews](#reviews)). It holds reviews, not threads, and a review
+  leaves it once decided.
 - **Archive**: threads you archived. A thread that gets new mail after it was
   archived returns to the inbox.
 
-The folders show their names, with the unread count on Inbox. Ctrl+B folds them
+The folders show their names, with the unread count on Inbox and the review count on Pending. Ctrl+B folds them
 to icons, and a window narrower than 760 px shows icons only.
 
 Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
@@ -120,13 +123,27 @@ sent, never the quote. What it does:
 - with no request waiting, it is a message to the agent
   (`POST .../messages`), and may carry files.
 
-An answer to a question carries words only, never an option, and no files. A
-review takes an option, so a reply to a review's e-mail sends `edit`: your
-words go ahead in place of the text the agent's action held
-(`{"option": "edit", "body": text}`). To approve or deny it, answer it in the
-console's pending queue.
+An answer to a question carries words only, never an option, and no files.
 
 FORWARD opens the compose window with `Fwd:` and the message quoted.
+
+## Reviews
+
+A review opens in the right pane as a message from the agent that acted: who
+acted, a summary of the action, the text it holds, and its step ("step 1 of 2")
+when the review has several. It offers three actions:
+
+- APPROVE, the one filled action, lets the action go ahead as it is
+  (`POST .../requests/{id}/reply` with `{"option": "approve", "body": "approve"}`);
+- EDIT opens the reply box filled with the held text. SEND replies with option
+  `edit` and your words, which go ahead in place of the held text
+  (`{"option": "edit", "body": text}`); it needs some text;
+- DENY opens the reply box for a reason, which may stay empty. SEND replies
+  with option `deny` (`{"option": "deny", "body": reason}`, the body being
+  `deny` when empty).
+
+A review that is not yours to decide is not listed. The console's pending
+queue holds the same reviews.
 
 ## Composing
 

@@ -161,7 +161,7 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
-  test "the mailbox holds what reaches the requester: requests whose arbiter is them, reviews included" do
+  test "mail holds the requests whose arbiter is the person, never reviews" do
     run!("""
     const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];
     const works = [{id: "w1", state: "waiting", waiting: "request", parent_id: null}];
@@ -173,12 +173,46 @@ defmodule Omunculus.GuiMailboxTest do
     const shown = mails([request("c"), request("o1", {arbiter: other}), request("o2", {arbiter: agent("seller")}),
       request("v1", {reason: "Sales would ask local:1000", options, interception: held}),
       request("v2", {reason: "Sales would ask local:2000", options, interception: held, arbiter: other})]);
-    if (shown.pending.join() !== "c,v1") throw Error("pending " + shown.pending);
-    if (shown.messages.some(message => ["o1", "o2", "v2"].includes(message.request))) throw Error("only what is addressed to the person is mail");
-    if (!shown.messages.find(message => message.request === "v1").review) throw Error("a review is flagged");
+    if (shown.pending.join() !== "c") throw Error("pending " + shown.pending);
+    if (shown.messages.some(message => ["o1", "o2", "v1", "v2"].includes(message.request))) throw Error("only questions addressed to the person are mail");
     const hidden = mails([request("o1", {arbiter: other})]);
     if (hidden.pending.length !== 0 || hidden.label !== "progress") throw Error("only others' requests: " + hidden.label);
-    if (JSON.stringify(Mailbox.answer(" Go ", true)) !== JSON.stringify({option: "edit", body: "Go"})) throw Error("a reply to a review edits it");
+    const only = mails([request("v1", {options, interception: held})]);
+    if (only.messages.length !== 1 || only.received !== 0 || Mailbox.inFolder(only, "inbox", {})) throw Error("a review alone is no inbox mail");
+    if (only.label !== "") throw Error("a review waiting for the person reads as waiting: " + only.label);
+    if (JSON.stringify(Mailbox.answer(" Go ")) !== JSON.stringify({body: "Go"})) throw Error("an answer is words only");
+    """)
+  end
+
+  test "pending lists the reviews whose arbiter is the person, newest first" do
+    run!("""
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];
+    const other = {kind: "human", issuer: "local", subject: "2000"};
+    const held = (summary, step, of) => ({action: "ask", summary, step, of});
+    const options = {approve: [], edit: [], deny: []};
+    const t = build(snap({runs: [run("r1", "sales", "closed")], requests: [
+      request("c"),
+      request("v1", {requester: agent("seller"), reason: "Seller would ask", options, interception: held('ask local:1000: "Ready?"', 1, 2), created_at: "2026-01-01T10:03:00Z"}),
+      request("v2", {options, interception: held('comment: "Done"', 1, 1), created_at: "2026-01-01T10:04:00Z"}),
+      request("v3", {options, interception: held("tool x", 1, 1), arbiter: other}),
+      request("v4", {options, interception: held("tool y", 1, 1), status: "answered"})
+    ]}), events);
+    if (t.reviews.map(review => review.request).join() !== "v1,v2") throw Error("only pending reviews for the person: " + t.reviews.map(review => review.request));
+    const first = t.reviews[0];
+    if (first.from.address !== "seller@agency" || first.text !== "Ready?" || first.step !== 1 || first.of !== 2 || first.key !== "agency/c1/v1") throw Error(JSON.stringify(first));
+    if (t.reviews[1].from.name !== "Sales" || build(snap(), events).reviews.length !== 0) throw Error("none without reviews");
+    const all = [first, t.reviews[1]];
+    if (Mailbox.reviewMatches(first, "ready") !== true || Mailbox.reviewMatches(first, "zebra") !== false || all.filter(review => Mailbox.reviewMatches(review, "seller")).length !== 1) throw Error("search");
+    if (Mailbox.inFolder(t, "pending", {})) throw Error("pending holds reviews, not threads");
+    """)
+  end
+
+  test "a decision on a review sends approve, the edited words or the reason to deny" do
+    run!("""
+    if (JSON.stringify(Mailbox.decision("approve", "")) !== JSON.stringify({body: "approve", option: "approve"})) throw Error("approve");
+    if (JSON.stringify(Mailbox.decision("edit", "  Better words ")) !== JSON.stringify({body: "Better words", option: "edit"})) throw Error("edit");
+    if (JSON.stringify(Mailbox.decision("deny", "Too early")) !== JSON.stringify({body: "Too early", option: "deny"})) throw Error("deny with a reason");
+    if (JSON.stringify(Mailbox.decision("deny", "")) !== JSON.stringify({body: "deny", option: "deny"})) throw Error("deny without one");
     """)
   end
 

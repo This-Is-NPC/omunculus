@@ -7,7 +7,7 @@ import "kit/ui"
 
 ShellRoot {
   // The mailbox, an e-mail client: the masthead on top, whose notch sweeps
-  // when the folder changes, then the folders (Inbox, Sent, Drafts, Archive),
+  // when the folder changes, then the folders (Inbox, Sent, Drafts, Pending, Archive),
   // the messages of the one picked and the thread open, parted by hairlines
   // that fade downwards, under a command bar whose actions follow where you
   // are. Each column is headed by its name and the arrow that folds it: the
@@ -28,7 +28,7 @@ ShellRoot {
     // Whether you folded the folders to a rail, and the threads away.
     property bool foldersFolded: false
     property bool listFolded: false
-    readonly property bool reading: Mail.thread !== null
+    readonly property bool reading: Mail.thread !== null || Mail.review !== null
 
     onClosed: Qt.quit()
 
@@ -72,7 +72,7 @@ ShellRoot {
           anchors.fill: parent
           placeholderText: "search mail  /"
           onApplied: value => Mail.query = value.trim().toLowerCase()
-          onLeave: threads.enter()
+          onLeave: Mail.folder === "pending" ? reviews.enter() : threads.enter()
         }
 
         RowLayout {
@@ -103,6 +103,7 @@ ShellRoot {
               FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
               FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "sent"; icon: "send"; label: "Sent" }
               FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "pending"; icon: "spark"; label: "Pending"; count: Mail.reviews.length }
               FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "archive"; icon: "folder"; label: "Archive" }
               Item { Layout.fillHeight: true }
             }
@@ -127,7 +128,7 @@ ShellRoot {
                 Layout.fillWidth: true
                 visible: !window.narrow
                 title: Mail.folder
-                count: String(Mail.folder === "drafts" ? Mail.shownDrafts.length : Mail.shown.length)
+                count: String(Mail.folder === "drafts" ? Mail.shownDrafts.length : Mail.folder === "pending" ? Mail.shownReviews.length : Mail.shown.length)
                 shortcut: "ctrl+l"
                 onToggle: window.listFolded = true
               }
@@ -139,15 +140,22 @@ ShellRoot {
                 FolderTab { rail: true; named: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
                 FolderTab { rail: true; named: true; name: "sent"; icon: "send"; label: "Sent" }
                 FolderTab { rail: true; named: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
+                FolderTab { rail: true; named: true; name: "pending"; icon: "spark"; label: "Pending"; count: Mail.reviews.length }
                 FolderTab { rail: true; named: true; name: "archive"; icon: "folder"; label: "Archive" }
               }
               Item { id: narrowSearch; visible: window.narrow; Layout.fillWidth: true; Layout.preferredHeight: 30 }
               ThreadList {
                 id: threads
-                visible: Mail.folder !== "drafts"
+                visible: Mail.folder !== "drafts" && Mail.folder !== "pending"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 onCleared: searchBox.text = ""
+              }
+              ReviewList {
+                id: reviews
+                visible: Mail.folder === "pending"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
               }
               DraftList {
                 visible: Mail.folder === "drafts"
@@ -207,9 +215,27 @@ ShellRoot {
               }
             }
 
+            Repeater {
+              model: Mail.review ? [Mail.selectedReview] : []
+              delegate: Item {
+                id: reviewPage
+                required property string modelData
+                anchors.fill: parent
+                opacity: 0
+                Component.onCompleted: enterReview.start()
+                NumberAnimation { id: enterReview; target: reviewPage; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
+                ReviewView {
+                  anchors { fill: parent; leftMargin: window.narrow ? 0 : 20 }
+                  review: Mail.reviews.find(item => item.key === reviewPage.modelData) || Mail.blankReview
+                  back: window.narrow
+                  escapes: !searchBox.activeFocus && !compose.opened
+                }
+              }
+            }
+
             Column {
               anchors.centerIn: parent
-              visible: Mail.thread === null
+              visible: !window.reading
               spacing: 14
               DecodeLabel {
                 anchors.horizontalCenter: parent.horizontalCenter

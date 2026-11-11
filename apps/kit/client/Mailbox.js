@@ -138,10 +138,25 @@ function label(snapshot, events, waiting) {
   return snapshot.works.some(work => work.state === "open" || work.state === "waiting") ? "stuck" : "";
 }
 
+// The reviews waiting on the person in a conversation, which the Pending
+// folder lists and mail never holds: {key, project, conversation, request,
+// from (the requester as a person), summary, text (what the action holds, ""
+// for a tool or a grant), step, of, reason, at}.
+function reviews(projectId, id, snapshot, me) {
+  return snapshot.requests.filter(request => Requests.review(request) && Requests.pending(request) && Requests.forYou(request, me))
+    .map(request => ({
+      key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
+      from: request.requester && request.requester.agent ? person(request.requester.agent, projectId)
+        : { agent: "", project: projectId, name: Requests.label(request.requester), address: "", text: Requests.label(request.requester) },
+      summary: request.interception.summary, text: Requests.editable(request), step: request.interception.step, of: request.interception.of,
+      reason: String(request.reason || ""), at: request.created_at
+    }));
+}
+
 // The thread a conversation's snapshot and events make:
 //   key, project, id, agent, with: the agent as a person, subject, label,
 //   messages (oldest first), pending: the ids of the requests the person has
-//   to answer, oldest first, at: the last message's time, heard: the last
+//   to answer, oldest first, reviews: the reviews waiting on them, at: the last message's time, heard: the last
 //   message from the agent's, "" for none, received, sent, parties, snippet.
 // A message: {key, mine, from, to, text, at, files, request, pending, open}.
 function build(projectId, id, snapshot, events, me) {
@@ -183,12 +198,13 @@ function build(projectId, id, snapshot, events, me) {
   const notes = noted(events);
   // What reaches the person: the requests whose arbiter they are, whoever
   // else a review or question was written for stays off their mail.
-  const asked = snapshot.requests.filter(request => Requests.forYou(request, me)
+  const asked = snapshot.requests.filter(request => Requests.forYou(request, me) && !Requests.review(request)
     && !(notes[request.id] && Requests.passedOn(request).length === 0)
     && (!!notes[request.id] || (!!request.requester && request.requester.agent === agent)));
+  const held = reviews(projectId, id, snapshot, me);
   const waiting = asked.filter(request => Requests.pending(request)).map(request => request.id);
   for (const request of asked) {
-    messages.push({ key: request.id, mine: false, from: agentPerson, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, review: Requests.review(request), pending: Requests.pending(request), open: false });
+    messages.push({ key: request.id, mine: false, from: agentPerson, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
     const reply = replies[request.id];
     if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: agentPerson, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
   }
@@ -217,8 +233,8 @@ function build(projectId, id, snapshot, events, me) {
   return {
     key: projectId + "/" + id, project: projectId, id: id, agent: agent, with: agentPerson,
     subject: parts.subject || "(no subject)",
-    label: label(snapshot, events, waiting),
-    messages: messages, pending: waiting,
+    label: label(snapshot, events, waiting.concat(held.map(review => review.request))),
+    messages: messages, pending: waiting, reviews: held,
     at: latest ? latest.at : snapshot.conversation.created_at,
     heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
     received: theirs.length, sent: mine,
@@ -240,11 +256,15 @@ function replyTarget(thread, key) {
   return { request: request, quoted: quoted || null };
 }
 
-// The request reply body for an answer in words: text only, never an option,
-// except to a review, which takes an option: the words replace what it holds.
-function answer(text, review) {
-  const body = String(text).trim();
-  return review ? { option: "edit", body: body } : { body: body };
+// The request reply body for an answer in words: text only, never an option.
+function answer(text) {
+  return { body: String(text).trim() };
+}
+
+// The reply body of a decision on a review: "approve", "edit" (the words
+// replace the held text) or "deny" (the words are its reason, optional).
+function decision(option, text) {
+  return Requests.answer(option, String(text).trim(), []);
 }
 
 // A forward of a message as the compose window starts it: {subject, body}.
@@ -252,6 +272,12 @@ function forward(thread, message) {
   const head = "---------- Forwarded message ----------\nFrom: " + message.from.name + (message.from.address ? " <" + message.from.address + ">" : "")
     + "\nSubject: " + thread.subject + "\n\n";
   return { subject: fwd(thread.subject), body: "\n\n" + head + message.text };
+}
+
+// Whether a review holds what the search asks for.
+function reviewMatches(review, query) {
+  const text = String(query || "").trim().toLowerCase();
+  return text === "" || [review.summary, review.text, review.reason, review.from.address, review.from.name].some(word => String(word).toLowerCase().includes(text));
 }
 
 // Whether a thread holds what the search asks for, in its subject, agent,
@@ -271,7 +297,7 @@ function inFolder(thread, folder, archived) {
   const away = archived[thread.key] !== undefined && thread.at <= archived[thread.key];
   if (folder === "archive") return away;
   if (away) return false;
-  return folder === "sent" ? thread.sent > 0 : folder === "inbox" ? thread.received > 0 : false;
+  return folder === "sent" ? thread.sent > 0 : folder === "inbox" ? thread.received > 0 : false; // "pending" holds reviews, not threads
 }
 
 // Whether a thread has mail from its agent that `seen` (thread key to the time

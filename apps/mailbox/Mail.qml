@@ -32,19 +32,35 @@ Singleton {
   property var threads: ({})
   // A thread with nothing in it, for a view whose thread has just gone.
   readonly property var blank: ({ key: "", project: "", id: "", agent: "", with: { agent: "", project: "", name: "", address: "", text: "" },
-    subject: "", label: "", messages: [], pending: [], at: "", heard: "", received: 0, sent: 0, parties: "", snippet: "" })
+    subject: "", label: "", messages: [], pending: [], reviews: [], at: "", heard: "", received: 0, sent: 0, parties: "", snippet: "" })
+  // A review with nothing in it, for a view whose review has just gone.
+  readonly property var blankReview: ({ key: "", project: "", conversation: "", request: "", summary: "", text: "", step: 1, of: 1, reason: "", at: "",
+    from: { agent: "", project: "", name: "", address: "", text: "" } })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
-  // "inbox", "sent", "drafts" or "archive".
+  // "inbox", "sent", "drafts", "pending" or "archive".
   property string folder: "inbox"
+  onFolderChanged: {
+    if (folder === "pending")
+      selected = ""
+    else
+      selectedReview = ""
+  }
   // What the search box asks for, lowercased; "" finds every thread.
   property string query: ""
   readonly property var shown: all.filter(thread => Mailbox.inFolder(thread, folder, archived)
     && Mailbox.matches(thread, query))
   readonly property var shownDrafts: drafts.filter(draft => query === ""
     || [draft.subject, draft.body, draft.agent].some(word => String(word).toLowerCase().includes(query)))
+  // The reviews waiting on you, newest first: what the Pending folder lists.
+  readonly property var reviews: all.reduce((list, thread) => list.concat(thread.reviews), [])
+    .sort((a, b) => b.at.localeCompare(a.at))
+  readonly property var shownReviews: reviews.filter(review => Mailbox.reviewMatches(review, query))
   property string selected: ""
   readonly property var thread: threads[selected] || null
+  // The key of the review open, "project/conversation/request".
+  property string selectedReview: ""
+  readonly property var review: reviews.find(item => item.key === selectedReview) || null
   // Asks the window for a message to write, from `preset`: {to, subject, body,
   // draft}, each optional.
   signal composeRequested(var preset)
@@ -113,16 +129,33 @@ Singleton {
   }
 
   function open(key) {
+    selectedReview = ""
     selected = key
     markSeen(key)
   }
 
   function close() {
     selected = ""
+    selectedReview = ""
+  }
+
+  function openReview(key) {
+    selected = ""
+    selectedReview = key
+  }
+
+  // Opens the review `by` places from the one open.
+  function stepReview(by) {
+    if (shownReviews.length === 0)
+      return
+    const at = shownReviews.findIndex(item => item.key === selectedReview)
+    openReview(shownReviews[Math.max(0, Math.min(shownReviews.length - 1, at < 0 ? 0 : at + by))].key)
   }
 
   // Opens the thread `by` places from the one open in the list shown.
   function step(by) {
+    if (folder === "pending")
+      return stepReview(by)
     if (shown.length === 0)
       return
     const at = shown.findIndex(thread => thread.key === selected)
@@ -226,9 +259,19 @@ Singleton {
       sweep()
     }
     if (request !== "")
-      http.call(socket, "POST", base + "/requests/" + request + "/reply", Mailbox.answer(value, thread.messages.some(message => message.request === request && message.review)), true, sent)
+      http.call(socket, "POST", base + "/requests/" + request + "/reply", Mailbox.answer(value), true, sent)
     else
       http.post(socket, base + "/messages", { message: value, agent: thread.agent }, files, sent)
+  }
+
+  // Decides a review: `option` is "approve", "edit" or "deny", `text` the
+  // edited text or the reason.
+  function decide(review, option, text) {
+    const place = projectOf(review.project)
+    if (!place)
+      return
+    http.call(place.socket, "POST", "/v1/projects/" + review.project + "/conversations/" + review.conversation + "/requests/" + review.request + "/reply",
+      Mailbox.decision(option, text), true, () => sweep())
   }
 
   // Saves a file attached in a thread to the downloads directory and opens it.
