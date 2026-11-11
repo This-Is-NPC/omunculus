@@ -374,6 +374,41 @@ account that gave the asker its work, and needs no entry here
 ([requests](requests.md#who-a-request-goes-to)). `[accounts]` is edited in the
 file only, like `[project]` and `[store]`.
 
+## Interceptors
+
+`[[interceptors]]` is optional. Each rule turns an action of an agent into a
+review request to the accounts it names, in order
+([requests](requests.md#interception)).
+
+```toml
+[[interceptors]]
+action = "ask"            # ask | comment | attach | grant | tool
+to = "requester"          # optional: only actions that reach this account
+accounts = ["owner"]      # reviewers, in order
+
+[[interceptors]]
+action = "tool"
+tool = "promote"          # required with action = "tool", forbidden otherwise
+workflow = "release"      # optional; stage needs workflow
+stage = "promote"
+accounts = ["owner"]
+```
+
+| Key | Meaning |
+| --- | --- |
+| `action` | Required: `ask`, `comment`, `attach`, `grant` or `tool`. |
+| `tool` | The tool's name; required with `action = "tool"`, refused otherwise. |
+| `to` | Optional: `"requester"` (the account that opened the conversation), an `[accounts]` name or an agent name. Only actions whose target is that account match; a `tool` has no target and takes none. |
+| `agent` | Optional: only actions of this agent. |
+| `workflow`, `stage` | Optional: only actions from a work in this workflow, at this stage. `stage` needs `workflow`. |
+| `accounts` | Required, non-empty: the reviewers in order, each an `[accounts]` name or an agent name. |
+
+The file is refused, naming the rule by its position, for an unknown key or
+name, a missing or empty `accounts`, `tool` without `action = "tool"` or the
+reverse, `to` on a tool, and `stage` without `workflow` or not a stage of it.
+The harness has no rules of its own. A rule applies to agents: what a person
+does is never held. `[[interceptors]]` is edited in the file only.
+
 ## Agents, policy, workflow
 
 ```toml

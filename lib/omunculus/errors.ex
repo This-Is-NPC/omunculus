@@ -52,6 +52,12 @@ defmodule Omunculus.Errors do
   def format({:accounts, {:agent_name, name}}),
     do: "omunculus.toml [accounts.#{name}] is also the name of an agent: pick another name"
 
+  def format({:interceptors, :invalid}),
+    do: "omunculus.toml [[interceptors]] must be a list of tables"
+
+  def format({:interceptors, {position, reason}}),
+    do: "omunculus.toml [[interceptors]] number #{position}: " <> interceptor_reason(reason)
+
   def format({:policy, {:invalid, :default_agent}}) do
     "omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only"
   end
@@ -154,4 +160,29 @@ defmodule Omunculus.Errors do
     do: "the requests to pass up must be pending, distinct, and yours to arbitrate"
 
   def format(reason), do: inspect(reason)
+
+  defp interceptor_reason(:not_a_table), do: "it must be a table"
+  defp interceptor_reason({:unknown_key, key}), do: "#{key} is not a key of an interceptor"
+
+  defp interceptor_reason(:action),
+    do: "action is required, one of ask, comment, attach, grant or tool"
+
+  defp interceptor_reason(:tool_required), do: "action = \"tool\" requires tool, the tool's name"
+  defp interceptor_reason(:tool_only), do: "tool goes only with action = \"tool\""
+  defp interceptor_reason(:tool_has_no_target), do: "action = \"tool\" takes no to"
+
+  defp interceptor_reason({:unknown_name, key, name, names}),
+    do:
+      "#{key} names #{inspect(name)}, which is neither an account nor an agent; one of: #{Enum.join(names, ", ")}" <>
+        if(key == "to", do: ", or requester", else: "")
+
+  defp interceptor_reason({:unknown, key, name}), do: "#{key} #{inspect(name)} is not configured"
+  defp interceptor_reason({:invalid, key}), do: "#{key} must be a string"
+  defp interceptor_reason(:stage_needs_workflow), do: "stage goes with a workflow"
+
+  defp interceptor_reason({:unknown_stage, workflow, stage}),
+    do: "#{inspect(stage)} is not a stage of the workflow #{workflow}"
+
+  defp interceptor_reason(:accounts),
+    do: "accounts is required: a non-empty list of account or agent names, in review order"
 end

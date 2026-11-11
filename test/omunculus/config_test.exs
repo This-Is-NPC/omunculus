@@ -101,6 +101,104 @@ defmodule Omunculus.ConfigTest do
            }
   end
 
+  @interceptor_base """
+  [agents.concierge]
+  depth = 0
+  text = "root"
+  [workflows.release]
+  steps = [{ name = "build", agent = "concierge" }, { name = "promote", agent = "concierge" }]
+  [accounts]
+  owner = { kind = "human", issuer = "local", subject = "1000" }
+  """
+
+  test "[[interceptors]] is optional and reads each rule as written", %{dir: dir} do
+    Fixtures.write_config(dir, @interceptor_base)
+    assert {:ok, %Config{interceptors: []}} = load(dir)
+
+    Fixtures.write_config(
+      dir,
+      @interceptor_base <>
+        """
+        [[interceptors]]
+        action = "ask"
+        to = "requester"
+        accounts = ["owner"]
+        [[interceptors]]
+        action = "tool"
+        tool = "promote"
+        agent = "concierge"
+        workflow = "release"
+        stage = "promote"
+        accounts = ["owner", "concierge"]
+        """
+    )
+
+    assert {:ok, %Config{interceptors: [ask, tool]}} = load(dir)
+
+    assert ask == %{
+             action: "ask",
+             tool: nil,
+             to: "requester",
+             agent: nil,
+             workflow: nil,
+             stage: nil,
+             accounts: ["owner"]
+           }
+
+    assert %{
+             action: "tool",
+             tool: "promote",
+             agent: "concierge",
+             workflow: "release",
+             stage: "promote",
+             accounts: ["owner", "concierge"]
+           } = tool
+  end
+
+  test "[[interceptors]] refuses what a rule cannot mean, saying which rule", %{dir: dir} do
+    for {rule, reason} <- [
+          {~s(accounts = ["owner"]), :action},
+          {~s(action = "sell"\naccounts = ["owner"]), :action},
+          {~s(action = "tool"\naccounts = ["owner"]), :tool_required},
+          {~s(action = "ask"\ntool = "promote"\naccounts = ["owner"]), :tool_only},
+          {~s(action = "tool"\ntool = "promote"\nto = "owner"\naccounts = ["owner"]),
+           :tool_has_no_target},
+          {~s(action = "ask"\nstage = "promote"\naccounts = ["owner"]), :stage_needs_workflow},
+          {~s(action = "ask"\nworkflow = "release"\nstage = "ship"\naccounts = ["owner"]),
+           {:unknown_stage, "release", "ship"}},
+          {~s(action = "ask"\nworkflow = "ghost"\naccounts = ["owner"]),
+           {:unknown, "workflow", "ghost"}},
+          {~s(action = "ask"\nagent = "ghost"\naccounts = ["owner"]),
+           {:unknown, "agent", "ghost"}},
+          {~s(action = "ask"\nextra = 1\naccounts = ["owner"]), {:unknown_key, "extra"}},
+          {~s(action = "ask"), :accounts},
+          {~s(action = "ask"\naccounts = []), :accounts}
+        ] do
+      Fixtures.write_config(dir, @interceptor_base <> "[[interceptors]]\n" <> rule <> "\n")
+      assert {:error, {:interceptors, {1, ^reason}} = error} = load(dir), rule
+      assert Omunculus.Errors.format(error) =~ "[[interceptors]] number 1: "
+    end
+
+    for {rule, name} <- [
+          {~s(action = "ask"\naccounts = ["ghost"]), "ghost"},
+          {~s(action = "ask"\nto = "ghost"\naccounts = ["owner"]), "ghost"}
+        ] do
+      Fixtures.write_config(
+        dir,
+        @interceptor_base <>
+          "[[interceptors]]\naction = \"ask\"\naccounts = [\"owner\"]\n[[interceptors]]\n" <>
+          rule <> "\n"
+      )
+
+      assert {:error, {:interceptors, {2, {:unknown_name, _key, ^name, names}}} = error} =
+               load(dir)
+
+      assert names == ["concierge", "owner"]
+      assert Omunculus.Errors.format(error) =~ "number 2: "
+      assert Omunculus.Errors.format(error) =~ "neither an account nor an agent"
+    end
+  end
+
   test "[accounts] refuses an invalid identity, an absent agent and an agent's name", %{dir: dir} do
     agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
 

@@ -13,7 +13,8 @@ defmodule Omunculus.Config do
   project root), optionally the `client` and a `summary` that say what it
   is for, plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries`, the optional `[accounts]`
-  (names for identities a request can be addressed to) and `[policy] default_agent` (the agent of depth 0 that receives a
+  (names for identities a request can be addressed to), the optional
+  `[[interceptors]]` (`Omunculus.Interceptors`) and `[policy] default_agent` (the agent of depth 0 that receives a
   new conversation when the person names none), the optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
@@ -56,6 +57,7 @@ defmodule Omunculus.Config do
     :max_retries,
     :max_reopens,
     :accounts,
+    :interceptors,
     :default_agent,
     :last_run_output_bytes,
     :tool_output_bytes,
@@ -143,6 +145,7 @@ defmodule Omunculus.Config do
           max_retries: non_neg_integer,
           max_reopens: non_neg_integer | nil,
           accounts: %{String.t() => map},
+          interceptors: [Omunculus.Interceptors.rule()],
           default_agent: String.t() | nil,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
@@ -722,6 +725,7 @@ defmodule Omunculus.Config do
              "auth",
              "access",
              "accounts",
+             "interceptors",
              "secrets",
              "skills"
            ] do
@@ -749,6 +753,13 @@ defmodule Omunculus.Config do
               session} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, accounts} <- Omunculus.Accounts.parse(Map.get(data, "accounts"), agents),
+             {:ok, interceptors} <-
+               Omunculus.Interceptors.parse(
+                 Map.get(data, "interceptors"),
+                 agents,
+                 accounts,
+                 workflows
+               ),
              {:ok, default_agent} <- fetch_default_agent(data, agents),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
@@ -773,6 +784,7 @@ defmodule Omunculus.Config do
               max_retries: max_retries,
               max_reopens: max_reopens,
               accounts: accounts,
+              interceptors: interceptors,
               default_agent: default_agent,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
