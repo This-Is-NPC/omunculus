@@ -1,14 +1,17 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Progress.js" as Progress
+import "kit/client/Time.js" as Time
 import "kit/ui"
 
-// WorkRuns is the runs of the work picked on the map, newest first, as the
-// runs command sums up the project's last closed runs, matched to the
-// work's own by id: when each started, how long it took, how it ended or
-// that it stopped without end, its calls, those that failed, and what its
-// model used and cost; a run still open says so. Above them, the work's
-// runs in all. Opening one shows it call by call; Esc goes back to the list.
+// WorkRuns is the runs of the work picked on the map, newest first, one line
+// each: the local time it started, its agent, how it ended (or that it still
+// runs, or stopped without end) and how long it took, read from what the runs
+// command sums up, matched to the work's own by id. The calls, the failures
+// and what the model used are behind DETAIL, which shows the run call by
+// call; Esc goes back to the list. Above them, the work's runs in all, the
+// calls that failed and what they cost.
 Item {
   id: runsPane
 
@@ -111,12 +114,6 @@ Item {
     return Math.max(0, Math.round((Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000)) + " S"
   }
 
-  function lineTone(line) {
-    if (line.startsWith("failed:") || line === "ended: stopped without end")
-      return line.startsWith("failed:") ? Theme.error : Theme.warning
-    return line.startsWith("ended:") ? Theme.foreground : Theme.dim
-  }
-
   onVisibleChanged: if (visible) load()
   onKeyChanged: {
     opened = ""
@@ -134,7 +131,12 @@ Item {
     back()
   }
 
+  // As tall as the list of runs, or room for a run opened call by call.
+  readonly property real callsRoom: 260
+  implicitHeight: opened === "" ? runList.implicitHeight : callsRoom
+
   ColumnLayout {
+    id: runList
     anchors.fill: parent
     spacing: Theme.space.gap
     visible: runsPane.opened === ""
@@ -166,6 +168,7 @@ Item {
       id: list
       Layout.fillWidth: true
       Layout.fillHeight: true
+      Layout.preferredHeight: contentHeight
       clip: true
       spacing: Theme.space.row
       boundsBehavior: Flickable.StopAtBounds
@@ -180,65 +183,40 @@ Item {
         id: card
         required property var modelData
         required property int index
-        readonly property var lines: runsPane.summaries[modelData.id] || null
+        readonly property var outcome: Progress.outcome(modelData.status, runsPane.summaries[modelData.id] || [])
         readonly property bool current: list.activeFocus && list.currentIndex === index
         width: ListView.view.width
         implicitHeight: facts.implicitHeight + Theme.space.insetTop * 2
         color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
-        border.color: current ? Theme.primary : Theme.line
+        border.color: Theme.line
 
-        ColumnLayout {
+        RowLayout {
           id: facts
-          anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
-          spacing: Theme.space.line
-
-          RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.space.tight
-            Label {
-              text: String(card.modelData.started_at || "").slice(5, 16).replace("T", " ")
-              color: Theme.dim
-              font.pixelSize: 10
-            }
-            Label {
-              text: String(card.modelData.agent).toUpperCase()
-              color: Omunculus.toneOf(card.modelData.agent)
-              font.pixelSize: 10
-              font.letterSpacing: 2
-            }
-            Label {
-              Layout.fillWidth: true
-              text: card.modelData.status === "open" ? "RUNNING"
-                : runsPane.seconds(card.modelData) + (card.modelData.via ? "  ·  VIA " + String(card.modelData.via).toUpperCase() : "")
-              color: card.modelData.status === "open" ? Theme.primary : Theme.dim
-              font.pixelSize: 10
-              font.letterSpacing: 1
-              elide: Text.ElideRight
-            }
-            Icon { name: "chevron-right"; size: 12; color: card.current || pointer.containsMouse ? Theme.primary : Theme.dim }
-          }
-
-          Repeater {
-            model: card.lines || []
-            delegate: Label {
-              required property string modelData
-              Layout.fillWidth: true
-              text: modelData
-              color: runsPane.lineTone(modelData)
-              font.pixelSize: 11
-              wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-              maximumLineCount: 3
-              elide: Text.ElideRight
-            }
+          anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+          spacing: Theme.space.gap
+          Label {
+            text: Time.clock(card.modelData.started_at, Date.now())
+            color: Theme.dim
+            font.pixelSize: 10
           }
           Label {
-            Layout.fillWidth: true
-            visible: card.lines === null && card.modelData.status !== "open" && !runsPane.loading && runsPane.failure === ""
-            text: "not among the project's last closed runs"
-            color: Theme.dim
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
+            text: String(card.modelData.agent).toUpperCase()
+            color: Omunculus.toneOf(card.modelData.agent)
+            font.pixelSize: 10
+            font.letterSpacing: 2
           }
+          StateMark {
+            Layout.fillWidth: true
+            state: card.outcome.state
+            text: card.outcome.text + (card.modelData.status === "open" ? "" : runsPane.seconds(card.modelData) !== "" ? Theme.type.meta.separator + runsPane.seconds(card.modelData) : "")
+          }
+          Label {
+            text: "DETAIL"
+            color: card.current || pointer.containsMouse ? Theme.primary : Theme.dim
+            font.pixelSize: 10
+            font.letterSpacing: 2
+          }
+          Icon { name: "chevron-right"; size: 12; color: card.current || pointer.containsMouse ? Theme.primary : Theme.dim }
         }
 
         MouseArea {

@@ -52,18 +52,21 @@ defmodule Omunculus.GuiPendingTest do
     check(item.work === "Build: Doce Ana", "work", item.work);
     check(item.title === "Surgeon asks to use the network", "title", item.title);
     check(item.grants === "use the network \\u00b7 this work only", "grants", item.grants);
-    check(item.unblocks === "surgeon resumes Build: Doce Ana \\u00b7 sales and seller wait on it", "unblocks", item.unblocks);
+    check(item.unblocks === "surgeon resumes Build: Doce Ana \\u00b7 sales and seller are waiting for it", "unblocks", item.unblocks);
     check(item.since === iso(1500), "since", item.since);
     const asks = Pending.describe(question, input(question));
     check(asks.kind === "needs-you" && asks.word === "QUESTION" && asks.icon === "help", "question kind", asks);
     check(asks.title === "Which WhatsApp number should the order button use?" && asks.body === "It goes on every page.", "title and body", asks);
+    const long = Object.assign({}, question, {reason: "Approve the quote? It was priced at R$ 1,500. Ana decides alone.\\nMore."});
+    const split = Pending.describe(long, input(long));
+    check(split.title === "Approve the quote?" && split.body === "It was priced at R$ 1,500. Ana decides alone.\\n\\nMore.", "first sentence", split);
     const list = Pending.describe(questions, input(questions));
     check(list.title === "Surgeon asks 3 questions" && list.body === "" && list.asks === 3, "numbered list", list);
     const choose = Pending.describe(decision, input(decision));
     check(choose.word === "DECISION" && choose.icon === "diamond" && choose.path.join(" > ") === "sales > seller", "decision", choose);
     check(Pending.describe(Object.assign({}, decision, {arbiter: agent("seller")}), input(decision)).kind === "decision", "an agent's decision has its shape too", "");
     check(item.audience === "client" && Pending.describe(Object.assign({}, question, {destination: "owners"}), input(question)).audience === "owner", "audience", item.audience);
-    check(choose.unblocks === "seller resumes Doce Ana: site \\u00b7 sales waits on it", "single waiter", choose.unblocks);
+    check(choose.unblocks === "seller resumes Doce Ana: site \\u00b7 sales is waiting for it", "single waiter", choose.unblocks);
     """)
   end
 
@@ -71,7 +74,7 @@ defmodule Omunculus.GuiPendingTest do
     run!("""
     const lost = asked("x1", {work_id: "gone", reason: "Still there?"});
     const item = Pending.describe(lost, {flat: out.flat, front: "sales", noted: {}, folder: "", text: lost.reason});
-    check(item.path.join(" > ") === "sales > surgeon" && item.work === "" && item.unblocks === "surgeon resumes its work \\u00b7 sales waits on it", "fallback", item);
+    check(item.path.join(" > ") === "sales > surgeon" && item.work === "" && item.unblocks === "surgeon resumes its work \\u00b7 sales is waiting for it", "fallback", item);
     """)
   end
 
@@ -81,6 +84,8 @@ defmodule Omunculus.GuiPendingTest do
     check(all.once.join() === "grant" && all.denies.join() === "deny" && all.always.join() === "grant_agent,grant_stage", "permission", all);
     const pick = Pending.actions(["accept", "keep", "cancel"], false);
     check(pick.once.join() === "accept,keep" && pick.denies.join() === "cancel" && pick.always.length === 0, "decision", pick);
+    check(all.primary === "grant" && pick.primary === "accept", "primary", [all.primary, pick.primary]);
+    check(Pending.actions(["keep", "refuse"], false).primary === "" && Pending.actions(["approve", "deny"], false).primary === "approve", "no recommendation", 0);
     """)
   end
 
@@ -112,21 +117,17 @@ defmodule Omunculus.GuiPendingTest do
     """)
   end
 
-  test "a work card says its state in the tree's words, who works now and its stage" do
+  test "a work card says its state in the tree's words and what it waits for" do
     run!("""
     const working = build([], [run("r1", "surgeon", "w2")]);
     const card = Pending.workCard(working.flat.find(node => node.work === "w1"), 2000);
     check(card.title === "Doce Ana: site" && card.state === "waiting" && card.word === "WAITING FOR SURGEON", "word", card);
-    check(card.now.agent === "surgeon" && card.now.doing === "thinking", "who works", card.now);
     check(card.waits === "seller is waiting for surgeon", "waits", card.waits);
-    check(card.stage.at === 3 && card.stage.count === 3 && card.stage.name === "build" && card.steps.length === 3, "stage", card.stage);
     check(card.elapsed === "16 min", "elapsed", card.elapsed);
     const leaf = Pending.workCard(working.flat.find(node => node.work === "w2"), 2000);
-    check(leaf.word === "WORKING" && leaf.now.agent === "surgeon" && leaf.waits === "" && leaf.stage === null, "leaf", leaf);
+    check(leaf.word === "WORKING" && leaf.waits === "", "leaf", leaf);
     const asking = build([question]);
     check(Pending.workCard(asking.flat.find(node => node.work === "w2"), 2000).word === "WAITING FOR YOU", "needs you", "");
-    const idle = Pending.workCard(build([]).flat.find(node => node.work === "w2"), 2000);
-    check(idle.now === null, "no one works", idle);
     """)
   end
 

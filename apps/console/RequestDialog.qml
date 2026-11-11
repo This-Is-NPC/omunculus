@@ -21,7 +21,7 @@ ModalDialog {
     open()
   }
 
-  onOpened: card.focusWords()
+  onOpened: card.focusFirst()
 
   contentItem: DialogPanel {
     dialogOpen: dialog.visible

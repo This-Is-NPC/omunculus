@@ -778,7 +778,7 @@ Singleton {
       who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
+      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf, titles[event.work_id || ""] || ""),
       ok: !failed,
       tool: event.type === "tool" && !Events.hook(body) ? body.name : event.type === "break" || event.type === "reopen" ? "break" : "",
       request: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter) ? event.request_id : "",
@@ -907,7 +907,7 @@ Singleton {
       failed: was.failed + (fails ? 1 : 0),
       open: open,
       retried: retried,
-      last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
+      last: line.hook ? was.last : { text: line.outcome ? line.text : Phrases.said(line.name, line.args), at: line.at }
     })
     const place = rows[runId]
     if (place === undefined)

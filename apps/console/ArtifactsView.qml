@@ -1,13 +1,15 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Artifacts.js" as Artifacts
 import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // ArtifactsView lists the documents the conversation's agents made: a section
-// per artifact, its name and kind, a row per version under it, oldest first,
-// with its note, size and when and by whom it was written. Enter, or a click,
-// opens that version. It reads them each time it comes on screen. Esc leaves.
+// per artifact, headed by its title and what it is, a row per version under
+// it, oldest first, with its size, by whom and when it was written; the media
+// type is in a row's tooltip. Enter, or a click, opens that version. It reads
+// them each time it comes on screen. Esc leaves.
 FocusScope {
   id: view
 
@@ -20,8 +22,8 @@ FocusScope {
 
   // The versions of every artifact, each with the artifact it is of.
   readonly property var versions: [].concat(...items.map(artifact => artifact.versions.map(version => ({
-    id: artifact.name + "@" + version.version, name: artifact.name, kind: artifact.kind,
-    group: artifact.name + "  ·  " + artifact.kind, version: version
+    id: artifact.name + "@" + version.version, name: artifact.name,
+    group: Artifacts.heading(artifact), version: version
   }))))
 
   function load() {
@@ -63,11 +65,10 @@ FocusScope {
     rows: view.versions
     section: "group"
     loading: view.loading && view.items.length === 0
-    columns: [{ title: "Version", weight: 0.15 }, { title: "Note", weight: 0.5 }, { title: "Written", weight: 0.35 }]
-    cells: entry => ["v" + entry.version.version,
-      entry.version.note || "",
-      [view.size(entry.version.bytes), entry.version.media_type, Time.clock(entry.version.at, Date.now()), entry.version.by].filter(text => text).join(table.separator)]
-    stacked: [[0], [1], [2]]
+    columns: [{ title: "Version", weight: 0.15 }, { title: "Size", weight: 0.2 }, { title: "By", weight: 0.25 }, { title: "Written", weight: 0.4 }]
+    cells: entry => ["v" + entry.version.version, view.size(entry.version.bytes), entry.version.by || "", Time.clock(entry.version.at, Date.now())]
+    tip: entry => entry.version.media_type || ""
+    stacked: [[0], [1, 2, 3]]
     emptyText: "No document was made in this conversation."
     onOpened: entry => Omunculus.openArtifact(entry.name, entry.version)
     onBackRequested: view.leave()

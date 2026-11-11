@@ -21,7 +21,8 @@ import "kit/ui"
 // was passed up, a chip says through whom and opens the wordings of each
 // level and the harness's own sentence. Who decides, you or an agent you can
 // overrule, and each decision it gathers from below, under its part, are
-// shown as before. The actions are one group at the bottom: the options, SEND
+// shown as before. The actions are one group at the bottom: the options, the
+// recommended one (GRANT, APPROVE or ACCEPT) filled and the rest outlined, SEND
 // while words are written, "I can't answer this", DENY last and "Always…"
 // after it; a numbered list's form holds its own, which float on the view's
 // bottom edge while the form's end is out of view, and the heading counts its
@@ -73,7 +74,7 @@ SurfaceFrame {
   readonly property var own: choices.find(choice => choice.path.length === 0) || null
   readonly property var gathered: choices.filter(choice => choice.path.length > 0)
   // The scopes behind "Always…", and the options a grant is made of.
-  readonly property var ownActions: own && !escalating ? Pending.actions(own.options, kind === "permission") : { once: [], denies: [], always: [] }
+  readonly property var ownActions: own && !escalating ? Pending.actions(own.options, kind === "permission") : { once: [], primary: "", denies: [], always: [] }
 
   // The dim tone, kept readable on the card's own fill.
   readonly property color dim: Theme.readableOn(fill)
@@ -98,6 +99,9 @@ SurfaceFrame {
     { name: "FOR", value: facts.audience === "owner" ? "the project's owner" : "" }
   ].filter(field => field.value !== "")
 
+  // The recommended button of the one decision it gathers, when it has no
+  // options of its own.
+  property Item recommendedButton: null
   // Whether the words written escalate it rather than answer it.
   property bool escalating: false
   // What was sent, shown while it goes.
@@ -118,6 +122,21 @@ SurfaceFrame {
       form.focusBox()
     else if (!formLoader.active && wordsShown)
       words.forceActiveFocus()
+  }
+
+  // Puts the keyboard where the answer starts: in its words or form, else on
+  // its recommended action, else on the first action.
+  function focusFirst() {
+    if (!open)
+      return
+    if (formLoader.active || wordsShown)
+      return focusWords()
+    const at = ownActions.once.indexOf(ownActions.primary)
+    const first = ownOptions.count > 0 ? ownOptions.itemAt(Math.max(0, at)) : recommendedButton
+    if (first)
+      first.forceActiveFocus()
+    else if (deny.visible)
+      deny.forceActiveFocus()
   }
 
   onDeliveryChanged: if (delivery === "failed") focusWords()
@@ -485,12 +504,17 @@ SurfaceFrame {
           Repeater {
             model: choice.parts.once.concat(choice.parts.denies)
             delegate: TraceButton {
+              id: gatheredOption
               required property string modelData
+              // The one decision gathered is recommended like the card's own.
+              readonly property bool recommended: modelData === choice.parts.primary && card.gathered.length === 1
               dense: true
               role: Requests.guarded(modelData) ? "guarded" : "progress"
+              filled: recommended && card.yours
               icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : "diamond"
               text: card.labelOf(modelData, choice.modelData.request)
               onClicked: choice.decide(modelData)
+              Component.onCompleted: if (recommended) card.recommendedButton = gatheredOption
             }
           }
           AlwaysMenu {
@@ -518,7 +542,7 @@ SurfaceFrame {
           required property string modelData
           dense: true
           role: "progress"
-          filled: modelData === "grant" && card.yours
+          filled: modelData === card.ownActions.primary && card.yours
           icon: modelData === "grant" ? "check" : "diamond"
           text: card.labelOf(modelData)
           onClicked: card.decide(modelData, card.note, [])

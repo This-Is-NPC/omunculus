@@ -5,11 +5,10 @@ import "kit/client/Pending.js" as Pending
 import "kit/ui"
 
 // WorkCard is a work handed down, once, in the chat: its title, its state
-// as an icon and a word, how long, who works for it now, who it waits for,
-// and the stages of its workflow, with OPEN IN TREE to read it where it sits
-// among the works. Narrow, the stages are a bar of one segment each and the
-// button has its own line. Its runs and steps are not here; they are in the
-// tree.
+// as an icon and a word, how long, and who it waits for, with OPEN IN TREE to
+// read it where it sits among the works. Where the work stands, its stages and
+// who is at work, is the progress strip's alone, and the live line under the
+// thread says what the agent at work does; its runs and steps are in the tree.
 SurfaceFrame {
   id: card
 
@@ -80,64 +79,17 @@ SurfaceFrame {
       }
     }
 
-    Fact {
-      visible: card.view !== null && card.view.now !== null
-      name: "NOW"
-      who: card.view && card.view.now ? card.view.now.agent : ""
-      text: card.view && card.view.now ? card.view.now.doing : ""
-    }
-    Fact {
-      visible: card.view !== null && card.view.waits !== ""
-      name: "WAITS"
-      text: card.view ? card.view.waits : ""
-    }
-
-    GridLayout {
+    RowLayout {
       Layout.fillWidth: true
-      columns: card.stacked ? 1 : 2
-      columnSpacing: Theme.space.section
-      rowSpacing: Theme.space.gap
-
-      ColumnLayout {
-        Layout.fillWidth: true
-        Layout.alignment: Qt.AlignVCenter
-        spacing: Theme.space.tight
-        visible: card.view !== null && card.view.stage !== null
-        Label {
-          visible: card.stacked && card.view !== null && card.view.stage !== null
-          text: card.view && card.view.stage ? "STAGE " + card.view.stage.at + "/" + card.view.stage.count + (card.view.stage.name !== "" ? "  ·  " + card.view.stage.name.toUpperCase() : "") : ""
-          color: Theme.dim
-          font.pixelSize: Theme.type.header.size
-          font.letterSpacing: Theme.type.meta.tracking
-          elide: Text.ElideRight
-          Layout.fillWidth: true
-        }
-        RowLayout {
-          visible: card.stacked
-          Layout.fillWidth: true
-          spacing: Theme.space.tight
-          Repeater {
-            model: card.view && card.stacked ? card.view.steps : []
-            delegate: Rectangle {
-              required property var modelData
-              Layout.fillWidth: true
-              implicitHeight: Theme.space.tight
-              color: ({ done: Theme.success, current: Theme.primary })[modelData.status] || Theme.line
-            }
-          }
-        }
-        Stepper {
-          visible: !card.stacked
-          Layout.fillWidth: true
-          steps: card.view && !card.stacked ? card.view.steps : []
-          round: card.view ? card.view.round : 0
-          tip: card.view && card.view.stage ? "stage " + card.view.stage.at + " of " + card.view.stage.count : ""
-        }
+      spacing: Theme.space.gap
+      Fact {
+        visible: card.view !== null && card.view.waits !== ""
+        name: "WAITS"
+        text: card.view ? card.view.waits : ""
       }
-
+      Item { visible: card.view === null || card.view.waits === ""; Layout.fillWidth: true }
       TraceButton {
-        Layout.fillWidth: card.stacked
-        Layout.alignment: card.stacked ? Qt.AlignLeft : Qt.AlignRight | Qt.AlignVCenter
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
         dense: true
         role: "action"
         icon: "chevron-right"

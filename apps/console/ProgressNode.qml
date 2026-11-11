@@ -190,26 +190,14 @@ FocusScope {
       tip: row.stageTip
     }
 
-    // The tool it called last, else what it is doing.
-    RowLayout {
+    // What it did last, as a verb and its object, else what it is doing.
+    Label {
       Layout.fillWidth: true
-      spacing: Theme.space.tight
-      Label {
-        visible: !!row.node.lastCall
-        Layout.maximumWidth: card.width * 0.4
-        text: row.node.lastCall ? row.node.lastCall.name : ""
-        color: Theme.foreground
-        font.pixelSize: Theme.type.tab.size
-        elide: Text.ElideRight
-      }
-      Label {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        text: row.node.lastCall ? row.node.lastCall.brief : row.node.doing
-        color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
-        font.pixelSize: Theme.type.tab.size
-        elide: Text.ElideRight
-      }
+      Layout.minimumWidth: 0
+      text: row.node.lastStep !== "" ? row.node.lastStep : row.node.doing
+      color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
+      font.pixelSize: Theme.type.tab.size
+      elide: Text.ElideRight
     }
 
     Label {

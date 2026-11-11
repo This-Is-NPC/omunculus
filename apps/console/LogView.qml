@@ -239,6 +239,13 @@ Item {
           font.pixelSize: Theme.type.header.size
           font.letterSpacing: Theme.type.header.tracking
         }
+        // The kind column holds the longest single kind whole ("CONVERSATION").
+        TextMetrics {
+          id: kindWidth
+          text: "CONVERSATION"
+          font.pixelSize: Theme.type.header.size
+          font.letterSpacing: Theme.type.header.tracking
+        }
         // A failure a later call settled is dim, not red.
         readonly property bool bad: !model.ok && !model.retried
         // Narrow, a row is two lines, not columns.
@@ -341,7 +348,7 @@ Item {
               color: row.bad ? Theme.error : row.kind.tone
             }
             Label {
-              Layout.preferredWidth: Theme.size.control * 1.4
+              Layout.preferredWidth: kindWidth.advanceWidth
               text: row.model.kind.toUpperCase()
               color: row.bad ? Theme.error : row.kind.tone
               font.pixelSize: Theme.type.header.size

@@ -92,5 +92,5 @@ Rectangle {
     onClicked: button.press()
   }
   FocusRing {}
-  Hint { id: hint; active: pointer.containsMouse || button.activeFocus; text: button.reason || button.tip }
+  Hint { id: hint; active: pointer.containsMouse; text: button.reason || button.tip }
 }

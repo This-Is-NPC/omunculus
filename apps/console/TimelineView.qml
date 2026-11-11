@@ -22,9 +22,10 @@ import "kit/ui"
 // by its top, so its first words stay readable. From the keyboard, Tab reaches
 // it on the newest entry: ↑/↓ and PgUp/PgDn move, Home goes to the first and
 // End back to the newest, and Tab moves into the tools of the entry it is on.
-// While an agent works for a work's thread, a live line at its end says who,
-// from the agent you wrote to down to the one at work, what that one does and
-// for how long, unless that agent's own turn streams here and says it. Its
+// While an agent works for the thread, a live line at its end says who, from
+// the agent you wrote to down to the one at work, what that one does, in a
+// plain verb, and for how long, unless that agent's own turn streams here and
+// says it. Its
 // implicit height is its entries', for a thread nested in a block, which says
 // itself that its agents work.
 Item {
@@ -47,12 +48,20 @@ Item {
   // Counts every change to the entries, a turn streaming included.
   property int changes: 0
 
-  // How many entries lie below the view: the ones the NEW pill counts.
+  // How many entries lie below the view: the ones the NEW pill counts. An
+  // entry that draws nothing, an empty turn or a request the queue holds, is
+  // not news, and a thread that fits has none.
   readonly property int below: {
-    if (changes < 0 || timeline.contentHeight < 0)
+    if (changes < 0 || timeline.contentHeight < 0 || timeline.contentHeight + timeline.edge <= timeline.height)
       return 0
     const last = timeline.indexAt(1, timeline.contentY + timeline.height - 2)
-    return last < 0 ? 0 : Math.max(0, timeline.count - 1 - last)
+    let count = 0
+    for (let row = last < 0 ? timeline.count : last + 1; row < timeline.count; row++) {
+      const entry = timeline.itemAtIndex(row)
+      if (!entry || entry.drawn)
+        count++
+    }
+    return count
   }
   // The streaming turn whose top the view holds, and the one you jumped to
   // the end of, which it does not hold.
@@ -159,12 +168,12 @@ Item {
 
   // Who works for this thread, as {chain, agent, doing, since, round}
   // (Progress.live); null when no one does, in a thread nested in a block, or
-  // while that agent's own turn streams here and shows it. In the dialogue
-  // only the agent written to: the works below have their cards.
+  // while that agent's own turn streams here and shows it. In the dialogue it
+  // is whoever works, down the team, at every width.
   readonly property var working: {
     const front = Omunculus.agent || Omunculus.lastAgent
     const live = nesting > 0 ? null : Progress.live(Omunculus.progress, thread, front)
-    if (!live || changes < 0 || (dialogue && live.agent !== front))
+    if (!live || changes < 0)
       return null
     for (let row = model.count - 1; row >= 0; row--) {
       const entry = model.get(row)
@@ -245,7 +254,7 @@ Item {
     // would cut it. Once the thread outgrows the view, each end has a band for
     // a pill, so a pill never covers an entry; the band does not follow the
     // pill, whose count follows the view.
-    readonly property bool scrolls: contentHeight + edge > Window.height / 2
+    readonly property bool scrolls: contentHeight + edge > Math.min(root.height, Window.height / 2)
     // The two pixels of an entry's outline, one at each end.
     readonly property int edge: 2
     // The bands above and below the view hold the pills, so none covers a line.

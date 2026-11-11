@@ -10,7 +10,8 @@ import "kit/ui"
 // items are the three kinds, QUESTION, DECISION and PERMISSION, oldest first,
 // each a RequestDecision with its actions grouped inside it. Acting on one
 // removes it from the queue and leaves a sentence in the chat. Esc, the close
-// button and a click outside close it.
+// button and a click outside close it, and so does answering the last one: it
+// is never open with nothing in it.
 FocusScope {
   id: queue
 
@@ -19,10 +20,20 @@ FocusScope {
   property bool shown: false
   signal closed()
 
-  // Puts the keyboard on the panel, so Esc closes it and Tab goes in.
-  function focusFirst() { panel.forceActiveFocus() }
+  // Puts the keyboard on the first item's first field or main action; the
+  // panel itself when there is none, so Esc closes it and Tab goes in.
+  function focusFirst() {
+    const first = list.count > 0 ? list.itemAt(0) as RequestDecision : null
+    if (!first) {
+      panel.forceActiveFocus()
+      return
+    }
+    first.focusFirst()
+    // The question is read from its top, whatever the focus scrolled to.
+    Qt.callLater(() => scroller.scrollTo(0))
+  }
 
-  visible: shown
+  visible: shown && items.length > 0
   onShownChanged: if (shown) Qt.callLater(focusFirst)
 
   Rectangle {
@@ -86,20 +97,10 @@ FocusScope {
         color: Theme.line
       }
 
-      Label {
-        Layout.fillWidth: true
-        visible: queue.items.length === 0
-        text: "NOTHING WAITS ON YOU"
-        color: Theme.dim
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: Theme.type.meta.tracking
-      }
-
       ScrollPage {
+        id: scroller
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.preferredHeight: 0
-        visible: queue.items.length > 0
         contentHeight: column.implicitHeight
 
         ColumnLayout {

@@ -11,6 +11,9 @@ const tools = {
   ls: { now: "Looking at the project", done: "Looked at the project", act: "look at", past: "looked in", folder: true },
   grep: { now: "Searching the project", done: "Searched the project", act: "search", past: "searched" },
   find: { now: "Looking for files", done: "Looked for files", act: "look for files in", past: "looked for files in" },
+  put_artifact: { now: "Saving a document", done: "Saved a document", act: "save a document", past: "saved", document: true },
+  get_artifact: { now: "Reading a document", done: "Read a document", act: "read a document", past: "read", document: true },
+  list_artifacts: { now: "Listing the documents", done: "Listed the documents", act: "list the documents" },
   bash: { now: "Running a command", done: "Ran a command", act: "run a command", past: "ran a command on", command: true },
   ask: { now: "Asking a teammate", done: "Asked a teammate", act: "ask a teammate", past: "asked" },
   escalate: { now: "Passing a question up", done: "Passed a question up", act: "pass a question up", past: "passed a question up to" },
@@ -37,7 +40,7 @@ const patterned = ["grep", "egrep", "fgrep", "rg", "sed", "awk"];
 const talkers = ["echo", "printf"];
 const unknown = { now: "Working", done: "Made a call" };
 // The arg a tool row shows for the tools that name their object by it.
-const briefKeys = { read: "path", write: "path", edit: "path", ls: "path", bash: "command", grep: "path", find: "path", ask: "to", escalate: "to" };
+const briefKeys = { put_artifact: "name", get_artifact: "name", read: "path", write: "path", edit: "path", ls: "path", bash: "command", grep: "path", find: "path", ask: "to", escalate: "to" };
 
 // The title of the object a call names, for the tools that name theirs: the
 // first of a `work` call's works, with "+N more" when it opens several.
@@ -45,6 +48,14 @@ function titleOf(tool, args) {
   const works = tool.titled && args && Array.isArray(args.works) ? args.works : [];
   const title = works.length > 0 && works[0] && typeof works[0].title === "string" ? works[0].title : "";
   return title !== "" && works.length > 1 ? title + " +" + (works.length - 1) + " more" : title;
+}
+
+// A document's name as its title: its extension and the hash that makes the
+// name unique go, dashes become spaces: "proposal-0023b19c...f5.md" is "Proposal".
+function document(name) {
+  const stem = String(name || "").replace(/\.[A-Za-z0-9]{1,5}$/, "").replace(/[-_ ]?[0-9a-f]{16,}$/i, "");
+  const words = stem.replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 // What a tool is doing while it runs, with the title of its object when the
@@ -175,6 +186,8 @@ function object(name, args) {
     return shown.length > nameLimit ? shown.slice(0, nameLimit - 1) + "…" : shown;
   }
   const path = given.replace(/\s+/g, " ").trim();
+  if (tool.document)
+    return document(path);
   if (tool.folder && ["", ".", "./"].includes(path))
     return "the project";
   return tool.folder && path !== "" && !path.endsWith("/") ? path + "/" : path;
@@ -208,14 +221,21 @@ function step(name, args) {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-// A failed call as the log's plain sentence, before the reason ("could not
-// read design/rounds.md").
+// A finished call as a sentence of its own ("Read design/rounds.md"): a verb
+// and its object, never the command that ran.
+function said(name, args) {
+  const text = step(name, args);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 // A tool as a verb phrase the person reads ("publish the site to
 // production"); "" for a tool not in the table.
 function act(name) {
   return tools[name] ? tools[name].act : "";
 }
 
+// A failed call as the log's plain sentence, before the reason ("could not
+// read design/rounds.md").
 function stepFailure(name, args) {
   const tool = tools[name];
   if (!tool) return "could not make a call";

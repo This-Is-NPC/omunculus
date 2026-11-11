@@ -100,6 +100,9 @@ defmodule Omunculus.GuiEventsTest do
     says("delegate", {title: "Logo", goal: "g", parent_id: "p"}, "sales", "handed down: Logo");
     says("work", {works: [{title: "Bakery"}, {title: "Menu"}], start: true}, "sales", "opened Bakery +1 more");
     says("work", {state: "open", reason: "reopened_by_prompt"}, "", "reopened by a message");
+    says("artifact", {name: "proposal-0023b19cb2ea27323f5f6d8b3443cbe4.md", kind: "proposal", media_type: "text/markdown", version: 3}, "seller", "saved Proposal, version 3");
+    says("tool", {name: "put_artifact", args: {name: "proposal-0023b19cb2ea27323f5f6d8b3443cbe4", content: "x"}, ok: true}, "seller", "saved Proposal");
+    check(Events.what("work", {state: "done"}, "", {}, "", {}, "Bakery website") === "Bakery website is now done" && Events.what("work", {}, "", {}, "", {}, "") === "a work changed", "work event names its work", "");
     says("grant", {name: "bash", kind: "tool"}, "you", "granted: run a command, for this work");
     says("attach", {attachments: [{}, {}]}, "sales", "attached 2 files");
     says("comment.delete", {ids: ["a"]}, "sales", "deleted 1 comment");

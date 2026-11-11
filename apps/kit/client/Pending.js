@@ -43,6 +43,13 @@ function rest(text) {
   return at < 0 ? "" : lines.slice(at + 1).join("\n").trim();
 }
 
+// A headline split after its first sentence: {first, more}, `more` being "" for
+// a headline that is one sentence.
+function sentence(line) {
+  const found = /^(.+?[.?!])\s+(\S.*)$/.exec(line);
+  return found ? { first: found[1], more: found[2] } : { first: line, more: "" };
+}
+
 function capital(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
 
 function lower(text) { return text.charAt(0).toLowerCase() + text.slice(1); }
@@ -93,13 +100,14 @@ function describe(request, input) {
   const wanted = Requests.granted(request);
   const unlocks = wanted ? Requests.unlocks(wanted, input.folder) : "";
   const above = route.slice(0, -1);
+  const lead = wanted || form ? null : sentence(headline(input.text));
   const unblocks = [asker + " resumes " + (work !== "" ? work : "its work")]
-    .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " wait" : " waits") + " on it"] : []).join(" · ");
+    .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " are" : " is") + " waiting for it"] : []).join(" · ");
   return {
     id: request.id, kind: kind, word: look.word, icon: look.icon,
     asker: asker, audience: Requests.audience(request), path: route, work: work,
-    title: wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : headline(input.text),
-    body: wanted || form ? "" : rest(input.text),
+    title: wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
+    body: lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",
     unblocks: unblocks,
     grants: wanted && Object.keys(request.options || {}).includes("grant") ? unlocks + " · this work only" : unlocks,
     since: request.created_at || "",
@@ -109,9 +117,11 @@ function describe(request, input) {
 
 // A request's options split as its action group shows them: the ones given
 // once, the no or cancel, and, for a permission, the wider scopes behind
-// "Always…".
+// "Always…". `primary` is the one given once that is recommended, the card's
+// filled button: a grant, an approval or an acceptance; "" when none is.
 function actions(options, permission) {
-  return { once: Requests.once(options, permission), denies: options.filter(Requests.guarded), always: Requests.always(options, permission) };
+  const once = Requests.once(options, permission);
+  return { once: once, primary: once.find(option => ["grant", "approve", "accept"].includes(option)) || "", denies: options.filter(Requests.guarded), always: Requests.always(options, permission) };
 }
 
 // What you did to a request, as one line of the chat: {icon, word, sentence}.
@@ -147,22 +157,13 @@ function stateWord(node) {
   return Progress.word(node.state).toUpperCase();
 }
 
-// A work as its card in the chat reads: {work, title, state, word, now,
-// waits, stage, steps, round, elapsed}. `now` is who works for it at the
-// moment, {agent, doing}, or null; `waits` who it waits for, as a sentence,
-// or ""; `stage` {at, count, name} its place in the workflow, or null. `at`
-// is the clock in seconds.
+// A work as its card in the chat reads: {work, title, state, word, waits,
+// elapsed}. `waits` is who it waits for, as a sentence, or ""; `at` is the
+// clock in seconds.
 function workCard(node, at) {
-  const under = node.state === "working" ? [node] : Progress.underway(node);
-  const worker = under.length > 0 ? under[under.length - 1] : null;
-  const current = node.steps.findIndex(step => step.status === "current");
-  const done = node.steps.filter(step => step.status === "done").length;
   return {
     work: node.work, title: node.title, state: node.state, word: stateWord(node),
-    now: worker ? { agent: worker.agent, doing: lower(Progress.lively(worker.doing, worker.since, at)) } : null,
     waits: node.state === "waiting" && node.waitingOn ? node.agent + " is waiting for " + node.waitingOn : "",
-    stage: node.steps.length === 0 ? null : { at: current >= 0 ? current + 1 : done, count: node.steps.length, name: current >= 0 ? node.steps[current].name : "" },
-    steps: node.steps, round: node.round,
     elapsed: Progress.span(Progress.closed(node.state) ? node.own.seconds : Math.max(0, at - node.created))
   };
 }

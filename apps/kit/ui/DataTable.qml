@@ -12,7 +12,7 @@ import QtQuick.Controls.Basic as C
 // only, or, `toolsLive`, every row's, row by row. Tools whose root has `act()`
 // take the row's Enter, Space and double click instead of opening it; Esc, or
 // Enter a tool leaves, goes back to the rows. Rows may also carry a status
-// cell, and be listed under group titles. The row the keyboard is on shows
+// cell, with an icon before its word, and be listed under group titles. The row the keyboard is on shows
 // it by a focus ring once a key was used on the rows, never because they
 // took the keyboard as they were shown or clicked; a picked row stays
 // outlined. Cells show their text as it is; with `decode` a new row's cells
@@ -27,14 +27,16 @@ Item {
   property var cells: entry => []
   // A cell's colour, or "" for the usual one (the first column reads brighter).
   property var tone: (entry, column) => ""
+  // A row's tooltip, shown when it is pointed at; "" for none.
+  property var tip: entry => ""
   // The columns shown on each line of a stacked row.
   property var stacked: [[0]]
   // The column shown at the top right of a stacked row, or -1.
   property int status: -1
   // What joins the cells of a stacked line.
   readonly property string separator: "  ·  "
-  // A record whose status shows a dot before it, as one going on now.
-  property var dotted: entry => false
+  // The icon a record's status shows before its word, or "" for none.
+  property var statusIcon: entry => ""
   // The field of a record naming the group it is listed under, or "" for none:
   // a title opens each run of records sharing it.
   property string section: ""
@@ -239,7 +241,7 @@ Item {
       required property var modelData
       required property int index
       readonly property var texts: table.cells(modelData)
-      readonly property bool dot: table.dotted(modelData)
+      readonly property string mark: table.statusIcon(modelData)
       // The stacked lines that hold text: the title's always.
       readonly property int lineCount: table.stacked.filter((line, i) => i === 0 || line.some(column => texts[column])).length
       readonly property bool current: ListView.isCurrentItem
@@ -306,6 +308,7 @@ Item {
       Behavior on opacity { NumberAnimation { duration: 140 } }
 
       HoverHandler { id: hover }
+      Hint { active: hover.hovered; text: table.tip(row.modelData) }
       FocusRing { shown: row.current && list.activeFocus && !toolScope.activeFocus && table.keyed }
 
       Row {
@@ -326,14 +329,16 @@ Item {
             soft: true
             revealOnStage: table.decode && !table.compact
             // The row is gone while its cells are torn down.
-            leftPadding: row && index === table.status && row.dot ? 11 : 0
+            leftPadding: row && index === table.status && row.mark !== "" ? 14 : 0
             color: row ? row.color(index) : Theme.dim
             font.pixelSize: index === 0 ? 11 : 10
             elide: Text.ElideRight
-            Dot {
+            Icon {
               visible: parent.leftPadding > 0
               anchors.verticalCenter: parent.verticalCenter
-              tone: parent.color
+              name: row ? row.mark : ""
+              size: 10
+              color: parent.color
             }
           }
         }
@@ -371,16 +376,18 @@ Item {
         // Not `visible`, which also follows the row's: a row torn down would loop.
         // Measured apart, since a Text's own implicit width follows its width.
         width: shown ? Math.ceil(statusMetrics.advanceWidth) + leftPadding : 0
-        leftPadding: row.dot ? 11 : 0
+        leftPadding: row.mark !== "" ? 14 : 0
         text: table.status >= 0 ? row.texts[table.status] : ""
         color: table.tone(row.modelData, table.status) || Theme.primary
         font.pixelSize: 9
         font.letterSpacing: 1
         TextMetrics { id: statusMetrics; font: statusLabel.font; text: statusLabel.text }
-        Dot {
-          visible: row.dot
+        Icon {
+          visible: row.mark !== ""
           anchors.verticalCenter: parent.verticalCenter
-          tone: parent.color
+          name: row.mark
+          size: 10
+          color: parent.color
         }
       }
 
