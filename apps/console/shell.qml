@@ -161,8 +161,9 @@ ShellRoot {
             onDismissed: panel.notesKept = count
             onCountChanged: panel.notesKept = -1
           }
+          // Keys are for a keyboard: a narrow window, a phone, has no use for them.
           IconButton {
-            visible: !panel.started
+            visible: !panel.started && panel.size !== "narrow"
             name: "info"
             tip: "the keys  " + Shortcuts.label("help")
             onClicked: shortcuts.open()
@@ -251,6 +252,7 @@ ShellRoot {
               DecodeLabel {
                 width: parent.width
                 value: !Omunculus.connected ? "The server does not answer"
+                  : panel.size === "narrow" ? "Tap a way in."
                   : "Press 1 to " + panel.ways.length + ", or click. Enter opens the first."
                 soft: true
                 horizontalAlignment: Text.AlignHCenter
