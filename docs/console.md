@@ -442,7 +442,8 @@ even when what it names is unknown (`Requests.optionLabel`: "FOR THIS AGENT",
 NOTE (or ADD A REASON OR A NOTE) and goes with the option chosen; DENY gives
 it as the reason. ESCALATE, from the menu, shows the box, captioned WHY IT GOES
 UP, and turns the action into ESCALATE; ANSWER INSTEAD turns it back. Sending
-shows your answer dimmed under SENDING…; answered, the item shrinks to the
+turns the button you chose into a turning spinner and SENDING, at the width it
+had, so nothing moves; the other buttons go off; answered, the item shrinks to the
 question and your answer; a failure reopens it with your words kept and an
 error line. The words are written in the kit's `TextBlock`, one line tall and
 growing with its text, and Enter sends them on a question. Under a decision

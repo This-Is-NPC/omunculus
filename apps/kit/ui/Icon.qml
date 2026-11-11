@@ -40,6 +40,8 @@ Item {
     folder: "M2.5 4.5v8h11v-6.5h-6l-1.5-1.5z",
     more: "M3.5 8h0.01 M8 8h0.01 M12.5 8h0.01",
     check: "M3.5 8.5l3 3 6-7",
+    // Three quarters of a circle: turns while something is on its way.
+    spinner: "M8 2.5a5.5 5.5 0 1 0 5.5 5.5",
     send: "M13.5 2.5l-11 4.5 4.5 2 2 4.5z M7 9l6.5-6.5",
     map: "M2.5 3.5h4v3h-4z M9.5 9.5h4v3h-4z M9.5 3.5h4v3h-4z M6.5 5h3 M4.5 6.5v3.5c0 .6.4 1 1 1h4",
     cost: "M8 2v12 M11 4.5c0-1-1.3-1.5-3-1.5s-3 .7-3 2c0 3 6 1.5 6 4.5 0 1.3-1.3 2-3 2s-3-.6-3-1.7",

@@ -10,6 +10,8 @@ import "Breakpoints.js" as Breakpoints
 // wider than `maximumWidth`, its caption eliding instead. `busy`, the trace
 // runs in place of its caption; one that still acts while busy
 // (`allowClickWhileBusy`) keeps its caption, with the trace along its foot.
+// `sending`, the button says SENDING with a turning spinner in its own place,
+// at the width its text gave it, and reads as pressed rather than off.
 Rectangle {
   id: button
 
@@ -23,6 +25,7 @@ Rectangle {
   property bool armed: false
   property bool filled: false
   property bool busy: false
+  property bool sending: false
   property bool allowClickWhileBusy: false
   property real maximumWidth: Breakpoints.room(parent)
   property color tone: role === "guarded" ? Theme.error : Theme.primary
@@ -38,14 +41,14 @@ Rectangle {
 
   // Room on each side of the centred content.
   readonly property real side: dense ? 10 : 14
-  readonly property real iconRoom: icon ? (dense ? 12 : 14) + content.spacing : 0
-  implicitWidth: Math.max(dense ? 72 : 150, iconRoom + caption.implicitWidth + 2 * side)
+  readonly property real iconRoom: icon || sending ? (dense ? 12 : 14) + content.spacing : 0
+  implicitWidth: Math.max(dense ? 72 : 150, iconRoom + Math.max(caption.implicitWidth, whole.advanceWidth) + 2 * side)
   implicitHeight: dense ? Breakpoints.target(Window.width) : Theme.size.control
   // The width, not the implicit width, is bounded: what sizes itself from the
   // button's implicit width never depends on its own.
   width: Math.min(implicitWidth, maximumWidth)
   activeFocusOnTab: true
-  opacity: off ? 0.35 : 1
+  opacity: off && !sending ? 0.35 : 1
   color: armed || filled ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
   border.color: primary || filled ? tone : Theme.line
   scale: pointer.pressed && !off ? 0.97 : 1
@@ -109,10 +112,11 @@ Rectangle {
 
       Icon {
         anchors.verticalCenter: parent.verticalCenter
-        visible: button.icon.length > 0
-        name: button.icon
+        visible: button.icon.length > 0 || button.sending
+        name: button.sending ? "spinner" : button.icon
         size: button.dense ? 12 : 14
         color: button.ink
+        RotationAnimator on rotation { running: button.sending; from: 0; to: 360; duration: 900; loops: Animation.Infinite }
       }
       DecodeLabel {
         id: caption
@@ -120,7 +124,7 @@ Rectangle {
         // Elided before it reaches the key or the edges.
         width: Math.min(implicitWidth, button.width - 2 * button.side - button.iconRoom)
         elide: Text.ElideRight
-        value: button.text
+        value: button.sending ? "SENDING" : button.text
         soft: true
         color: button.ink
         font.pixelSize: button.dense ? 10 : 11
@@ -146,6 +150,15 @@ Rectangle {
     cursorShape: button.off ? Qt.ArrowCursor : Qt.PointingHandCursor
     onPressed: hint.dismiss()
     onClicked: button.press()
+  }
+
+  // The width its own text takes, which SENDING never shrinks.
+  TextMetrics {
+    id: whole
+    text: button.text
+    font.pixelSize: button.dense ? 10 : 11
+    font.letterSpacing: button.dense ? 1 : 1.4
+    font.family: caption.font.family
   }
 
   GuardNudge { id: guardNudge; targetObject: contentShift }

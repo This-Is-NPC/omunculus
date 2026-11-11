@@ -29,7 +29,7 @@ import "kit/ui"
 // after it; a numbered list's form holds its own, which float on the view's
 // bottom edge while the form's end is out of view, and the heading counts its
 // answers. A note, or the reason of a no, is behind ADD A NOTE. Sending shows
-// the answer dimmed at once, answered it collapses to the question and your
+// SENDING on the button chosen, which keeps its width; answered it collapses to the question and your
 // answer, and a failure reopens it with the words kept.
 SurfaceFrame {
   id: card
@@ -108,8 +108,8 @@ SurfaceFrame {
   property bool escalating: false
   // Whether a review's action is being rewritten: the words replace its text.
   property bool editing: false
-  // What was sent, shown while it goes.
-  property string sentText: ""
+  // What is being sent: "path|option" of the option chosen, or "words".
+  property string chosen: ""
   property bool wording: false
   // Whether the words of a decision or a permission are open.
   property bool noting: false
@@ -141,7 +141,13 @@ SurfaceFrame {
       first.forceActiveFocus()
     else if (deny.visible)
       deny.forceActiveFocus()
+    else if (!focusRetried) {
+      // Its buttons are not built yet: once more, on the filled one.
+      focusRetried = true
+      Qt.callLater(focusFirst)
+    }
   }
+  property bool focusRetried: false
 
   onDeliveryChanged: if (delivery === "failed") focusWords()
 
@@ -152,7 +158,7 @@ SurfaceFrame {
   // Chooses an option, with the words as its body: the request's own or, by
   // the parts of path, that of a decision it gathers.
   function decide(option, body, path) {
-    sentText = body !== "" ? body : labelOf(option)
+    chosen = (path || []).join("/") + "|" + option
     sent(Focus.within(Window.activeFocusItem, card))
     Omunculus.reply(key, option, body, path)
   }
@@ -162,7 +168,7 @@ SurfaceFrame {
     const body = text.trim()
     if (body === "")
       return
-    sentText = body
+    chosen = "words"
     sent(Focus.within(Window.activeFocusItem, card))
     Omunculus.reply(key, "", body)
   }
@@ -183,7 +189,7 @@ SurfaceFrame {
     const reason = card.note
     if (reason === "" || !yours)
       return
-    sentText = reason
+    chosen = "words"
     sent(Focus.within(Window.activeFocusItem, card))
     Omunculus.escalate(key, reason)
   }
@@ -410,15 +416,15 @@ SurfaceFrame {
     }
 
     // Your answer, or what the agent above chose, as a bubble on the right with
-    // its text left aligned: dim while it goes.
+    // its text left aligned. While it goes, the button chosen says SENDING.
     ColumnLayout {
       Layout.fillWidth: true
-      visible: card.busy || card.settled
+      visible: card.settled
       spacing: Theme.space.line
       Label {
         Layout.alignment: Qt.AlignRight
-        text: card.busy ? "SENDING…" : card.answer ? (card.answer.who === "you" ? "YOU ANSWERED" : card.answer.who.toUpperCase() + " ANSWERED") : ""
-        color: card.busy ? card.dim : Omunculus.toneOf(card.answer ? card.answer.who : "you")
+        text: card.answer ? (card.answer.who === "you" ? "YOU ANSWERED" : card.answer.who.toUpperCase() + " ANSWERED") : ""
+        color: Omunculus.toneOf(card.answer ? card.answer.who : "you")
         font.pixelSize: Theme.type.name.size
         font.letterSpacing: Theme.type.name.tracking
       }
@@ -428,12 +434,11 @@ SurfaceFrame {
         implicitWidth: Math.min(620, said.implicitWidth + 2 * Theme.size.bubbleInset)
         implicitHeight: said.implicitHeight + Theme.space.inset
         color: Theme.highlight
-        opacity: card.busy ? 0.6 : 1
         Label {
           id: said
           anchors { fill: parent; leftMargin: Theme.size.bubbleInset; rightMargin: Theme.size.bubbleInset; topMargin: Theme.space.inset / 2; bottomMargin: Theme.space.inset / 2 }
-          text: card.busy ? card.sentText : !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
-          color: card.busy ? card.dim : Theme.foreground
+          text: !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
+          color: Theme.foreground
           font.pixelSize: Theme.type.body.size
           lineHeight: Theme.type.body.lineHeight
           horizontalAlignment: Text.AlignLeft
@@ -534,6 +539,7 @@ SurfaceFrame {
               dense: true
               role: Requests.guarded(modelData) ? "guarded" : "progress"
               filled: recommended && card.yours
+              sending: card.busy && card.chosen === choice.modelData.path.join("/") + "|" + modelData
               icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : "diamond"
               text: card.labelOf(modelData, choice.modelData.request)
               onClicked: choice.decide(modelData)
@@ -566,6 +572,7 @@ SurfaceFrame {
           dense: true
           role: "progress"
           filled: modelData === card.ownActions.primary && card.yours
+          sending: card.busy && card.chosen === "|" + modelData
           icon: modelData === "grant" || modelData === "approve" ? "check" : modelData === "edit" ? "edit" : "diamond"
           text: card.labelOf(modelData)
           onClicked: modelData === "edit" ? card.startEdit() : card.decide(modelData, card.note, [])
@@ -580,7 +587,7 @@ SurfaceFrame {
         icon: card.escalating ? "chevron-up" : "enter"
         text: card.escalating ? "ESCALATE" : card.editing ? "SEND EDIT" : "ANSWER"
         tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : card.editing ? "let it go ahead with your words in place of its text" : "answer in your words, choosing no option"
-        busy: card.busy
+        sending: card.busy && (card.chosen === "words" || card.editing)
         reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : card.editing ? "write the text it goes ahead with first" : "type your answer first"
         onClicked: card.submitWords()
       }
@@ -600,6 +607,7 @@ SurfaceFrame {
           required property string modelData
           dense: true
           role: "guarded"
+          sending: card.busy && card.chosen === "|" + modelData
           text: card.labelOf(modelData)
           onClicked: card.decide(modelData, card.note, [])
         }
@@ -611,6 +619,7 @@ SurfaceFrame {
         role: "guarded"
         icon: "close"
         text: "DENY"
+        sending: card.busy && card.chosen === "|deny"
         tip: "say no, with your words as the reason"
         onClicked: card.decide("deny", card.note)
       }
