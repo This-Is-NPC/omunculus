@@ -4,8 +4,10 @@ from its store: people's messages and answers, works handed down and moved
 between stages, requests and their escalations, grants, breaks, reopens,
 retires, works done, artifacts, refused protocol calls and the deploy tools,
 each step tagged with its work (W1, W2, ...). A work shows where it began, as
-a card with how it ended. Writes dev/diagrams/<conversation>.mmd (Mermaid)
-and .svg.
+a card with how it ended. The root work's stages become phases, the packs of
+the project's config the teams, and loops, refusals, decisions and waits are
+framed from the events. Writes dev/diagrams/<conversation>.mmd (Mermaid) and
+.svg.
 
 Usage: dev-diagram [--project agency|dev] [conversation id], or through
 mise run dev:diagram.
@@ -19,6 +21,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import tomllib
 from datetime import datetime
 
 STORES = {"agency": "dev/agency/.omunculus/store.sqlite3", "dev": "dev/.omunculus/store.sqlite3"}
@@ -34,9 +37,25 @@ STATES = {"done": ("#3d7a3d", "#e6f2e6"), "cancelled": ("#888888", "#eeeeee")}
 OPEN = ("#c0392b", "#fbe3e0")
 FONT = "Noto Sans, DejaVu Sans, Liberation Sans, sans-serif"
 CW, CWB = 6.0, 6.6  # Text width per character at 11 px, regular and bold.
-COL, TOP, LH, LEFT = 170, 70, 13, 40  # Column pitch, first row, text line height.
-HEAD = 40  # Steps between repeated participant headers.
+COL, TOP, LH, LEFT = 170, 90, 13, 40  # Column pitch, first row, text line height.
+HEAD = 40  # Steps between repeated participant headers inside a phase.
+PHASE_H, TAB_H, END_H, STRIP_H, HEAD_H = 24, 18, 5, 32, 62  # Phase bar, frame tab, frame end, thin and full headers.
+# A frame by what it shows: the UML operator, its colour, its priority when frames overlap.
+FRAMES = {"critical": ("#c0392b", 0), "loop": ("#d35400", 1), "alt": ("#2a6f97", 2), "opt": ("#8a8a8a", 3)}
+WAIT = ("#d08a00", "#8a5a00")
+TEAMS = ["#2f4858", "#35618a", "#5a4a8c", "#2e7d6b", "#8a5a2f"]  # Team colours, in team order.
+OTHER = "other"
 GAP = 60  # Seconds of silence that earn a separator row.
+
+
+def duration(sec, fine=False):
+    sec = round(sec)
+    if fine:
+        return f"{sec // 60}m {sec % 60}s" if sec >= 60 else f"{sec}s"
+    if sec < 60:
+        return f"{sec} s"
+    m = round(sec / 60)
+    return f"{m // 60} h {m % 60} min" if m >= 60 else f"{m} min"
 
 
 def short(text, n=90):
@@ -162,6 +181,7 @@ def steps_of(db, conv, client_agent):
                 label, msg = f"escalates #{{{esc['origin_id']}}}", f"escalates #{{{esc['origin_id']}}} [{esc['part']}]: {msg}"
             between(e, actor, to, label, msg, work_id=work_id)
             steps[-1]["rid"] = e["request_id"]
+            steps[-1]["origins"] = [esc["origin_id"] for esc in by_escalated.get(e["request_id"], [])]
         elif kind == "reply" and e["request_id"] in requests:
             rid = e["request_id"]
             answer = body.get("option") or body.get("body", "")
@@ -172,14 +192,15 @@ def steps_of(db, conv, client_agent):
                 grants_drawn.add(g["id"])
                 gb = bodies[g["id"]]
                 msg += f" -> GRANT {gb['name']} to {gb['agent']}"
+            style = {"reply_to": rid, "choice": option or short(text, 40)}
             if e["actor_kind"] == "agent":
-                between(e, actor, requester(rid), "answer", msg, dashed=True, open=True)
+                between(e, actor, requester(rid), "answer", msg, dashed=True, open=True, **style)
             elif rid in by_origin:
                 # The part of a human answer passed on through the escalating agent.
                 esc = by_origin[rid][0]
-                between(e, requester(esc["escalated_id"]), requester(rid), f"part {esc['part']}", f"part {esc['part']}: {msg.removeprefix('answer ')}", dashed=True, open=True, colour=COLOURS[role(esc["escalated_id"])])
+                between(e, requester(esc["escalated_id"]), requester(rid), f"part {esc['part']}", f"part {esc['part']}: {msg.removeprefix('answer ')}", dashed=True, open=True, colour=COLOURS[role(esc["escalated_id"])], **style)
             else:
-                between(e, role(rid), requester(rid), "answer", msg, dashed=True, open=True)
+                between(e, role(rid), requester(rid), "answer", msg, dashed=True, open=True, **style)
         elif kind == "grant" and e["id"] not in grants_drawn:
             add(e, "arrow", OWNER, body.get("agent", "?"), "grant", f"GRANT {body.get('name')} to {body.get('agent')} ({body.get('scope') or 'this work'})")
         elif kind == "continue" and body.get("to"):
@@ -238,31 +259,151 @@ def steps_of(db, conv, client_agent):
         if e["type"] == "start-run":
             end = next((x["sequence"] for x in events if x["type"] == "end-run" and x["run_id"] == e["run_id"]), float("inf"))
             runs.append((bodies[e["id"]].get("agent"), e["sequence"], end))
-    return steps, runs
+    # The root work's stage moves cut the process into phases; each work's workflow and title label its frame.
+    root = next((w for w, tag in tags.items() if tag == "W1"), None)
+    stages = [(e["sequence"], bodies[e["id"]].get("from"), bodies[e["id"]]["to"]) for e in events if e["type"] == "continue" and e["work_id"] == root and bodies[e["id"]].get("to")]
+    info = {"stages": stages, "works": {tag: (works[w]["workflow"], works[w]["title"]) for w, tag in tags.items()}}
+    return steps, runs, info
 
 
-def participants(steps, seed):
-    """The people at the ends; between them the agents seeded in the order of
-    the work tree, then adjacent swaps that shorten the arrows."""
+def teams_of(config):
+    """The agent of each pack in the project's config, as {agent: team} with the teams in pack order."""
+    team = {}
+    try:
+        with open(config, "rb") as f:
+            packs = tomllib.load(f).get("packs", [])
+    except FileNotFoundError:
+        return team
+    for pack in packs:
+        try:
+            with open(os.path.join(os.path.dirname(config), pack["path"], "pack.toml"), "rb") as f:
+                data = tomllib.load(f)
+        except FileNotFoundError:
+            continue
+        for agent in data.get("agents", {}):
+            team.setdefault(agent, data.get("pack", {}).get("name") or os.path.basename(pack["path"]))
+    return team
+
+
+def participants(steps, seed, team):
+    """The people at the ends, the harness before the Owner, and between them the
+    teams in pack order. Agents are seeded in the order of the work tree, then
+    adjacent swaps, of agents and of whole teams, shorten the arrows. Returns the
+    names and the team of each agent."""
     used = {n for s in steps for n in (s["a"], s["b"])}
-    middle = []
+    group = {}
     for n in seed + [n for s in steps for n in (s["a"], s["b"])]:
-        if n in used and n not in middle and n not in (CLIENT, OWNER):
-            middle.append(n)
+        if n in used and n not in group and n not in (CLIENT, OWNER, HARNESS):
+            group[n] = team.get(n, OTHER)
+    order = [t for t in dict.fromkeys([*team.values(), OTHER]) if t in group.values()]
+    blocks = [[n for n in group if group[n] == t] for t in order]
+    if HARNESS in used:
+        blocks.append([HARNESS])
     arrows = [(s["a"], s["b"]) for s in steps if s["shape"] == "arrow"]
 
-    def cost(mid):
-        pos = {n: i for i, n in enumerate([CLIENT] + mid + [OWNER])}
+    def cost(bs):
+        pos = {n: i for i, n in enumerate([CLIENT] + [n for b in bs for n in b] + [OWNER])}
         return sum(abs(pos[a] - pos[b]) for a, b in arrows)
+
+    def variants(bs):
+        for i in range(len(bs) - 1):
+            yield bs[:i] + [bs[i + 1], bs[i]] + bs[i + 2:]
+        for k, b in enumerate(bs):
+            for i in range(len(b) - 1):
+                yield bs[:k] + [b[:i] + [b[i + 1], b[i]] + b[i + 2:]] + bs[k + 1:]
 
     improved = True
     while improved:
         improved = False
-        for i in range(len(middle) - 1):
-            swapped = middle[:i] + [middle[i + 1], middle[i]] + middle[i + 2:]
-            if cost(swapped) < cost(middle):
-                middle, improved = swapped, True
-    return [n for n in [CLIENT] + middle + [OWNER] if n in used]
+        for v in variants(blocks):
+            if cost(v) < cost(blocks):
+                blocks, improved = v, True
+                break
+    return [n for n in [CLIENT] + [n for b in blocks for n in b] + [OWNER] if n in used], group
+
+def episodes(steps, info):
+    """What the steps tell, by step index: the phases of the root work's stages,
+    the frames (refused episodes, loops of breaks, decisions by a person, works
+    in a workflow) and the waits of an agent for a person."""
+    n = len(steps)
+    cuts = [next((i for i, s in enumerate(steps) if s["seq"] >= seq), n) for seq, _, _ in info["stages"]]
+    names = [to for _, _, to in info["stages"]]
+    if info["stages"] and cuts[0] > 0:
+        cuts, names = [0] + cuts, [info["stages"][0][1]] + names
+    phases = [{"name": name, "a": a, "b": (cuts[k + 1] if k + 1 < len(cuts) else n) - 1} for k, (name, a) in enumerate(zip(names, cuts))]
+    phases = [p for p in phases if p["a"] <= p["b"]]
+
+    found, waits, by_tag = [], [], {}
+    for i, s in enumerate(steps):
+        by_tag.setdefault(s["tag"], []).append(i)
+
+    # Refused calls of one agent on one work, a few steps apart: one episode.
+    group = []
+
+    def flush():
+        if len(group) > 1:
+            s = steps[group[0]]
+            found.append({"op": "critical", "text": f"{s['tag']} {s['a']}: {len(group)} {s['kind']}", "a": group[0], "b": group[-1]})
+        group.clear()
+
+    for i, s in enumerate(steps):
+        if s.get("tone") == "refused":
+            if group and ((steps[group[-1]]["a"], steps[group[-1]]["tag"], steps[group[-1]]["kind"]) != (s["a"], s["tag"], s["kind"]) or i - group[-1] > 3):
+                flush()
+            group.append(i)
+    flush()
+
+    # A work broken two or more times: a loop from its first break to its last.
+    for tag, idx in by_tag.items():
+        breaks = [i for i in idx if steps[i]["kind"] in ("break", "harness stop")]
+        if len(breaks) > 1:
+            before = idx[max(idx.index(breaks[0]) - 1, 0)]
+            start = before if steps[before]["kind"] == "reopen" else breaks[0]
+            found.append({"op": "loop", "text": f"×{len(breaks)}: {tag} {fit(info['works'][tag][1], 260)} keeps breaking", "a": start, "b": breaks[-1]})
+
+    # A request to a person, with the answer and the parts passed back: a decision and a wait.
+    asked = {s["rid"]: i for i, s in enumerate(steps) if "rid" in s}
+    for i, s in enumerate(steps):
+        if s.get("rid") and s["b"] in (CLIENT, OWNER):
+            answer = next((j for j in range(i + 1, n) if steps[j].get("reply_to") == s["rid"] and steps[j]["a"] == s["b"]), None)
+            if answer is None:
+                continue
+            back = [j for j in range(answer + 1, n) if steps[j].get("reply_to") in s["origins"]]
+            first = min([i] + [asked[o] for o in s["origins"] if o in asked])
+            found.append({"op": "alt", "text": f"decision by {s['b']}: {steps[answer]['choice']}", "a": first, "b": max([answer] + back)})
+            waits.append({"agent": s["a"], "person": s["b"], "a": i, "b": answer, "secs": seconds(steps[answer]["at"]) - seconds(s["at"])})
+
+    # A work in a workflow, from its first step to its last.
+    for tag, idx in by_tag.items():
+        workflow, title = info["works"].get(tag, (None, None))
+        if workflow and tag != "W1" and len(idx) > 1:
+            found.append({"op": "opt", "text": f"[{workflow}] {tag} {fit(title, 260)}", "a": idx[0], "b": idx[-1]})
+
+    # Keep the frames that sit in one phase and nest or stay apart, by priority.
+    def phase_of(i):
+        return next((k for k, p in enumerate(phases) if p["a"] <= i <= p["b"]), None)
+
+    def crosses(f, g):
+        return f["a"] < g["a"] <= f["b"] < g["b"] or g["a"] < f["a"] <= g["b"] < f["b"]
+
+    kept = []
+    for f in sorted(found, key=lambda f: (FRAMES[f["op"]][1], f["b"] - f["a"])):
+        if phase_of(f["a"]) == phase_of(f["b"]) and not any(crosses(f, g) for g in kept):
+            kept.append(f)
+    frames = sorted(kept, key=lambda f: (f["a"], -f["b"], FRAMES[f["op"]][1]))
+
+    for p in phases:
+        mine = steps[p["a"] : p["b"] + 1]
+
+        def count(test):
+            return sum(1 for s in mine if test(s))
+
+        facts = [(count(lambda s: s.get("card")), "works begun"), (count(lambda s: s.get("mark") == "check"), "works done"), (count(lambda s: s.get("mark") == "x"), "works retired")]
+        facts += [(count(lambda s, who=who: s["kind"] == "answer" and s["a"] == who), f"{who} answers") for who in (CLIENT, OWNER)]
+        facts += [(count(lambda s: s.get("tone") == "refused"), "refused calls"), (count(lambda s: s["kind"] == "break"), "breaks"), (count(lambda s: s["kind"] == "harness stop"), "harness stops")]
+        p["caption"] = " · ".join(f"{what}: {k}" for k, what in facts if k)
+        p["title"] = f"{str(p['name']).upper()} · {mine[0]['at'][11:19]}–{mine[-1]['at'][11:19]} · {duration(seconds(mine[-1]['at']) - seconds(mine[0]['at']))}"
+    return phases, frames, waits
 
 
 def tree_order(db, conv):
@@ -294,10 +435,6 @@ def colour_of(s):
     return s.get("colour") or COLOURS.get(s["a"]) or COLOURS.get(s["b"]) or PLAIN
 
 
-def label_of(n, s):
-    return f"{n}. {s['at'][11:19]} {s['tag']} {s['kind']}".replace("  ", " ")
-
-
 def rows_of(steps):
     """Rows in order: a step, or a separator after a gap of silence."""
     rows, last = [], None
@@ -321,14 +458,38 @@ def run_spans(steps, runs):
     return spans
 
 
-def mermaid(parts, steps, runs):
+def mermaid(parts, steps, runs, group, phases, frames, waits):
     clean = lambda text: re.sub(r"[#;]", lambda m: f"#{ord(m.group())};", short(text, 120))
     ids = {p: f"P{i}" for i, p in enumerate(parts)}
     spans = run_spans(steps, runs)
     lines = ["sequenceDiagram"]
-    lines += [f"    {'actor' if p in (CLIENT, OWNER) else 'participant'} {ids[p]} as {p}" for p in parts]
+    # Teams are boxes around their participants.
+    teams = list(dict.fromkeys(group[p] for p in parts if p in group))
+    i = 0
+    while i < len(parts):
+        team = group.get(parts[i])
+        j = i
+        while team and j + 1 < len(parts) and group.get(parts[j + 1]) == team:
+            j += 1
+        if team:
+            lines.append(f"    box {'rgb(228,235,242)' if teams.index(team) % 2 == 0 else 'transparent'} {team}")
+        lines += [f"    {'actor' if p in (CLIENT, OWNER) else 'participant'} {ids[p]} as {p}" for p in parts[i : j + 1]]
+        if team:
+            lines.append("    end")
+        i = j + 1
+    by_start = {}
+    for kind, items in (("phase", phases), ("frame", frames)):
+        for f in items:
+            by_start.setdefault(f["a"], []).append((kind, f))
+    stack = []
     for i, s in enumerate(steps):
         a, b, n = ids[s["a"]], ids[s["b"]], i + 1
+        for kind, f in by_start.get(i, []):
+            if kind == "phase":
+                lines += ["    rect rgb(244,241,230)", f"    Note over {ids[parts[0]]},{ids[parts[-1]]}: {clean(f['title'] + (' · ' + f['caption'] if f['caption'] else ''))}"]
+            else:
+                lines.append(f"    {f['op']} {clean(f['text'])}")
+            stack.append(f)
         lines += [f"    activate {ids[agent]}" for agent, first, _ in spans if first == i]
         text = clean(f"{n}. {s['at'][11:19]} {s['tag']} {s['msg']}".replace("  ", " "))
         if s.get("tone") == "refused":
@@ -343,7 +504,11 @@ def mermaid(parts, steps, runs):
             lines.append(f"    {a}{'-->>' if s.get('dashed') else '->>'}{b}: {text}")
         if s.get("card"):
             lines.append(f"    Note over {a},{b}: {s['tag']} {s['state']}" if a != b else f"    Note over {a}: {s['tag']} {s['state']}")
+        lines += [f"    Note over {ids[w['agent']]}: waited for {w['person']} ({duration(w['secs'], True)})" for w in waits if w["b"] == i]
         lines += [f"    deactivate {ids[agent]}" for agent, _, last in spans if last == i]
+        while stack and stack[-1]["b"] == i:
+            stack.pop()
+            lines.append("    end")
     return "\n".join(lines) + "\n"
 
 
@@ -381,7 +546,7 @@ def text_of(n, s):
     return f"{prefix} {kind}: {msg}"
 
 
-def svg(parts, steps, runs):
+def svg(parts, steps, runs, group, phases, frames, waits):
     x = {name: LEFT + COL // 2 + i * COL for i, name in enumerate(parts)}
     last_x = x[parts[-1]]
     halo = 'stroke="#fffdf8" stroke-width="3" paint-order="stroke"'
@@ -393,7 +558,8 @@ def svg(parts, steps, runs):
             markers[key] = f"m{len(markers)}"
         return markers[key]
 
-    # Lay each step out first: its wrapped text, box and height (rows grow to fit).
+    # Lay each step out first: its wrapped text, box and height (rows grow to fit),
+    # and the horizontal extent xl..xr its text and arrow cover.
     plan = []
     right = last_x + COL // 2 + 20
     for i, s in enumerate(steps):
@@ -404,51 +570,142 @@ def svg(parts, steps, runs):
             lines = wrap(full, int(2.5 * COL) - 14, False)
             w = max(width(l) for l in lines) + 14
             p.update(lines=lines, w=w, h=len(lines) * LH + 20, left=max(x[s["a"]] - w / 2, 8))
-            right = max(right, p["left"] + w + 20)
+            p.update(xl=p["left"], xr=p["left"] + w)
         elif s["shape"] == "self":
             lines = wrap(full, 2 * COL - 44, card)
             p.update(lines=lines, h=max(len(lines) * LH, 18) + 16, left=x[s["a"]] + 32)
-            right = max(right, p["left"] + max(width(l, card) for l in lines) + 30)
+            p.update(xl=x[s["a"]], xr=p["left"] + max(width(l, card) for l in lines) + 10)
         else:
             left = min(x[s["a"]], x[s["b"]])
             lines = wrap(full, max(abs(x[s["a"]] - x[s["b"]]), 2 * COL) - 14, card)
             p.update(lines=lines, left=left, h=len(lines) * LH + (9 if card else 0) + 20)
-            right = max(right, left + max(width(l, card) for l in lines) + 20)
+            p.update(xl=left, xr=max(max(x[s["a"]], x[s["b"]]), left + max(width(l, card) for l in lines) + 12))
+        right = max(right, p["xr"] + 20)
         plan.append(p)
+
+    # A frame spans what its steps cover, and encloses the frames inside it.
+    for f in frames:
+        f["lo"] = min(plan[i]["xl"] for i in range(f["a"], f["b"] + 1)) - 14
+        f["hi"] = max(plan[i]["xr"] for i in range(f["a"], f["b"] + 1)) + 14
+    inner = []
+    for f in sorted(frames, key=lambda f: (f["b"] - f["a"], -FRAMES[f["op"]][1])):
+        for g in inner:
+            if f["a"] <= g["a"] and g["b"] <= f["b"]:
+                f["lo"], f["hi"] = min(f["lo"], g["lo"] - 8), max(f["hi"], g["hi"] + 8)
+        f["lo"] = max(f["lo"], 8)
+        right = max(right, f["hi"] + 14)
+        inner.append(f)
     canvas = int(max(right, LEFT + 760))
 
-    # Rows from top to bottom: steps, gaps, and a header row every HEAD steps and at the end.
-    layout, y, count = [], TOP - 20, 0
-    for kind, i in rows_of(steps):
-        h = plan[i]["h"] if kind == "step" else 26
-        layout.append((kind, i, y, h))
+    # Teams: runs of neighbouring participants of one team.
+    blocks = []
+    for i, name in enumerate(parts):
+        team = group.get(name)
+        if team and blocks and blocks[-1][0] == team and blocks[-1][2] == i - 1:
+            blocks[-1][2] = i
+        elif team:
+            blocks.append([team, i, i])
+    team_colour = {t: "#666666" if t == OTHER else TEAMS[k % len(TEAMS)] for k, t in enumerate(dict.fromkeys(b[0] for b in blocks))}
+
+    # Rows from top to bottom: steps, gaps, phase bars, frame tabs and ends, thin headers, and a full header at the end.
+    start_of, end_of, opens, closes = {p["a"]: p for p in phases}, {p["b"]: p for p in phases}, {}, {}
+    for f in frames:
+        opens.setdefault(f["a"], []).append(f)
+        closes.setdefault(f["b"], []).append(f)
+    for fs in closes.values():
+        fs.sort(key=lambda f: (-f["a"], -FRAMES[f["op"]][1]))
+    layout, y, since, open_frames = [], TOP - 20, 0, 0
+
+    def push(kind, ref, h):
+        nonlocal y
+        layout.append((kind, ref, y, h))
         y += h
-        if kind == "step":
-            count += 1
-            if count % HEAD == 0 and i < len(steps) - 1:
-                layout.append(("head", None, y, 50))
-                y += 50
-    layout.append(("head", None, y, 50))
-    life_end, legend_y = y, y + 70
-    height = legend_y + 230
+
+    for kind, i in rows_of(steps):
+        if kind == "gap":
+            push("gap", i, 26)
+            continue
+        if i in start_of:
+            push("phase", start_of[i], PHASE_H)
+        if (i in start_of and i > 0) or (i not in start_of and since >= HEAD and not open_frames and len(steps) - i > 8):
+            push("strip", None, STRIP_H)
+            since = 0
+        for f in opens.get(i, []):
+            push("fstart", f, TAB_H)
+            open_frames += 1
+        push("step", i, plan[i]["h"])
+        since += 1
+        for f in closes.get(i, []):
+            push("fend", f, END_H)
+            open_frames -= 1
+        if i in end_of:
+            push("pend", end_of[i], END_H + 3)
+    layout.append(("head", None, y, HEAD_H))
+    life_end, legend_y = y, y + HEAD_H + 30
+    box, legend_h = legend(LEFT, legend_y)
+    height = legend_y + legend_h + 24
     y_of = {}
-    bg, body = [], []
-    for kind, i, top, h in layout:
+    bg, bands, body = [], [], []
+    for kind, ref, top, h in layout:
         if kind == "gap":
             mid = top + h / 2
             bg.append(f'<line x1="{LEFT}" y1="{mid}" x2="{canvas - LEFT}" y2="{mid}" stroke="#bbb" stroke-dasharray="1 4"/>')
-            bg.append(f'<text x="{(LEFT + canvas) // 2}" y="{mid + 4}" text-anchor="middle" fill="#888" {halo}>... {i} ...</text>')
+            bg.append(f'<text x="{(LEFT + canvas) // 2}" y="{mid + 4}" text-anchor="middle" fill="#888" {halo}>... {ref} ...</text>')
         elif kind == "step":
-            p = plan[i]
+            p = plan[ref]
             p["top"] = top
-            p["y"] = top + h / 2 if steps[i]["shape"] != "arrow" else top + h - 10
-            y_of[i] = p["y"]
-            if i % 2:
-                bg.append(f'<rect x="0" y="{top}" width="{canvas}" height="{h}" fill="#f7f3e8"/>')
+            p["y"] = top + h / 2 if steps[ref]["shape"] != "arrow" else top + h - 10
+            y_of[ref] = p["y"]
+            if ref % 2:
+                bg.append(f'<rect x="0" y="{top}" width="{canvas}" height="{h}" fill="#e8dfc0" fill-opacity="0.25"/>')
+        elif kind in ("phase", "fstart"):
+            ref["top"] = top
+        elif kind in ("pend", "fend"):
+            ref["bottom"] = top + h - (3 if kind == "pend" else 0)
+
+    # Team columns, tinted in turn behind the rows.
+    tint = []
+    for k, (team, first, last) in enumerate(blocks):
+        x0, x1 = x[parts[first]] - COL // 2, x[parts[last]] + COL // 2
+        tint.append(f'<rect x="{x0}" y="{TOP - 20}" width="{x1 - x0}" height="{life_end + 10 - TOP + 20}" fill="{team_colour[team]}" fill-opacity="{0.10 if k % 2 == 0 else 0.04}"/>')
+
+    # Phases: a full-width titled bar and an outline down to the phase's end.
+    for p in phases:
+        bands.append(f'<rect x="4" y="{p["top"]}" width="{canvas - 8}" height="{p["bottom"] - p["top"]}" fill="none" stroke="#6d7f90" stroke-width="1.2"/>')
+        bands.append(f'<rect x="4" y="{p["top"]}" width="{canvas - 8}" height="{PHASE_H}" fill="#3d4f5f"/>')
+        bands.append(f'<text x="14" y="{p["top"] + 16}" fill="#fff" font-weight="bold" font-size="12">{html.escape(p["title"])}</text>')
+        cx = 14 + width(p["title"], True) * 12 / 11 + 18
+        bands.append(f'<text x="{cx:.0f}" y="{p["top"] + 16}" fill="#d9e2ec">{html.escape(fit(p["caption"], canvas - 14 - cx))}</text>')
+
+    # Frames: a labelled tab at the top left, nested frames inset.
+    frame_svg = []
+    for f in frames:
+        colour = FRAMES[f["op"]][0]
+        dash = ' stroke-dasharray="4 3"' if f["op"] == "opt" else ""
+        label = fit(f"{f['op']} {f['text']}", max(f["hi"] - f["lo"], 280) - 14, True)
+        tw = width(label, True) + 14
+        lo, top = f["lo"], f["top"]
+        frame_svg.append(f'<rect x="{lo:.0f}" y="{top}" width="{f["hi"] - lo:.0f}" height="{f["bottom"] - top}" fill="none" stroke="{colour}" stroke-width="1.3"{dash}/>')
+        frame_svg.append(f'<path d="M{lo:.0f},{top} h{tw:.0f} v10 l-6,6 h{-tw + 6:.0f} z" fill="#fff" stroke="{colour}"/>')
+        frame_svg.append(f'<text x="{lo + 6:.0f}" y="{top + 12}" fill="{colour}" font-weight="bold" font-size="10">{html.escape(label)}</text>')
 
     # Activation bars of the runs, under the arrows.
     for agent, first, last in run_spans(steps, runs):
         body.append(f'<rect x="{x[agent] - 3}" y="{y_of[first] - 9}" width="6" height="{y_of[last] - y_of[first] + 18}" fill="#d9e2ec" fill-opacity="0.8" stroke="#9fb3c8"/>')
+
+    # An agent waiting for a person: a bracket left of its lifeline, a lane each when they overlap.
+    lanes = {}
+    for w in waits:
+        taken = lanes.setdefault(w["agent"], [])
+        lane = next(k for k in range(len(taken) + 1) if all(l != k or w["b"] < a or b < w["a"] for a, b, l in taken))
+        taken.append((w["a"], w["b"], lane))
+        bx, y1, y2 = x[w["agent"]] - 13 - lane * 8, y_of[w["a"]], y_of[w["b"]]
+        d = duration(w["secs"], True)
+        title = f'waiting for {w["person"]} ({d})'
+        body.append(f'<path d="M{bx + 5},{y1} h-5 V{y2} h5" fill="none" stroke="{WAIT[0]}" stroke-width="1.8"><title>{html.escape(title)}</title></path>')
+        label = next((t for t in (title, f"{w['person']} {d}", d) if width(t) * 10 / 11 <= y2 - y1 - 8), None)
+        if label:
+            body.append(f'<text transform="translate({bx - 4},{(y1 + y2) / 2:.0f}) rotate(-90)" text-anchor="middle" font-size="10" fill="{WAIT[1]}" {halo}>{html.escape(label)}</text>')
 
     def put(lines, px, first_y, fill, extra=""):
         for k, line in enumerate(lines):
@@ -487,10 +744,28 @@ def svg(parts, steps, runs):
         mark = s.get("mark")
         if mark == "x":
             cx = x[s["mark_on"]]
+            side = 1 if x[s["a"]] < x[s["b"]] else -1
             body.append(f'<path d="M{cx - 5},{y - 2} l10,10 m0,-10 l-10,10" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
+            body.append(f'<text x="{cx + side * 10}" y="{y + 9}" fill="{REFUSED}" font-weight="bold" font-size="10" text-anchor="{"start" if side > 0 else "end"}" {halo}>{html.escape(s["tag"])} retired</text>')
         elif mark == "check":
             cx = x[s["mark_on"]] + (14 if x[s["b"]] < x[s["a"]] else -14)
             body.append(f'<path d="M{cx - 5},{y + 6} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
+
+    def header(hy, full):
+        """The team bands above the participants' boxes; thin and faded when repeated."""
+        band_h, box_y, box_h, size = (18, 22, 30, 11) if full else (11, 13, 16, 9)
+        out = [] if full else ['<g opacity="0.55">']
+        for team, first, last in blocks:
+            x0, x1 = x[parts[first]] - COL // 2 + 6, x[parts[last]] + COL // 2 - 6
+            out.append(f'<rect x="{x0}" y="{hy}" width="{x1 - x0}" height="{band_h}" rx="3" fill="{team_colour[team]}"/>')
+            out.append(f'<text x="{(x0 + x1) / 2}" y="{hy + band_h - (5 if full else 2.5)}" fill="#fff" text-anchor="middle" font-weight="bold" font-size="{size}">{html.escape(team)}</text>')
+        for name in parts:
+            bw = min(max(width(name, True) + 24, 100), COL - 12) if full else min(max(width(name, True) + 14, 70), COL - 12)
+            fill = COLOURS.get(name) or team_colour.get(group.get(name), "#2f4858")
+            out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="{hy + box_y}" width="{bw:.0f}" height="{box_h}" rx="{15 if name in (CLIENT, OWNER) else 4}" fill="{fill}"/>')
+            out.append(f'<text x="{x[name]}" y="{hy + box_y + box_h / 2 + 4}" fill="#fff" text-anchor="middle" font-weight="bold"{"" if full else " font-size=\"10\""}>{html.escape(name)}</text>')
+        return out + ([] if full else ["</g>"])
+
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{canvas}" height="{height}" font-family="{FONT}" font-size="11">',
            f'<rect width="{canvas}" height="{height}" fill="#fffdf8"/>']
     defs = "".join(
@@ -498,45 +773,65 @@ def svg(parts, steps, runs):
         + (f'<path d="M0,0 L10,4 L0,8" fill="none" stroke="{c}"/>' if o else f'<path d="M0,0 L10,4 L0,8 z" fill="{c}"/>')
         + "</marker>" for (c, o), mid in markers.items())
     out.append(f"<defs>{defs}</defs>")
-    out += bg
+    out += tint + bg
     for name in parts:
         out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{life_end + 10}" stroke="#ccc" stroke-dasharray="4 4"/>')
-    out += body
-    for hy in [10] + [top + 10 for kind, _, top, _ in layout if kind == "head"]:
-        for name in parts:
-            bw = min(max(width(name, True) + 24, 100), COL - 12)
-            out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="{hy}" width="{bw:.0f}" height="30" rx="{15 if name in (CLIENT, OWNER) else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
-            out.append(f'<text x="{x[name]}" y="{hy + 20}" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
-    out += legend(LEFT, legend_y)
+    out += body + bands + frame_svg
+    out += header(8, True)
+    for kind, _, top, _ in layout:
+        if kind == "strip":
+            out += header(top + 1, False)
+        elif kind == "head":
+            out += header(top + 10, True)
+    out += box
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
 
 def legend(x, y):
-    """A key to the drawing's conventions, one row each."""
-    box = [f'<rect x="{x}" y="{y}" width="720" height="206" fill="#fff" stroke="#ccc"/>']
+    """A key to the drawing's conventions, one row each, and its height."""
+    rows = []
     row = lambda i: y + 22 + i * 21
-    text = lambda i, t, dx=62: box.append(f'<text x="{x + dx}" y="{row(i) + 4}" fill="#333">{html.escape(t)}</text>')
-    for i, dash in ((0, ""), (1, ' stroke-dasharray="5 3"')):
-        box.append(f'<line x1="{x + 12}" y1="{row(i)}" x2="{x + 52}" y2="{row(i)}" stroke="#333"{dash}/>')
-    text(0, "solid arrow: request or hand-off (a work handed down, a stage move, a reopen, a retire)")
-    text(1, "dashed arrow: answer, work done, break; purple dotted: stopped by the harness")
-    for i, (name, (edge, fill)) in enumerate((("done", STATES["done"]), ("cancelled", STATES["cancelled"]), ("open", OPEN))):
-        box.append(f'<rect x="{x + 12 + i * 70}" y="{row(2) - 8}" width="62" height="16" rx="8" fill="{fill}" stroke="{edge}"/>')
-        box.append(f'<text x="{x + 43 + i * 70}" y="{row(2) + 4}" fill="{edge}" text-anchor="middle" font-weight="bold">{name}</text>')
-    text(2, "work card on the arrow that created it: how the work ended; open shows what it waits for", 230)
-    box.append(f'<rect x="{x + 12}" y="{row(3) - 8}" width="40" height="16" fill="#f3eed2" stroke="#d8cf9a"/>')
-    text(3, "yellow note on a lifeline: stage move kept by the same agent, artifact, tool, comment")
-    box.append(f'<rect x="{x + 12}" y="{row(4) - 8}" width="40" height="16" fill="#fbe3e0" stroke="{REFUSED}"/>')
-    text(4, "red note: a refused call")
-    box.append(f'<rect x="{x + 29}" y="{row(5) - 8}" width="6" height="16" fill="#d9e2ec" stroke="#9fb3c8"/>')
-    text(5, "bar on a lifeline: a run of the agent")
-    box.append(f'<path d="M{x + 14},{row(6) - 6} l12,12 m0,-12 l-12,12" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
-    box.append(f'<path d="M{x + 34},{row(6)} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
-    text(6, "cross: work retired here; check: work done here")
-    text(7, "each text sits on its arrow: N. HH:MM:SS Wn (event order, time, work); loop: a step by an agent to itself", 12)
-    text(8, "... N min ...: silence over a minute; Client and Owner by the destination a request recorded", 12)
-    return box
+    box = []
+    text = lambda t, dx=62: box.append(f'<text x="{x + dx}" y="{row(len(rows)) + 4}" fill="#333">{html.escape(t)}</text>')
+
+    def add(sample, t, dx=62):
+        box.extend(sample(row(len(rows))))
+        text(t, dx)
+        rows.append(t)
+
+    line = lambda dash: lambda r: [f'<line x1="{x + 12}" y1="{r}" x2="{x + 52}" y2="{r}" stroke="#333"{dash}/>']
+    add(line(""), "solid arrow: request or hand-off (a work handed down, a stage move, a reopen, a retire)")
+    add(line(' stroke-dasharray="5 3"'), "dashed arrow: answer, work done, break; purple dotted: stopped by the harness")
+    cards = lambda r: [e for i, (name, (edge, fill)) in enumerate((("done", STATES["done"]), ("cancelled", STATES["cancelled"]), ("open", OPEN)))
+                       for e in (f'<rect x="{x + 12 + i * 70}" y="{r - 8}" width="62" height="16" rx="8" fill="{fill}" stroke="{edge}"/>',
+                                 f'<text x="{x + 43 + i * 70}" y="{r + 4}" fill="{edge}" text-anchor="middle" font-weight="bold">{name}</text>')]
+    add(cards, "work card on the arrow that created it: how the work ended; open shows what it waits for", 230)
+    add(lambda r: [f'<rect x="{x + 12}" y="{r - 8}" width="40" height="16" fill="#f3eed2" stroke="#d8cf9a"/>'], "yellow note on a lifeline: stage move kept by the same agent, artifact, tool, comment")
+    add(lambda r: [f'<rect x="{x + 12}" y="{r - 8}" width="40" height="16" fill="#fbe3e0" stroke="{REFUSED}"/>'], "red note: a refused call")
+    add(lambda r: [f'<rect x="{x + 29}" y="{r - 8}" width="6" height="16" fill="#d9e2ec" stroke="#9fb3c8"/>'], "bar on a lifeline: a run of the agent")
+    add(lambda r: [f'<path d="M{x + 14},{r - 6} l12,12 m0,-12 l-12,12" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>',
+                   f'<path d="M{x + 34},{r} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>'], "cross: work retired here, named \"Wn retired\"; check: work done here")
+    add(lambda r: [f'<rect x="{x + 6}" y="{r - 9}" width="52" height="18" fill="#3d4f5f"/>', f'<text x="{x + 10}" y="{r + 4}" fill="#fff" font-weight="bold" font-size="10">SALE</text>'],
+        "phase: a full-width bar for each stage of the root work, with its times and a caption of what happened in it")
+    add(lambda r: [f'<rect x="{x + 6}" y="{r - 9}" width="24" height="18" rx="3" fill="{TEAMS[0]}" fill-opacity="0.9"/>', f'<rect x="{x + 34}" y="{r - 9}" width="24" height="18" rx="3" fill="{TEAMS[1]}" fill-opacity="0.9"/>'],
+        "band above the participants: a team of the project's packs, its columns tinted in turn; people and harness stand outside")
+    for op, t in (("loop", "loop: a work that broke more than once, from its first break to its last"),
+                  ("alt", "alt: a request to a person, from the ask to the answer and the parts passed back, with the choice"),
+                  ("critical", "critical: the same refused call repeated by one agent on one work, with the reasons"),
+                  ("opt", "opt: a work while it goes through its workflow (dashed)")):
+        colour = FRAMES[op][0]
+        add(lambda r, op=op, colour=colour: [f'<rect x="{x + 6}" y="{r - 9}" width="52" height="18" fill="none" stroke="{colour}" stroke-width="1.3"{" stroke-dasharray=" + chr(34) + "4 3" + chr(34) if op == "opt" else ""}/>',
+                                             f'<path d="M{x + 6},{r - 9} h38 v8 l-5,5 h-33 z" fill="#fff" stroke="{colour}"/>', f'<text x="{x + 9}" y="{r}" fill="{colour}" font-weight="bold" font-size="9">{op}</text>'], t)
+    add(lambda r: [f'<path d="M{x + 28},{r - 9} h-5 v18 h5" fill="none" stroke="{WAIT[0]}" stroke-width="1.8"/>'], "bracket left of a lifeline: the agent waits for a person, for the time shown")
+    add(lambda r: [f'<g opacity="0.55"><rect x="{x + 6}" y="{r - 9}" width="52" height="8" rx="2" fill="{TEAMS[0]}"/><rect x="{x + 12}" y="{r}" width="40" height="9" rx="2" fill="{TEAMS[0]}"/></g>'],
+        f"faded header: the participants again at each phase start and every {HEAD} steps")
+    text("each text sits on its arrow: N. HH:MM:SS Wn (event order, time, work); a step by an agent to itself is a loop arrow", 12)
+    rows.append("")
+    text("... N min ...: silence over a minute; Client and Owner by the destination a request recorded", 12)
+    rows.append("")
+    h = 22 + len(rows) * 21
+    return [f'<rect x="{x}" y="{y}" width="760" height="{h - 8}" fill="#fff" stroke="#ccc"/>'] + box, h - 8
 
 
 def main():
@@ -559,15 +854,19 @@ def main():
     # The agent the person's first message went to is the one that talks with them.
     first = db.execute("select body from events where conversation_id = ? and type = 'prompt' order by sequence limit 1", (conv,)).fetchone()
     client_agent = json.loads(first["body"]).get("agent") if first else None
-    steps, runs = steps_of(db, conv, client_agent)
-    parts = participants(steps, [client_agent] + tree_order(db, conv))
+    steps, runs, info = steps_of(db, conv, client_agent)
+    # The project's config names the packs, and each pack its agents: the teams.
+    team = teams_of(os.path.join(root, os.path.dirname(os.path.dirname(STORES[args.project])), "omunculus.toml"))
+    parts, group = participants(steps, [client_agent] + tree_order(db, conv), team)
+    phases, frames, waits = episodes(steps, info)
 
     out = os.path.join(root, "dev", "diagrams")
     os.makedirs(out, exist_ok=True)
-    for ext, text in (("mmd", mermaid(parts, steps, runs)), ("svg", svg(parts, steps, runs))):
+    for ext, text in (("mmd", mermaid(parts, steps, runs, group, phases, frames, waits)), ("svg", svg(parts, steps, runs, group, phases, frames, waits))):
         with open(os.path.join(out, f"{conv}.{ext}"), "w") as f:
             f.write(text)
     print(os.path.join(out, f"{conv}.svg"))
 
 
-main()
+if __name__ == "__main__":
+    main()
