@@ -33,8 +33,9 @@ PLAIN, REFUSED = "#333333", "#c0392b"
 STATES = {"done": ("#3d7a3d", "#e6f2e6"), "cancelled": ("#888888", "#eeeeee")}
 OPEN = ("#c0392b", "#fbe3e0")
 FONT = "Noto Sans, DejaVu Sans, Liberation Sans, sans-serif"
-CW, CWB = 6.6, 7.2  # Text width per character at 11 px, regular and bold.
-COL, TOP, ROW, LEFT, MSG = 170, 70, 24, 40, 100
+CW, CWB = 6.0, 6.6  # Text width per character at 11 px, regular and bold.
+COL, TOP, LH, LEFT = 170, 70, 13, 40  # Column pitch, first row, text line height.
+HEAD = 40  # Steps between repeated participant headers.
 GAP = 60  # Seconds of silence that earn a separator row.
 
 
@@ -130,8 +131,8 @@ def steps_of(db, conv, client_agent):
         return step
 
     def between(e, a, b, kind, msg, **style):
-        """An arrow, or a note when it would go from an agent to itself."""
-        return add(e, "note" if a == b else "arrow", a, b, kind, msg, **style)
+        """An arrow; from an agent to itself, a note for a stage it keeps, else a loop."""
+        return add(e, ("note" if kind.startswith("->") else "self") if a == b else "arrow", a, b, kind, msg, **style)
 
     for e in events:
         kind, actor, body = e["type"], e["actor_id"], bodies[e["id"]]
@@ -346,18 +347,44 @@ def mermaid(parts, steps, runs):
     return "\n".join(lines) + "\n"
 
 
+def wrap(text, px, bold=False, lines=3):
+    """Greedy word wrap to px wide, at most `lines` lines, the last cut with an ellipsis."""
+    cw = CWB if bold else CW
+    cap = max(int(px / cw), 8)
+    out, cur = [], ""
+    for word in " ".join(str(text).split()).split(" "):
+        while len(word) > cap:
+            if cur:
+                out.append(cur)
+                cur = ""
+            out.append(word[:cap])
+            word = word[cap:]
+        if cur and len(cur) + 1 + len(word) > cap:
+            out.append(cur)
+            cur = word
+        else:
+            cur = f"{cur} {word}".strip()
+    if cur:
+        out.append(cur)
+    if len(out) > lines:
+        out = out[:lines]
+        out[-1] = out[-1][: cap - 1].rstrip() + "…"
+    return out
+
+
+def text_of(n, s):
+    """The step's text: number, time and work tag, then the kind and message."""
+    prefix = f"{n}. {s['at'][11:19]} {s['tag']}".replace("  ", " ")
+    msg, kind = s["msg"], s["kind"]
+    if s.get("card") or kind.startswith("->") or msg.lower().startswith(kind.split()[0].lower()):
+        return f"{prefix} {msg}"
+    return f"{prefix} {kind}: {msg}"
+
+
 def svg(parts, steps, runs):
-    n = len(parts)
     x = {name: LEFT + COL // 2 + i * COL for i, name in enumerate(parts)}
     last_x = x[parts[-1]]
-    msg_x = last_x + COL // 2 + 20
-    rows = rows_of(steps)
-    y_of = {i: TOP + ROW * (r + 1) for r, (kind, i) in enumerate(rows) if kind == "step"}
-    msgs = [fit(s["msg"], MSG * CW, s.get("card") is not None) for s in steps]
-    canvas = int(msg_x + max([width(m, True) for m in msgs] + [0]) + 40)
-    legend_y = TOP + ROW * (len(rows) + 2)
-    canvas = max(canvas, LEFT + 760)
-    height = legend_y + 230
+    halo = 'stroke="#fffdf8" stroke-width="3" paint-order="stroke"'
     markers = {}
 
     def marker(colour, open_head):
@@ -366,49 +393,104 @@ def svg(parts, steps, runs):
             markers[key] = f"m{len(markers)}"
         return markers[key]
 
-    body = []
-    for r, (kind, i) in enumerate(rows):
-        y = TOP + ROW * (r + 1)
+    # Lay each step out first: its wrapped text, box and height (rows grow to fit).
+    plan = []
+    right = last_x + COL // 2 + 20
+    for i, s in enumerate(steps):
+        full = text_of(i + 1, s)
+        card = s.get("card") is not None
+        p = {"full": full}
+        if s["shape"] == "note":
+            lines = wrap(full, int(2.5 * COL) - 14, False)
+            w = max(width(l) for l in lines) + 14
+            p.update(lines=lines, w=w, h=len(lines) * LH + 20, left=max(x[s["a"]] - w / 2, 8))
+            right = max(right, p["left"] + w + 20)
+        elif s["shape"] == "self":
+            lines = wrap(full, 2 * COL - 44, card)
+            p.update(lines=lines, h=max(len(lines) * LH, 18) + 16, left=x[s["a"]] + 32)
+            right = max(right, p["left"] + max(width(l, card) for l in lines) + 30)
+        else:
+            left = min(x[s["a"]], x[s["b"]])
+            lines = wrap(full, max(abs(x[s["a"]] - x[s["b"]]), 2 * COL) - 14, card)
+            p.update(lines=lines, left=left, h=len(lines) * LH + (9 if card else 0) + 20)
+            right = max(right, left + max(width(l, card) for l in lines) + 20)
+        plan.append(p)
+    canvas = int(max(right, LEFT + 760))
+
+    # Rows from top to bottom: steps, gaps, and a header row every HEAD steps and at the end.
+    layout, y, count = [], TOP - 20, 0
+    for kind, i in rows_of(steps):
+        h = plan[i]["h"] if kind == "step" else 26
+        layout.append((kind, i, y, h))
+        y += h
+        if kind == "step":
+            count += 1
+            if count % HEAD == 0 and i < len(steps) - 1:
+                layout.append(("head", None, y, 50))
+                y += 50
+    layout.append(("head", None, y, 50))
+    life_end, legend_y = y, y + 70
+    height = legend_y + 230
+    y_of = {}
+    bg, body = [], []
+    for kind, i, top, h in layout:
         if kind == "gap":
-            body.append(f'<line x1="{LEFT}" y1="{y}" x2="{canvas - LEFT}" y2="{y}" stroke="#bbb" stroke-dasharray="1 4"/>')
-            body.append(f'<text x="{(LEFT + canvas) // 2}" y="{y + 4}" text-anchor="middle" fill="#888" stroke="#fffdf8" stroke-width="3" paint-order="stroke">... {i} ...</text>')
-        elif i % 2:
-            body.append(f'<rect x="0" y="{y - ROW // 2}" width="{canvas}" height="{ROW}" fill="#f7f3e8"/>')
+            mid = top + h / 2
+            bg.append(f'<line x1="{LEFT}" y1="{mid}" x2="{canvas - LEFT}" y2="{mid}" stroke="#bbb" stroke-dasharray="1 4"/>')
+            bg.append(f'<text x="{(LEFT + canvas) // 2}" y="{mid + 4}" text-anchor="middle" fill="#888" {halo}>... {i} ...</text>')
+        elif kind == "step":
+            p = plan[i]
+            p["top"] = top
+            p["y"] = top + h / 2 if steps[i]["shape"] != "arrow" else top + h - 10
+            y_of[i] = p["y"]
+            if i % 2:
+                bg.append(f'<rect x="0" y="{top}" width="{canvas}" height="{h}" fill="#f7f3e8"/>')
+
     # Activation bars of the runs, under the arrows.
     for agent, first, last in run_spans(steps, runs):
         body.append(f'<rect x="{x[agent] - 3}" y="{y_of[first] - 9}" width="6" height="{y_of[last] - y_of[first] + 18}" fill="#d9e2ec" fill-opacity="0.8" stroke="#9fb3c8"/>')
+
+    def put(lines, px, first_y, fill, extra=""):
+        for k, line in enumerate(lines):
+            body.append(f'<text x="{px[0]}" y="{first_y + k * LH}" fill="{fill}" {extra}>{html.escape(line)}{px[1]}</text>')
+
     for i, s in enumerate(steps):
-        y, colour = y_of[i], colour_of(s)
-        label = label_of(i + 1, s)
-        full = f"{label}: {s['msg']}"
-        halo = 'stroke="#fffdf8" stroke-width="3" paint-order="stroke"'
-        title = f"<title>{html.escape(full)}</title>"
+        p, colour = plan[i], colour_of(s)
+        y, lines, title = p["y"], p["lines"], f"<title>{html.escape(p['full'])}</title>"
         if s["shape"] == "note":
-            w = width(label) + 12
             fill, edge, ink = ("#fbe3e0", REFUSED, "#8a1f14") if s.get("tone") == "refused" else ("#f3eed2", "#d8cf9a", "#555")
-            body.append(f'<rect x="{x[s["a"]] - w / 2:.0f}" y="{y - 10}" width="{w:.0f}" height="18" fill="{fill}" stroke="{edge}">{title}</rect>')
-            body.append(f'<text x="{x[s["a"]]}" y="{y + 3}" fill="{ink}" text-anchor="middle" font-style="italic">{html.escape(label)}{title}</text>')
+            body.append(f'<rect x="{p["left"]:.0f}" y="{y - p["h"] / 2 + 4:.0f}" width="{p["w"]:.0f}" height="{p["h"] - 8:.0f}" fill="{fill}" stroke="{edge}">{title}</rect>')
+            for k, line in enumerate(lines):
+                body.append(f'<text x="{p["left"] + p["w"] / 2:.0f}" y="{y - len(lines) * LH / 2 + 10 + k * LH:.0f}" fill="{ink}" text-anchor="middle" font-style="italic">{html.escape(line)}{title}</text>')
+            continue
+        card, head = s.get("card"), marker(colour, bool(s.get("open")))
+        dash = ' stroke-dasharray="1 3"' if s.get("tone") == "harness" else ' stroke-dasharray="5 3"' if s.get("dashed") else ""
+        stroke = 2 if card or s.get("tone") == "harness" else 1
+        if s["shape"] == "self":
+            cx = x[s["a"]]
+            body.append(f'<path d="M{cx},{y - 8} h24 v16 h-24" fill="none" stroke="{colour}" stroke-width="{stroke}"{dash} marker-end="url(#{head})">{title}</path>')
+            top = y - len(lines) * LH / 2 + 10
+            if card:
+                body.append(f'<rect x="{p["left"] - 6}" y="{top - 11}" width="{max(width(l, True) for l in lines) + 12:.0f}" height="{len(lines) * LH + 4}" rx="8" fill="{card[1]}" stroke="{card[0]}">{title}</rect>')
+                put(lines, (p["left"], title), top, card[0], 'font-weight="bold"')
+            else:
+                put(lines, (p["left"], title), top, colour, halo)
         else:
-            left = min(x[s["a"]], x[s["b"]])
-            dash = ' stroke-dasharray="1 3"' if s.get("tone") == "harness" else ' stroke-dasharray="5 3"' if s.get("dashed") else ""
-            head = marker(colour, bool(s.get("open")))
-            width_ = 2 if s.get("card") or s.get("tone") == "harness" else 1
-            body.append(f'<line x1="{x[s["a"]]}" y1="{y}" x2="{x[s["b"]]}" y2="{y}" stroke="{colour}" stroke-width="{width_}"{dash} marker-end="url(#{head})">{title}</line>')
-            body.append(f'<text x="{left + 6}" y="{y - 4}" fill="{colour}" {halo}>{html.escape(fit(label, last_x + COL // 3 - left))}{title}</text>')
+            body.append(f'<line x1="{x[s["a"]]}" y1="{y}" x2="{x[s["b"]]}" y2="{y}" stroke="{colour}" stroke-width="{stroke}"{dash} marker-end="url(#{head})">{title}</line>')
+            first = y - (8 if card else 5) - (len(lines) - 1) * LH
+            if card:
+                top = first - 12
+                body.append(f'<rect x="{p["left"]}" y="{top}" width="{max(width(l, True) for l in lines) + 12:.0f}" height="{len(lines) * LH + 3}" rx="8" fill="{card[1]}" stroke="{card[0]}">{title}</rect>')
+                put(lines, (p["left"] + 6, title), first, card[0], 'font-weight="bold"')
+            else:
+                put(lines, (p["left"] + 6, title), first, colour, halo)
         mark = s.get("mark")
         if mark == "x":
             cx = x[s["mark_on"]]
-            body.append(f'<path d="M{cx - 6},{y - 6} l12,12 m0,-12 l-12,12" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
+            body.append(f'<path d="M{cx - 5},{y - 2} l10,10 m0,-10 l-10,10" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
         elif mark == "check":
             cx = x[s["mark_on"]] + (14 if x[s["b"]] < x[s["a"]] else -14)
-            body.append(f'<path d="M{cx - 5},{y} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
-        # The message column: the card of a work, or plain text.
-        if s.get("card"):
-            line, fill = s["card"]
-            body.append(f'<rect x="{msg_x - 6}" y="{y - 10}" width="{width(msgs[i], True) + 12:.0f}" height="18" rx="9" fill="{fill}" stroke="{line}">{title}</rect>')
-            body.append(f'<text x="{msg_x}" y="{y + 3}" fill="{line}" font-weight="bold">{html.escape(msgs[i])}{title}</text>')
-        else:
-            body.append(f'<text x="{msg_x}" y="{y + 3}" fill="{colour}">{html.escape(msgs[i])}{title}</text>')
+            body.append(f'<path d="M{cx - 5},{y + 6} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{canvas}" height="{height}" font-family="{FONT}" font-size="11">',
            f'<rect width="{canvas}" height="{height}" fill="#fffdf8"/>']
     defs = "".join(
@@ -416,14 +498,15 @@ def svg(parts, steps, runs):
         + (f'<path d="M0,0 L10,4 L0,8" fill="none" stroke="{c}"/>' if o else f'<path d="M0,0 L10,4 L0,8 z" fill="{c}"/>')
         + "</marker>" for (c, o), mid in markers.items())
     out.append(f"<defs>{defs}</defs>")
+    out += bg
     for name in parts:
-        bw = min(max(width(name, True) + 24, 100), COL - 12)
-        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{legend_y - 20}" stroke="#ccc" stroke-dasharray="4 4"/>')
-        out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="10" width="{bw:.0f}" height="30" rx="{15 if name in (CLIENT, OWNER) else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
-        out.append(f'<text x="{x[name]}" y="30" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
-    out.append(f'<line x1="{msg_x - 12}" y1="{TOP - 20}" x2="{msg_x - 12}" y2="{legend_y - 20}" stroke="#ddd"/>')
-    out.append(f'<text x="{msg_x}" y="30" fill="#555" font-weight="bold">message</text>')
+        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{life_end + 10}" stroke="#ccc" stroke-dasharray="4 4"/>')
     out += body
+    for hy in [10] + [top + 10 for kind, _, top, _ in layout if kind == "head"]:
+        for name in parts:
+            bw = min(max(width(name, True) + 24, 100), COL - 12)
+            out.append(f'<rect x="{x[name] - bw / 2:.0f}" y="{hy}" width="{bw:.0f}" height="30" rx="{15 if name in (CLIENT, OWNER) else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
+            out.append(f'<text x="{x[name]}" y="{hy + 20}" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
     out += legend(LEFT, legend_y)
     out.append("</svg>")
     return "\n".join(out) + "\n"
@@ -441,9 +524,9 @@ def legend(x, y):
     for i, (name, (edge, fill)) in enumerate((("done", STATES["done"]), ("cancelled", STATES["cancelled"]), ("open", OPEN))):
         box.append(f'<rect x="{x + 12 + i * 70}" y="{row(2) - 8}" width="62" height="16" rx="8" fill="{fill}" stroke="{edge}"/>')
         box.append(f'<text x="{x + 43 + i * 70}" y="{row(2) + 4}" fill="{edge}" text-anchor="middle" font-weight="bold">{name}</text>')
-    text(2, "work card (right column): how the work ended; open shows what it waits for", 230)
+    text(2, "work card on the arrow that created it: how the work ended; open shows what it waits for", 230)
     box.append(f'<rect x="{x + 12}" y="{row(3) - 8}" width="40" height="16" fill="#f3eed2" stroke="#d8cf9a"/>')
-    text(3, "yellow note: stage move kept by the same agent, artifact, tool, comment")
+    text(3, "yellow note on a lifeline: stage move kept by the same agent, artifact, tool, comment")
     box.append(f'<rect x="{x + 12}" y="{row(4) - 8}" width="40" height="16" fill="#fbe3e0" stroke="{REFUSED}"/>')
     text(4, "red note: a refused call")
     box.append(f'<rect x="{x + 29}" y="{row(5) - 8}" width="6" height="16" fill="#d9e2ec" stroke="#9fb3c8"/>')
@@ -451,8 +534,8 @@ def legend(x, y):
     box.append(f'<path d="M{x + 14},{row(6) - 6} l12,12 m0,-12 l-12,12" stroke="{REFUSED}" stroke-width="2.5" fill="none"/>')
     box.append(f'<path d="M{x + 34},{row(6)} l3.5,4 l6.5,-9" stroke="{STATES["done"][0]}" stroke-width="2.5" fill="none"/>')
     text(6, "cross: work retired here; check: work done here")
-    text(7, "Wn: the work of a step; N.: event order; HH:MM:SS: time; ... N min ...: silence over a minute", 12)
-    text(8, "Client and Owner by the destination a request recorded (origin: Client, owners: Owner)", 12)
+    text(7, "each text sits on its arrow: N. HH:MM:SS Wn (event order, time, work); loop: a step by an agent to itself", 12)
+    text(8, "... N min ...: silence over a minute; Client and Owner by the destination a request recorded", 12)
     return box
 
 
