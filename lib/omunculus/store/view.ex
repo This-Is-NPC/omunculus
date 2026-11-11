@@ -149,7 +149,7 @@ defmodule Omunculus.Store.View do
   end
 
   @doc """
-  The closed runs of a conversation that had no work, oldest first, each
+  The closed runs of a conversation that began without a work, oldest first, each
   with its record; a nil conversation is that of the calls outside one.
   """
   @spec conversation_runs(Omunculus.Store.Connection.t(), String.t() | nil) :: {:ok, [map]}
@@ -159,7 +159,7 @@ defmodule Omunculus.Store.View do
              conn,
              """
              SELECT runs.* FROM runs JOIN events AS start ON start.id = runs.event_id
-             WHERE runs.work_id IS NULL AND runs.conversation_id IS ? AND runs.status = 'done'
+             WHERE start.work_id IS NULL AND runs.conversation_id IS ? AND runs.status = 'done'
              ORDER BY start.sequence
              """,
              [conversation_id]

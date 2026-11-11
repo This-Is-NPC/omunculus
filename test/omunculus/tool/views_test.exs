@@ -187,6 +187,42 @@ defmodule Omunculus.Tool.ViewsTest do
     assert {:ok, %{}} == hydrate(conn, views, %{run_id: run, work_id: root})
   end
 
+  test "conversation runs keep the run that began without a work and then opened a root",
+       %{conn: conn} do
+    conversation = Omunculus.Id.new()
+
+    :ok =
+      Omunculus.Store.Query.insert(conn, :conversations, %{
+        id: conversation,
+        created_issuer: "local",
+        created_subject: Omunculus.Operations.local_principal().subject,
+        created_at: "2026-01-01T00:00:00Z"
+      })
+
+    root = Fixtures.insert(conn, :works, %{conversation_id: conversation})
+
+    begin = fn sequence, work ->
+      Fixtures.insert(conn, :events, %{type: "start-run", sequence: sequence, work_id: work})
+    end
+
+    opener =
+      Fixtures.insert(conn, :runs, %{
+        conversation_id: conversation,
+        status: "done",
+        work_id: root,
+        event_id: begin.(1, nil)
+      })
+
+    Fixtures.insert(conn, :runs, %{
+      conversation_id: conversation,
+      status: "done",
+      work_id: root,
+      event_id: begin.(2, root)
+    })
+
+    assert {:ok, [%{id: ^opener}]} = Store.conversation_runs(conn, conversation)
+  end
+
   test "recent runs reads the project's last closed runs, newest first, with their work and events",
        %{conn: conn} do
     work = Fixtures.insert(conn, :works, %{title: "build", workflow: "page", stage: "review"})

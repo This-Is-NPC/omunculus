@@ -250,7 +250,7 @@ under `## Environment`, the workspace every command starts in, the
 ```
 
 A run without a work also gets, after the last run, what the person and
-the agent said in its conversation under `## Conversation`, when its
+the agent said in its conversation (the run that opened a root work included) under `## Conversation`, when its
 session starts over, then the conversation's root works under `## Works`,
 each the newest that fits `[policy] conversation_bytes`. A run that continues its agent's
 paused session (`[policy] session_ttl_ms` and `session_max_bytes`) keeps

@@ -35,7 +35,7 @@ defmodule Omunculus.Tools.Assemble do
 
   With `session_ttl_ms` and `session_max_bytes` in the args, and the
   `session` view (the work with its closed runs) or, for a run without a
-  work, the `chat` view (its conversation's closed runs that had none),
+  work, the `chat` view (its conversation's closed runs that began without one, among them the run that opened a root work),
   the run may continue its
   `agent`'s paused session (`Omunculus.Tools.Session`): the output's
   `session` then carries the history and `since`, what happened since the
