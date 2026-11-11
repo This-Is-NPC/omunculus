@@ -181,7 +181,12 @@ last being the owner's. What is written in the fields, as every message to
 the client, is in the language the client writes in. The seller records that
 language in `language` when it first writes the proposal, taken from the
 client's own messages and never inferred from their country, the team's
-reports or the site's content; the `proposal` tool refuses the statuses
+reports or the site's content. The tool keeps one form, the ISO 639-1 code
+(`en`, `pt`): a code with a region (`pt-BR`) or a common name (`English`,
+`Português`) is turned into it, and anything else is refused. The first
+language recorded stays: a later version naming another is refused, unless
+the call says `change_language` because the client now writes in another.
+The `proposal` tool refuses the statuses
 `sent`, `accepted` and `approved` without it, and `next_stage` refuses
 `propose`. The same gate refuses a `pending` item that names an address,
 hours, a contact, a menu, prices or texts while the matching content field
@@ -189,6 +194,17 @@ already holds the client's answer (matched on English words): the seller
 records each answer the client gave before it asks again. The options of an
 ask stay the keys `accept`, `adjust` and `refuse`; the message explains them
 in the client's language.
+
+The language reaches the front desk as data, not as a rule to remember. The
+seller and the project manager ask the client with the pack's `ask_client`
+(`ask` with `to` stays for the owner and the project manager): it adds a
+fixed line `Language of the client: English (en)`, from the proposal, to the
+request's message, above any `Attach:` line, and is refused while the
+proposal records no language. The front desk writes what it escalates in
+that language, whatever the business facts (a city, a dish) are written in.
+The project manager's comments and reports that come back as results carry
+no such line: the front desk writes those in the language of the client's
+own messages.
 
 `next_stage` and the tools read only versions the `proposal` tool wrote: a
 version another tool puts under that name, with `put_artifact` or by hand,

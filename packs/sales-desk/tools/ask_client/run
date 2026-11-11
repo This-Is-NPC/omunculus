@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""The seller's and the project manager's way to ask the client: the request
+for the front desk, with the language recorded in the proposal as a fixed
+line, so the front desk writes to the client in it whatever the facts of the
+question are written in."""
+
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "_proposal"))
+import proposal  # noqa: E402
+
+OPTION = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+def run(call):
+    view = call.get("view") or {}
+    args = call.get("args") or {}
+    question = str(args.get("question") or "").strip()
+    if not question:
+        raise proposal.Refusal("question required")
+    options = args.get("options") or []
+    if options and not (
+        isinstance(options, list) and len(options) >= 2 and len(set(map(str, options))) == len(options)
+        and all(isinstance(option, str) and OPTION.match(option) for option in options)
+    ):
+        raise proposal.Refusal("options takes two or more different answers, each a short name of lowercase letters, digits, dashes and underscores")
+
+    data = proposal.current(view, proposal.engagement(view.get("work") or {}))
+    code = (data or {}).get("language")
+    if not code:
+        raise proposal.Refusal("the proposal records no language yet: write it with the proposal tool (language, the language of the client's own messages), then ask again")
+
+    lines = question.split("\n")
+    line = f"Language of the client: {proposal.language_name(code)}"
+    at = len(lines) - 1 if lines[-1].startswith("Attach:") else len(lines)
+    body = {"reason": "\n".join([*lines[:at], line, *lines[at:]]), "options": {option: [] for option in options}}
+    return "", [{"type": "request", "body": body}], []
+
+
+proposal.tool(run)

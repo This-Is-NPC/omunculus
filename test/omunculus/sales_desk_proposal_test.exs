@@ -65,7 +65,7 @@ defmodule Omunculus.SalesDeskProposalTest do
   test "the pack's tools are valid manifests reading the proposals' artifacts" do
     catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
 
-    for name <- ~w(proposal render_proposal next_stage request_golive) do
+    for name <- ~w(proposal render_proposal next_stage request_golive ask_client) do
       assert %{^name => manifest} = catalog
 
       assert [%{include: ["data"], prefix: "proposal-"}] =
@@ -222,6 +222,48 @@ defmodule Omunculus.SalesDeskProposalTest do
                write(%{}, broken, root)
 
       assert %{"ok" => false} = call("render_proposal", %{}, broken, root)
+    end
+  end
+
+  describe "ask_client" do
+    defp ask_client(question, view, root, extra \\ %{}),
+      do: call("ask_client", Map.merge(%{"question" => question}, extra), view, root)
+
+    test "the manifest ends the run and reads the proposals' artifacts" do
+      catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
+      assert %{"ask_client" => %{then: ["end"]}} = catalog
+    end
+
+    test "carries the proposal's language as a fixed line, above an Attach line", %{root: root} do
+      view = view_after(write(%{"language" => "English"}, %{}, root))
+
+      assert %{"ok" => true, "emit" => [%{"type" => "request", "body" => body}]} =
+               ask_client("Do you like the preview?", view, root, %{
+                 "options" => ["accept", "adjust"]
+               })
+
+      assert body == %{
+               "reason" => "Do you like the preview?\nLanguage of the client: English (en)",
+               "options" => %{"accept" => [], "adjust" => []}
+             }
+
+      assert %{"emit" => [%{"body" => %{"reason" => reason}}]} =
+               ask_client("Here is the price.\nAttach: proposal-w1.md", view, root)
+
+      assert reason ==
+               "Here is the price.\nLanguage of the client: English (en)\nAttach: proposal-w1.md"
+    end
+
+    test "is refused without a recorded language or with bad options", %{root: root} do
+      assert %{"ok" => false, "output" => "the proposal records no language" <> _} =
+               ask_client("Which colours?", %{}, root)
+
+      view = view_after(write(%{"language" => "pt"}, %{}, root))
+
+      assert %{"ok" => false, "output" => "options takes" <> _} =
+               ask_client("Which?", view, root, %{"options" => ["one"]})
+
+      assert %{"ok" => false, "output" => "question required"} = ask_client(" ", view, root)
     end
   end
 
@@ -607,7 +649,7 @@ defmodule Omunculus.SalesDeskProposalTest do
       assert %{"ok" => false, "output" => "language is not set" <> _} =
                write(Map.put(base, "status", "sent"), %{}, root)
 
-      assert %{"ok" => false, "output" => "language is not set" <> _} =
+      assert %{"ok" => false, "output" => "language " <> _} =
                write(%{"language" => " ", "status" => "accepted"}, %{}, root)
 
       answered =
@@ -654,6 +696,42 @@ defmodule Omunculus.SalesDeskProposalTest do
 
       assert %{"ok" => false, "output" => "stage propose does not hold yet: pending lists" <> _} =
                stage("propose", forged("proposal-w1", 1, held, "proposal"), root)
+    end
+
+    test "the language is kept as an ISO code and stays the first one recorded", %{root: root} do
+      for {given, code} <- [
+            {"en", "en"},
+            {"English", "en"},
+            {" EN-us ", "en"},
+            {"Português", "pt"},
+            {"pt_BR", "pt"}
+          ] do
+        assert %{"ok" => true} = out = write(%{"language" => given}, %{}, root)
+        assert data(out)["language"] == code
+      end
+
+      for given <- ["", "Klingon", "english please", "eng", "e1"] do
+        assert %{"ok" => false, "output" => "language " <> _} =
+                 write(%{"language" => given}, %{}, root)
+      end
+
+      first = write(%{"language" => "en"}, %{}, root)
+
+      # The same language, by name or code, is no change.
+      assert %{"ok" => true} = same = write(%{"language" => "English"}, view_after(first), root)
+      assert data(same)["language"] == "en"
+
+      assert %{"ok" => false, "output" => "the proposal's language is English (en)" <> _} =
+               write(%{"language" => "pt"}, view_after(first), root)
+
+      assert %{"ok" => true} =
+               changed =
+               write(%{"language" => "pt"}, view_after(first), root, %{"change_language" => true})
+
+      assert data(changed)["language"] == "pt"
+
+      # A later version that does not name it keeps it.
+      assert data(write(%{"city" => "Campinas"}, view_after(first), root))["language"] == "en"
     end
 
     test "a proposal another tool wrote passes no gate", %{root: root} do

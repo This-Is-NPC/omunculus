@@ -11,7 +11,7 @@ required = ["fields"]
 
 [parameters.properties.fields]
 type = "object"
-description = "What to set, merged key by key into the proposal: language (of the client's own messages, required before status sent), client, business, city, audience, decider, budget_timing, problem, content {texts, products, contacts (with hours and address), style (colours, fonts, tone)}, scope {pages, features, excluded} (lists), design {state (approved or waived), address, client_answer (the client's own answer, required to waive)}, delivery {address (homologation), accepted (the word accepted, once the client accepted the built site), production (address)}, timing, next_steps, assessment {answer, conditions}, pending (list), status (draft, sent, accepted, refused or approved). The client's own words, in their language."
+description = "What to set, merged key by key into the proposal: language (of the client's own messages: its ISO 639-1 code, such as en or pt, or a common name that becomes one; required before status sent; kept once recorded), client, business, city, audience, decider, budget_timing, problem, content {texts, products, contacts (with hours and address), style (colours, fonts, tone)}, scope {pages, features, excluded} (lists), design {state (approved or waived), address, client_answer (the client's own answer, required to waive)}, delivery {address (homologation), accepted (the word accepted, once the client accepted the built site), production (address)}, timing, next_steps, assessment {answer, conditions}, pending (list), status (draft, sent, accepted, refused or approved). The client's own words, in their language."
 
 [parameters.properties.discount]
 type = "number"
@@ -24,3 +24,7 @@ source = "works"
 source = "artifacts"
 include = ["data"]
 prefix = "proposal-"
+
+[parameters.properties.change_language]
+type = "boolean"
+description = "True only when the client now writes in another language and wants it: a later version otherwise keeps the language first recorded and refuses a different one."

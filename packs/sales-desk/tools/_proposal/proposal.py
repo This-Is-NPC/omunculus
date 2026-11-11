@@ -52,6 +52,15 @@ HELD_BY = (
     (("colour", "color", "font", "style", "tone"), "content.style"),
 )
 SENT = ("sent", "accepted", "approved")
+# The language is kept as an ISO 639-1 code; these names, in English and in
+# the language itself, are the ones turned into one.
+LANGUAGES = {
+    "en": ("English",), "pt": ("Portuguese", "Português", "Portugues"), "es": ("Spanish", "Español", "Espanol"),
+    "fr": ("French", "Français", "Francais"), "de": ("German", "Deutsch"), "it": ("Italian", "Italiano"),
+    "nl": ("Dutch", "Nederlands"), "ja": ("Japanese",), "zh": ("Chinese",), "ko": ("Korean",),
+    "ru": ("Russian",), "ar": ("Arabic",), "pl": ("Polish", "Polski"), "tr": ("Turkish",),
+}
+LANGUAGE_NAMES = {name.lower(): code for code, names in LANGUAGES.items() for name in names}
 COMPUTED = ("work", "updated", "price", "discount")
 
 
@@ -145,6 +154,38 @@ def validate_object(key, value):
         raise Refusal(f"design.state is one of: {', '.join(DESIGN_STATES)}")
     if key == "design" and value.get("state") == "waived" and not str(value.get("client_answer") or "").strip():
         raise Refusal("only the client waives the preview: write their answer to the front desk's question, in their words, in design.client_answer")
+
+
+def language_code(value):
+    """The ISO 639-1 code of a language given as a code ("en", "pt-BR") or a
+    common name ("English"); anything else is refused."""
+    word = value.strip().lower()
+    code = word.replace("_", "-").split("-")[0]
+    if re.fullmatch(r"[a-z]{2}", code) and (word == code or re.fullmatch(r"[a-z]{2}[-_][a-z0-9]{2,8}", word)):
+        return code
+    if word in LANGUAGE_NAMES:
+        return LANGUAGE_NAMES[word]
+    raise Refusal(f"language {value!r} is not a language the proposal can hold: write its ISO 639-1 code, such as en or pt")
+
+
+def language_name(code):
+    """The language as the messages name it: `English (en)`, or the code alone."""
+    return f"{LANGUAGES[code][0]} ({code})" if code in LANGUAGES else code
+
+
+def set_language(data, fields, change):
+    """`fields` with its language as a code. The first one recorded stays: a
+    different one is refused unless the call says `change_language`."""
+    if "language" not in fields:
+        return fields
+    code = language_code(fields["language"])
+    held = data.get("language")
+    if held and held != code and not change:
+        raise Refusal(
+            f"the proposal's language is {language_name(held)}, the client's: it does not change with a later version. "
+            "If the client wrote to you in another language and wants it, call proposal again with change_language true"
+        )
+    return {**fields, "language": code}
 
 
 def check_sendable(data):

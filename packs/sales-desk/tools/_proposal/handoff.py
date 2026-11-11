@@ -54,7 +54,7 @@ def facts(data, work_id, extra):
     client = (
         f"Client: {value(data, 'client')}\nBusiness: {value(data, 'business')}\nCity: {value(data, 'city')}\n"
         f"Slug (lowercase letters, digits and dashes): {slug(value(data, 'business'))}\n"
-        f"Language of the pages: {value(data, 'language')}"
+        f"Language of the pages: {proposal.language_name(value(data, 'language'))}"
     )
     sections = [
         section("CLIENT", client),

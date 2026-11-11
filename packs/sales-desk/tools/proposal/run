@@ -25,7 +25,7 @@ def run(call):
     proposal.validate(fields)
 
     data = proposal.current(view, work_id) or {}
-    data = proposal.merge(data, fields)
+    data = proposal.merge(data, proposal.set_language(data, fields, args.get("change_language")))
     if "discount" in args:
         data["discount"] = proposal.check_discount(args["discount"])
     data["work"] = work_id
@@ -36,7 +36,7 @@ def run(call):
         proposal.check_sendable(data)
 
     total = proposal.money(data["price"]["total"]) if "price" in data else "no price yet"
-    note = f"attach the artifact {proposal.document(work_id)} to give the client this version; write every message to them in {data.get('language') or 'their language'}"
+    note = f"attach the artifact {proposal.document(work_id)} to give the client this version; write every message to them in {proposal.language_name(data['language']) if data.get('language') else 'their language'}"
     return f"proposal saved: status {data['status']}, total {total}; {note}", proposal.emits(view, work_id, data), []
 
 
