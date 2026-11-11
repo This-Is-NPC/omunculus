@@ -170,8 +170,9 @@ All are QML on Quickshell and share `apps/kit`:
   which derives from a conversation's state and stage events where its
   works are, nested by stage and level, with what each does, waits on and
   spent, and fits one-line stages and phrases to a width in characters;
-  `Team.js`, which lays those works out as the team page's tree of agents,
-  what shows and what folds, and moves through it by key;
+  `Tree.js`, which lays those works out as the tree page's rows in the order
+  they were made, what shows and what folds, words each work's state and
+  moves through it by key;
   `Calls.js`, which groups a run's tool calls into rows and reads the diff
   of an edit or a write from its args; `Phrases.js`, which says a tool call
   in plain words and in brief; `Events.js`, which says any event in one
