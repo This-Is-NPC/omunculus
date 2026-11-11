@@ -30,8 +30,10 @@ you read (`seen.json`), which you archived (`archive.json`) and your drafts
 The e-mails of a thread, oldest first, are:
 
 - what you wrote, from you, to the agent;
-- what the thread's agent said to you: the text of its model replies that call
-  no tool, its comments and the files it attached, one e-mail per run;
+- what the thread's agent addressed to you: its comments on the
+  conversation's root work and the files it attached, one e-mail per run. A
+  file shows on the e-mail of its own run: the request that run raised, else
+  its comments, else an e-mail of its own with no text;
 - each request whose requester is the thread's agent, whose arbiter is you and
   that is not an owner's decision, as an e-mail from that agent whose body is the request's reason, in the
   agent's own words. The questions of the request's origins are other agents'
@@ -40,12 +42,15 @@ The e-mails of a thread, oldest first, are:
   never appears either, even when you are its arbiter;
 - your answers to those requests, as e-mails of yours.
 
-A model reply that calls a tool is the agent acting, and its text narrates the
-call to itself; it is not shown. Nothing of another agent is shown: not its
-words, not requests it raised, not a note the harness opened between agents
-(a request the harness opened that passes on no question). A request the
-harness opened that passes on a question shows that question as the thread's
-agent's.
+The channel to the person is explicit. An agent speaks to you only through a
+request to you (`ask`, or `escalate` to the origin), a `comment` on the
+conversation's root work and `attach`. What a model writes in plain text, beside
+a call or with none, is the agent's own narration: the console shows it, the
+mailbox never does. A comment on any other work, and the note of an `attach`,
+are not shown either. Nothing of another agent is shown: not its words, not
+requests it raised, not a note the harness opened between agents (a request the
+harness opened that passes on no question). A request the harness opened that
+passes on a question shows that question as the thread's agent's.
 
 A conversation has no title in the core: its subject is the first line of its
 first message of yours, cut at 90 characters. The compose window's Subject is

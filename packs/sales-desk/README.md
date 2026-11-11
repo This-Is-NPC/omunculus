@@ -115,14 +115,14 @@ the production address and the client's `works` answer to the live notice.
 
 What reaches the client is only what the front desk addresses to them: its
 escalations, the documents it attaches and, when a result of the project
-manager comes back (the sale closed, the handover), its text relaying what
+manager comes back (the sale closed, the handover), its comment relaying what
 concerns them, in the second person and in its own words: a report of the
 project manager is written between colleagues and never reaches the client
 as it is, and a result that only records what the client did leaves nothing
 to tell. The project manager's works for the teams carry the client's
 content word for word from the proposal, and the seller lists as pending,
-never asks again for, what the client said they do not have. Every other reply of an agent acts through tools, and the
-text a model writes beside a call is its own note, which the mailbox does
+never asks again for, what the client said they do not have. Any text a model writes, beside a call or
+with none, is its own note, which the mailbox does
 not show ([the mailbox](../../docs/mailbox.md)). A client who answers a decision
 without making it, saying they will think the price over, has answered for
 now: the front desk passes their words down in text, the seller records them

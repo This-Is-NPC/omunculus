@@ -1,11 +1,11 @@
 .pragma library
 .import "Requests.js" as Requests
-.import "Model.js" as Model
 
 // The mailbox's mapping from a conversation to e-mail. A thread is one
 // conversation of one project, with the agent of depth 0 the person first
-// wrote to; its e-mails are what the person wrote, what that agent said to
-// them and the requests it addressed to them, never anything of another
+// wrote to; its e-mails are what the person wrote, what that agent
+// explicitly addressed to them (its comments on the root work and the files it
+// attached) and the requests it addressed to them, never anything of another
 // agent. Everything here is pure: the window feeds it snapshots and events.
 
 const labels = { progress: "In progress", stuck: "Stuck", cancelled: "Cancelled" };
@@ -156,6 +156,9 @@ function build(projectId, id, snapshot, events, me) {
   for (const run of snapshot.runs) if (String(run.depth) === "0" && run.agent === agent) rootRuns[run.id] = run;
   const messages = [];
   const spoken = {};
+  const attached = [];
+  const rootWorks = {};
+  for (const work of snapshot.works) if (!work.parent_id) rootWorks[work.id] = true;
   const replies = {};
   for (const event of events) {
     const body = event.body || {};
@@ -164,22 +167,21 @@ function build(projectId, id, snapshot, events, me) {
       messages.push({ key: event.cursor, mine: true, from: you, to: agentPerson, text: body.message || "", at: event.at, files: body.attachments || [], request: "", pending: false, open: false });
     } else if (event.type === "reply" && event.request_id && isMe(event.actor, me)) {
       replies[event.request_id] = event;
-    } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
-      // A reply that calls a tool is the agent acting, its text narrating the
-      // call to itself; only a reply that calls none speaks to the person.
-      const words = (event.type === "model" ? (Model.calls(body).length > 0 ? "" : Model.text(body))
-        : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim();
-      const files = event.type === "attach" ? body.attachments || [] : [];
-      if (words === "" && files.length === 0) continue;
+    } else if (rootRuns[event.run_id] && event.type === "comment" && rootWorks[event.work_id] && String(body.body || "").trim() !== "") {
+      // Only what the agent explicitly addresses to the person is an e-mail:
+      // a comment on the conversation's root work. Its model text is its own
+      // narration, console only.
       const run = rootRuns[event.run_id];
+      const words = String(body.body).trim();
       if (spoken[run.id] === undefined) {
         spoken[run.id] = messages.length;
-        messages.push({ key: run.id, mine: false, from: agentPerson, to: you, text: words, at: event.at, files: files, request: "", pending: false, open: run.status === "open" });
+        messages.push({ key: run.id, mine: false, from: agentPerson, to: you, text: words, at: event.at, files: [], request: "", pending: false, open: run.status === "open" });
       } else {
         const message = messages[spoken[run.id]];
-        message.text = [message.text, words].filter(part => part !== "").join("\n\n");
-        message.files = message.files.concat(files);
+        message.text = message.text + "\n\n" + words;
       }
+    } else if (rootRuns[event.run_id] && event.type === "attach" && Array.isArray(body.attachments) && body.attachments.length > 0) {
+      attached.push(event);
     }
   }
   const notes = noted(events);
@@ -191,6 +193,19 @@ function build(projectId, id, snapshot, events, me) {
     messages.push({ key: request.id, mine: false, from: agentPerson, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
     const reply = replies[request.id];
     if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: agentPerson, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
+  }
+  // A file belongs to the e-mail of its own run: the request that run raised
+  // when it raised one, else its comments, else an e-mail of its own.
+  for (const event of attached) {
+    const run = rootRuns[event.run_id];
+    const own = messages.find(message => !message.mine && message.request !== ""
+      && asked.some(request => request.id === message.request && request.run_id === run.id));
+    const target = own || messages[spoken[run.id]];
+    if (target) target.files = target.files.concat(event.body.attachments);
+    else {
+      spoken[run.id] = messages.length;
+      messages.push({ key: run.id, mine: false, from: agentPerson, to: you, text: "", at: event.at, files: event.body.attachments.slice(), request: "", pending: false, open: false });
+    }
   }
   messages.sort((a, b) => a.at.localeCompare(b.at));
   waiting.sort((a, b) => asked.find(r => r.id === a).created_at.localeCompare(asked.find(r => r.id === b).created_at));

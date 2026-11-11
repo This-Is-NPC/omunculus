@@ -9,9 +9,10 @@ defmodule Omunculus.GuiMailboxTest do
   const agent = name => ({kind: "agent", agent: name});
   const prompt = (cursor, at, message, to) => ({type: "prompt", cursor, at, actor: human, body: {message, agent: to || "sales"}});
   const run = (id, who, status, depth) => ({id, agent: who, depth: depth === undefined ? 0 : depth, status, started_at: "2026-01-01T10:00:00Z", finished_at: status === "open" ? null : "2026-01-01T10:05:00Z"});
+  const comment = (cursor, at, run_id, work_id, text) => ({type: "comment", cursor, at, run_id, work_id, body: {body: text}});
   const model = (cursor, at, run_id, text) => ({type: "model", cursor, at, run_id, body: {content: text}});
   const request = (id, over) => Object.assign({id, status: "pending", requester: agent("sales"), arbiter: human, reason: "Which pages?", origins: {}, options: {}, created_at: "2026-01-01T10:02:00Z"}, over || {});
-  const snap = over => Object.assign({conversation: {created_at: "2026-01-01T09:00:00Z"}, works: [], runs: [], requests: []}, over || {});
+  const snap = over => Object.assign({conversation: {created_at: "2026-01-01T09:00:00Z"}, works: [{id: "w1", parent_id: null, state: "done"}], runs: [], requests: []}, over || {});
   const build = (snapshot, events) => Mailbox.build("agency", "c1", snapshot, events, me);
   """
 
@@ -65,13 +66,16 @@ defmodule Omunculus.GuiMailboxTest do
     run!("""
     const events = [
       prompt("1", "2026-01-01T10:00:00Z", "Website\\n\\nI need a site."),
-      model("2", "2026-01-01T10:01:00Z", "r1", "Thanks, one question coming."),
+      comment("2", "2026-01-01T10:01:00Z", "r1", "w1", "Thanks, one question coming."),
       {type: "model", cursor: "3", at: "2026-01-01T10:01:30Z", run_id: "r1", body: {content: [{type: "text", text: "I will ask now"}, {type: "tool_use", name: "ask", input: {}}]}},
-      model("4", "2026-01-01T10:01:40Z", "r2", "I am the seller talking to myself"),
+      comment("4", "2026-01-01T10:01:40Z", "r2", "w1", "I am the seller talking to myself"),
+      model("6", "2026-01-01T10:01:50Z", "r1", "Ana accepted; I told the team."),
+      comment("7", "2026-01-01T10:01:55Z", "r1", "w2", "A note on a child work"),
       {type: "reply", cursor: "5", at: "2026-01-01T10:03:00Z", request_id: "q1", actor: human, body: {body: "Home and Menu"}}
     ];
     const snapshot = snap({
       runs: [run("r1", "sales", "closed"), run("r2", "seller", "closed", 1)],
+      works: [{id: "w1", parent_id: null, state: "done"}, {id: "w2", parent_id: "w1", state: "done"}],
       requests: [
         request("q1", {status: "closed"}),
         request("q2", {created_at: "2026-01-01T10:04:00Z", reason: "Which colour?"}),
@@ -90,6 +94,26 @@ defmodule Omunculus.GuiMailboxTest do
     if (t.received !== 3 || t.sent !== 2) throw Error("counts");
     if (t.parties !== "Sales, me (5)") throw Error(t.parties);
     if (t.at !== "2026-01-01T10:04:00Z" || t.heard !== "2026-01-01T10:04:00Z") throw Error("times");
+    """)
+  end
+
+  test "plain model text never reaches the mailbox, and a file shows on its own run's e-mail" do
+    run!("""
+    const works = [{id: "w1", parent_id: null, state: "waiting"}];
+    const attach = (cursor, at, run_id, name) => ({type: "attach", cursor, at, run_id, body: {attachments: [{name, sha256: "x" + cursor}], note: "doc version 1"}});
+    const hi = prompt("1", "2026-01-01T10:00:00Z", "Hi");
+    const alone = build(snap({runs: [run("r1", "sales", "closed")], works}), [hi, model("2", "2026-01-01T10:01:00Z", "r1", "Ana accepted the proposal.")]);
+    if (alone.messages.length !== 1 || alone.received !== 0) throw Error("model text is no e-mail");
+    const asked = build(snap({runs: [run("r1", "sales", "closed")], works, requests: [request("q1", {run_id: "r1", reason: "Do you accept?"})]}),
+      [hi, attach("2", "2026-01-01T10:01:00Z", "r1", "Proposal.md")]);
+    const mail = asked.messages.find(m => m.request === "q1");
+    if (asked.messages.length !== 2 || mail.files.map(f => f.name).join() !== "Proposal.md" || mail.text !== "Do you accept?") throw Error(JSON.stringify(asked.messages));
+    const said = build(snap({runs: [run("r1", "sales", "closed")], works}),
+      [hi, attach("2", "2026-01-01T10:01:00Z", "r1", "Proposal.md"), comment("3", "2026-01-01T10:02:00Z", "r1", "w1", "Here it is.")]);
+    const one = said.messages[1];
+    if (said.messages.length !== 2 || one.text !== "Here it is." || one.files.length !== 1) throw Error(JSON.stringify(said.messages));
+    const bare = build(snap({runs: [run("r1", "sales", "closed")], works}), [hi, attach("2", "2026-01-01T10:01:00Z", "r1", "Proposal.md")]);
+    if (bare.messages[1].text !== "" || bare.messages[1].files.length !== 1 || bare.snippet !== "[Proposal.md]") throw Error(JSON.stringify(bare.messages) + bare.snippet);
     """)
   end
 
@@ -174,7 +198,7 @@ defmodule Omunculus.GuiMailboxTest do
 
   test "a reply answers the request of the e-mail it replies to, else the newest, else messages the agent" do
     run!("""
-    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi"), model("2", "2026-01-01T10:01:00Z", "r1", "Hello")];
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi"), comment("2", "2026-01-01T10:01:00Z", "r1", "w1", "Hello")];
     const two = build(snap({runs: [run("r1", "sales", "closed")], requests: [
       request("q1", {created_at: "2026-01-01T10:02:00Z", reason: "First?"}),
       request("q2", {created_at: "2026-01-01T10:03:00Z", reason: "Second?"})
@@ -195,7 +219,7 @@ defmodule Omunculus.GuiMailboxTest do
 
   test "folders, archive, unread, search and forward" do
     run!("""
-    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi\\n\\nabout the menu"), model("2", "2026-01-01T10:01:00Z", "r1", "Hello")];
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi\\n\\nabout the menu"), comment("2", "2026-01-01T10:01:00Z", "r1", "w1", "Hello")];
     const t = build(snap({runs: [run("r1", "sales", "closed")]}), events);
     const lone = build(snap(), [events[0]]);
     const none = {};
