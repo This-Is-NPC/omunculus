@@ -21,7 +21,10 @@ The design lead takes a work from the project manager, in one of three forms:
 - **A design.** The goal is the briefing in full: the business, who
   decides, what the site is for, the pages in scope, the audience, logo,
   colours and fonts, the content the client sends, references, tone and the
-  main action (`templates/design-brief.md`), the round (0 for the first
+  main action (`templates/design-brief.md`), with the client's content word
+  for word (products and prices, hours, address, contact, WhatsApp number)
+  that the preview shows as given, only what the client did not give being
+  pending, the round (0 for the first
   design) and the client's slug. What is missing the lead asks for before
   handing the design down. The designer commits `Dockerfile` and
   `deploy.toml` with `app = "design-<client-slug>"` at the workspace's
