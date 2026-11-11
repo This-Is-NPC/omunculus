@@ -9,7 +9,8 @@ fi
 
 # Each project config of dev/: its workspace, the workspace/ files of the
 # packs it imports that the workspace lacks, as the pack tool copies them,
-# and its local administrator while its store does not exist.
+# and its local administrator while its store does not exist. The command
+# reads no stdin: mix would swallow the rest of the project list.
 while IFS= read -r config; do
   dir=$(dirname "$config")
   root=$(sed -n 's/^root = "\(.*\)"$/\1/p' "$config" | head -n 1)
@@ -19,5 +20,5 @@ while IFS= read -r config; do
     cp -rn "$dir/$pack/workspace/." "$workspace/" 2>/dev/null || true
   done < <(awk '/^\[\[packs\]\]/ { p = 1; next } /^\[/ { p = 0 } p && /^path = "/ { gsub(/^path = "|"$/, ""); print }' "$config")
   [[ -f $dir/.omunculus/store.sqlite3 ]] && continue
-  bin/omunculus --config "$config" access bootstrap --issuer local --subject "$(id -u)"
+  bin/omunculus --config "$config" access bootstrap --issuer local --subject "$(id -u)" </dev/null
 done < <(find dev -maxdepth 2 -name omunculus.toml)
