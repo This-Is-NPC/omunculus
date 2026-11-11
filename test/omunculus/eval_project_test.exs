@@ -828,9 +828,78 @@ defmodule Omunculus.EvalProjectTest do
 
       work_id = Enum.find(events, &(&1.type == "work")).work_id
 
-      assert {:ok, %{workflow: "engagement", stage: "sale", assignee: "project-manager"}} =
+      assert {:ok, %{workflow: "engagement", stage: "start", assignee: "project-manager"}} =
                Store.view(conn, "work", work_id)
     end
+  end
+
+  test "agency's manager can only start the sale at stage start, which opens the seller's work",
+       %{conn: conn} do
+    dir = Fixtures.tmp_dir()
+    assert {:ok, path} = EquivalentExchange.Project.build(dir, "agency", {"fake", false}, nil)
+    assert {:ok, config} = Config.load(path)
+    conversation = conversation(conn)
+    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+
+    manager_work =
+      Fixtures.insert(conn, :works, %{
+        assignee: "project-manager",
+        conversation_id: conversation,
+        workflow: "engagement",
+        stage: "start",
+        title: "Padaria Sol",
+        goal: "Quero um site."
+      })
+
+    stage = Enum.find(config.workflows["engagement"], &(&1.name == "start")).ceiling
+
+    manager = fn ->
+      configured_actor(
+        conn,
+        config,
+        conversation,
+        "project-manager",
+        manager_work,
+        config.agents["project-manager"].depth,
+        stage
+      )
+    end
+
+    tools = config.agents["project-manager"].ceiling.granted
+
+    ceiling =
+      Ceiling.mount(
+        config,
+        %{
+          agent: "project-manager",
+          depth: config.agents["project-manager"].depth,
+          grants: [],
+          stage: stage,
+          workspace: Config.workspace_ceiling(config, nil),
+          groups: %{}
+        },
+        tools
+      )
+
+    # The model is left with the sale's start, and the steps it chains.
+    have = Enum.filter(tools, &(Ceiling.classify(ceiling, &1, "tool") == "have"))
+    assert Enum.sort(have) == ~w(comment continue delegate end start_sale)
+
+    assert {:ok, %{ok: true}, _} = Harness.dispatch(project, "start_sale", %{}, manager.())
+
+    assert {:ok, %{stage: "sale", state: "waiting", waiting: "child"}} =
+             Store.view(conn, "work", manager_work)
+
+    assert {:ok, [seller]} =
+             Query.all(conn, "SELECT * FROM works WHERE parent_id = ?", [manager_work])
+
+    assert %{
+             workflow: "sale",
+             stage: "qualify",
+             assignee: "seller",
+             goal: "Quero um site.",
+             title: "Padaria Sol: sale"
+           } = seller
   end
 
   test "agency's manager hands the seller a sale and the teams their works, and the seller asks it",
@@ -1065,6 +1134,7 @@ defmodule Omunculus.EvalProjectTest do
           "ask",
           "work",
           "comment",
+          "continue",
           "delegate",
           "promote",
           "sandbox.network",

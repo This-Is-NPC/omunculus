@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""The project manager's first move on a client's request: hands the seller the
+sale as a work of the workflow sale, its goal the request's own goal, and moves
+the engagement to stage sale. The only move stage start allows, so the sale
+starts whatever the model would otherwise do."""
+
+import json
+import sys
+
+
+def run(call):
+    work = (call.get("view") or {}).get("work") or {}
+    if work.get("stage") != "start":
+        return {"ok": False, "output": f"start_sale starts the sale at stage start; this work is at stage {work.get('stage')}",
+                "emit": [], "chain": []}
+    title = f"{work.get('title') or 'Request'}: sale"
+    return {"ok": True, "output": "", "emit": [], "chain": [
+        {"name": "continue", "args": {}},
+        {"name": "delegate", "args": {"title": title, "goal": work.get("goal") or title, "workflow": "sale"}},
+    ]}
+
+
+json.dump(run(json.load(sys.stdin)), sys.stdout)
+sys.stdout.write("\n")

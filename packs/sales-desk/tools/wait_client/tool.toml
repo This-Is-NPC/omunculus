@@ -1,7 +1,7 @@
 name = "wait_client"
 kind = "tool"
 triggers = ["model"]
-description = "Parks the engagement until the client's next message reopens it, with the report as its comment: the project manager's wait. In stage sale it is refused until the seller's sale work broke because the client will decide later; before that, the sale is handed to the seller with work."
+description = "Parks the engagement until the client's next message reopens it, with the report as its comment: the project manager's wait. In stage sale it is refused until the seller's sale work broke because the client will decide later."
 tags = ["sales", "sequence"]
 command = ["./run"]
 chains = ["end"]

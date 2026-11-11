@@ -245,14 +245,6 @@ defmodule Omunculus.SalesDeskProposalTest do
       do: %{"workflow" => "sale", "assignee" => "seller", "state" => state, "waiting" => waiting}
 
     test "at sale it is refused until the seller's work broke, guiding the manager", %{root: root} do
-      assert %{
-               "ok" => false,
-               "output" => "wait refused at stage sale: no sale work exists" <> guide
-             } =
-               wait("sale", [], root)
-
-      assert guide =~ "call work with one work naming the workflow sale"
-
       for child <- [
             sale("open"),
             sale("waiting", "child"),
@@ -278,6 +270,34 @@ defmodule Omunculus.SalesDeskProposalTest do
 
     test "other stages wait freely", %{root: root} do
       assert %{"ok" => true, "emit" => [%{"type" => "wait"}]} = wait("design", [], root)
+    end
+  end
+
+  describe "start_sale" do
+    test "hands the seller the request's goal and moves to stage sale", %{root: root} do
+      view = %{"work" => %{"id" => "w1", "stage" => "start", "title" => "Padaria Sol", "goal" => "Quero um site."}}
+
+      assert %{
+               "ok" => true,
+               "chain" => [
+                 %{"name" => "continue", "args" => %{}},
+                 %{
+                   "name" => "delegate",
+                   "args" => %{
+                     "title" => "Padaria Sol: sale",
+                     "goal" => "Quero um site.",
+                     "workflow" => "sale"
+                   }
+                 }
+               ]
+             } = call("start_sale", %{}, view, root)
+    end
+
+    test "is refused after stage start", %{root: root} do
+      view = %{"work" => %{"id" => "w1", "stage" => "sale", "goal" => "x"}}
+
+      assert %{"ok" => false, "output" => "start_sale starts the sale at stage start" <> _} =
+               call("start_sale", %{}, view, root)
     end
   end
 

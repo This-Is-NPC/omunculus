@@ -10,7 +10,7 @@ concerns them.
 | Agent | Depth | Role |
 |---|---|---|
 | front-desk | 0 | the only one that talks with the client: receives what they say, routes it, relays questions, previews, documents and the finished site in plain words |
-| project-manager | 1, workflow `engagement` | the internal hub: owns the delivery plan, the stages after the sale and every internal decision; hands works to the seller and to the teams, and gathers their answers |
+| project-manager | 1, workflow `engagement` | the internal hub: owns the delivery plan, the stages after the sale and every internal decision; starts the seller's sale, hands works to the teams and gathers their answers |
 | seller | 2, workflow `sale` | scopes, prices and writes the proposal; asks the project manager what only the teams know |
 
 The design team's `design-lead` and the dev team's `administrator` are
@@ -65,7 +65,12 @@ goes through it whether it names the workflow or not, and one naming an
 agent is refused, so the front desk never holds a work of its own. Its
 stages, all the project manager's:
 
-1. `sale`: hands the seller a work of the workflow `sale`. The seller's
+0. `start`: the stage denies every tool of the project manager but
+   `start_sale`, so the sale starts the same way every time. The tool hands
+   the seller a work of the workflow `sale` whose goal is the request's own
+   and moves the engagement to `sale`; it takes no arguments and is refused
+   at any other stage.
+1. `sale`: the seller's work is open. The seller's
    stages are `qualify` (discovery, in short questions to the client),
    `estimate` (asks the project manager, with `ask` and `to = "pm"`),
    `propose` (the price from the table, accepted by the client) and
