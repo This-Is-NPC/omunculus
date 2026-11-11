@@ -47,7 +47,7 @@ defmodule Omunculus.GuiShortcutsTest do
     if (Shortcuts.rows("tree").length === 0) throw Error("rows");
     if (Shortcuts.rows("everywhere")[0][0] !== "1 · 2 · …") throw Error("rows label");
     if (Shortcuts.chord("projects") !== "Ctrl+P" || Shortcuts.find("projects").mutates) throw Error("projects");
-    if (Shortcuts.keys("start-projects")[0] !== "P" || Shortcuts.find("start-projects").tier !== 1) throw Error("start-projects");
+    if (Shortcuts.keys("start-way").join("") !== "1234" || Shortcuts.find("start-way").tier !== 1) throw Error("start-way");
     """)
   end
 
