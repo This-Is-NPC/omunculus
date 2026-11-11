@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
 // CommandRow is a bar's actions, ranked: the main one (`role: "primary"`)
 // first and solid, then the others outlined, in the order given but the
@@ -26,6 +27,8 @@ Item {
   property real spacing: Theme.space.gap
   // The main action at the left edge, the others at the right.
   property bool spread: false
+  // The height of a button, and the width of one that is only an icon.
+  property real control: Breakpoints.target(Window.width)
 
   function isMain(command) { return !command.group && command.role === "primary" }
   readonly property var leading: runs(commands.filter(command => isMain(command)))
@@ -91,7 +94,7 @@ Item {
       for (const command of run) {
         // A run of the commands before they changed counts nothing until it follows them.
         const width = widths[commands.indexOf(command)] || { full: 0, brief: 0 }
-        total += names === "icon" && !isMain(command) && command.icon ? 32 : names === "full" ? width.full : width.brief
+        total += names === "icon" && !isMain(command) && command.icon ? control : names === "full" ? width.full : width.brief
       }
       total -= run.length - 1
     }
@@ -156,6 +159,7 @@ Item {
           required property var modelData
           readonly property bool iconOnly: row.iconOnly(modelData)
           dense: true
+          implicitHeight: row.control
           role: modelData.group ? (modelData.checked ? "primary" : "action")
             : modelData.role === "primary" || modelData.role === "guarded" ? modelData.role : "action"
           filled: row.isMain(modelData)
@@ -163,7 +167,7 @@ Item {
           icon: modelData.icon || ""
           text: iconOnly ? "" : row.names === "full" ? modelData.text : modelData.short || modelData.text
           maximumWidth: row.room - (row.overflow.length > 0 ? row.reserve : 0)
-          width: iconOnly ? 32 : Math.min(implicitWidth, maximumWidth)
+          width: iconOnly ? row.control : Math.min(implicitWidth, maximumWidth)
           tip: modelData.tip || (iconOnly ? modelData.text.toLowerCase() : "")
           enabled: modelData.enabled !== false
           onClicked: modelData.run()

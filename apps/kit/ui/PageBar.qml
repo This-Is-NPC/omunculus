@@ -37,7 +37,8 @@ Rectangle {
   readonly property var back: shown.find(command => command.role === "back") || null
   readonly property var actions: shown.filter(command => command.role !== "back")
   readonly property bool switching: pageSwitcher && narrow && pages.length > 0
-  readonly property real control: Breakpoints.target(Window.width)
+  // The side of a control: a touch target on a narrow window.
+  readonly property real control: narrow ? Theme.size.control : Breakpoints.target(Window.width)
   // The least gap between the main action and the others.
   readonly property real gap: 24
   // The room the actions have beside BACK as only its chevron and its rule,
@@ -86,6 +87,7 @@ Rectangle {
         Layout.preferredWidth: contextual.tight || bar.narrow ? bar.control : implicitWidth
         visible: bar.back !== null
         dense: true
+        implicitHeight: bar.control
         role: "navigation"
         icon: "chevron-left"
         text: bar.back && !contextual.tight && !bar.narrow ? bar.back.text : ""
@@ -107,6 +109,7 @@ Rectangle {
         Layout.alignment: Qt.AlignVCenter
         visible: bar.switching
         dense: true
+        implicitHeight: bar.control
         role: "action"
         icon: "chevron-down"
         text: bar.pages.length > 0 ? bar.pages[Math.max(0, Math.min(bar.current, bar.pages.length - 1))].name.toUpperCase() : ""
@@ -128,6 +131,7 @@ Rectangle {
         Layout.alignment: Qt.AlignVCenter
         Layout.fillWidth: true
         spread: true
+        control: bar.control
         commands: bar.actions
         iconsWhenTight: true
         overflows: true
@@ -143,6 +147,7 @@ Rectangle {
         readonly property var listed: contextual.overflow.filter(command => command.enabled !== false)
         Layout.alignment: Qt.AlignVCenter
         visible: contextual.overflow.length > 0
+        control: bar.control
         tip: "more commands"
         items: more.listed.map((command, index) => ({ id: String(index), icon: command.icon || "", text: command.text,
           guarded: command.role === "guarded", chosen: !!command.checked }))

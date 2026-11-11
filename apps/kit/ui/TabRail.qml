@@ -18,8 +18,9 @@ Item {
   // [{name}], in order.
   required property var tabs
   property int current: 0
-  // The height of the command bar beside the rail.
-  readonly property real headHeight: 44
+  // The height of the command bar beside the rail; room for touch-sized
+  // controls on a narrow window.
+  readonly property real headHeight: Theme.size.control + (size === "narrow" ? Theme.space.gap : 0)
 
   // Chosen by a click or Enter; Esc folded it, so the page takes the keyboard.
   signal chosen(int index)
