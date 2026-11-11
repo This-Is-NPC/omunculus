@@ -44,10 +44,10 @@ defmodule Omunculus.GuiShortcutsTest do
     const ids = table.map(entry => entry.id);
     if (new Set(ids).size !== ids.length) throw Error("duplicate id");
     if (Shortcuts.chord("reply") !== "Alt+R" || Shortcuts.label("page") !== "1 · 2 · …") throw Error("lookups");
-    if (Shortcuts.rows("team").length === 0) throw Error("rows");
+    if (Shortcuts.rows("tree").length === 0) throw Error("rows");
     if (Shortcuts.rows("everywhere")[0][0] !== "1 · 2 · …") throw Error("rows label");
     if (Shortcuts.chord("projects") !== "Ctrl+P" || Shortcuts.find("projects").mutates) throw Error("projects");
-    if (Shortcuts.keys("start-projects")[0] !== "P" || Shortcuts.find("start-projects").tier !== 1) throw Error("start-projects");
+    if (Shortcuts.keys("start-way").join("") !== "1234" || Shortcuts.find("start-way").tier !== 1) throw Error("start-way");
     """)
   end
 end

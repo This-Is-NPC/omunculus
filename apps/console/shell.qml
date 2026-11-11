@@ -62,15 +62,19 @@ ShellRoot {
     property int elsewhereKept: -1
     property int notesKept: -1
 
-    // The ways in at the start: on a project, a new conversation, its
-    // conversations, the board and the projects; on the registry alone, the
-    // projects and the board.
+    // The ways in at the start, each a card with a line of what is there: on a
+    // project, a new conversation, its conversations, the board and the
+    // projects; on the registry alone, the projects and the board.
     readonly property var ways: {
-      const projects = { key: "start-projects", page: "projects", text: "PROJECTS", icon: "folder" }
-      const board = { key: "start-board", page: "board", text: "BOARD", icon: "board" }
+      const row = Omunculus.projectRows.find(item => item.id === Omunculus.project) || null
+      const count = Omunculus.boardProjects.length
+      const projects = { page: "projects", text: "PROJECTS", detail: Omunculus.registry
+        ? (count > 0 ? count + (count === 1 ? " project" : " projects") + Theme.type.meta.separator + "open one to see its conversations" : "None yet" + Theme.type.meta.separator + "add the first")
+        : "Switch to another project" }
+      const board = { page: "board", text: "BOARD", detail: Omunculus.registry ? "The works of every project, by state" : "The works of this project, by state" }
       return Omunculus.registry ? [projects, board] : [
-        { key: "start-new", page: "new", text: "NEW CONVERSATION", icon: "play" },
-        { key: "start-history", page: "conversations", text: "CONVERSATIONS", icon: "list" },
+        { page: "new", text: "NEW CONVERSATION", detail: "Choose whom to talk with and say what you need" },
+        { page: "conversations", text: "CONVERSATIONS", detail: !row || row.reading ? "Reading the conversations…" : Projects.meta(row, "", 80, Theme.type.meta.separator) },
         board, projects
       ]
     }
@@ -130,6 +134,8 @@ ShellRoot {
           Layout.fillWidth: true
           Layout.fillHeight: false
           tight: panel.short
+          home: panel.started
+          onHomeClicked: panel.started = false
           crumbs: panel.crumbs
           // Requests waiting for you in the other projects, while one is
           // open; it opens them, the waiting ones picked out.
@@ -196,49 +202,60 @@ ShellRoot {
             Keys.onPressed: event => {
               if (!Typing.idle)
                 return
-              const at = panel.ways.findIndex(way => Shortcuts.keys(way.key).includes(event.text.toUpperCase()))
-              if (at >= 0)
-                (wayButtons.itemAt(at) as TraceButton).press()
+              const at = Shortcuts.keys("start-way").indexOf(event.text)
+              if (at >= 0 && at < panel.ways.length)
+                (wayCards.itemAt(at) as StartCard).press()
             }
+            Keys.onReturnPressed: (wayCards.itemAt(0) as StartCard).press()
 
             Column {
               anchors.horizontalCenter: parent.horizontalCenter
-              // Whole pixels, or the first button's top hairline is not drawn;
+              width: Math.min(560, panel.width - 2 * panel.margin)
+              // Whole pixels, or the first card's top hairline is not drawn;
               // never past the view's top on a short window.
               y: Math.round(Math.max(0, (parent.height - height) / 2))
               spacing: panel.short ? Theme.space.blockShort : Theme.space.block
-              // The first way in is the main one, and stands taller.
+              Label {
+                visible: !Omunculus.registry
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: Omunculus.project.toUpperCase()
+                color: Theme.dim
+                elide: Text.ElideRight
+                font.pixelSize: Theme.type.meta.size
+                font.letterSpacing: Theme.type.meta.tracking
+              }
+              Label {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: "What now?"
+                font.pixelSize: Theme.type.input.size
+                font.bold: true
+              }
+              // The first way in is the main one, and the only one filled.
               Repeater {
-                id: wayButtons
+                id: wayCards
                 model: panel.ways
-                delegate: TraceButton {
+                delegate: StartCard {
                   required property var modelData
                   required property int index
-                  // A delegate torn down has no parent.
-                  anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                  implicitWidth: Math.min(260, panel.width - 2 * panel.margin)
-                  implicitHeight: index === 0 ? Theme.size.control + Theme.space.line : Theme.size.control
-                  role: index === 0 ? "primary" : "navigation"
-                  icon: modelData.icon
-                  text: modelData.text
+                  width: parent ? parent.width : 0
+                  primary: index === 0
+                  title: modelData.text
+                  detail: modelData.detail
+                  key: String(index + 1).padStart(2, "0")
                   enabled: Omunculus.connected
-                  tip: Shortcuts.label(modelData.key)
                   onClicked: panel.enter(modelData.page)
                 }
               }
-              Item { width: 1; height: Theme.space.tight }
               DecodeLabel {
-                readonly property int count: Omunculus.boardProjects.length
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(0, panel.width - 2 * panel.margin)
+                width: parent.width
                 value: !Omunculus.connected ? "The server does not answer"
-                  : !Omunculus.registry ? "Project " + Omunculus.project + " · its agents wait for a word"
-                  : count > 0 ? count + (count === 1 ? " project" : " projects") + " · open PROJECTS to choose one"
-                  : "No project yet · open PROJECTS to add one"
+                  : "Press 1 to " + panel.ways.length + ", or click. Enter opens the first."
                 soft: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                color: Omunculus.connected ? Theme.dim : Theme.warning
+                color: Omunculus.connected ? Theme.faint : Theme.warning
                 font.pixelSize: Theme.type.meta.size
                 font.letterSpacing: Theme.type.meta.tracking
               }
@@ -313,7 +330,7 @@ ShellRoot {
                 id: rail
                 // Over the bar and the page while it unfolds, opaque.
                 z: 1
-                tabs: pagesView.pages.map(name => ({ name: pagesView.nameOf(name) }))
+                tabs: pagesView.pages.map(name => ({ name: name }))
                 current: pagesView.tabIndex
                 onChosen: index => pagesView.choose(index)
                 onEscaped: pagesView.focusEntry()
@@ -443,7 +460,7 @@ ShellRoot {
         panel.enterProject(place)
     }
     // A page by its name: projects, conversations or board, or, with a
-    // conversation open, chat, map, log, cost or artifacts.
+    // conversation open, chat, tree, log, cost or artifacts.
     function page(name: string): void {
       if (!["projects", "conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
         return
@@ -464,7 +481,7 @@ ShellRoot {
         panel.enter("board")
       pagesView.showWork(found)
     }
-    function agents(): void { page("map") }
+    function tree(): void { page("tree") }
     function log(): void { page("log") }
     function board(): void { page("board") }
     function back(): void { pagesView.back() }

@@ -14,7 +14,7 @@ import "kit/ui"
 // dim, whom it is with, "with front-desk › project-manager · sale 1/4" when another
 // agent holds its first work, at which stage of how many, and since when it
 // waits, else when it began; then what the newest request asks, or, under a work's title, what
-// was first said. Each row's menu opens it at its team or its log. Its cells
+// was first said. Each row's menu opens it at its tree or its log. Its cells
 // decode into view.
 DataTable {
   id: table
@@ -22,7 +22,7 @@ DataTable {
   decode: true
   compact: true
   property var conversations: []
-  // A row's menu chose where to open it: "map" or "log".
+  // A row's menu chose where to open it: "tree" or "log".
   signal openedAt(var conversation, string page)
 
   function summary(conversation) {
@@ -111,7 +111,7 @@ DataTable {
       property var entry
       tip: "open it elsewhere"
       items: [
-        { id: "map", icon: "people", text: "OPEN IN TEAM" },
+        { id: "tree", icon: "people", text: "OPEN IN TREE" },
         { id: "log", icon: "list", text: "SHOW LOG" }
       ]
       onChosen: id => table.openedAt(entry, id)

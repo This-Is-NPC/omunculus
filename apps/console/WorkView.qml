@@ -9,7 +9,7 @@ import "kit/ui"
 // is — its project, its conversation, the work it came from — and its title
 // on top, then a header strip of its state, stage and age, with ANSWER, in
 // the warning tone, while it asked you something, and a tool to its
-// conversation's team; then, on the left, what it is for, what it asked and
+// conversation's tree; then, on the left, what it is for, what it asked and
 // its notes, and under them the tabs of its runs, the files it changed and
 // the prompt a run was given; on the right, its properties: its state, its project, its workflow
 // with each stage over the agent that takes it, or the agent it is with,
@@ -25,8 +25,8 @@ FocusScope {
   signal picked(string key)
   // A request it asked you, to answer in its decision over the page.
   signal answer(string id)
-  // Its conversation's team, it picked.
-  signal openTeam()
+  // Its conversation's tree, it picked.
+  signal openTree()
 
   readonly property var work: key !== "" ? Omunculus.work(key) : null
   readonly property string agent: work ? Omunculus.agentOf(work) : ""
@@ -315,7 +315,7 @@ FocusScope {
           tip: "answer what it asked you"
           onClicked: view.answer(view.askedOfYou[0].id)
         }
-        IconButton { name: "people"; tip: "its conversation's team, this work picked"; onClicked: view.openTeam() }
+        IconButton { name: "people"; tip: "its conversation's tree, this work picked"; onClicked: view.openTree() }
       }
     }
 

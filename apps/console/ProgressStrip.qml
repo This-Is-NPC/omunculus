@@ -7,22 +7,23 @@ import "kit/client/Progress.js" as Progress
 import "kit/client/Time.js" as Time
 import "kit/client/Shortcuts.js" as Shortcuts
 
-// ProgressStrip is the conversation's head, its overview: a 40 px strip with
-// its meta — the agent it is with, in its tone; the stage of the work in
-// focus (the stepper under names it) and how long it has run, or, before any
-// work, that the conversation is starting — then, where there is room, how
-// many agents ran and what the conversation has cost, each opening what it
-// counts (the team, the cost); at its right the chevron that opens the full
-// progress, and ANSWER, in the warning tone, while something waits on you.
-// Under it, unframed, one line: the stages of the work in focus, or its title
-// where the masthead does not already say it. Who works and on what is the
-// chat's to say, in its live line, not the head's. A finished conversation
-// says so in the meta, "✓ DONE" and how long it took, in the success tone.
-// Every agent is named in its own tone, and the meta is fitted in characters
-// to its width. The line is hidden while nothing was handed to anyone and no
-// agent runs, and keeps its room once the person has written, so the tabs
-// under it never move. Waiting on you, the meta says so, in the warning tone,
-// in place of the clock, which stops.
+// ProgressStrip is the conversation's head, which says where it stands: a
+// 40 px strip with its state, the workflow of the work in focus and the step
+// it is at of how many, and how long it has run — or, before any work, that
+// the conversation is starting — then, where there is room, how many agents
+// ran and what the conversation has cost, each opening what it counts (the
+// tree, the cost); at its right the chevron that opens the full progress, and
+// ANSWER, in the warning tone, while something waits on you. Under it,
+// unframed, the stages of the work in focus (`Stepper`), or its title where
+// the masthead does not already say it, and the chain of agents from the one
+// you talk with down to the one at work, each in its tone, behind what the
+// conversation is doing: AT WORK, WAITING FOR YOU or WAITING FOR the agents it
+// waits for. A finished conversation says "✓ DONE" and how long it took, in
+// the success tone. The meta is fitted in characters to its width. The stage
+// line is hidden while nothing was handed to anyone and no agent runs, and
+// keeps its room once the person has written, so the tabs under it never move
+// for it. Waiting on you, the meta says so, in the warning tone, in place of
+// the clock, which stops.
 ColumnLayout {
   id: strip
 
@@ -44,7 +45,7 @@ ColumnLayout {
   // The result of a done conversation is wanted.
   signal openResult()
   // The agents counted, or the cost, are wanted.
-  signal openTeam()
+  signal openTree()
   signal openCost()
 
   readonly property string phase: progress ? progress.state : "idle"
@@ -56,8 +57,19 @@ ColumnLayout {
   readonly property bool moving: progress !== null && (progress.roots.length > 0 || phase !== "idle")
   // The agent the conversation is with.
   readonly property string who: Omunculus.agent || Omunculus.lastAgent
+  // Where it stands, for the line of the chain; null before any work.
+  readonly property var standing: Progress.standing(progress, who)
   // The focus work's title, when it says what the masthead does not.
   readonly property string title: focusNode && focusNode.steps.length === 0 && focusNode.title !== heading ? focusNode.title : ""
+
+  // What the conversation is doing, ahead of the chain of agents: "" for
+  // nothing to say.
+  readonly property string doing: !standing ? ""
+    : phase === "working" ? "AT WORK"
+    : phase === "needs-you" ? "WAITING FOR YOU"
+    : phase === "waiting" && standing.waits !== "" ? "WAITING FOR " + standing.waits.toUpperCase() : ""
+  // How long the agent at work has been on it.
+  readonly property string clock: phase === "working" && progress.now.since !== null && progress.now.since !== undefined ? Progress.clock(Math.max(0, tick - progress.now.since)) : ""
 
   // Whether the person's message is in the thread, even still sending: the
   // conversation is starting even before its first run shows.
@@ -77,23 +89,27 @@ ColumnLayout {
     : phase === "idle" ? (Omunculus.runs.length > 0 ? "" : said ? "STARTING" : "NOT STARTED")
     : phase === "needs-you" ? "" : Progress.word(phase).toUpperCase()
 
-  // The meta's parts, for Progress.fit: the stage gives way to its short
-  // form, then the agent; the stage and the time stay.
+  // The meta's parts, for Progress.fit: the workflow gives way to the step's
+  // short form; the state, the step and the time stay.
   readonly property var meta: {
     const focus = focusNode
-    const segments = who !== "" ? [{ text: who.toUpperCase(), tone: Omunculus.toneOf(who), lead: true }] : []
-    if (phase === "done") {
+    const here = standing
+    const segments = []
+    if (phase === "done")
       segments.push({ text: "✓ DONE", tone: Theme.success, keep: true })
-    } else if (phase === "failed") {
+    else if (phase === "failed")
       segments.push({ text: "✕ FAILED", tone: Theme.error, keep: true })
-    } else if (focus && focus.count > 0) {
-      const at = Math.min(focus.at, focus.count - 1)
-      // The stepper under the strip names the stage.
-      segments.push({ text: "STAGE " + (at + 1) + "/" + focus.count, keep: true })
-    } else if (focus && focus.state !== "needs-you") {
-      segments.push({ text: focus.word.toUpperCase(), keep: true })
-    } else if (opening !== "") {
+    else if (phase === "needs-you")
+      segments.push({ text: "NEEDS YOUR ANSWER", short: "NEEDS YOU", tone: Theme.warning, keep: true })
+    else if (focus)
+      segments.push({ text: Progress.word(phase).toUpperCase() || "OPEN", keep: true })
+    else if (opening !== "")
       segments.push({ text: opening, keep: true })
+    if (here && here.steps > 0) {
+      segments.push({ text: here.workflow.toUpperCase() })
+      segments.push({ text: "STEP " + here.step + " OF " + here.steps, short: here.step + "/" + here.steps, keep: true })
+      if (here.step < here.steps)
+        segments.push({ text: here.steps - here.step + " LEFT" })
     }
     if (focus) {
       // While anything runs, even below a work that is over, the clock counts
@@ -110,16 +126,12 @@ ColumnLayout {
         segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true,
           tone: phase === "done" ? Theme.success : undefined })
     }
-    // The agent carries the separator after it, so it goes with it; the
-    // others carry the one before them.
     const separator = Theme.type.meta.separator
     const shown = segments.filter(segment => segment.text !== "")
-    const join = (text, index) => shown[index].lead ? text + (shown.length > 1 ? separator : "")
-      : index === 0 || shown[index - 1].lead ? text : separator + text
+    const join = (text, index) => index === 0 ? text : separator + text
     return shown.map((segment, index) => ({
       text: join(segment.text, index), short: segment.short !== undefined ? join(segment.short, index) : undefined,
-      keep: segment.keep, tone: segment.tone,
-      pieces: segment.lead && shown.length > 1 ? [{ text: segment.text, tone: segment.tone }, { text: separator }] : undefined
+      keep: segment.keep, tone: segment.tone
     }))
   }
 
@@ -127,11 +139,10 @@ ColumnLayout {
   Accessible.role: Accessible.StatusBar
   Accessible.name: progress ? progress.spoken : ""
 
-  // A line of parts ({text, short?, elide?, keep?, tone?, pieces?}) fitted
-  // in characters to its width, each part in its tone, else `color`; a part
-  // shown whole draws its `pieces`, each in its own. When a glyph still draws
-  // wider than counted, it gives back a character, at most three times.
-  // Its implicit width is the whole line's.
+  // A line of parts ({text, short?, elide?, keep?, tone?}) fitted in
+  // characters to its width, each part in its tone, else `color`. When a
+  // glyph still draws wider than counted, it gives back a character, at most
+  // three times. Its implicit width is the whole line's.
   component Fitted: Item {
     id: room
     property var parts: []
@@ -171,10 +182,7 @@ ColumnLayout {
       width: room.width
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.StyledText
-      text: room.texts.map((text, index) => {
-        const part = room.parts[index] || {}
-        return part.pieces && text === part.text ? part.pieces.map(piece => room.painted(piece.text, piece.tone)).join("") : room.painted(text, part.tone)
-      }).join("")
+      text: room.texts.map((text, index) => room.painted(text, (room.parts[index] || {}).tone)).join("")
       Accessible.name: room.fitted
     }
   }
@@ -234,11 +242,6 @@ ColumnLayout {
       anchors { fill: parent; leftMargin: Theme.space.inset; rightMargin: Theme.space.trail }
       spacing: Theme.space.tight
 
-      Dot {
-        Layout.alignment: Qt.AlignVCenter
-        visible: strip.who !== ""
-        tone: Omunculus.toneOf(strip.who)
-      }
       Fitted {
         Layout.fillHeight: true
         parts: strip.meta
@@ -269,7 +272,7 @@ ColumnLayout {
           visible: strip.agents.length > 1
           text: strip.agents.length + " AGENTS"
           tip: strip.agents.slice(0, -1).join(", ") + " and " + strip.agents[strip.agents.length - 1] + " ran here; open the team"
-          onChosen: strip.openTeam()
+          onChosen: strip.openTree()
         }
         Count {
           visible: !!strip.usage && strip.usage.priced > 0
@@ -320,6 +323,48 @@ ColumnLayout {
     font.pixelSize: Theme.type.body.size
     font.bold: true
     elide: Text.ElideRight
+  }
+
+  // The agents from the one you talk with down to the one at work, behind
+  // what the conversation is doing.
+  Flow {
+    Layout.fillWidth: true
+    Layout.leftMargin: Theme.space.line
+    visible: strip.moving && strip.doing !== ""
+    spacing: Theme.space.tight
+    Label {
+      text: strip.doing
+      color: strip.phase === "needs-you" ? Theme.warning : Theme.dim
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: Theme.type.meta.tracking
+    }
+    Repeater {
+      model: strip.standing ? strip.standing.chain : []
+      delegate: Row {
+        id: link
+        required property string modelData
+        required property int index
+        spacing: Theme.space.tight
+        Label {
+          text: link.modelData
+          color: Omunculus.toneOf(link.modelData)
+          font.pixelSize: Theme.type.body.size
+          font.bold: link.modelData === strip.standing.agent
+        }
+        Label {
+          visible: link.modelData !== strip.standing.agent
+          text: "›"
+          color: Theme.dim
+          font.pixelSize: Theme.type.body.size
+        }
+      }
+    }
+    Label {
+      visible: strip.clock !== ""
+      text: strip.clock
+      color: Theme.dim
+      font.pixelSize: Theme.type.meta.size
+    }
   }
 
   // The line of the stages or title, kept blank once the person has written,

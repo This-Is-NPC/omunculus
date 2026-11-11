@@ -13,24 +13,24 @@ import "kit/ui"
 // conversations and NEW PROJECT registers another, and the board of all
 // their works. A project's: its conversations, and the board, its works
 // first, every project's one click away, where a card opens its work on a
-// page of its own, from where its conversation's team opens; whom a new
+// page of its own, from where its conversation's tree opens; whom a new
 // conversation is with is chosen on a screen of the conversations. Each page
 // of these two levels gives the commands of its bar and the count of its
 // readout. A conversation's, once one is open, in place of the project's,
 // under its head: the header strip, with the conversation's meta, whose
-// counts open the team and the cost, ANSWER while something waits on you
+// counts open the tree and the cost, ANSWER while something waits on you
 // and its progress on two lines, and its tabs.
 // The chat, the dialogue with the root agent, where each work handed down is
 // one card and what you answered a sentence, and, opened, the progress beside
 // the thread (a card over it on a medium window, a sheet over the page on a
-// narrow one); the team, the outline of the works
-// and the work picked in full (TeamView); the log, every event a row; and
+// narrow one); the tree, the works in the order they were made
+// and the work picked in full (TreePage); the log, every event a row; and
 // what it cost. A work's thread also opens as a page of its own, under the
-// way down to it. The log, the team and the cost are loaded when first on
+// way down to it. The log, the tree and the cost are loaded when first on
 // screen. A conversation's pages have no bar: their rarer actions are the
 // items of the masthead's menu (`more`), and their keys are chords. What
 // waits on you is answered in the pending queue, opened from a counter under
-// the head over any page; on the team and a work's page a request also has
+// the head over any page; on the tree and a work's page a request also has
 // its decision, opened over the page. Every move into another level, conversation or project is
 // remembered, so BACK, and Esc once the page has let go of what it holds,
 // return to exactly where it was: the page, its level, its project, its
@@ -49,7 +49,7 @@ Item {
 
   readonly property bool open: Omunculus.conversationId !== ""
   // The pages of a conversation open, in their order.
-  readonly property var inConversation: ["chat", "map", "log", "cost", "artifacts"]
+  readonly property var inConversation: ["chat", "tree", "log", "cost", "artifacts"]
   // The pages of a conversation: its own, and a work's thread, a page of the chat.
   readonly property var ofConversation: inConversation.concat(["thread"])
   // The level on screen: "registry", "project" or "conversation".
@@ -64,8 +64,6 @@ Item {
   // Whether a conversation's pages are on screen, under its head and tabs.
   readonly property bool inside: level === "conversation"
   readonly property string title: page === "new" ? "new conversation" : page
-  // What a page is called on its tab and the rail: the map is the team.
-  function nameOf(name) { return name === "map" ? "team" : name }
   // What the masthead calls the conversation: the title of its first work
   // once it has one; before, whom it is with, never what was first said,
   // which its chat already shows.
@@ -100,7 +98,7 @@ Item {
   // the card and the sheet closed.
   property var progressChoice: null
   readonly property bool progressShown: progressChoice !== null ? progressChoice : chat.progressMode === "dock" && Omunculus.works.length > 0
-  // The logged work the log is kept to, and, kept while the team page is
+  // The logged work the log is kept to, and, kept while the tree page is
   // not loaded, the work picked on it ("" for none).
   property string logFilter: ""
   property string pickedNode: ""
@@ -159,13 +157,32 @@ Item {
     Qt.callLater(focusEntry)
   }
 
-  // Leaves the conversation: a fresh one for the picker it began on, one
-  // with something said for the list of the project's; BACK returns.
+  // Whether the last place remembered is a page of the conversation open, a
+  // move down into it (a work's thread, a log kept to a work).
+  function drilled() {
+    const last = history.length > 0 ? history[history.length - 1] : null
+    return last !== null && last.level === "conversation" && last.conversation === Omunculus.conversationId
+  }
+
+  // Leaves the conversation, up one level: a fresh one for the picker it
+  // began on, one with something said for the list it was opened from, or,
+  // opened from nowhere, the project's.
   function leave() {
-    if (fresh)
-      back()
-    else
+    while (drilled())
+      history = history.slice(0, -1)
+    if (history.length === 0 && !fresh)
       go("conversations")
+    else
+      retreat()
+  }
+
+  // BACK: up one level. In a conversation, from a work's thread or a log kept
+  // to a work, to the page it was opened from; from any other page, out of it.
+  function back() {
+    if (inside && !drilled())
+      leave()
+    else
+      retreat()
   }
 
   // Enters the pages from the start, at a page, with nothing behind it.
@@ -210,7 +227,7 @@ Item {
   // conversation that has said nothing, or is not made yet, is left for the
   // picker it began on; one that has is not returned to it. Leaving makes
   // nothing.
-  function back() {
+  function retreat() {
     if (!fresh)
       while (history.length > 0 && history[history.length - 1].page === "new")
         history = history.slice(0, -1)
@@ -284,16 +301,16 @@ Item {
     workKey = key
   }
 
-  // Opens a work's conversation on its team page, the work picked.
+  // Opens a work's conversation on its tree page, the work picked.
   function openWork(work) {
     remember()
     reach(work)
     pickedNode = work.id
-    show("map")
+    show("tree")
   }
 
-  // Opens a work of the conversation open on its team page.
-  function openInTeam(key) { openWork({ id: key, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
+  // Opens a work of the conversation open on its tree page.
+  function openInTree(key) { openWork({ id: key, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
 
   // Opens the log kept to the events of a work; BACK returns.
   function showLog(work) {
@@ -327,11 +344,11 @@ Item {
     queueOpen = true
   }
 
-  // Answers what waits on you: on the team, nearest the work picked; on a
+  // Answers what waits on you: on the tree, nearest the work picked; on a
   // work's page, what it asked; elsewhere in the conversation, in the pending
   // queue.
   function answer() {
-    if (page === "map") {
+    if (page === "tree") {
       if (replyTo !== "")
         decision.show(replyTo, false)
     } else if (page === "work") {
@@ -374,11 +391,11 @@ Item {
     Omunculus.markRead(note.id)
   }
 
-  // The team page and the log, while they are loaded.
-  readonly property TeamView team: agentsPage.item as TeamView
+  // The tree page and the log, while they are loaded.
+  readonly property TreePage tree: treePage.item as TreePage
   readonly property LogView events: logPage.item as LogView
 
-  // The work picked on the team page, or "" for none; its requests still
+  // The work picked on the tree page, or "" for none; its requests still
   // waiting, those on you first, those on you alone, and its notes to you
   // unread.
   readonly property string node: pickedNode
@@ -386,10 +403,10 @@ Item {
   readonly property var askedOfYou: asked.filter(request => Requests.human(request.arbiter))
   readonly property var notesHere: node === "" ? [] : Omunculus.unreadFrom(node)
 
-  // What the team asks to be answered: what waits on you nearest the work
+  // What the tree asks to be answered: what waits on you nearest the work
   // picked, else what the work asked, instead of whoever decides; "" for
   // nothing. A work's page answers what its work asked you.
-  readonly property string nearest: page === "map" && team ? team.nearestForYou() : ""
+  readonly property string nearest: page === "tree" && tree ? tree.nearestForYou() : ""
   readonly property string replyTo: nearest !== "" ? nearest : asked.length > 0 ? asked[0].id : ""
   readonly property var workAsks: page === "work" ? Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter)) : []
 
@@ -405,7 +422,7 @@ Item {
     if (inside)
       return []
     const last = history.length > 0 ? history[history.length - 1] : null
-    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? nameOf(last.page) : "start") + "  " + Shortcuts.label("back"),
+    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? last.page : "start") + "  " + Shortcuts.label("back"),
       run: () => view.back() }
     if (page === "projects")
       return [
@@ -440,14 +457,14 @@ Item {
       return []
     const items = []
     const add = (id, icon, text, run) => items.push({ id: id, icon: icon, text: text, run: run })
-    if (page === "map" && team) {
+    if (page === "tree" && tree) {
       if (node !== "") {
-        add("write", "edit", "WRITE TO ITS AGENT", () => view.team.write(false))
-        add("comment", "plus", "LEAVE A NOTE", () => view.team.write(true))
+        add("write", "edit", "WRITE TO ITS AGENT", () => view.tree.write(false))
+        add("comment", "plus", "LEAVE A NOTE", () => view.tree.write(true))
       }
     }
     if (page === "thread") {
-      add("open-team", "people", "OPEN IN TEAM", () => view.openInTeam(view.threadWork))
+      add("open-tree", "people", "OPEN IN TREE", () => view.openInTree(view.threadWork))
       add("log", "list", "ITS LOG", () => view.showLog(view.threadWork))
     }
     add("new", "plus", "NEW CONVERSATION", () => view.newConversation())
@@ -460,14 +477,14 @@ Item {
   readonly property var chords: {
     const chord = (id, run) => ({ key: Shortcuts.chord(id), run: run })
     if (page === "work")
-      return [chord("reply", () => view.answer()), chord("open-team", () => view.openInTeam(view.workKey))]
+      return [chord("reply", () => view.answer()), chord("open-tree", () => view.openInTree(view.workKey))]
     if (!inside)
       return []
     const all = [chord("reply", () => view.answer()), chord("progress", () => view.toggleProgress(true))]
     if (page === "chat" && Omunculus.unread.length > 0)
       all.push(chord("mark-read", () => view.readNote()))
-    if (page === "map" && team) {
-      all.push(chord("team-log", () => view.team.showTab("log")), chord("team-changes", () => view.team.showTab("changes")))
+    if (page === "tree" && tree) {
+      all.push(chord("tree-log", () => view.tree.showTab("log")), chord("tree-changes", () => view.tree.showTab("changes")))
       more.filter(item => ["write", "comment"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
       // The detail's menu has these too.
       if (askedOfYou.length > 0)
@@ -476,7 +493,7 @@ Item {
         all.push(chord("mark-read", () => view.notesHere.forEach(note => Omunculus.markRead(note.id))))
     }
     if (page === "thread")
-      all.push(chord("open-team", () => view.openInTeam(view.threadWork)))
+      all.push(chord("open-tree", () => view.openInTree(view.threadWork)))
     return all
   }
 
@@ -500,8 +517,8 @@ Item {
       board.focusEntry()
     else if (page === "new")
       picker.forceActiveFocus()
-    else if (page === "map")
-      agentsPage.forceActiveFocus()
+    else if (page === "tree")
+      treePage.forceActiveFocus()
     else if (page === "log")
       logPage.forceActiveFocus()
     else if (page === "cost")
@@ -595,44 +612,57 @@ Item {
       onToggle: view.toggleProgress(false)
       onAnswer: view.answer()
       onOpenResult: view.showResult()
-      onOpenTeam: view.go("map")
+      onOpenTree: view.go("tree")
       onOpenCost: view.go("cost")
     }
 
-    // Before there is more than the chat, a lone tab gives no choice. The
-    // pending counter, on every page of the conversation, is beside the tabs,
-    // over them when narrow.
-    GridLayout {
+    // Before there is more than the chat, a lone tab gives no choice. On one
+    // line: without their digits under 420 px, and scrolling sideways when
+    // they still do not fit. The pending counter, on every page of the
+    // conversation, is beside the tabs.
+    RowLayout {
       Layout.fillWidth: true
       visible: view.pages.length > 1 || view.pending.length > 0
-      columns: Breakpoints.size(Window.width) === "narrow" ? 1 : 2
-      columnSpacing: Theme.space.section
-      rowSpacing: Theme.space.gap
+      spacing: Theme.space.section
 
-      Flow {
+      Flickable {
+        id: tabStrip
         Layout.fillWidth: true
-        Layout.row: parent.columns === 1 ? 1 : 0
+        Layout.preferredHeight: tabRow.height
         visible: view.pages.length > 1
-        spacing: Theme.space.section
-        Repeater {
-          model: view.inside ? view.pages : []
-          delegate: Tab {
-            required property string modelData
-            required property int index
-            label: view.nameOf(modelData)
-            digit: String(index + 1).padStart(2, "0")
-            current: view.tabIndex === index
-            // The log says when a work failed.
-            alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
-            onChosen: view.choose(index)
+        contentWidth: tabRow.width
+        contentHeight: tabRow.height
+        clip: true
+        flickableDirection: Flickable.HorizontalFlick
+        boundsBehavior: Flickable.StopAtBounds
+        // Brings a tab, at `left` and `size` wide, into view.
+        function reveal(left, size) {
+          if (left < contentX)
+            contentX = left
+          else if (left + size > contentX + width)
+            contentX = left + size - width
+        }
+        Row {
+          id: tabRow
+          spacing: Theme.space.section
+          Repeater {
+            model: view.inside ? view.pages : []
+            delegate: Tab {
+              required property string modelData
+              required property int index
+              label: modelData
+              digit: Breakpoints.tight(view.width) ? "" : String(index + 1).padStart(2, "0")
+              current: view.tabIndex === index
+              // The log says when a work failed.
+              alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
+              onChosen: view.choose(index)
+              onCurrentChanged: if (current) tabStrip.reveal(x, width)
+            }
           }
         }
       }
 
       TraceButton {
-        Layout.row: 0
-        Layout.column: parent.columns === 1 ? 0 : 1
-        Layout.fillWidth: parent.columns === 1
         Layout.alignment: Qt.AlignRight | Qt.AlignTop
         visible: view.inside && view.pending.length > 0
         dense: true
@@ -770,7 +800,7 @@ Item {
             onAnswer: view.openQueue()
             onOpenThread: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)
-            onOpenTeam: work => view.openInTeam(work)
+            onOpenTree: work => view.openInTree(work)
           }
         }
       }
@@ -836,18 +866,18 @@ Item {
       }
     }
 
-    // The team, the log and the cost are loaded while on screen.
+    // The tree, the log and the cost are loaded while on screen.
     Stage {
-      id: teamStage
+      id: treeStage
       anchors.fill: parent
-      shown: view.page === "map"
+      shown: view.page === "tree"
 
       Loader {
-        id: agentsPage
+        id: treePage
         anchors.fill: parent
-        active: teamStage.shown || teamStage.visible
-        focus: view.page === "map"
-        sourceComponent: TeamView {
+        active: treeStage.shown || treeStage.visible
+        focus: view.page === "tree"
+        sourceComponent: TreePage {
           onLeave: view.back()
           onOpenLog: work => view.showLog(work)
           onDecide: (id, escalating) => decision.show(id, escalating)
@@ -855,15 +885,15 @@ Item {
       }
       // The work picked is kept here, so it outlives the page.
       Connections {
-        target: view.team
-        function onPickedChanged() { view.pickedNode = view.team.picked }
+        target: view.tree
+        function onPickedChanged() { view.pickedNode = view.tree.picked }
       }
-      // A team going away keeps its values, so nothing is written back from it.
+      // A tree going away keeps its values, so nothing is written back from it.
       Binding {
-        target: view.team
+        target: view.tree
         property: "picked"
         value: view.pickedNode
-        when: view.team !== null
+        when: view.tree !== null
         restoreMode: Binding.RestoreNone
       }
     }
@@ -942,7 +972,7 @@ Item {
         onLeave: view.back()
         onPicked: key => view.showOther(key)
         onAnswer: id => decision.show(id, false)
-        onOpenTeam: view.openInTeam(view.workKey)
+        onOpenTree: view.openInTree(view.workKey)
       }
     }
   }

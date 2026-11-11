@@ -10,7 +10,7 @@ import "kit/client/Progress.js" as Progress
 // with its reason, the questions it asked and its steps; a done, cancelled or
 // coming work is one line. Picked, it shows its details instead of the
 // questions' first lines: its agent's last words, its questions in full and
-// the ways to its thread, log and team.
+// the ways to its thread, log and tree.
 FocusScope {
   id: row
 
@@ -30,7 +30,7 @@ FocusScope {
   signal foldToggled()
   signal openThread(string work)
   signal openLog(string work)
-  signal openTeam(string work)
+  signal openTree(string work)
 
   readonly property bool quiet: ["done", "cancelled", "up-next"].includes(node.state)
   readonly property real now: Omunculus.tick
@@ -308,7 +308,7 @@ FocusScope {
       spacing: Theme.space.tight
       TraceButton { role: "action"; dense: true; text: "OPEN"; icon: "enter"; tip: "its thread, as a page"; onClicked: row.openThread(row.node.work) }
       TraceButton { role: "action"; dense: true; text: "LOG"; icon: "list"; tip: "the log kept to it"; onClicked: row.openLog(row.node.work) }
-      TraceButton { role: "action"; dense: true; text: "TEAM"; icon: "people"; tip: "the team page, it picked"; onClicked: row.openTeam(row.node.work) }
+      TraceButton { role: "action"; dense: true; text: "TREE"; icon: "people"; tip: "the tree page, it picked"; onClicked: row.openTree(row.node.work) }
     }
   }
 
