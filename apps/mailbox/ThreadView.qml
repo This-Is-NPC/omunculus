@@ -172,7 +172,7 @@ Item {
           text: "To: " + view.thread.with.text + "   ·   " + Mailbox.re(view.thread.subject)
           color: Theme.dim
           font.pixelSize: 11
-          elide: Text.ElideRight
+          wrapMode: Text.Wrap
         }
         Editor {
           id: editor

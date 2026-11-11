@@ -19,6 +19,12 @@ defmodule Omunculus.GuiMailboxTest do
     assert {"", 0} = GuiModules.run(["Requests", "Model", "Mailbox"], @fixtures <> assertions)
   end
 
+  test "the client scripts avoid String.trimEnd, which the QML engine lacks" do
+    for file <- Path.wildcard("apps/kit/client/*.js") ++ Path.wildcard("apps/*/*.{js,qml}") do
+      refute File.read!(file) =~ ~r/\.trim(End|Start)\(/, file
+    end
+  end
+
   test "addresses, names and autocomplete" do
     run!("""
     const p = Mailbox.person("sales", "agency");
@@ -126,6 +132,8 @@ defmodule Omunculus.GuiMailboxTest do
     if (Mailbox.fwd("Menu") !== "Fwd: Menu") throw Error("fwd");
     const q = Mailbox.quoted({from: {name: "Sales"}, text: "a\\n\\nb"}, "10 Nov 2026, 18:02");
     if (q.head !== "On 10 Nov 2026, 18:02, Sales wrote:" || q.lines.join("|") !== "> a|>|> b") throw Error(JSON.stringify(q));
+    const w = Mailbox.quoted({from: {name: "Sales"}, text: "a  \\nb\\t"}, "x");
+    if (w.lines.join("|") !== "> a|> b") throw Error("trailing blanks: " + JSON.stringify(w));
     """)
   end
 
