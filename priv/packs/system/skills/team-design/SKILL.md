@@ -49,12 +49,17 @@ tasks/         the tasks that show the team works
   agent names its own. Stage agents that only work in the workflow have
   `workflow_only = true`.
 - What only the person may give an agent goes in its `human` list. A
-  decision that is the person's — a discount, a contract, an approval —
-  the agent asks for with `ask`; the project's `[policy] request_routes`
-  resolves its receiver. Optional `to` names a logical responsibility
-  such as owner, which the project must configure. Permission requests
-  use `request_access`, including `kind = "resource"` for sandbox capabilities.
-  Receivers use `reply` or `escalate`; `break` only stops failed work.
+  decision that is someone's — a discount, a contract, an approval — the
+  agent asks for with `ask`: with no `to` it reaches whoever gave the
+  agent its work, and `to` names an account (`[accounts]` in the project's
+  file) or an agent. Accounts are the project's own, so say in the pack's
+  README which names it expects. To hold an action until an account
+  reviews it (a tool such as a promotion, a comment, an attachment, a
+  grant), the project declares an `[[interceptors]]` rule; the agent just
+  calls the tool and waits for the review, so give the agent the tool and
+  say the review is expected. Permission requests use `request_access`,
+  including `kind = "resource"` for sandbox capabilities. Receivers use
+  `reply` or `escalate`; `break` only stops failed work.
 - A tool the team uses that the pack does not bring goes in
   `[pack.requires]`, with where to get it as text (another pack, a
   preset's tools): loading the config refuses the pack while the project
