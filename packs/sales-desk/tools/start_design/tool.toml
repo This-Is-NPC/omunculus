@@ -1,0 +1,39 @@
+name = "start_design"
+kind = "tool"
+triggers = ["model"]
+description = "Hands the design lead the design, at stage design: the work's goal is composed from the proposal, with every fact the client gave (products and prices, contacts, WhatsApp, hours, address, colours, pages, texts, what is pending) in a fixed labelled block, and cannot be written or shortened. Refused when the proposal lacks one of those facts. After a published preview, a fix is always a new design round through the workflow design: name the earlier design's work in round_of. The only way to hand the design down."
+tags = ["sales", "sequence"]
+command = ["./run"]
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+
+[parameters.properties.note]
+type = "string"
+description = "Optional short note for the design lead, added beside the facts block, never in place of it."
+
+[parameters.properties.round_of]
+type = "string"
+description = "For a round: the id of the earlier design work whose preview the client asked to change. Omit for the first design."
+
+[parameters.properties.changes]
+type = "string"
+description = "For a round: what the client asked to change, in their words, naming the pages. Required with round_of."
+
+[parameters.properties.extra_round]
+type = "boolean"
+description = "For a round beyond those included: true once the owner approved it."
+
+[views.work]
+source = "works"
+
+[views.children]
+source = "works"
+relation = "children"
+
+[views.artifacts]
+source = "artifacts"
+include = ["data"]
+prefix = "proposal-"

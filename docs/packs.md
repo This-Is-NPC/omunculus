@@ -60,7 +60,8 @@ the dream team's deploy tools name each conversation's apps apart. One agent
 owns each responsibility: the front desk at depth 0 is the only one that
 talks with the client; the project manager at depth 1 is the internal hub,
 which starts the seller's sale at its first stage, owns the delivery stages
-after it and hands works to the teams; the seller at depth 2 scopes and
+after it and hands the design and the build to the teams with tools that
+compose the goal from the proposal; the seller at depth 2 scopes and
 prices. Its depth layer
 requires the workflow `engagement` at depth 1, below the front desk, so every
 work there is a client's request the project manager works through it: a

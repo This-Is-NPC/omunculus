@@ -54,7 +54,7 @@ def run(call):
 
     if stage == "qualify":
         missing = filled(data, ["business", "city", "audience", "decider", "budget_timing", "problem",
-                                "content.texts", "content.products", "content.contacts"])
+                                "content.texts", "content.products", "content.contacts", "content.style"])
         pages = proposal.lookup(data, "scope.pages")
         if not (proposal.is_text_list(pages) and pages):
             missing.append("scope.pages")

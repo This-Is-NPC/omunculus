@@ -79,16 +79,34 @@ stages, all the project manager's:
    "Assessment only, build nothing:" and, since the preview is the default,
    the design lead one the same way, then replies with what can be built,
    what blocks it and the time in days of work.
-2. `design`: hands the design lead the briefing from the proposal; the
-   preview's homologation address goes to the client, who approves it or
-   asks changes (the design lead counts the rounds included, and more are the
-   owner's, and the project manager passes the owner's approval down in the
-   goal of the next round). Only the client waives the preview, by
+2. `design`: `start_design` hands the design lead the briefing. Its goal is
+   composed by the tool from the proposal, never written by the manager: a
+   block from `=== PROPOSAL FACTS` to `=== END PROPOSAL FACTS ===` with the
+   client, who decides, what the site is for, the pages, features, what is
+   not included, the products with their prices, the contacts with the
+   WhatsApp number, hours and address, the colours, fonts and style, the
+   texts and what is pending, then the round; the manager's optional `note`
+   goes beside it. It refuses when the proposal lacks a product list,
+   contacts, colours and style, texts, pages or the business, so the team
+   never receives a placeholder for a fact the client gave. The preview's
+   homologation address goes to the client, who approves it or asks changes.
+   Every change to a published preview is a new round through the workflow
+   `design` (design, review, publish): `start_design` with `round_of`, the
+   earlier design's work id, and `changes`, the client's words (it refuses a
+   second design without `round_of`, and an earlier design still open). The
+   stage denies `reopen` and `work`, since a reopened design work is
+   never committed or published. The design lead counts the rounds included,
+   and more are the owner's: the manager passes the owner's approval down
+   with `extra_round`. Only the client waives the preview, by
    answering an explicit question the front desk puts to them; their answer
    is recorded. The design is made and published only before the build.
-3. `build`: hands the administrator the build, stating the design from the
-   proposal: `design/handoff.md` when it was approved, "the client waived the
-   design" when it was waived, as the administrator requires. When the site is in homologation the release's
+3. `build`: `start_build` hands the administrator the build with the same
+   facts block, composed from the proposal, and the design as its
+   `design.state` says: `design/handoff.md` (with the preview's address) when
+   it was approved, "the client waived the design" when it was waived. It is
+   refused until `design.state` is written and while an earlier build is
+   open (the client's changes are forwarded to it). The stage denies `work`.
+   When the site is in homologation the release's
    request to grant `promote` comes to the project manager, who has the
    client accept the built site and only then passes the request to
    the owner with `request_golive`, who promotes. Changes the client then asks go, with
@@ -112,6 +130,14 @@ its address, or a waiver with the client's own answer; after `build` a
 build done and the client's acceptance of the built site (`delivery.accepted`
 is the word `accepted`); after `handover`
 the production address and the client's `works` answer to the live notice.
+
+`start_design` and `start_build` are the only ways the design and the build
+reach the teams: the `design` and `build` stages deny the raw `work`, so
+what the client gave (`content.products`, `content.contacts` with the
+WhatsApp number, hours and address, `content.style` for colours and fonts,
+`content.texts`, the pages and `pending`) arrives as the proposal holds it.
+The seller records the colours and style in `content.style` at `qualify`,
+which `next_stage` requires.
 
 `request_golive` is the only way the release's `promote` request goes up to
 the owner. It refuses until the proposal holds `delivery.address` and

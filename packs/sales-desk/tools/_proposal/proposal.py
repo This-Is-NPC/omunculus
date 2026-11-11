@@ -36,7 +36,7 @@ TEMPLATE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "template.m
 STRINGS = ("language", "client", "business", "city", "audience", "decider", "budget_timing", "problem", "timing", "next_steps")
 LISTS = ("pending",)
 OBJECTS = {
-    "content": {"texts": str, "products": str, "contacts": str},
+    "content": {"texts": str, "products": str, "contacts": str, "style": str},
     "scope": {"pages": list, "features": list, "excluded": list},
     "design": {"state": str, "address": str, "client_answer": str},
     "assessment": {"answer": str, "conditions": str},
@@ -49,6 +49,7 @@ HELD_BY = (
     (("address", "hours", "phone", "whatsapp", "contact", "e-mail", "email"), "content.contacts"),
     (("menu", "price", "product", "service"), "content.products"),
     (("text", "copy"), "content.texts"),
+    (("colour", "color", "font", "style", "tone"), "content.style"),
 )
 SENT = ("sent", "accepted", "approved")
 COMPUTED = ("work", "updated", "price", "discount")

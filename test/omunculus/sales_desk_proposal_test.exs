@@ -387,6 +387,197 @@ defmodule Omunculus.SalesDeskProposalTest do
     end
   end
 
+  describe "start_design and start_build" do
+    @facts %{
+      "language" => "Portuguese",
+      "client" => "Ana",
+      "business" => "Doce Ana",
+      "city" => "Campinas",
+      "audience" => "neighbours",
+      "decider" => "Ana",
+      "problem" => "no site",
+      "content" => %{
+        "texts" => "Doces feitos com carinho",
+        "products" => "Brigadeiro R$ 4,50; Bolo de pote R$ 12",
+        "contacts" => "WhatsApp +55 19 99876-5432; seg-sab 9h-18h; Rua das Flores, 12",
+        "style" => "cream and chocolate brown"
+      },
+      "scope" => %{"pages" => @pages},
+      "pending" => ["logo"]
+    }
+
+    defp proposal_view(fields, work, children \\ []) do
+      view = view_after(write(fields, %{}, Fixtures.tmp_dir()))
+      %{view | "work" => work} |> Map.put("children", children)
+    end
+
+    defp handoff(name, view, root, args \\ %{}), do: call(name, args, view, root)
+
+    defp delegated(%{"emit" => [%{"type" => "delegate", "body" => body}]}), do: body
+
+    test "the design goal holds every fact of the proposal, verbatim", %{root: root} do
+      view = proposal_view(@facts, %{"id" => "w1", "stage" => "design", "title" => "Doce Ana"})
+      out = handoff("start_design", view, root, %{"note" => "Keep it warm."})
+
+      assert %{"ok" => true, "chain" => [], "output" => ""} = out
+
+      assert %{"agent" => "design-lead", "title" => "Doce Ana: design", "goal" => goal} =
+               delegated(out)
+
+      for fact <- [
+            "Brigadeiro R$ 4,50; Bolo de pote R$ 12",
+            "WhatsApp +55 19 99876-5432; seg-sab 9h-18h; Rua das Flores, 12",
+            "cream and chocolate brown",
+            "Doces feitos com carinho",
+            "Doce Ana",
+            "doce-ana",
+            "- Menu",
+            "- logo",
+            "Round: 0 (the first design)",
+            "Keep it warm."
+          ] do
+        assert goal =~ fact
+      end
+
+      assert goal =~ "=== PROPOSAL FACTS (verbatim from proposal-w1"
+      assert goal =~ "=== END PROPOSAL FACTS ==="
+    end
+
+    test "a design is refused without a fact, at another stage and after the client waived it",
+         %{root: root} do
+      work = %{"id" => "w1", "stage" => "design"}
+      thin = Map.put(@facts, "content", %{"products" => "Cake 10"})
+
+      assert %{"ok" => false, "output" => "the proposal lacks facts the team needs: " <> missing} =
+               handoff("start_design", proposal_view(thin, work), root)
+
+      assert missing =~ "contacts, hours and address, colours and style, texts"
+      refute missing =~ "products"
+
+      assert %{
+               "ok" => false,
+               "output" => "start_design hands the design work at stage design" <> _
+             } =
+               handoff("start_design", proposal_view(@facts, %{work | "stage" => "sale"}), root)
+
+      waived = Map.put(@facts, "design", %{"state" => "waived", "client_answer" => "skip"})
+
+      assert %{"ok" => false, "output" => "the client waived the design" <> _} =
+               handoff("start_design", proposal_view(waived, work), root)
+
+      assert %{"ok" => false, "output" => "write the proposal" <> _} =
+               handoff("start_design", %{"work" => work}, root)
+    end
+
+    test "a fix after a published preview is a new round naming the earlier design", %{root: root} do
+      work = %{"id" => "w1", "stage" => "design", "title" => "Doce Ana"}
+
+      first = %{
+        "id" => "d1",
+        "title" => "Doce Ana: design",
+        "assignee" => "design-lead",
+        "state" => "done",
+        "goal" => "=== PROPOSAL FACTS"
+      }
+
+      assessment = %{first | "id" => "a1", "goal" => "Assessment only, build nothing: x"}
+      view = proposal_view(@facts, work, [assessment, first])
+
+      assert %{"ok" => false, "output" => "a design already exists" <> _} =
+               handoff("start_design", view, root)
+
+      assert %{"ok" => false, "output" => "changes required" <> _} =
+               handoff("start_design", view, root, %{"round_of" => "d1"})
+
+      assert %{"ok" => false, "output" => "round_of must be the id of an earlier design" <> _} =
+               handoff("start_design", view, root, %{"round_of" => "a1", "changes" => "x"})
+
+      args = %{"round_of" => "d1", "changes" => "Menu: bigger prices", "extra_round" => true}
+      out = handoff("start_design", view, root, args)
+
+      assert %{"title" => "Doce Ana: design round 1", "agent" => "design-lead", "goal" => goal} =
+               delegated(out)
+
+      assert goal =~ "Round: 1, of the earlier design Doce Ana: design (d1)"
+      assert goal =~ "Menu: bigger prices"
+      assert goal =~ "The owner approved an extra round."
+      assert goal =~ "WhatsApp +55 19 99876-5432"
+
+      open = %{first | "state" => "waiting"}
+
+      assert %{
+               "ok" => false,
+               "output" => "the design Doce Ana: design (d1) is still waiting" <> _
+             } =
+               handoff("start_design", proposal_view(@facts, work, [open]), root, args)
+    end
+
+    test "the build goal holds the facts and the design as the proposal says", %{root: root} do
+      work = %{"id" => "w1", "stage" => "build", "title" => "Doce Ana"}
+
+      assert %{"ok" => false, "output" => "the design is not settled" <> _} =
+               handoff("start_build", proposal_view(@facts, work), root)
+
+      approved = Map.put(@facts, "design", %{"state" => "approved"})
+
+      assert %{"ok" => false, "output" => "write the preview's address" <> _} =
+               handoff("start_build", proposal_view(approved, work), root)
+
+      approved =
+        Map.put(@facts, "design", %{"state" => "approved", "address" => "https://p.test"})
+
+      out = handoff("start_build", proposal_view(approved, work), root)
+
+      assert %{"agent" => "administrator", "title" => "Doce Ana: build", "goal" => goal} =
+               delegated(out)
+
+      assert goal =~
+               "Design: approved; build from design/handoff.md (preview address: https://p.test)"
+
+      assert goal =~ "Brigadeiro R$ 4,50; Bolo de pote R$ 12"
+      assert goal =~ "WhatsApp +55 19 99876-5432"
+      assert goal =~ "cream and chocolate brown"
+
+      waived = Map.put(@facts, "design", %{"state" => "waived", "client_answer" => "skip"})
+      out = handoff("start_build", proposal_view(waived, work), root)
+      assert delegated(out)["goal"] =~ "the client waived the design"
+
+      assert %{"ok" => false, "output" => "start_build hands the build work at stage build" <> _} =
+               handoff(
+                 "start_build",
+                 proposal_view(approved, %{work | "stage" => "design"}),
+                 root
+               )
+    end
+
+    test "a build is refused while an earlier one is open, and names it once done", %{root: root} do
+      work = %{"id" => "w1", "stage" => "build", "title" => "Doce Ana"}
+
+      approved =
+        Map.put(@facts, "design", %{"state" => "approved", "address" => "https://p.test"})
+
+      build = %{
+        "id" => "b1",
+        "title" => "Doce Ana: build",
+        "assignee" => "administrator",
+        "state" => "doing",
+        "goal" => "x"
+      }
+
+      assert %{"ok" => false, "output" => "the build Doce Ana: build (b1) is still open" <> _} =
+               handoff("start_build", proposal_view(approved, work, [build]), root)
+
+      out =
+        handoff(
+          "start_build",
+          proposal_view(approved, work, [%{build | "state" => "done"}]),
+          root
+        )
+
+      assert delegated(out)["goal"] =~ "This changes the earlier build Doce Ana: build (b1)."
+    end
+  end
+
   describe "next_stage" do
     defp stage(stage, view, root) do
       view = Map.put(view, "work", %{"id" => "w1", "stage" => stage})
@@ -501,7 +692,12 @@ defmodule Omunculus.SalesDeskProposalTest do
         "decider" => "Ana",
         "budget_timing" => "pending: no deadline",
         "problem" => "no site",
-        "content" => %{"texts" => "yes", "products" => "yes", "contacts" => "pending: logo"},
+        "content" => %{
+          "texts" => "yes",
+          "products" => "yes",
+          "contacts" => "pending: logo",
+          "style" => "cream and brown"
+        },
         "scope" => %{"pages" => @pages}
       }
 

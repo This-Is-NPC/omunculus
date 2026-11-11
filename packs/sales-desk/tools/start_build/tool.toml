@@ -1,0 +1,27 @@
+name = "start_build"
+kind = "tool"
+triggers = ["model"]
+description = "Hands the dev team's administrator the build, at stage build: the work's goal is composed from the proposal, with every fact the client gave (products and prices, contacts, WhatsApp, hours, address, colours, pages, texts, what is pending) and the design state in a fixed labelled block, and cannot be written or shortened. Refused when the proposal lacks one of those facts or its design state, and while an earlier build is open (forward the client's changes to it). The only way to hand the build down."
+tags = ["sales", "sequence"]
+command = ["./run"]
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+
+[parameters.properties.note]
+type = "string"
+description = "Optional short note for the administrator, added beside the facts block, never in place of it."
+
+[views.work]
+source = "works"
+
+[views.children]
+source = "works"
+relation = "children"
+
+[views.artifacts]
+source = "artifacts"
+include = ["data"]
+prefix = "proposal-"

@@ -21,7 +21,8 @@ Updated: {{updated}}
 ## Content
 - Texts: {{content.texts}}
 - Products and prices: {{content.products}}
-- Contacts: {{content.contacts}}
+- Contacts, hours and address: {{content.contacts}}
+- Colours, fonts and style: {{content.style}}
 
 ## What we propose
 ### Pages

@@ -904,6 +904,42 @@ defmodule Omunculus.EvalProjectTest do
            } = seller
   end
 
+  test "agency's manager hands design and build down only with the proposal's tools" do
+    dir = Fixtures.tmp_dir()
+    assert {:ok, path} = EquivalentExchange.Project.build(dir, "agency", {"fake", false}, nil)
+    assert {:ok, config} = Config.load(path)
+    tools = config.agents["project-manager"].ceiling.granted
+
+    have = fn name ->
+      stage = Enum.find(config.workflows["engagement"], &(&1.name == name)).ceiling
+
+      ceiling =
+        Ceiling.mount(
+          config,
+          %{
+            agent: "project-manager",
+            depth: config.agents["project-manager"].depth,
+            grants: [],
+            stage: stage,
+            workspace: Config.workspace_ceiling(config, nil),
+            groups: %{}
+          },
+          tools
+        )
+
+      Enum.filter(tools, &(Ceiling.classify(ceiling, &1, "tool") == "have"))
+    end
+
+    design = have.("design")
+    build = have.("build")
+
+    assert "start_design" in design and "start_build" in build
+    refute "work" in design or "work" in build
+    refute "reopen" in design
+    assert "reopen" in build
+    assert "work" in have.("sale")
+  end
+
   test "agency's manager hands the seller a sale and the teams their works, and the seller asks it",
        %{
          conn: conn
