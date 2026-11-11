@@ -935,7 +935,7 @@ defmodule Omunculus.ServerTest do
       |> update_in(["policy"], &Map.delete(&1, "harness_route"))
       |> put_in(["policy", "request_routes"], [
         %{"from" => local_identity, "via" => [reviewer_identity, final_identity]},
-        %{"name" => "origin", "via" => ["origin"]},
+        %{"name" => "origin", "via" => ["origin", final_identity]},
         %{"via" => ["parent", "origin"]}
       ])
 

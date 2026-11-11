@@ -30,7 +30,7 @@ harness_route = "owner"
 request_routes = [
   { name = "owner", via = ["owners", "origin"] },
   { name = "client", from = { kind = "agent", agent = "front-desk" }, via = ["origin"] },
-  { name = "questions", workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }] },
+  { name = "questions", workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, { kind = "agent", agent = "steward" }] },
   { name = "questions", via = ["parent", { kind = "agent", agent = "front-desk" }] },
   { via = [{ kind = "agent", agent = "steward" }] },
 ]
