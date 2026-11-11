@@ -32,9 +32,11 @@ def run(call):
     data["updated"] = datetime.date.today().isoformat()
     data.setdefault("status", "draft")
     data = proposal.priced(data)
+    if fields.get("status") in proposal.SENT:
+        proposal.check_sendable(data)
 
     total = proposal.money(data["price"]["total"]) if "price" in data else "no price yet"
-    note = f"attach the artifact {proposal.document(work_id)} to give the client this version"
+    note = f"attach the artifact {proposal.document(work_id)} to give the client this version; write every message to them in {data.get('language') or 'their language'}"
     return f"proposal saved: status {data['status']}, total {total}; {note}", proposal.emits(view, work_id, data), []
 
 

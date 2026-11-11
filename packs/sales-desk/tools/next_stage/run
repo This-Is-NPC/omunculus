@@ -64,6 +64,10 @@ def run(call):
         if filled(data, ["assessment.answer"]):
             refuse(stage, "ask the project manager with ask, to pm, whether the scope can be built and in what time, and write its answer (assessment.answer) with the proposal tool")
     elif stage == "propose":
+        try:
+            proposal.check_sendable(data)
+        except proposal.Refusal as refusal:
+            refuse(stage, str(refusal))
         if "price" not in data or data.get("status") != "accepted":
             refuse(stage, "give the client the price, and set the status accepted once they accept; the owner's approval is asked at stage signoff, after this one")
     elif stage == "signoff":

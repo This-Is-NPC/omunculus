@@ -33,7 +33,7 @@ CURRENCY = "R$"
 
 TEMPLATE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "template.md")
 
-STRINGS = ("client", "business", "city", "audience", "decider", "budget_timing", "problem", "timing", "next_steps")
+STRINGS = ("language", "client", "business", "city", "audience", "decider", "budget_timing", "problem", "timing", "next_steps")
 LISTS = ("pending",)
 OBJECTS = {
     "content": {"texts": str, "products": str, "contacts": str},
@@ -42,6 +42,15 @@ OBJECTS = {
     "assessment": {"answer": str, "conditions": str},
     "delivery": {"address": str, "accepted": str, "production": str},
 }
+# Where the client's answer to each kind of question is recorded: a pending
+# item naming one of these words, while its field holds text, is a question
+# the client already answered.
+HELD_BY = (
+    (("address", "hours", "phone", "whatsapp", "contact", "e-mail", "email"), "content.contacts"),
+    (("menu", "price", "product", "service"), "content.products"),
+    (("text", "copy"), "content.texts"),
+)
+SENT = ("sent", "accepted", "approved")
 COMPUTED = ("work", "updated", "price", "discount")
 
 
@@ -135,6 +144,18 @@ def validate_object(key, value):
         raise Refusal(f"design.state is one of: {', '.join(DESIGN_STATES)}")
     if key == "design" and value.get("state") == "waived" and not str(value.get("client_answer") or "").strip():
         raise Refusal("only the client waives the preview: write their answer to the front desk's question, in their words, in design.client_answer")
+
+
+def check_sendable(data):
+    """Refuses a proposal that cannot reach the client yet: without the
+    language of their own messages, or listing as pending what it holds."""
+    if not str(data.get("language") or "").strip():
+        raise Refusal("language is not set: write it with the proposal tool (language), the language of the client's own messages, never inferred from their country, the team's reports or the site's content; the proposal and every message to them are in it")
+    for item in data.get("pending") or []:
+        words = item.lower()
+        for keywords, path in HELD_BY:
+            if any(word in words for word in keywords) and str(lookup(data, path) or "").strip():
+                raise Refusal(f"pending lists {item!r}, but {path} already holds the client's answer: take it out of pending, and write into the proposal every answer they gave before asking again")
 
 
 def check_discount(value):

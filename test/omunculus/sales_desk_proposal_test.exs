@@ -119,13 +119,23 @@ defmodule Omunculus.SalesDeskProposalTest do
       first = write(%{"scope" => %{"pages" => @pages}}, %{}, root)
       assert data(first)["price"]["total"] == 1500
 
-      second = write(%{"status" => "sent"}, view_after(first), root, %{"discount" => 10})
+      second =
+        write(%{"language" => "English", "status" => "sent"}, view_after(first), root, %{
+          "discount" => 10
+        })
+
       assert %{"status" => "sent", "scope" => %{"pages" => @pages}} = data(second)
       assert data(second)["price"]["total"] == 1350
       assert %{"base" => 1} = bodies(second)["proposal-w1"]
       assert bodies(second)["proposal-w1.md"]["content"] =~ "- Discount 10%: -R$ 150"
 
-      third = write(%{"status" => "accepted"}, view_after(second, view_after(first)), root)
+      third =
+        write(
+          %{"language" => "English", "status" => "accepted"},
+          view_after(second, view_after(first)),
+          root
+        )
+
       assert data(third)["price"]["total"] == 1350
       assert %{"base" => 2} = bodies(third)["proposal-w1"]
     end
@@ -315,7 +325,7 @@ defmodule Omunculus.SalesDeskProposalTest do
     end
 
     test "propose holds once the price is worked out and the client accepted", %{root: root} do
-      draft = write(%{"scope" => %{"pages" => @pages}}, %{}, root)
+      draft = write(%{"language" => "English", "scope" => %{"pages" => @pages}}, %{}, root)
 
       assert %{
                "ok" => false,
@@ -323,14 +333,76 @@ defmodule Omunculus.SalesDeskProposalTest do
              } =
                stage("propose", view_after(draft), root)
 
-      accepted = write(%{"status" => "accepted"}, view_after(draft), root)
+      accepted =
+        write(%{"language" => "English", "status" => "accepted"}, view_after(draft), root)
 
       assert %{"ok" => true, "chain" => [%{"name" => "comment"}, %{"name" => "continue"}]} =
                stage("propose", view_after(accepted, view_after(draft)), root)
     end
 
+    test "a proposal reaches the client only in their language and without questions already answered",
+         %{root: root} do
+      base = %{"scope" => %{"pages" => @pages}}
+
+      assert %{"ok" => false, "output" => "language is not set" <> _} =
+               write(Map.put(base, "status", "sent"), %{}, root)
+
+      assert %{"ok" => false, "output" => "language is not set" <> _} =
+               write(%{"language" => " ", "status" => "accepted"}, %{}, root)
+
+      answered =
+        Map.merge(base, %{
+          "language" => "English",
+          "status" => "sent",
+          "content" => %{"contacts" => "12 Main St, 9-5", "products" => "Cake 10"},
+          "pending" => ["logo", "opening hours"]
+        })
+
+      assert %{"ok" => false, "output" => "pending lists 'opening hours'" <> _} =
+               write(answered, %{}, root)
+
+      for item <- ["address", "menu prices"] do
+        assert %{"ok" => false, "output" => "pending lists" <> _} =
+                 write(%{answered | "pending" => [item]}, %{}, root)
+      end
+
+      assert %{"ok" => true, "output" => output} =
+               write(%{answered | "pending" => ["logo"]}, %{}, root)
+
+      assert output =~ "write every message to them in English"
+
+      # A draft may still list what it has not recorded, and the gate also guards next_stage.
+      draft =
+        write(%{base | "scope" => base["scope"]} |> Map.put("pending", ["address"]), %{}, root)
+
+      assert %{"ok" => true} = draft
+
+      sent = %{"status" => "accepted", "price" => %{"total" => 1}, "work" => "w1"}
+
+      assert %{
+               "ok" => false,
+               "output" => "stage propose does not hold yet: language is not set" <> _
+             } =
+               stage("propose", forged("proposal-w1", 1, sent, "proposal"), root)
+
+      held =
+        Map.merge(sent, %{
+          "language" => "English",
+          "content" => %{"contacts" => "x"},
+          "pending" => ["address"]
+        })
+
+      assert %{"ok" => false, "output" => "stage propose does not hold yet: pending lists" <> _} =
+               stage("propose", forged("proposal-w1", 1, held, "proposal"), root)
+    end
+
     test "a proposal another tool wrote passes no gate", %{root: root} do
-      whole = %{"status" => "accepted", "price" => %{"total" => 1}, "work" => "w1"}
+      whole = %{
+        "language" => "English",
+        "status" => "accepted",
+        "price" => %{"total" => 1},
+        "work" => "w1"
+      }
 
       assert %{
                "ok" => false,
@@ -421,7 +493,7 @@ defmodule Omunculus.SalesDeskProposalTest do
     end
 
     test "signoff wants the owner's approval and the approved status", %{root: root} do
-      approved = write(%{"status" => "approved"}, %{}, root)
+      approved = write(%{"language" => "English", "status" => "approved"}, %{}, root)
       cause = %{"type" => "reply", "body" => ~s({"option":"approve"})}
 
       assert %{"ok" => false, "output" => "stage signoff" <> _} =
@@ -430,14 +502,14 @@ defmodule Omunculus.SalesDeskProposalTest do
       assert %{"ok" => true} =
                stage("signoff", Map.put(view_after(approved), "cause", cause), root)
 
-      accepted = write(%{"status" => "accepted"}, %{}, root)
+      accepted = write(%{"language" => "English", "status" => "accepted"}, %{}, root)
 
       assert %{"ok" => false, "output" => "stage signoff does not hold yet: set the status" <> _} =
                stage("signoff", Map.put(view_after(accepted), "cause", cause), root)
     end
 
     test "the manager's stages read the works below and the delivery", %{root: root} do
-      approved = write(%{"status" => "approved"}, %{}, root)
+      approved = write(%{"language" => "English", "status" => "approved"}, %{}, root)
       done = fn assignee, goal -> %{"assignee" => assignee, "state" => "done", "goal" => goal} end
 
       with_children = fn view, children -> Map.put(view, "children", children) end

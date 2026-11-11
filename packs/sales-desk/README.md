@@ -134,7 +134,7 @@ work, whose versions are JSON ([artifacts](../../docs/tools.md#artifacts)).
 The seller writes it with the pack's tool `proposal`, which lays `fields`
 over the latest version and keeps the rest: business, city, audience, who
 decides, budget and timing, the problem, the content, the scope's pages,
-features and exclusions, the project manager's `assessment`, what is
+features and exclusions, the project manager's `assessment`, the client's `language`, what is
 pending, the timing, the next steps and the status. The project manager
 writes `design` (`state` `approved` or `waived`, the preview's `address` and,
 to waive, the client's own `client_answer`) and `delivery` (the built site's
@@ -142,7 +142,17 @@ homologation `address`, the client's `accepted`, the `production` address).
 Types are checked and a field the proposal does not have is refused. The
 status is one of `draft`, `sent`, `accepted`, `refused` and `approved`, the
 last being the owner's. What is written in the fields, as every message to
-the client, is in the language the client writes in.
+the client, is in the language the client writes in. The seller records that
+language in `language` when it first writes the proposal, taken from the
+client's own messages and never inferred from their country, the team's
+reports or the site's content; the `proposal` tool refuses the statuses
+`sent`, `accepted` and `approved` without it, and `next_stage` refuses
+`propose`. The same gate refuses a `pending` item that names an address,
+hours, a contact, a menu, prices or texts while the matching content field
+already holds the client's answer (matched on English words): the seller
+records each answer the client gave before it asks again. The options of an
+ask stay the keys `accept`, `adjust` and `refuse`; the message explains them
+in the client's language.
 
 `next_stage` and the tools read only versions the `proposal` tool wrote: a
 version another tool puts under that name, with `put_artifact` or by hand,
