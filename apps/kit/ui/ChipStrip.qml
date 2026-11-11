@@ -1,14 +1,18 @@
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 import "focus.js" as Focus
 
 // ChipStrip keeps chips on one line that scrolls sideways when they run past
 // its width — by wheel, drag, or as the keyboard moves along them — and fades
-// the edge that hides more.
+// the edge that hides more. On a narrow window, where a line out of reach is
+// worse than a taller one, the chips wrap onto lines instead.
 Item {
   id: strip
 
   default property alias chips: row.data
   property real spacing: Theme.space.tight
+  // Whether the chips wrap rather than scroll.
+  readonly property bool wrapped: Breakpoints.size(Window.width) === "narrow"
   readonly property Item focused: Window.activeFocusItem
   // Whether the keyboard is on one of its chips.
   readonly property bool holdsFocus: focused !== null && Focus.within(focused, row)
@@ -57,8 +61,10 @@ Item {
         flick.contentX = Math.max(0, Math.min(most, flick.contentX - step))
       }
 
-      Row {
+      // Wide enough for one line unless the strip wraps.
+      Flow {
         id: row
+        width: strip.wrapped ? strip.width : 100000
         spacing: strip.spacing
       }
     }
