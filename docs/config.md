@@ -309,6 +309,24 @@ last comment ([the cycle](cycle.md#a-run-whose-context-is-full)). Set it
 to about half the context the model's server allows, so the report fits.
 Without it a run's context grows until the server refuses the request.
 
+Every model takes an optional `price`, what the model costs in US dollars
+per million tokens. It is a table of all four rates, none assumed:
+
+```toml
+[models.haiku]
+# …
+price = { input = 0.10, output = 0.50, cache_write = 0.125, cache_read = 0.01 }
+```
+
+`input` is for the tokens read that were not cached, `cache_write` for those
+that entered the provider's cache, `cache_read` for those it served from the
+cache and `output` for the tokens written. A rate is a number of at least
+zero; a missing rate, an extra key or another type refuses the config.
+With it the server prices each agent's replies by its model, in
+[`GET /usage`](server.md), and the console's COST tab shows the dollars per
+agent and in all. A model with no `price` has no dollars: the tab says "no
+price set for <model> in the project config".
+
 Every HTTP adapter takes an optional `body` table, merged over the
 request body it builds: a key of `body` replaces the request's key of the
 same name, and two tables merge key by key. It sets what the adapters

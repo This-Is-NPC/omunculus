@@ -24,6 +24,40 @@ defmodule Omunculus.GuiUsageTest do
              Omunculus.Usage.sum([%{"usage" => @openai}])
   end
 
+  test "the server splits the input into fresh, written and cached tokens" do
+    assert %{input: 25_012, fresh: 12, cache_write: 5000, cached: 20_000} =
+             Omunculus.Usage.sum([%{"usage" => @anthropic}])
+
+    assert %{input: 100, fresh: 60, cache_write: 0, cached: 40} =
+             Omunculus.Usage.sum([%{"usage" => @openai}])
+  end
+
+  test "the cost is each kind of token at its price per million" do
+    price = %{input: 0.10, output: 0.50, cache_write: 0.125, cache_read: 0.01}
+    totals = Omunculus.Usage.sum([%{"usage" => @anthropic}])
+    # 12 * 0.10 + 300 * 0.50 + 5000 * 0.125 + 20000 * 0.01, per million.
+    assert_in_delta Omunculus.Usage.spend(totals, price), 976.2 / 1.0e6, 1.0e-12
+  end
+
+  test "an agent's dollars are its model's price, and a model with none is named" do
+    totals = Omunculus.Usage.sum([%{"usage" => @anthropic}])
+    price = %{input: 1.0, output: 2.0, cache_write: 0.0, cache_read: 0.0}
+
+    usage =
+      Omunculus.Server.Contract.usage(
+        [{"a", totals}, {"b", totals}],
+        %{"a" => "haiku", "b" => "mystery"},
+        %{"haiku" => price, "mystery" => nil}
+      )
+
+    [a, b] = usage.agents
+    assert_in_delta a.usd, (12 * 1.0 + 300 * 2.0) / 1.0e6, 1.0e-12
+    assert b.usd == nil
+    assert_in_delta usage.total.usd, a.usd, 1.0e-12
+    assert usage.total.unpriced == ["mystery"]
+    assert usage.total.replies == 2
+  end
+
   test "Usage.add matches Usage.sum on the same fixtures" do
     script = """
     const anthropic = #{Jason.encode!(@anthropic)};

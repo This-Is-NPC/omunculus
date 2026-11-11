@@ -219,7 +219,7 @@ defmodule Omunculus.Server.Router do
 
   OpenAPI.route :get, "/v1/projects/:project_id/usage", :get_usage do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
-         {:ok, usage} <- Project.usage(project_id, principal) do
+         {:ok, usage} <- Project.usage(project_id, principal, conn.params["conversation"]) do
       reply(conn, 200, usage)
     else
       error -> error_reply(conn, error)

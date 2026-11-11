@@ -120,16 +120,36 @@ defmodule Omunculus.Server.Contract do
 
   def member(row), do: Map.take(row, ~w(issuer subject role updated_at)a)
 
-  @doc "Usage per agent, each with the model it is configured with, and their sum."
-  def usage(per_agent, models) do
+  @doc """
+  Usage per agent, each with the model it is configured with and, when that
+  model has a `price`, its `usd`; and their sum, with the `usd` of the
+  agents priced and the models of the others in `unpriced`. `models` maps an
+  agent to its model, `prices` a model to its price or nil.
+  """
+  def usage(per_agent, models, prices) do
     agents =
-      for {agent, totals} <- per_agent,
-          do: Map.merge(%{agent: agent, model: models[agent]}, totals)
+      for {agent, totals} <- per_agent do
+        model = models[agent]
+        price = prices[model]
 
-    %{
-      agents: agents,
-      total: Omunculus.Usage.total(Enum.map(agents, &Map.drop(&1, [:agent, :model])))
-    }
+        Map.merge(
+          %{agent: agent, model: model, usd: price && Omunculus.Usage.spend(totals, price)},
+          totals
+        )
+      end
+
+    priced = Enum.filter(agents, & &1.usd)
+
+    total =
+      agents
+      |> Enum.map(&Map.drop(&1, [:agent, :model, :usd]))
+      |> Omunculus.Usage.total()
+      |> Map.merge(%{
+        usd: Enum.reduce(priced, 0.0, &(&1.usd + &2)),
+        unpriced: agents |> Enum.reject(& &1.usd) |> Enum.map(& &1.model) |> Enum.uniq()
+      })
+
+    %{agents: agents, total: total}
   end
 
   def conversation(row),

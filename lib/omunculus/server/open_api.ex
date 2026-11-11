@@ -158,9 +158,11 @@ defmodule Omunculus.Server.OpenAPI do
       response: "Members"
     },
     get_usage: %{
-      summary: "Read the tokens and cost of the project's model replies, per agent",
+      summary:
+        "Read the tokens and cost of the project's model replies, per agent; with conversation, of that conversation's",
       status: 200,
-      response: "Usage"
+      response: "Usage",
+      conversation: true
     },
     get_config: %{
       summary: "Read the project's config index, or all of it with whole=true",
@@ -305,6 +307,15 @@ defmodule Omunculus.Server.OpenAPI do
         %{name: "whole", in: "query", schema: %{type: "boolean"}, description: "The whole setup"}
     )
     |> maybe_append(
+      spec[:conversation] &&
+        %{
+          name: "conversation",
+          in: "query",
+          schema: %{type: "string"},
+          description: "Only this conversation's replies"
+        }
+    )
+    |> maybe_append(
       spec[:revision] &&
         %{
           name: "revision",
@@ -443,11 +454,13 @@ defmodule Omunculus.Server.OpenAPI do
           %{
             replies: %{type: "integer"},
             input: %{type: "number"},
+            fresh: %{type: "number"},
+            cache_write: %{type: "number"},
             cached: %{type: "number"},
             output: %{type: "number"},
             cost: %{type: "number"}
           },
-          ~w(replies input cached output cost)
+          ~w(replies input fresh cache_write cached output cost)
         ),
       "Usage" =>
         object(
@@ -456,10 +469,22 @@ defmodule Omunculus.Server.OpenAPI do
               array(%{
                 allOf: [
                   ref("UsageTotals"),
-                  object(%{agent: string(), model: nullable_string()}, ["agent"])
+                  object(
+                    %{
+                      agent: string(),
+                      model: nullable_string(),
+                      usd: %{type: ["number", "null"]}
+                    },
+                    ["agent"]
+                  )
                 ]
               }),
-            total: ref("UsageTotals")
+            total: %{
+              allOf: [
+                ref("UsageTotals"),
+                object(%{usd: %{type: "number"}, unpriced: array(string())}, ~w(usd unpriced))
+              ]
+            }
           },
           ~w(agents total)
         ),

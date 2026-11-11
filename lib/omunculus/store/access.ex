@@ -391,16 +391,18 @@ defmodule Omunculus.Store.Access do
   end
 
   @doc """
-  The tokens and cost of every model reply recorded in the project, per
-  agent, for a principal who manages the project's config.
+  The tokens and cost of every model reply recorded in the project, or in
+  one conversation, per agent. The project's are for a principal who manages
+  its config, a conversation's for one who may read it.
   """
-  @spec usage(Project.t(), principal) :: {:ok, [map]} | {:error, term}
-  def usage(project, actor) do
-    with :ok <- check(project, actor, "project.manage_config"),
+  @spec usage(Project.t(), principal, String.t() | nil) :: {:ok, [map]} | {:error, term}
+  def usage(project, actor, conversation_id \\ nil) do
+    with :ok <- usage_access(project, actor, conversation_id),
          {:ok, rows} <-
            Query.all(
              project.conn,
-             "SELECT runs.agent AS agent, events.body AS body FROM events JOIN runs ON runs.id = events.run_id WHERE events.type = 'model' ORDER BY runs.agent, events.sequence"
+             "SELECT runs.agent AS agent, events.body AS body FROM events JOIN runs ON runs.id = events.run_id WHERE events.type = 'model' AND (?1 IS NULL OR events.conversation_id = ?1) ORDER BY runs.agent, events.sequence",
+             [conversation_id]
            ) do
       {:ok,
        rows
@@ -408,6 +410,12 @@ defmodule Omunculus.Store.Access do
        |> Enum.sort()
        |> Enum.map(fn {agent, replies} -> {agent, Omunculus.Usage.sum(replies)} end)}
     end
+  end
+
+  defp usage_access(project, actor, nil), do: check(project, actor, "project.manage_config")
+
+  defp usage_access(project, actor, id) do
+    with {:ok, _conversation} <- conversation(project, actor, id), do: :ok
   end
 
   @spec put_member(Project.t(), principal, principal, String.t(), String.t() | nil) ::

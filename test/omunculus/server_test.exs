@@ -742,14 +742,39 @@ defmodule Omunculus.ServerTest do
     assert local.(:delete, members <> "/test/alice", []).status == 200
     assert length(names.()) == 1
 
-    totals = %{"replies" => 2, "input" => 20, "cached" => 3, "output" => 6, "cost" => 0.5}
+    totals = %{
+      "replies" => 2,
+      "input" => 20,
+      "fresh" => 17,
+      "cache_write" => 0,
+      "cached" => 3,
+      "output" => 6,
+      "cost" => 0.5
+    }
+
     usage = local.(:get, "/v1/projects/solo/usage", [])
     assert usage.status == 200
 
+    # The model has no price: no dollars, and it is named as unpriced.
     assert usage.body == %{
-             "agents" => [Map.merge(%{"agent" => "concierge", "model" => "fake"}, totals)],
-             "total" => totals
+             "agents" => [
+               Map.merge(%{"agent" => "concierge", "model" => "fake", "usd" => nil}, totals)
+             ],
+             "total" => Map.merge(totals, %{"usd" => 0.0, "unpriced" => ["fake"]})
            }
+
+    # A conversation's usage holds only its own replies: this run is in none.
+    made =
+      local.(:post, "/v1/projects/solo/conversations",
+        headers: [{"idempotency-key", "u1"}],
+        json: %{}
+      ).body["id"]
+
+    scoped = local.(:get, "/v1/projects/solo/usage?conversation=#{made}", [])
+    assert scoped.status == 200
+    assert scoped.body["agents"] == []
+    assert scoped.body["total"]["replies"] == 0
+    assert local.(:get, "/v1/projects/solo/usage?conversation=nope", []).status == 404
 
     :ok = Supervisor.stop(server)
   end

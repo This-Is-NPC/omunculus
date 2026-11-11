@@ -2164,6 +2164,42 @@ defmodule Omunculus.ConfigTest do
       assert {:error, {:models, "local", {:invalid, :handoff_tokens}}} = load(dir)
     end
 
+    test "price is four optional dollar rates per million tokens the adapter does not get", %{
+      dir: dir
+    } do
+      write_http_model(
+        dir,
+        "openai-completions",
+        "price = { input = 0.1, output = 0.5, cache_write = 0.125, cache_read = 0.01 }"
+      )
+
+      assert {:ok, config} = load(dir)
+
+      assert Config.price(config, "local") == %{
+               input: 0.1,
+               output: 0.5,
+               cache_write: 0.125,
+               cache_read: 0.01
+             }
+
+      refute Map.has_key?(config.models["local"].input, "price")
+
+      write_http_model(dir, "openai-completions", "")
+      assert {:ok, config} = load(dir)
+      assert Config.price(config, "local") == nil
+
+      for bad <- [
+            "price = { input = 0.1, output = 0.5 }",
+            "price = { input = 0.1, output = 0.5, cache_write = 0, cache_read = -1 }",
+            "price = { input = 0.1, output = \"1\", cache_write = 0, cache_read = 0 }",
+            "price = { input = 1, output = 1, cache_write = 0, cache_read = 0, extra = 1 }",
+            "price = 3"
+          ] do
+        write_http_model(dir, "openai-completions", bad)
+        assert {:error, {:models, "local", {:invalid, :price}}} = load(dir), bad
+      end
+    end
+
     test "stream is an optional boolean of the HTTP adapters", %{dir: dir} do
       write_http_model(dir, "anthropic-messages", "stream = true")
       assert {:ok, config} = load(dir)

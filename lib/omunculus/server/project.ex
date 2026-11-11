@@ -150,16 +150,20 @@ defmodule Omunculus.Server.Project do
 
   def members(id, principal), do: Access.members(project(id), principal)
 
-  @doc "The usage of the project's recorded model replies, per agent with its configured model."
-  def usage(id, principal) do
+  @doc """
+  The usage of the project's recorded model replies, or of one conversation's,
+  per agent with its configured model and what that costs at the model's price.
+  """
+  def usage(id, principal, conversation_id \\ nil) do
     project = project(id)
 
-    with {:ok, per_agent} <- Access.usage(project, principal),
+    with {:ok, per_agent} <- Access.usage(project, principal, conversation_id),
          {:ok, config} <- Config.load(project.config_path) do
       {:ok,
        Omunculus.Server.Contract.usage(
          per_agent,
-         Map.new(config.agents, fn {name, agent} -> {name, agent.model} end)
+         Map.new(config.agents, fn {name, agent} -> {name, agent.model} end),
+         Map.new(config.models, fn {name, _model} -> {name, Config.price(config, name)} end)
        )}
     end
   end

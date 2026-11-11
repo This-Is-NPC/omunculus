@@ -90,6 +90,12 @@ defmodule Omunculus.Config do
           assemble: String.t() | nil,
           ceiling: Layer.t()
         }
+  @type price :: %{
+          input: number,
+          output: number,
+          cache_write: number,
+          cache_read: number
+        }
   @type model :: %{api: String.t(), module: module, input: map}
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{
@@ -268,6 +274,11 @@ defmodule Omunculus.Config do
     %{model: name} = Map.fetch!(config.agents, agent_name)
     config.models |> Map.fetch!(name) |> Map.get(:handoff_tokens)
   end
+
+  @doc "The `price` of the model `name`, in US dollars per million tokens, or nil."
+  @spec price(t, String.t()) :: price | nil
+  def price(%__MODULE__{} = config, name),
+    do: config.models |> Map.fetch!(name) |> Map.get(:price)
 
   @doc "The adapter fun of the model `name`, with its provider's credential."
   @spec model(t, String.t()) :: {:ok, fun} | {:error, term}
@@ -2190,8 +2201,11 @@ defmodule Omunculus.Config do
   defp parse_models(data, auth, config_dir) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, spec}, {:ok, acc} ->
       with {:ok, handoff_tokens, spec} <- model_handoff(name, spec),
+           {:ok, price, spec} <- model_price(name, spec),
            {:ok, model} <- parse_model(name, spec, auth, config_dir) do
-        {:cont, {:ok, Map.put(acc, name, Map.put(model, :handoff_tokens, handoff_tokens))}}
+        {:cont,
+         {:ok,
+          Map.put(acc, name, Map.merge(model, %{handoff_tokens: handoff_tokens, price: price}))}}
       else
         {:error, _reason} = error -> {:halt, error}
       end
@@ -2209,6 +2223,22 @@ defmodule Omunculus.Config do
   end
 
   defp model_handoff(_name, spec), do: {:ok, nil, spec}
+
+  @price_keys ~w(input output cache_write cache_read)
+
+  # `price` belongs to the cost, not to the adapter: US dollars per million
+  # tokens, all four given, never defaulted.
+  defp model_price(name, %{"price" => price} = spec) do
+    with true <- is_map(price) and Enum.sort(Map.keys(price)) == Enum.sort(@price_keys),
+         true <- Enum.all?(Map.values(price), &(is_number(&1) and &1 >= 0)) do
+      {:ok, Map.new(price, fn {key, value} -> {String.to_atom(key), value} end),
+       Map.delete(spec, "price")}
+    else
+      false -> {:error, {:models, name, {:invalid, :price}}}
+    end
+  end
+
+  defp model_price(_name, spec), do: {:ok, nil, spec}
 
   defp parse_model(name, data, auth, config_dir) when is_map(data) do
     case Map.get(data, "api") do
