@@ -280,9 +280,17 @@ function build(projectId, id, snapshot, events, me) {
     at: latest ? latest.at : snapshot.conversation.created_at,
     heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
     received: theirs.length, sent: mine,
-    parties: agentPerson.name + (mine > 0 ? ", me" : "") + (messages.length > 1 ? " (" + messages.length + ")" : ""),
+    parties: parties(agentPerson.name, theirs, mine > 0, messages.length),
     snippet: latest ? oneLine(latest.text + (latest.files.length > 0 ? " [" + latest.files.map(file => file.name).join(", ") + "]" : "")) : ""
   };
+}
+
+// The names of everyone who wrote in a thread: its agent, then the others who
+// did, each once in the order they first did, then "me", and how many messages
+// it holds.
+function parties(agent, theirs, wrote, count) {
+  const names = [agent].concat(theirs.map(message => message.from.name)).filter((name, at, all) => all.indexOf(name) === at);
+  return names.concat(wrote ? ["me"] : []).join(", ") + (count > 1 ? " (" + count + ")" : "");
 }
 
 // What a reply written while reading `key` of `thread` does: {request, quoted}.

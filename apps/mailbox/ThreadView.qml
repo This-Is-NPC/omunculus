@@ -105,8 +105,8 @@ Item {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         spacing: 6
-        // The label sits beside the subject; on a narrow window the subject
-        // wraps to two lines and the label goes under it.
+        // The label sits beside the subject, which wraps to two lines before
+        // it is cut; on a narrow window the label goes under it.
         GridLayout {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
@@ -118,8 +118,8 @@ Item {
             text: view.thread.subject
             font.pixelSize: 16
             font.bold: true
-            wrapMode: view.back ? Text.Wrap : Text.NoWrap
-            maximumLineCount: view.back ? 2 : 1
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
           }
           MailLabel { kind: view.thread.label }

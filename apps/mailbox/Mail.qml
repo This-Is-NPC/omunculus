@@ -245,6 +245,8 @@ Singleton {
         { message: text, agent: agent }, files, () => {
           if (draft)
             discardDraft(draft)
+          // What you sent is in Sent, not next to an empty Inbox.
+          folder = "sent"
           selected = project + "/" + data.id
           sweep()
         })

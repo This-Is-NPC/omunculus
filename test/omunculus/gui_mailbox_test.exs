@@ -229,6 +229,15 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
+  test "a thread's parties name every sender, the agent first, then me" do
+    run!("""
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];
+    const t = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("q1", {requester: agent("seller")})]}), events);
+    if (t.parties !== "Sales, Seller, me (2)") throw Error(t.parties);
+    if (build(snap({runs: [run("r1", "sales", "closed")]}), events).parties !== "Sales, me") throw Error("alone");
+    """)
+  end
+
   test "a decision on a review sends approve, the edited words or the reason to deny" do
     run!("""
     if (JSON.stringify(Mailbox.decision("approve", "")) !== JSON.stringify({body: "approve", option: "approve"})) throw Error("approve");
