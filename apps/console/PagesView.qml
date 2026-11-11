@@ -745,6 +745,8 @@ Item {
         readonly property bool docked: dockLoader.active && progressMode === "dock"
 
         ColumnLayout {
+          // A sheet covers the chat: nothing of it shows through.
+          visible: !(view.progressShown && chat.progressMode === "sheet")
           anchors {
             left: parent.left
             top: parent.top
