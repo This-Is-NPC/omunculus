@@ -141,13 +141,21 @@ an intermediary escalates without `to` therefore still takes the
 `owners` so that it never reaches the client. The requester is skipped, so
 the intermediary listed first passes it on to the next destination.
 
+An escalation that gives no `to` also stays on the named route its origins
+all travelled on, and is matched against the rules of that name. An
+owner-route request that the hub escalates without `to` therefore goes on to
+`owners`, never along the default route to the client. An explicit `to`
+wins; origins on different routes, or on the default route, leave the
+escalation on the default route. The automatic escalation of an unanswered
+request is such an escalation, so it moves along the request's own route.
+
 Every request records `route` and `destination`, and its view, snapshots and
 events expose them. A client reads `destination = "owners"` as a decision of the
 project's owners (a sale's approval, a build past `max_reopens`, a project
 change, a permission) and `destination = "origin"` as a question for the
 client; the route's name decides nothing. An escalation carries the route it was resolved on: the
 upstream request of an escalation on `to = "owner"` has `route = "owner"`, when the project declares that name;
-one that omits `to` follows the default route and has `route = null`.
+one that omits `to` carries the route of its origins, or the default route (`route = null`) when they have none in common.
 
 ## Forms and effects
 
