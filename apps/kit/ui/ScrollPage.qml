@@ -2,8 +2,8 @@ import QtQuick
 import "focus.js" as Focus
 
 // ScrollPage is content taller than its room: it scrolls with the wheel, with
-// PgUp/PgDn — and ↑/↓ while it holds the keyboard itself — and it scrolls to
-// keep the control the keyboard moves to in view, also when the content
+// PgUp/PgDn, Home/End — and ↑/↓ while it holds the keyboard itself — and it
+// scrolls to keep the control the keyboard moves to in view, also when the content
 // around it changes height.
 Flickable {
   id: page
@@ -36,7 +36,7 @@ Flickable {
   }
 
   Keys.onPressed: event => {
-    const step = { [Qt.Key_PageDown]: height, [Qt.Key_PageUp]: -height }[event.key]
+    const step = { [Qt.Key_PageDown]: height, [Qt.Key_PageUp]: -height, [Qt.Key_Home]: -contentY, [Qt.Key_End]: contentHeight }[event.key]
       ?? (page.activeFocus ? { [Qt.Key_Down]: 40, [Qt.Key_Up]: -40 }[event.key] : undefined)
     if (step === undefined)
       return

@@ -56,10 +56,14 @@ Item {
     Qt.callLater(() => { editor.focusEntry(); toEnd() })
   }
 
+  // Scrolls to the latest message, and keeps there while the messages settle
+  // to their height, until you scroll or a moment passes.
   function toEnd() {
-    const flick = scroll.contentItem
-    flick.contentY = Math.max(0, flick.contentHeight - scroll.availableHeight)
+    landing = true
+    settle.restart()
+    scroll.scrollTo(scroll.contentHeight)
   }
+  property bool landing: false
 
   function send() {
     if (editor.text.trim() === "")
@@ -77,7 +81,15 @@ Item {
       Qt.callLater(toEnd)
     }
   }
-  Component.onCompleted: Qt.callLater(toEnd)
+  Component.onCompleted: Qt.callLater(() => {
+    toEnd()
+    // The thread holds the keyboard, for PgUp/PgDn, unless a text field has it.
+    const held = Window.activeFocusItem
+    if (!held || !held.hasOwnProperty("cursorPosition"))
+      scroll.forceActiveFocus()
+  })
+
+  Timer { id: settle; interval: 600; onTriggered: view.landing = false }
 
   ColumnLayout {
     anchors.fill: parent
@@ -121,15 +133,21 @@ Item {
 
     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
 
-    C.ScrollView {
+    // A Flickable of its own: the wheel scrolls it wherever the pointer is
+    // over it, and PgUp/PgDn/Home/End when it holds the keyboard.
+    ScrollPage {
       id: scroll
       Layout.fillWidth: true
       Layout.fillHeight: true
-      clip: true
-      contentWidth: availableWidth
+      contentWidth: width
+      contentHeight: column.implicitHeight
+      onContentHeightChanged: if (view.landing) scrollTo(contentHeight)
+      onMovementStarted: view.landing = false
+      C.ScrollBar.vertical: C.ScrollBar {}
 
       ColumnLayout {
-        width: scroll.availableWidth
+        id: column
+        width: scroll.width
         spacing: 8
 
         Repeater {
