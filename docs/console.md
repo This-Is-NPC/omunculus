@@ -253,8 +253,13 @@ the time the run ended and a question at the time it was asked. An answer
 shown under its question keeps the time it was given, so it can read later
 than the lines after the question.
 
+A message is yours, on the right and headed YOU, only when its sender is your
+account; another account's, an agent's (the front desk's internal message) or
+the harness's shows under its own name on the left.
+
 A request waiting on you is not in the thread: it is in the pending queue (see
-[Requests](#requests)). What you did to one is a sentence in the chat
+[Requests](#requests)). What you did to one is a sentence in the chat, in time
+where you answered it and not where it was asked
 (`ResolvedLine`), with its kind's icon and word and the time at the right: "?
 ANSWERED  You answered sales' 5 questions (Doce Ana: sale)", "◇ CHOSE  You
 chose approve on seller's decision (Doce Ana: sale)", "⛨ GRANTED  You granted

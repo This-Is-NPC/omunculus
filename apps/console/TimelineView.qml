@@ -117,13 +117,17 @@ Item {
       return "none"
     if (entry.kind === "work")
       return dialogue ? "card" : "work"
-    if (entry.kind !== "request")
+    if (entry.kind !== "request" && entry.kind !== "resolved")
       return ["turn", "note"].includes(entry.kind) ? entry.kind : "speech"
     const request = Omunculus.requests.find(item => item.id === entry.key)
     if (!requestsShown || !request || contained.has(entry.key) || (Requests.pending(request) && Requests.forYou(request, Omunculus.me)))
       return "none"
     const answer = Omunculus.replies[entry.key]
-    return answer && answer.who === "you" ? "answer" : dialogue ? "none" : "team"
+    const yours = !!answer && answer.who === "you"
+    // Your answer shows on its own line, in time; its request row is then gone.
+    if (entry.kind === "resolved")
+      return yours ? "answer" : "none"
+    return yours ? "none" : dialogue ? "none" : "team"
   }
 
   // The row of the newest note a work's agent left, or -1.
@@ -215,7 +219,7 @@ Item {
       return false
     const previous = timeline.model.get(index - 1)
     const current = timeline.model.get(index)
-    const apart = ["request", "work", "note"]
+    const apart = ["request", "resolved", "work", "note"]
     return !apart.includes(previous.kind) && !apart.includes(current.kind)
       && previous.who === current.who && current.at - previous.at < root.pause
   }
@@ -334,7 +338,7 @@ Item {
       readonly property alias content: slot.item
       readonly property bool drawn: slot.status === Loader.Ready && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
-      readonly property bool rises: kind === "request" || kind === "work"
+      readonly property bool rises: kind === "request" || kind === "resolved" || kind === "work"
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0

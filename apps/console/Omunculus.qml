@@ -138,6 +138,9 @@ Singleton {
   // Request id -> true for each request the harness opened, passing on a
   // question someone left unanswered; the snapshot does not say.
   property var noted: ({})
+  // Request id -> the thread its request shows in; the line of its answer
+  // goes there.
+  property var requestThreads: ({})
   // Request id -> the request that gathers it (from the escalate events), and
   // inbox id -> the request a harness note is about, for each note whose
   // question the person already sees as a card.
@@ -507,6 +510,7 @@ Singleton {
     notes = {}
     replies = {}
     noted = {}
+    requestThreads = {}
     gatheredBy = {}
     cardNotes = {}
     drafts = {}
@@ -998,7 +1002,7 @@ Singleton {
         // The server's copy takes the place of the words shown while sending.
         threads[""].set(waiting, { stamp: stamp, at: at, files: JSON.stringify(body.attachments || []), pending: false })
       } else {
-        append(key, { who: "you", mine: true, text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
+        append(key, { who: who, mine: who === "you", text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
       }
       break
     case "attach":
@@ -1078,6 +1082,7 @@ Singleton {
     case "request":
       if (Requests.byHarness(event))
         keep("noted", event.request_id, true)
+      keep("requestThreads", event.request_id, !body.arbiter || Requests.isMe(body.arbiter, me) ? "" : key)
       append(!body.arbiter || Requests.isMe(body.arbiter, me) ? "" : key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "escalate":
@@ -1085,6 +1090,10 @@ Singleton {
       break
     case "reply":
       keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "", stamp: stamp })
+      // Your answer is a line of its own where it was given, not up where the
+      // request was asked.
+      if (who === "you" && requestThreads[event.request_id] !== undefined)
+        append(requestThreads[event.request_id], { kind: "resolved", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       if (!replaying)
         Object.keys(cardNotes).filter(id => climbsTo(cardNotes[id], event.request_id)).filter(id => inbox.some(item => item.id === id && !item.read_at)).forEach(id => markRead(id))
       if (sending[event.request_id] !== undefined) {

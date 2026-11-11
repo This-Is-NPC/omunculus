@@ -41,6 +41,17 @@ defmodule Omunculus.GuiProgressTest do
     assert {"", 0} = GuiModules.run(@modules, @fixtures <> assertions)
   end
 
+  test "a message is yours only when its sender is the viewer's account" do
+    run!("""
+    const prompt = actor => ({type: "prompt", actor, body: {message: "x"}});
+    const speaker = event => Progress.actorOf(event, human);
+    check(speaker(prompt(human)) === "you", "the viewer", speaker(prompt(human)));
+    check(speaker(prompt(by("front-desk"))) === "front-desk", "an agent's message reads as that agent", speaker(prompt(by("front-desk"))));
+    check(speaker(prompt({kind: "human", issuer: "local", subject: "2000"})) === "local:2000", "another account", 0);
+    check(speaker(prompt({kind: "harness"})) === "harness", "the harness", 0);
+    """)
+  end
+
   test "journal keeps the stages entered, the rounds and who sent a work back" do
     run!("""
     const w3 = journeys.w3;
