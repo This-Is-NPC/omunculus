@@ -110,6 +110,12 @@ Item {
   readonly property string pendingJson: JSON.stringify(Pending.queue(Omunculus.requests).map(request => ({ id: request.id, at: request.created_at || "" })))
   readonly property var pending: JSON.parse(pendingJson)
   property bool queueOpen: false
+  onPendingChanged: {
+    if (pending.length === 0 && queueOpen) {
+      queueOpen = false
+      Qt.callLater(focusEntry)
+    }
+  }
 
   // Whether the conversation has said nothing yet, or is not made.
   readonly property bool fresh: Omunculus.drafting || (open && Omunculus.thread("").count === 0)
@@ -336,9 +342,12 @@ Item {
     return chain
   }
 
-  // Opens the pending queue over the page; the progress sheet over a narrow
-  // chat closes first.
+  // Opens the pending queue over the page, when something waits on you; the
+  // progress sheet over a narrow chat closes first. The queue closes by itself
+  // once nothing waits.
   function openQueue() {
+    if (pending.length === 0)
+      return
     if (progressShown && chat.progressMode === "sheet")
       progressChoice = false
     queueOpen = true
