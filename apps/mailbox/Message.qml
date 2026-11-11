@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
+import "kit/ui/Breakpoints.js" as Breakpoints
 
 // Message is one e-mail of a thread, as a mail client stacks them: folded, a
 // line with who wrote, the start of the text and the time; open, its header
@@ -85,7 +86,12 @@ SurfaceFrame {
           Layout.preferredHeight: 10
           running: visible
         }
-        Label { text: mail.expanded ? Mail.stamp(mail.message.at) : Mail.when(mail.message.at); color: Theme.dim; font.pixelSize: 10 }
+        // The full date gives the address its room on a narrow window.
+        Label {
+          text: mail.expanded && Breakpoints.size(Window.width) !== "narrow" ? Mail.stamp(mail.message.at) : Mail.when(mail.message.at)
+          color: Theme.dim
+          font.pixelSize: 10
+        }
       }
     }
 
