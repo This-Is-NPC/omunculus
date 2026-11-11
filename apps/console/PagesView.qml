@@ -623,7 +623,6 @@ Item {
     ProgressStrip {
       Layout.fillWidth: true
       progress: Omunculus.progress
-      lastEvent: Omunculus.lastEventAt
       waiting: Omunculus.waiting.length
       usage: Omunculus.usage.all
       heading: view.named
