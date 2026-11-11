@@ -891,7 +891,7 @@ defmodule Omunculus.CLITest do
       assert assembled =~ "answered apply: the reply is below"
     end
 
-    test "a proposal goes to the project's owner, not along the default route", %{dir: dir} do
+    test "a proposal takes the harness route, else the default route", %{dir: dir} do
       config = """
       [agents.keeper]
       depth = 0
@@ -905,12 +905,19 @@ defmodule Omunculus.CLITest do
       tools = ["end"]
 
       [policy]
+      HARNESS
       request_routes = [ROUTES]
       """
 
       owner = ~s({ name = "owner", via = ["origin"] }, )
       default = ~s({ via = [{ kind = "agent", agent = "desk" }, "origin"] })
-      write_config(dir, String.replace(config, "ROUTES", owner <> default))
+
+      write_config(
+        dir,
+        config
+        |> String.replace("HARNESS", ~s(harness_route = "owner"))
+        |> String.replace("ROUTES", owner <> default)
+      )
 
       # Proposes the desk's own table with a shorter text.
       proposing = fn dir ->
@@ -937,23 +944,27 @@ defmodule Omunculus.CLITest do
       assert request.arbiter == @human
       Project.close(project)
 
-      # Without an owner route the store refuses the proposal, naming the routes there are.
+      # Without a harness route the proposal follows the default route, to the desk.
       dir = Fixtures.tmp_dir()
       Fixtures.install_default(dir)
-      write_config(dir, String.replace(config, "ROUTES", default))
+
+      write_config(
+        dir,
+        config |> String.replace("HARNESS", "") |> String.replace("ROUTES", default)
+      )
+
       Fixtures.use_model(dir, proposing.(dir))
       assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
       project = open_project(dir)
-      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
 
-      assert {:ok, [%{body: body}]} =
+      assert {:ok, [%{arbiter: arbiter}]} =
                Query.all(
                  project.conn,
-                 "SELECT body FROM events WHERE type = 'tool' AND body LIKE '%propose_config%'"
+                 "SELECT arbiter FROM requests WHERE requester LIKE '%keeper%'"
                )
 
+      assert Jason.decode!(arbiter) == %{"kind" => "agent", "agent" => "desk"}
       Project.close(project)
-      assert body =~ "owner"
     end
 
     test "a pack an agent proposes to import is loaded first, then the person's to apply",

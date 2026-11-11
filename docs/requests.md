@@ -68,24 +68,26 @@ An agent's selected grant also requires the applicable ceiling to allow it.
 Text never substitutes for a grant or impersonates an upstream answerer.
 
 The presets, Amestris and benchmark declare parent then origin in TOML. The
-presets, the sales-desk and agency eval configs and the course-recovery
-overlay also declare the logical `owner` route as `["owners", "origin"]`,
-used by the agency's decisions (a sale's approval, a discount, production): the owner where the project has one, else the one
-local person. Importing that pack requires configuring this logical
-responsibility; it names the project's owners, not the client.
+default preset, the sales-desk and agency eval configs and the
+course-recovery overlay also declare a route named `owner` as
+`["owners", "origin"]`, which the agency's prompts name with `to = "owner"`
+(a sale's approval, a discount, production): the owner where the project has
+one, else the one local person. The name is the pack's own convention, not
+the core's: importing such a pack requires declaring the route it names; it
+reaches the project's owners, not the client.
 
-A change to the project is its owner's to decide, whoever the default route
-passes through: `propose_config` and `propose_pack` send their request with
-`to = "owner"`, so a project whose agents have them — the system team's —
-declares the `owner` route, as the default preset and the development
-projects do. Without it the proposal is refused as an unknown route, naming
-the routes there are; there is no fallback to the default route. In the
-agency, whose default route passes the front desk, the system team's
-proposals reach the person directly instead of being reworded on the way.
-So does the harness's retry/cancel request for a root work its agent
-stopped on past `max_retries`, and the request a `reopen` past
-`max_reopens` opens, in a project with the `owner` route; in one without,
-they follow the default route.
+A change to the project, a root work stopped past `max_retries` and a
+`reopen` past `max_reopens` are the project's to decide, whoever the default
+route passes through. The core names no route for them: the project declares
+`[policy] harness_route = "<name of a request_routes rule>"` and
+`propose_config`, `propose_pack` and the harness send those requests along
+it. The key is optional and must name a declared rule; without it they
+follow the default route, as any request that names none. A project whose
+agents hold the proposal tools, such as the system team's, usually declares a
+route to its owners and names it there, as the default preset does with
+`harness_route = "owner"`. In the agency, whose default route passes the
+front desk, the system team's proposals then reach the person directly
+instead of being reworded on the way.
 
 ### Client and owner
 
@@ -115,8 +117,8 @@ The conversation's person is the **client**; the project's operator is its
   owner who could not answer would leave its requests pending. Owners of
   `propose_config` and `propose_pack` requests also need
   `project.manage_config` for the apply option to take effect.
-- When the harness stops a root work past `max_retries` and the `owner` route
-  resolves to nobody, no request is made: an inbox note, once, says no
+- When the harness stops a root work past `max_retries` and the
+  `harness_route` resolves to nobody, no request is made: an inbox note, once, says no
   arbiter is left on its route.
 - A person holding both roles is both: the same identity arbitrates
   either route, and `route` tells which kind of request it is.
@@ -132,11 +134,11 @@ The requester is skipped within a list, so the hub's own request goes on to
 is composed that way.
 
 Every request records `route` and `destination`, and its view, snapshots and
-events expose them. A client reads `route = "owner"` as a decision of the
-agency (a sale's approval, a build past `max_reopens`, a project change, a
-permission) and `route = null` with `destination = "origin"` as a question
-for the client. An escalation carries the route it was resolved on: the
-upstream request of an escalation on `to = "owner"` has `route = "owner"`;
+events expose them. A client reads `destination = "owners"` as a decision of the
+project's owners (a sale's approval, a build past `max_reopens`, a project
+change, a permission) and `destination = "origin"` as a question for the
+client; the route's name decides nothing. An escalation carries the route it was resolved on: the
+upstream request of an escalation on `to = "owner"` has `route = "owner"`, when the project declares that name;
 one that omits `to` follows the default route and has `route = null`.
 
 ## Forms and effects
@@ -152,8 +154,8 @@ one that omits `to` follows the default route and has `route = null`.
 | `break`, `reopen`, `retire` | Stop failed work, return it for correction, or retire it when the parent no longer wants it. A resumable question uses a request rather than a break/reopen round trip. |
 | `wait` | A root work that only the person can move on later — a decision they will think over, something they will send — waits for their next message rather than asking again: their answer stays the answer, and the message reopens the work. A work below another cannot wait on a message. |
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
-| `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
-| Harness retry/cancel | A routed request after root retry exhaustion, on the logical `owner` route where the project configures it, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
+| `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, on the project's `harness_route`, else the default route. A text reply records advice without applying the proposal. |
+| Harness retry/cancel | A routed request after root retry exhaustion, on the project's `harness_route` where it declares one, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
 | Unanswered receiver | Not when the run opened child works (`delegate`, `work`) that are still open or waiting: the receiver waits on them to answer, and the request stays pending with it until a later run ends without answering, when this rule applies again. Otherwise, linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. When no destination is left on the route (every one excluded, see below), nothing is escalated: the request stays pending and an inbox note, once, names the question and says no arbiter is left on its route, for a person to answer. An origin never goes again to an agent that answered it with text without escalating it (see below). |
 
 An agent's run opened by the answer to its own question — a reply to its

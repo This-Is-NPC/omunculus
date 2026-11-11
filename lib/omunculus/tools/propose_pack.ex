@@ -3,7 +3,7 @@ defmodule Omunculus.Tools.ProposePack do
   Builtin `propose_pack` tool: loads the config `config_path` would make
   once the pack at `path`, relative to the workspace, is imported with
   `models`, `auth` and `depth` (`Omunculus.Config.try_pack/2`) and, when it
-  loads, emits a request, on the route `Omunculus.RequestRoutes.owner/0` names, whose
+  loads, emits a request, on the project's `[policy] harness_route`, whose
   `apply` option calls `pack` with that
   import, and whose `deny` calls nothing; its reason gives the agent's
   `reason`, each of the pack's agents at the depth and on the model it
@@ -56,22 +56,24 @@ defmodule Omunculus.Tools.ProposePack do
           agent = config.agents[name],
           do: "- #{name}: depth #{agent.depth}, model #{agent.model}"
 
-    %{
-      "to" => RequestRoutes.owner(),
-      "reason" =>
-        Enum.join(
-          [
-            args["reason"],
-            "Import #{pack["pack"]["name"]} from #{dir}, its agents as they would run:\n" <>
-              Enum.join(agents, "\n")
-          ] ++ Omunculus.Tools.Pack.environment(dir),
-          "\n\n"
-        ),
-      "options" => %{
-        "apply" => [%{"name" => "pack", "args" => pack_args(entry)}],
-        "deny" => []
-      }
-    }
+    RequestRoutes.put_harness_route(
+      %{
+        "reason" =>
+          Enum.join(
+            [
+              args["reason"],
+              "Import #{pack["pack"]["name"]} from #{dir}, its agents as they would run:\n" <>
+                Enum.join(agents, "\n")
+            ] ++ Omunculus.Tools.Pack.environment(dir),
+            "\n\n"
+          ),
+        "options" => %{
+          "apply" => [%{"name" => "pack", "args" => pack_args(entry)}],
+          "deny" => []
+        }
+      },
+      config
+    )
   end
 
   defp pack_args(entry) do

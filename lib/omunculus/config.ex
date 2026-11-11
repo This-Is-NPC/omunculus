@@ -13,7 +13,8 @@ defmodule Omunculus.Config do
   project root), optionally the `client` and a `summary` that say what it
   is for, plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries` and `request_routes`, the
-  optional `[policy] default_agent` (the agent of depth 0 that receives a
+  optional `[policy] harness_route` (the `request_routes` rule that takes the
+  harness's own requests) and `[policy] default_agent` (the agent of depth 0 that receives a
   new conversation when the person names none), the optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
@@ -57,6 +58,7 @@ defmodule Omunculus.Config do
     :max_reopens,
     :request_routes,
     :default_agent,
+    :harness_route,
     :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
@@ -144,6 +146,7 @@ defmodule Omunculus.Config do
           max_reopens: non_neg_integer | nil,
           request_routes: [map],
           default_agent: String.t() | nil,
+          harness_route: String.t() | nil,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
           conversation_bytes: pos_integer | nil,
@@ -194,7 +197,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes default_agent)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes default_agent harness_route)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -754,6 +757,8 @@ defmodule Omunculus.Config do
                  workflows
                ),
              {:ok, default_agent} <- fetch_default_agent(data, agents),
+             {:ok, harness_route} <-
+               Omunculus.RequestRoutes.fetch_harness_route(data, request_routes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -778,6 +783,7 @@ defmodule Omunculus.Config do
               max_reopens: max_reopens,
               request_routes: request_routes,
               default_agent: default_agent,
+              harness_route: harness_route,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,

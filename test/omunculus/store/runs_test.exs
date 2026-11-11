@@ -260,15 +260,18 @@ defmodule Omunculus.Store.RunsTest do
     assert comment.body == "concierge stopped a work after 1 cancel retry"
   end
 
-  test "unreported asks about a root on the owner route where the project names one",
+  test "unreported asks about a root on the project's harness route when it declares one",
        %{conn: conn} do
     desk = %{"kind" => "human", "issuer" => "test", "subject" => "desk"}
     default = %{"via" => [desk]}
     owner = %{"name" => "owner", "via" => ["origin"]}
     origin = Omunculus.Participant.human("local", Omunculus.Operations.local_principal().subject)
 
-    for {routes, arbiter} <- [{[default], desk}, {[owner, default], origin}] do
-      config = %{Fixtures.config() | request_routes: routes}
+    for {routes, harness, arbiter} <- [
+          {[default], nil, desk},
+          {[owner, default], "owner", origin}
+        ] do
+      config = %{Fixtures.config() | request_routes: routes, harness_route: harness}
       work_id = Fixtures.insert(conn, :works)
       run = Fixtures.open_run(conn, %{work_id: work_id})
       {:ok, _} = Runs.close(conn, run.id)
@@ -282,10 +285,10 @@ defmodule Omunculus.Store.RunsTest do
     end
   end
 
-  test "unreported notes a root whose owner route reaches nobody, and asks nothing",
+  test "unreported notes a root whose harness route reaches nobody, and asks nothing",
        %{conn: conn} do
     routes = [%{"name" => "owner", "via" => ["owners"]}, %{"via" => ["origin"]}]
-    config = %{Fixtures.config() | request_routes: routes}
+    config = %{Fixtures.config() | request_routes: routes, harness_route: "owner"}
     work_id = Fixtures.insert(conn, :works)
     run = Fixtures.open_run(conn, %{work_id: work_id})
     {:ok, _} = Runs.close(conn, run.id)

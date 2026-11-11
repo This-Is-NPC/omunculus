@@ -34,6 +34,7 @@ key = "$OMUNCULUS_PRODUCTION_KEY"
 # default route passes the project manager before the front desk.
 [policy]
 default_agent = "front-desk"
+harness_route = "owner"
 request_routes = [
   { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners", "origin"] },
   { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners", "origin"] },

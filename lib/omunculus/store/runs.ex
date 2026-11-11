@@ -12,7 +12,7 @@ defmodule Omunculus.Store.Runs do
   another run while the work's latest runs without `end` are within
   `max_retries`; past it, a `break` with the given text for a child,
   or, for a root, a request by the harness with the options `retry` and
-  `cancel`, on the `owner` route where the project configures one, and an
+  `cancel`, on the project's `[policy] harness_route`, and an
   inbox note saying how to answer it; their texts name the
   agent and the work's title.
   `continues/3` records the `session` event of a run that continues its
@@ -449,14 +449,9 @@ defmodule Omunculus.Store.Runs do
 
     options = %{"retry" => [], "cancel" => [%{"name" => "cancel"}]}
     body = %{"reason" => text, "options" => options}
-    owner = RequestRoutes.owner()
-
-    # The work is the project's to retry or give up, so it goes to its
-    # owner where the project names one, not to whoever the default reaches.
-    body =
-      if RequestRoutes.named?(config.request_routes, owner),
-        do: Map.put(body, "to", owner),
-        else: body
+    # The work is the project's to retry or give up, so it takes the
+    # project's harness route.
+    body = RequestRoutes.put_harness_route(body, config)
 
     case Actions.run(conn, [%{"type" => "request", "body" => body}], ctx) do
       {:ok, [request]} ->

@@ -157,9 +157,9 @@ reach `max_retries` (`[policy]`, or the work's workspace), the harness
 does not open another run. A work with a parent gets `break` with the
 comment `<agent> stopped the work "<title>" without a report after N
 runs.`, which parks it and wakes the parent waiting on it, whose run
-opens. A root work gets a request instead, on the `owner` route where
-`[policy] request_routes` names one and along the default route
-otherwise, opened by the harness with that sentence as its reason and the options
+opens. A root work gets a request instead, on the
+project's `[policy] harness_route` where it declares one and along the
+default route otherwise, opened by the harness with that sentence as its reason and the options
 `retry` (no call) and `cancel`, and an inbox note, the sentence followed
 by `Answer it with cancel or retry.`; the work waits on it. `reply --option retry`
 opens another run of the work; `reply --option cancel` cancels it. The
@@ -348,8 +348,9 @@ A work that keeps breaking does not go round for ever. With `[policy]
 max_reopens`, once a parent has sent one work back that many times in a
 row — its reopens since an answer to a request of the parent's work last
 came — its next `reopen` sends nothing back: the store opens a request
-instead, on the `owner` route where the project names one and along the
-parent's route otherwise, its reason the question the `reopen`
+instead, on the project's `[policy]
+harness_route` where it declares one and along the default route
+otherwise, its reason the question the `reopen`
 tool wrote (`past_limit`: the work, that it went back as often as the
 limit allows, and the instructions it would have gone back with), and
 the parent waits on it, the broken work still waiting on the parent. The

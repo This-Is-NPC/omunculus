@@ -1214,9 +1214,13 @@ defmodule Omunculus.Store.ActionsTest do
                record_tool(conn, [delegate], ctx)
     end
 
-    test "past [policy] max_reopens the decision goes to the owner route when the project has one",
+    test "past [policy] max_reopens the decision goes to the harness route",
          %{conn: conn} do
-      config = Fixtures.config(arbiter_toml() <> "\n[policy]\nmax_reopens = 0\n")
+      config =
+        Fixtures.config(
+          arbiter_toml() <> "\n[policy]\nmax_reopens = 0\nharness_route = \"owner\"\n"
+        )
+
       root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
 

@@ -3,17 +3,31 @@ defmodule Omunculus.RequestRoutes do
   alias Omunculus.Participant
 
   @doc """
-  The logical route of what is the project owner's to decide, whoever else
-  the default route passes: a change to the project, and a root work its
-  agent stopped on past `[policy] max_retries`. Its `via` names the project's
-  owners (`"owners"`), apart from the conversation's person (`"origin"`).
+  Validates `[policy] harness_route`: optional, and the name of a configured
+  rule. It is the route of the harness's own requests (a work stopped past
+  `[policy] max_retries`, a reopen past `max_reopens`, `propose_config` and
+  `propose_pack`); absent, they take the default route.
   """
-  @spec owner() :: String.t()
-  def owner, do: "owner"
+  @spec fetch_harness_route(map, [map]) :: {:ok, String.t() | nil} | {:error, term}
+  def fetch_harness_route(data, routes) do
+    case get_in(data, ["policy", "harness_route"]) do
+      nil ->
+        {:ok, nil}
 
-  @doc "Whether `routes` configure the route `name`."
-  @spec named?([map], String.t()) :: boolean
-  def named?(routes, name), do: Enum.any?(routes, &(&1["name"] == name))
+      name when is_binary(name) ->
+        if Enum.any?(routes, &(&1["name"] == name)),
+          do: {:ok, name},
+          else: {:error, {:policy, {:invalid, :harness_route}}}
+
+      _invalid ->
+        {:error, {:policy, {:invalid, :harness_route}}}
+    end
+  end
+
+  @doc "Sends a harness request along the project's `harness_route`, when it declares one."
+  @spec put_harness_route(map, Omunculus.Config.t()) :: map
+  def put_harness_route(body, %{harness_route: nil}), do: body
+  def put_harness_route(body, %{harness_route: name}), do: Map.put(body, "to", name)
 
   def parse(nil, _agents, _workflows), do: {:error, {:policy, {:required, :request_routes}}}
 

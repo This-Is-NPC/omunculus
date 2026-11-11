@@ -19,7 +19,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   agent lacks and the parent could grant it on a request; once the child
   went back `[policy] max_reopens` times in a row, since an answer to a
   request of the parent's work last came, the parent opens a request with
-  the `past_limit` reason instead, on the `owner` route where the project
+  the `past_limit` reason instead, on the project's `harness_route` where it
   names one, else along its route; `delegate` is refused while a child that broke waits on
   the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
@@ -164,8 +164,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   # Past `[policy] max_reopens` the work does not go back once more: the
   # parent asks instead, with the reason its tool wrote, and waits on the
   # request, the broken child still waiting on it. It is the project's
-  # decision, so it goes to its owners where the project names the `owner`
-  # route, else along the parent's route.
+  # decision, so it takes the project's `harness_route`, else the default route.
   defp ask_instead(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:reopen, body, "past_limit"),
          {:ok, event} <- Requests.request(conn, ask(body["past_limit"], ctx.config), ctx),
@@ -174,11 +173,7 @@ defmodule Omunculus.Store.Actions.Sequence do
 
   defp ask(reason, config) do
     ask = %{"reason" => reason, "options" => %{}}
-    owner = RequestRoutes.owner()
-
-    if RequestRoutes.named?(config.request_routes, owner),
-      do: Map.put(ask, "to", owner),
-      else: ask
+    RequestRoutes.put_harness_route(ask, config)
   end
 
   # What the parent gives with the reopen: names the agent lacks on the work

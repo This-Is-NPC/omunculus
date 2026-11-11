@@ -100,6 +100,7 @@ defmodule Omunculus.Store.RequestRoutesTest do
     capabilities = ["conversation.read", "conversation.manage_access"]
     [policy]
     max_reopens = 0
+    harness_route = "owner"
     request_routes = [
       { name = "owner", via = ["owners"] },
       { name = "either", via = ["owners", "origin"] },

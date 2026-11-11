@@ -198,6 +198,7 @@ then the front desk, so no depth-3 request skips the manager:
 ```toml
 [policy]
 default_agent = "front-desk"
+harness_route = "owner"
 request_routes = [
   { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners"] },
   { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners"] },

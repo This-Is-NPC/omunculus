@@ -249,10 +249,11 @@ Questions use `ask`. What only the machine's operator can settle — a
 tool, a login or a setting the machine lacks, as git's author identity —
 the administrator and the surgeon ask through the logical route `owner`,
 never toward whoever asked for the work, so the project configures it,
-for example:
+for example (`harness_route` sends the harness's own requests the same way):
 
 ```toml
 [policy]
+harness_route = "owner"
 request_routes = [{ name = "owner", via = ["owners", "origin"] }, { via = ["parent", "origin"] }]
 ```
 

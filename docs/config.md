@@ -35,22 +35,21 @@ there is left out. `variables` is a table of environment variables
 every command gets with the value written there, apart from `environment`,
 which passes the server's own.
 
-`read` and `variables` let a command resolve the tools the person's mise
-already installed, without a network or a `mise link` that would not
-outlast its run: a command's home is its run's scratch, so mise's own
-data directory is empty there. Name the installs folder in `read` and
-point mise's read-only shared installs at it:
+`read` and `variables` let a command use tools that live outside its
+workspace, such as a read-only folder of tools the person keeps: a
+command's home is its run's scratch, so nothing the person keeps in their
+own home is there. Name the folder in `read` and give the command an
+environment variable that points at it:
 
 ```toml
 [execution]
-read = ["~/.local/share/mise/installs"]
-variables = { MISE_SHARED_INSTALL_DIRS = "/home/<you>/.local/share/mise/installs" }
+read = ["~/tools"]
+variables = { TOOLS_DIR = "/home/<you>/tools" }
 ```
 
-`variables` takes the absolute path, `~` is not expanded in it. A pinned
-version the person's mise holds then resolves for `mise install`, which
-downloads nothing, and for `mise run`; one it lacks needs
-`sandbox.network`. Under `host = true` the installs are visible already.
+`variables` takes the absolute path, `~` is not expanded in it. A command
+reads `$TOOLS_DIR` and finds the folder there, read-only: it cannot change
+it. Under `host = true` the folder is visible already.
 
 A root in `runtimes` is read-only inside the sandbox and exposes every
 binary it contains; it is not a per-binary allowlist, so keep those
@@ -91,12 +90,22 @@ times in a row a parent may send one work below it back with `reopen`.
 The rounds counted are the work's reopens since an answer to a request
 of the parent's work last came. Once they reach `max_reopens`, the next
 `reopen` does not send the work back: the parent asks instead, on the
-`owner` route where the project names one, else along its request
-route, with a question naming the work and the instructions it
+`[policy] harness_route` where the project declares one, else along the
+default route, with a question naming the work and the instructions it
 would have gone back with, and waits on the answer, the broken work still
 waiting on it ([the cycle](cycle.md#work)). Without it a parent reopens
 a work as often as it likes. A workspace sets it the same way as
 `max_retries`.
+
+`[policy] harness_route` is optional: the name of a rule of
+`request_routes`. It is the route of the harness's own requests: a root
+work stopped past `max_retries`, a `reopen` past `max_reopens`, and the
+proposals of `propose_config` and `propose_pack`. They are the project's to
+decide, so the project says where they go; absent, they take the default
+route, as any request that names none. A name no rule carries is refused at
+load with `{:policy, {:invalid, :harness_route}}`. A pack's prompts may
+name a route of their own with `to`; the project declares it in
+`request_routes`, and names it here when it should take these requests too.
 
 `[policy] default_agent` is optional: the name of an agent of depth 0
 that is not `workflow_only`, the front desk that receives a new
@@ -599,6 +608,7 @@ needs what is missing:
 | `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
 | `omunculus.toml [policy] request_routes is required, a nonempty list of routes` | `request_routes` absent |
 | `omunculus.toml [policy] request_routes must be a nonempty list of valid routes` | `request_routes` invalid |
+| `omunculus.toml [policy] harness_route must name a rule of [[policy.request_routes]]` | `harness_route` names no `request_routes` rule |
 | `omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only` | `default_agent` names no such agent |
 | `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
 | `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |

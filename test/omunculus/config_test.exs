@@ -167,6 +167,28 @@ defmodule Omunculus.ConfigTest do
     end
   end
 
+  test "[policy] harness_route is optional and names a declared route", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [policy]
+    request_routes = [{ name = "boss", via = ["owners"] }, { via = ["parent", "origin"] }]
+    """
+
+    Fixtures.write_config(dir, agents, request_routes: false)
+    assert {:ok, %Config{harness_route: nil}} = load(dir)
+
+    Fixtures.write_config(dir, agents <> "harness_route = \"boss\"\n", request_routes: false)
+    assert {:ok, %Config{harness_route: "boss"}} = load(dir)
+
+    for invalid <- [~s("nobody"), "3", ~s("")] do
+      Fixtures.write_config(dir, agents <> "harness_route = #{invalid}\n", request_routes: false)
+      assert {:error, {:policy, {:invalid, :harness_route}}} = load(dir)
+    end
+  end
+
   test "[policy] max_reopens is optional, a non-negative integer", %{dir: dir} do
     agents = """
     [agents.concierge]
@@ -320,13 +342,13 @@ defmodule Omunculus.ConfigTest do
       load(dir)
     end
 
-    assert {:ok, %{execution: %{read: [read], variables: %{"MISE_SHARED_INSTALL_DIRS" => "/m"}}}} =
+    assert {:ok, %{execution: %{read: [read], variables: %{"TOOLS_DIR" => "/t"}}}} =
              load_with.(%{
-               "read" => ["~/.local/share/mise/installs"],
-               "variables" => %{"MISE_SHARED_INSTALL_DIRS" => "/m"}
+               "read" => ["~/tools"],
+               "variables" => %{"TOOLS_DIR" => "/t"}
              })
 
-    assert read == Path.expand("~/.local/share/mise/installs")
+    assert read == Path.expand("~/tools")
     assert {:ok, %{execution: %{read: [], variables: %{}}}} = load_with.(%{})
 
     assert {:error, {:execution, {:invalid, :read}}} = load_with.(%{"read" => ["relative"]})

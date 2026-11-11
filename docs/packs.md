@@ -71,8 +71,8 @@ the seller. The system team beside the front desk opens no work; a project
 whose other agents at depth 0 open works imports the desk a depth below
 them.
 
-The sales desk and its `next_stage` refusal name the logical `owner` route,
-which the project importing it configures, as do the dream team's
+The sales desk and its `next_stage` refusal name the route `owner`,
+which the project importing it declares, as do the dream team's
 administrator and surgeon for what only the machine's operator can settle;
 the dream-team, sales-desk and agency eval overlays declare it. The seller
 asks the project manager, its parent, with the route `pm`; the dream team's
@@ -108,9 +108,10 @@ The default preset imports the system team (`priv/packs/system`):
 The auditor and the refiner are granted `config`, `overview` and
 `propose_config` but not `propose_pack`: importing a pack is the steward's.
 
-Their proposals go on the logical `owner` route, which a project importing
-the team declares, as the default preset does with
-`{ name = "owner", via = ["owners", "origin"] }`; see [requests](requests.md).
+Their proposals go on the project's `[policy] harness_route`, which a project
+importing the team declares, as the default preset does with
+`harness_route = "owner"` and `{ name = "owner", via = ["owners", "origin"] }`;
+see [requests](requests.md).
 
 Their portraits and their skills (`team-design`, `team-composition`,
 `configure`, `audit`, `refine`) are in the pack; see
