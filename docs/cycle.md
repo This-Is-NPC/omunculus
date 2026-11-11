@@ -233,7 +233,8 @@ under `## Environment`, the workspace every command starts in, the
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → under `## Inbox`, at depth 0: pending requests addressed to this agent
-  in this conversation, including linked origin questions and work/stage
+  in this conversation, and at any depth those whose run opens on this
+  work or below it other than the request that opened the run, including linked origin questions and work/stage
   context; a request already here is not repeated under `## Request`
 → if the opening carried inbox_id: its comments join `## Inbox`
 → under `## Attachments`, the files attached in the run's conversation,

@@ -2128,6 +2128,39 @@ defmodule Omunculus.Store.ActionsTest do
       assert body["arbiter_work_id"] == parent_id
     end
 
+    test "a later run of the arbiter on the work sees the request and answers it", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      config = Fixtures.config(arbiter_toml())
+      asking = Fixtures.open_run(conn, %{agent: "worker", depth: 1, ceiling: @ceiling})
+
+      assert {:ok, [_tool, event]} =
+               record_tool(conn, [request_emit(%{})], request_ctx(asking, work_id, config))
+
+      # A first run received it and ended; a woken run has no request of its own.
+      woken = Fixtures.open_run(conn, %{agent: "concierge", depth: 1, work_id: parent_id})
+      assert woken.request_id == nil
+
+      assert {:ok, [%{requests: [%{id: id}]}]} = Store.received_inbox(conn, woken.id)
+      assert id == event.request_id
+
+      other = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      unrelated = Fixtures.open_run(conn, %{agent: "concierge", depth: 1, work_id: other})
+      assert {:ok, []} = Store.received_inbox(conn, unrelated.id)
+
+      assert {:ok, [_tool, reply]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "reply", "body" => %{"request_id" => id, "body" => "yes"}}],
+                 request_ctx(woken, parent_id, config)
+               )
+
+      assert reply.type == "reply"
+      assert {:ok, %{status: "closed"}} = Store.view(conn, "request", id)
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work_id)
+      assert {:ok, []} = Store.received_inbox(conn, woken.id)
+    end
+
     test "a decision follows the default or named logical route", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       config = Fixtures.config(arbiter_toml())

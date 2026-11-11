@@ -231,7 +231,10 @@ harness.
 
 The existing `inbox` view with `relation = received` is anchored to the current
 run. At depth 0 it returns one group for that run's conversation, containing
-all pending requests addressed to that agent there. Client means conversation;
+all pending requests addressed to that agent there. At any depth it also
+returns the pending requests addressed to that agent whose run opens on the
+run's work or a work below it, other than the request that opened the run, so a run woken to answer a request an earlier
+run received sees it and can `reply`. Client means conversation;
 matching an agent name alone never exposes another conversation. Closed
 requests and escalated origins are not independent actionable entries.
 

@@ -256,40 +256,51 @@ defmodule Omunculus.Store.View do
     )
   end
 
-  @doc "Pending requests addressed to a depth-0 run's agent, in that run's conversation."
+  @doc """
+  Pending requests addressed to the run's agent, grouped by conversation: those
+  of the run's conversation at depth 0, and, at any depth, those whose arbiter
+  run opens on the run's work or one below it, but for the one that opened the
+  run, which its prompt shows under `## Request`.
+  """
   @spec received_inbox(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def received_inbox(conn, run_id) do
     Query.transaction(conn, fn ->
-      with {:ok, run} <- view(conn, "run", run_id) do
-        case run do
-          %{depth: "0", conversation_id: conversation_id} when is_binary(conversation_id) ->
-            with {:ok, rows} <-
-                   Query.all(
-                     conn,
-                     """
-                     SELECT requests.id FROM requests
-                     JOIN events opening ON opening.id = requests.event_id
-                     WHERE requests.status = 'pending'
-                       AND opening.conversation_id = ?
-                       AND json_extract(requests.arbiter, '$.kind') = 'agent'
-                       AND json_extract(requests.arbiter, '$.agent') = ?
-                     ORDER BY requests.created_at, requests.id
-                     """,
-                     [conversation_id, run.agent]
-                   ),
-                 {:ok, requests} <- request_views(conn, rows) do
-              {:ok,
-               if(requests == [],
-                 do: [],
-                 else: [%{conversation_id: conversation_id, requests: requests}]
-               )}
-            end
-
-          _other ->
-            {:ok, []}
-        end
+      with {:ok, run} <- view(conn, "run", run_id),
+           {:ok, rows} <- received_rows(conn, run),
+           {:ok, requests} <- request_views(conn, rows) do
+        {:ok,
+         requests
+         |> Enum.group_by(& &1.conversation_id)
+         |> Enum.map(fn {conversation_id, requests} ->
+           %{conversation_id: conversation_id, requests: requests}
+         end)
+         |> Enum.sort_by(&hd(&1.requests).created_at)}
       end
     end)
+  end
+
+  defp received_rows(_conn, nil), do: {:ok, []}
+
+  defp received_rows(conn, run) do
+    Query.all(
+      conn,
+      """
+      WITH RECURSIVE reach(id) AS (
+        SELECT ? WHERE ? IS NOT NULL
+        UNION
+        SELECT works.id FROM works JOIN reach ON works.parent_id = reach.id)
+      SELECT requests.id FROM requests
+      JOIN events opening ON opening.id = requests.event_id
+      WHERE requests.status = 'pending'
+        AND json_extract(requests.arbiter, '$.kind') = 'agent'
+        AND json_extract(requests.arbiter, '$.agent') = ?
+        AND ((? = '0' AND opening.conversation_id = ?)
+          OR (json_extract(opening.body, '$.arbiter_work_id') IN (SELECT id FROM reach)
+              AND requests.id IS NOT ?))
+      ORDER BY requests.created_at, requests.id
+      """,
+      [run.work_id, run.work_id, run.agent, run.depth, run.conversation_id, run.request_id]
+    )
   end
 
   @doc "Hydrates request rows with their canonical question, historical context and linked origins."
