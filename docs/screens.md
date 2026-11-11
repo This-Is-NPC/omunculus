@@ -250,7 +250,7 @@ Every event of the conversation, a row each, which opens whole.
 
 Each row is one line: when, its kind, what the event says, who; under 560 px
 two lines, the sentence under the rest. Chips, on one line that
-scrolls sideways, each with its count, keep
+scrolls sideways (wrapped onto lines on a narrow window), each with its count, keep
 the events that need you or failed, a picker one agent's, and BEHIND THE
 SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
 names each day and each run. The count, on one line, says how many rows a
