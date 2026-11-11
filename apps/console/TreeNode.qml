@@ -16,8 +16,9 @@ import "kit/ui"
 // At the right, in columns, its stages as a track (`StageTrack`), its state
 // in words (WORKING, WAITING FOR <child or who>, WAITING FOR YOU, DONE) and
 // how long it has run; narrow, the track and the state go under the title and
-// the time ends the agent's line. Opened, its runs and their steps show
-// inside it, with the ways on to its detail and its log.
+// the time ends the agent's line. Opened, its runs, one line each, show
+// inside it, with the ways on to its detail and its log; the rail of its
+// mark ends at the mark unless rows hang under it.
 Item {
   id: branch
 
@@ -123,7 +124,7 @@ Item {
     color: Theme.faint
   }
   Rectangle {
-    visible: branch.row.stem || branch.expanded
+    visible: branch.row.stem
     x: branch.markX
     y: branch.markY + Theme.space.tight
     width: 1
@@ -131,14 +132,14 @@ Item {
     color: Theme.faint
   }
 
-  // The picked row's wash and frame, from its mark to the right edge.
+  // The picked row's wash, from its mark to the right edge; the keyboard's
+  // ring is the only frame; a row that a request picked is washed in amber.
   Rectangle {
     id: wash
     x: branch.markX - branch.unit / 2
     width: branch.width - x
     height: branch.height
-    color: branch.picked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
-    border.color: branch.highlighted ? Theme.warning : branch.picked ? Theme.primary : "transparent"
+    color: branch.picked ? Theme.highlight : branch.highlighted ? Qt.alpha(Theme.warning, 0.12) : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
     Behavior on color { ColorAnimation { duration: 120 } }
     FocusRing { shown: branch.focused }
   }
