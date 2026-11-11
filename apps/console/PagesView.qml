@@ -617,22 +617,42 @@ Item {
       onOpenCost: view.go("cost")
     }
 
-    // Before there is more than the chat, a lone tab gives no choice.
-    Flow {
+    // Before there is more than the chat, a lone tab gives no choice. On one
+    // line: without their digits under 420 px, and scrolling sideways when
+    // they still do not fit.
+    Flickable {
+      id: tabStrip
       Layout.fillWidth: true
+      Layout.preferredHeight: tabRow.height
       visible: view.pages.length > 1
-      spacing: Theme.space.section
-      Repeater {
-        model: view.inside ? view.pages : []
-        delegate: Tab {
-          required property string modelData
-          required property int index
-          label: view.nameOf(modelData)
-          digit: String(index + 1).padStart(2, "0")
-          current: view.tabIndex === index
-          // The log says when a work failed.
-          alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
-          onChosen: view.choose(index)
+      contentWidth: tabRow.width
+      contentHeight: tabRow.height
+      clip: true
+      flickableDirection: Flickable.HorizontalFlick
+      boundsBehavior: Flickable.StopAtBounds
+      // Brings a tab, at `left` and `size` wide, into view.
+      function reveal(left, size) {
+        if (left < contentX)
+          contentX = left
+        else if (left + size > contentX + width)
+          contentX = left + size - width
+      }
+      Row {
+        id: tabRow
+        spacing: Theme.space.section
+        Repeater {
+          model: view.inside ? view.pages : []
+          delegate: Tab {
+            required property string modelData
+            required property int index
+            label: modelData
+            digit: Breakpoints.tight(view.width) ? "" : String(index + 1).padStart(2, "0")
+            current: view.tabIndex === index
+            // The log says when a work failed.
+            alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
+            onChosen: view.choose(index)
+            onCurrentChanged: if (current) tabStrip.reveal(x, width)
+          }
         }
       }
     }
