@@ -26,7 +26,7 @@ from datetime import datetime
 
 STORES = {"agency": "dev/agency/.omunculus/store.sqlite3", "dev": "dev/.omunculus/store.sqlite3"}
 # Tools drawn when they ran; the protocol tools are drawn only when refused.
-TOOLS = {"deploy_preview", "promote", "request_golive", "wait_client"}
+TOOLS = {"deploy_preview", "promote", "wait_client"}
 PROTOCOL = {"work", "delegate", "end", "reopen", "reply", "continue", "break", "retire", "escalate", "ask"}
 HARNESS = "harness"
 # The human accounts of the conversation in order of appearance, set by main:
