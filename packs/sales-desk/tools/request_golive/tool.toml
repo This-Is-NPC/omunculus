@@ -1,0 +1,32 @@
+name = "request_golive"
+kind = "tool"
+triggers = ["model"]
+description = "Passes the release's request to grant promote up to the owner, the go-live. Refused until the client accepted the built site: the proposal must hold delivery.address and delivery.accepted as accepted, which the project manager writes with the proposal tool after asking the client. The only way the request reaches the owner; it escalates the request on the owner route and ends the run until the owner answers."
+tags = ["sales", "sequence"]
+command = ["./run"]
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["request_id", "reason"]
+
+[parameters.properties.request_id]
+type = "string"
+description = "The id of the release's request to grant promote, as it is in your inbox."
+
+[parameters.properties.reason]
+type = "string"
+description = "What the owner is asked, plain: the client's name, the homologation address, that the client accepted the site, and that approving puts it on the air."
+
+[views.work]
+source = "works"
+
+[views.request]
+source = "requests"
+from = ["args.request_id"]
+
+[views.artifacts]
+source = "artifacts"
+include = ["data"]
+prefix = "proposal-"

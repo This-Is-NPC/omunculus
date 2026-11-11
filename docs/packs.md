@@ -78,8 +78,10 @@ administrator and surgeon for what only the machine's operator can settle;
 the dream-team, sales-desk and agency eval overlays declare it. The seller
 asks the project manager, its parent, with the route `pm`; the dream team's
 release asks to grant `promote` of the project manager, who has the client
-accept the built site and asks the owner (the route ends at `owners`, so the
-client is never asked to approve going live); the seller's other questions go to
+accept the built site and then passes it to the owner with its
+`request_golive` tool, which refuses until the client accepted (the route
+ends at the project manager alone, so an unanswered request stays pending with
+it and never reaches the client or the owner by itself); the seller's other questions go to
 the front desk, then the conversation origin; every other request goes
 through the parent, then the front desk, then the origin. The front desk
 batches all received questions in its conversation into one escalation and
