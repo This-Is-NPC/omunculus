@@ -65,7 +65,7 @@ defmodule Omunculus.SalesDeskProposalTest do
   test "the pack's tools are valid manifests reading the proposals' artifacts" do
     catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
 
-    for name <- ~w(proposal render_proposal next_stage request_golive) do
+    for name <- ~w(proposal render_proposal next_stage) do
       assert %{^name => manifest} = catalog
 
       assert [%{include: ["data"], prefix: "proposal-"}] =
@@ -237,75 +237,6 @@ defmodule Omunculus.SalesDeskProposalTest do
     test "refuses a request with no proposal", %{root: root} do
       assert %{"ok" => false, "output" => "there is no proposal" <> _} =
                call("render_proposal", %{}, %{"artifacts" => []}, root)
-    end
-  end
-
-  describe "request_golive" do
-    @args %{"request_id" => "r1", "reason" => "May the site go live?"}
-
-    defp golive(view, root, request \\ %{}) do
-      request =
-        Map.merge(
-          %{"id" => "r1", "workflow" => "release", "stage" => "promote", "status" => "pending"},
-          request
-        )
-
-      call("request_golive", @args, Map.put(view, "request", request), root)
-    end
-
-    test "the manifest loads and ends the run" do
-      catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
-      assert %{"request_golive" => %{then: ["end"]}} = catalog
-    end
-
-    test "refuses until the client accepted the built site", %{root: root} do
-      for delivery <- [nil, %{"address" => "http://h"}, %{"accepted" => "accepted"}] do
-        fields = if delivery, do: %{"delivery" => delivery}, else: %{"client" => "Ana"}
-        view = view_after(write(fields, %{}, root))
-
-        assert %{"ok" => false, "emit" => [], "output" => "the client has not accepted" <> _} =
-                 golive(view, root)
-      end
-
-      assert %{"ok" => false, "output" => "write the proposal" <> _} = golive(%{}, root)
-    end
-
-    test "escalates the promote request to the owner once the client accepted", %{root: root} do
-      accepted =
-        write(%{"delivery" => %{"address" => "http://h", "accepted" => "accepted"}}, %{}, root)
-
-      assert %{
-               "ok" => true,
-               "emit" => [
-                 %{
-                   "type" => "escalate",
-                   "body" => %{
-                     "reason" => "May the site go live?",
-                     "origins" => %{"promote" => "r1"},
-                     "to" => "owner"
-                   }
-                 }
-               ]
-             } = golive(view_after(accepted), root)
-    end
-
-    test "takes only the pending promote request of the release", %{root: root} do
-      accepted =
-        write(%{"delivery" => %{"address" => "http://h", "accepted" => "accepted"}}, %{}, root)
-
-      view = view_after(accepted)
-
-      assert %{"ok" => false, "output" => "request_id must be" <> _} =
-               golive(view, root, %{"stage" => "publish"})
-
-      assert %{"ok" => false, "output" => "request_id must be" <> _} =
-               golive(view, root, %{"id" => "other"})
-
-      assert %{"ok" => false, "output" => "that request is escalated" <> _} =
-               golive(view, root, %{"status" => "escalated"})
-
-      assert %{"ok" => false, "output" => "reason and request_id required"} =
-               call("request_golive", %{"request_id" => "r1"}, view, root)
     end
   end
 
@@ -833,6 +764,20 @@ defmodule Omunculus.SalesDeskProposalTest do
 
       assert %{"ok" => true} =
                stage("signoff", Map.put(view_after(approved), "cause", cause), root)
+
+      for desk <- ~w(front-desk project-manager seller) do
+        from_desk = Map.merge(cause, %{"actor_kind" => "agent", "actor_id" => desk})
+
+        assert %{"ok" => false, "output" => "stage signoff" <> _ = output} =
+                 stage("signoff", Map.put(view_after(approved), "cause", from_desk), root)
+
+        assert output =~ "#{desk} is an agent of this desk, not the owner"
+      end
+
+      from_account = Map.merge(cause, %{"actor_kind" => "agent", "actor_id" => "auditor"})
+
+      assert %{"ok" => true} =
+               stage("signoff", Map.put(view_after(approved), "cause", from_account), root)
 
       accepted = write(%{"language" => "English", "status" => "accepted"}, %{}, root)
 

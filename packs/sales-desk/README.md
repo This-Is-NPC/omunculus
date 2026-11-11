@@ -27,8 +27,8 @@ manager has none yet.
 
 ## Who decides what
 
-R decides and does it, C is asked, I is told. The owner is the human of the
-project's console.
+R decides and does it, C is asked, I is told. The owner is the account the
+project names `owner` ([what the project configures](#what-the-project-configures)).
 
 | | Front desk | Project manager | Seller | Design team | Dev team | Client | Owner |
 |---|---|---|---|---|---|---|---|
@@ -45,16 +45,17 @@ project's console.
 | The build and its QA | | R | | | R | | |
 | A blocker, a build past the maximum of reopens, a missing tool | | C | | | C | | R |
 | Accepts the built site | | I | | | | R | |
-| Promotes to production | | C | | | | | R |
+| Promotes to production | | C (reviews first) | | | | | R (reviews) |
 | Handover | R (relays) | R | | | I | I | |
 
-Every ask to the owner uses `to = "owner"`, and the client is asked only
-business questions, by the default route. The teams' owner-route questions
-(a tool the machine lacks, a build past the maximum of reopens) reach the
-project manager first by the routes below: it decides what is its own (a
-reopen inside the agreed scope, what one team asks of another, a waiver
-between teams) and escalates the rest to the owner itself. The client
-alone waives the preview.
+A question goes to whoever gave the asker its work: the teams' and the
+project manager's own questions reach the project manager, which decides
+what is its own (a reopen inside the agreed scope, what one team asks of
+another, a waiver between teams) and passes the rest to the owner with
+`to = "owner"`. The seller and the project manager ask the owner's decisions
+and the client's business questions with `to`: `owner` for the first,
+`front-desk` for the second, so the front desk stays the voice to the client.
+The client alone waives the preview.
 
 ## How a request goes
 
@@ -72,9 +73,9 @@ stages, all the project manager's:
    at any other stage.
 1. `sale`: the seller's work is open. The seller's
    stages are `qualify` (discovery, in short questions to the client),
-   `estimate` (asks the project manager, with `ask` and `to = "pm"`),
+   `estimate` (asks the project manager, with `ask`),
    `propose` (the price from the table, accepted by the client) and
-   `signoff` (asks the owner). The project manager answers the estimate
+   `signoff` (asks the owner, `to = "owner"`). The project manager answers the estimate
    by handing the dev team's `administrator` a work that begins
    "Assessment only, build nothing:" and, since the preview is the default,
    the design lead one the same way, then replies with what can be built,
@@ -109,10 +110,10 @@ stages, all the project manager's:
    it was approved, "the client waived the design" when it was waived. It is
    refused until `design.state` is written and while an earlier build is
    open (the client's changes are forwarded to it). The stage denies `work`.
-   When the site is in homologation the release's
-   request to grant `promote` comes to the project manager, who has the
-   client accept the built site and only then passes the request to
-   the owner with `request_golive`, who promotes. Changes the client then asks go, with
+   When the site is in homologation the release's clerk calls `promote`,
+   which the project's interceptor holds: the review goes to the project
+   manager first, who has the client accept the built site and then
+   approves it, and then to the owner, who decides the go-live. Changes the client then asks go, with
    `forward`, to the administrator's open build work, so only the changed
    items are redone. The base item replaces the design preview's root
    `Dockerfile` and `deploy.toml` (app `design-<slug>`) with the site's own,
@@ -127,7 +128,7 @@ stages, all the project manager's:
 `next_stage` is the tool both workflows move on with. It refuses until the
 stage holds, saying what is missing: after `qualify` the client's content;
 after `estimate` the project manager's answer; after `propose` the client's
-acceptance; after `signoff` the owner's approval; after `sale` the seller's
+acceptance; after `signoff` the owner's approval, an `approve` answer that no agent of the desk gave; after `sale` the seller's
 work done with the proposal approved; after `design` an approved preview with
 its address, or a waiver with the client's own answer; after `build` a
 build done and the client's acceptance of the built site (`delivery.accepted`
@@ -142,17 +143,17 @@ WhatsApp number, hours and address, `content.style` for colours and fonts,
 The seller records the colours and style in `content.style` at `qualify`,
 which `next_stage` requires.
 
-`request_golive` is the only way the release's `promote` request goes up to
-the owner. It refuses until the proposal holds `delivery.address` and
-`delivery.accepted` as `accepted`, and then escalates the request on the
-`owner` route, so the owner cannot be asked before the client accepted.
-
-The owner's grant of that request is the one decision on the go-live. The
-project manager's prompt keeps it out of the owner's questions: nothing
-about publishing or going live is asked of the owner before or after the
-grant, and the handover tells the client without another approval. The
-pack cannot refuse an `ask` to the owner, which is a core tool, so this
-rests on the prompt.
+The go-live is the review of `promote` (see below). The pack has no tool
+that passes it up: the project manager answers the first review with
+`approve` once the client accepted the built site, and the owner's review
+comes after. `next_stage` at `build` still refuses until the proposal holds
+`delivery.address` and `delivery.accepted` as `accepted`, but the pack
+cannot refuse the project manager's `reply` to a review, which is a core
+tool: that the client accepted before the first approval rests on the
+prompt, and the owner's review is the last gate. The project manager's
+prompt keeps the go-live out of the owner's questions: nothing about
+publishing is asked of the owner before or after, and the handover tells the
+client without another approval.
 
 What reaches the client is only what the front desk addresses to them: its
 escalations, the documents it attaches and, when a result of the project
@@ -242,12 +243,12 @@ imported at depth 2:
 
 - the `administrator` takes a work whose goal begins "Assessment only, build
   nothing:" and answers it without building, and a work that asks for the
-  build, ending with the release's request to grant `promote`;
+  build, ending with the release's `promote`, which is held for review;
 - the `design-lead` takes a briefing as the goal of a work, a work that
   begins "Assessment only, build nothing:", and a later round as a work that
   names the earlier one;
-- the release's request to grant `promote` reaches the project manager by
-  the route below.
+- the release's clerk calls `promote` with the homologation address, which
+  the interceptor below holds for review.
 
 ```sh
 omunculus pack --path packs/sales-desk --models team=<model>
@@ -260,36 +261,35 @@ The client talks with it by name: `omunculus send --agent front-desk "…"`.
 
 ## What the project configures
 
-The routes. The logical `owner` route reaches the project's owners, never
-the client: the seller's requests go straight to them, and the teams' go to
-the project manager first (the requester is skipped, so the project
-manager's own go on to the owners). `pm` is the seller's way to its parent;
-the release's `promote` request goes to the project manager alone: it reaches the owners only through the manager's `request_golive` (below), and stays pending with the manager while unanswered; the seller's
-questions to the client go to the front desk, then to the conversation
-origin; every other request goes to its parent, then the project manager,
-then the front desk, so no depth-3 request skips the manager:
+The accounts and the interceptors. The pack names one account, `owner`
+(what the owner decides: the sale, a discount beyond 10%, what only the
+machine's operator can settle, a design round beyond those included), and
+holds one action for review: the clerk's `promote`, first by the project
+manager, then by the owner. Declare both in the project's file; the owner is
+a human of the project, for example the one running it:
 
 ```toml
 [policy]
 default_agent = "front-desk"
-harness_route = "owner"
-request_routes = [
-  { name = "owner", from = { kind = "agent", agent = "seller" }, via = ["owners"] },
-  { name = "owner", via = [{ kind = "agent", agent = "project-manager" }, "owners"] },
-  { name = "pm", via = ["parent"] },
-  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "project-manager" }] },
-  { from = { kind = "agent", agent = "seller" }, via = [{ kind = "agent", agent = "front-desk" }, "origin"] },
-  { via = ["parent", { kind = "agent", agent = "project-manager" }, { kind = "agent", agent = "front-desk" }, "origin"] },
-]
+
+[accounts]
+owner = { kind = "human", issuer = "local", subject = "1000" }
+
+[[interceptors]]
+action = "tool"
+tool = "promote"
+workflow = "release"
+stage = "promote"
+accounts = ["project-manager", "owner"]
 ```
 
-A real project needs `[access]` with an owner member: a role with `scope =
-"project"` and `project.own` and `conversation.reply`, bootstrapped as the
-first member ([config](../../docs/config.md)). Without an owner, `owners`
-resolves to nobody and the owner's decisions have no route, so none of them
-falls to the client. The eval configurations have no owner member (the
-direct CLI runs without `[access]` and their one person is client and
-owner), so they alone end the owner route with `"origin"`.
+Without the `owner` account an ask `to = "owner"` is refused, listing what
+`to` takes. Without the interceptor the clerk's `promote` publishes to
+production with nobody's review: declare it before importing the dream team.
+The seller and the project manager ask the client with `to = "front-desk"`,
+which the pack's agents do on their own; every other question, with no `to`,
+goes to the asker's parent, so no depth-3 request skips the manager
+([requests](../../docs/requests.md#who-a-request-goes-to)).
 
 The design reviewer is the project's QA; compose it in the dev team's
 workflows, at the design team's depth, so every item and the release are

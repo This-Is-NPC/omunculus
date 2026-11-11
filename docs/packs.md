@@ -51,7 +51,11 @@ to the person with `propose_pack`, whose `apply` option calls `pack`.
 Pack questions use `ask`, permission forms use `request_access`, and
 intermediaries use `reply` or `escalate`; `break` stops failed work. Design
 leads and administrators answer known facts and escalate the remaining
-named origins while preserving child waits ([requests](requests.md)).
+named origins to whoever gave them their work, preserving child waits
+([requests](requests.md)).
+A pack names no account or interceptor of its own: its README says which
+`[accounts]` names it expects and which `[[interceptors]]` the project
+declares ([config](config.md#interceptors)).
 
 Each of the sales desk's conversations is one client's: the project
 importing it sets `[project] conversations`, so no client's design or site
@@ -73,18 +77,17 @@ the seller. The system team beside the front desk opens no work; a project
 whose other agents at depth 0 open works imports the desk a depth below
 them.
 
-The sales desk and its `next_stage` refusal name the route `owner`,
-which the project importing it declares, as do the dream team's
-administrator and surgeon for what only the machine's operator can settle;
-the dream-team, sales-desk and agency eval overlays declare it. The seller
-asks the project manager, its parent, with the route `pm`; the dream team's
-release asks to grant `promote` of the project manager, who has the client
-accept the built site and then passes it to the owner with its
-`request_golive` tool, which refuses until the client accepted (the route
-ends at the project manager alone, so an unanswered request stays pending with
-it and never reaches the client or the owner by itself); the seller's other questions go to
-the front desk, then the conversation origin; every other request goes
-through the parent, then the front desk, then the origin. The front desk
+The sales desk and the dream team's agents name one account, `owner`,
+which the project importing them declares in `[accounts]`: the sales desk's
+seller asks it the sale and a discount beyond its limit with `to = "owner"`,
+and the project manager passes up what only the machine's operator can settle.
+The project also declares an interceptor on the clerk's `promote`, whose
+reviewers are the project manager and then the owner: the project manager
+has the client accept the built site and approves, and the owner's review is
+the go-live. Without the interceptor the clerk publishes with nobody's
+review. The seller and the project manager ask the client with
+`to = "front-desk"`, so the front desk stays the voice to the client; every
+other request, with no `to`, goes to the asker's parent. The front desk
 batches all received questions in its conversation into one escalation and
 distributes the returned text with `reply`; seller and project manager
 questions and preview and price approvals use `ask`. It ends on

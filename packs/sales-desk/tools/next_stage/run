@@ -13,6 +13,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "_proposal"))
 import proposal  # noqa: E402
 
+# The agents of this pack: the owner's approval is never one of theirs.
+DESK = ("front-desk", "project-manager", "seller")
+
 
 def refuse(stage, missing):
     raise proposal.Refusal(f"stage {stage} does not hold yet: {missing}. Do that first, then call next_stage again.")
@@ -31,6 +34,11 @@ def body(event):
         except ValueError:
             return {}
     return data or {}
+
+
+def from_desk(event):
+    """Whether an agent of the desk itself gave the answer in `event`."""
+    return event.get("actor_kind") == "agent" and event.get("actor_id") in DESK
 
 
 def done(children, assignee):
@@ -62,7 +70,7 @@ def run(call):
             refuse(stage, "ask the client and write with the proposal tool what they said — that they left it to us, or do not have it, is an answer too: " + ", ".join(missing))
     elif stage == "estimate":
         if filled(data, ["assessment.answer"]):
-            refuse(stage, "ask the project manager with ask, to pm, whether the scope can be built and in what time, and write its answer (assessment.answer) with the proposal tool")
+            refuse(stage, "ask the project manager with ask whether the scope can be built and in what time, and write its answer (assessment.answer) with the proposal tool")
     elif stage == "propose":
         try:
             proposal.check_sendable(data)
@@ -74,6 +82,8 @@ def run(call):
         cause = view.get("cause") or {}
         if cause.get("type") != "reply" or body(cause).get("option") != "approve":
             refuse(stage, "ask the owner with ask, to owner, the options approve and deny; call next_stage in the run their approve opens")
+        if from_desk(cause):
+            refuse(stage, f"{cause.get('actor_id')} is an agent of this desk, not the owner: ask the owner with ask, to owner, and call next_stage in the run their approve opens")
         if data.get("status") != "approved":
             refuse(stage, "set the status approved with the proposal tool")
     elif stage == "sale":
