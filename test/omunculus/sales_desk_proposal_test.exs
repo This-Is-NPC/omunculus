@@ -65,7 +65,7 @@ defmodule Omunculus.SalesDeskProposalTest do
   test "the pack's tools are valid manifests reading the proposals' artifacts" do
     catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
 
-    for name <- ~w(proposal render_proposal next_stage request_golive ask_client) do
+    for name <- ~w(proposal render_proposal next_stage request_golive) do
       assert %{^name => manifest} = catalog
 
       assert [%{include: ["data"], prefix: "proposal-"}] =
@@ -222,48 +222,6 @@ defmodule Omunculus.SalesDeskProposalTest do
                write(%{}, broken, root)
 
       assert %{"ok" => false} = call("render_proposal", %{}, broken, root)
-    end
-  end
-
-  describe "ask_client" do
-    defp ask_client(question, view, root, extra \\ %{}),
-      do: call("ask_client", Map.merge(%{"question" => question}, extra), view, root)
-
-    test "the manifest ends the run and reads the proposals' artifacts" do
-      catalog = Catalog.discover(%{paths: [@tools], inline: %{}, skills: []})
-      assert %{"ask_client" => %{then: ["end"]}} = catalog
-    end
-
-    test "carries the proposal's language as a fixed line, above an Attach line", %{root: root} do
-      view = view_after(write(%{"language" => "English"}, %{}, root))
-
-      assert %{"ok" => true, "emit" => [%{"type" => "request", "body" => body}]} =
-               ask_client("Do you like the preview?", view, root, %{
-                 "options" => ["accept", "adjust"]
-               })
-
-      assert body == %{
-               "reason" => "Do you like the preview?\nLanguage of the client: English (en)",
-               "options" => %{"accept" => [], "adjust" => []}
-             }
-
-      assert %{"emit" => [%{"body" => %{"reason" => reason}}]} =
-               ask_client("Here is the price.\nAttach: proposal-w1.md", view, root)
-
-      assert reason ==
-               "Here is the price.\nLanguage of the client: English (en)\nAttach: proposal-w1.md"
-    end
-
-    test "is refused without a recorded language or with bad options", %{root: root} do
-      assert %{"ok" => false, "output" => "the proposal records no language" <> _} =
-               ask_client("Which colours?", %{}, root)
-
-      view = view_after(write(%{"language" => "pt"}, %{}, root))
-
-      assert %{"ok" => false, "output" => "options takes" <> _} =
-               ask_client("Which?", view, root, %{"options" => ["one"]})
-
-      assert %{"ok" => false, "output" => "question required"} = ask_client(" ", view, root)
     end
   end
 

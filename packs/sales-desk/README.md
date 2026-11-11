@@ -195,17 +195,6 @@ records each answer the client gave before it asks again. The options of an
 ask stay the keys `accept`, `adjust` and `refuse`; the message explains them
 in the client's language.
 
-The language reaches the front desk as data, not as a rule to remember. The
-seller and the project manager ask the client with the pack's `ask_client`
-(`ask` with `to` stays for the owner and the project manager): it adds a
-fixed line `Language of the client: English (en)`, from the proposal, to the
-request's message, above any `Attach:` line, and is refused while the
-proposal records no language. The front desk writes what it escalates in
-that language, whatever the business facts (a city, a dish) are written in.
-The project manager's comments and reports that come back as results carry
-no such line: the front desk writes those in the language of the client's
-own messages.
-
 `next_stage` and the tools read only versions the `proposal` tool wrote: a
 version another tool puts under that name, with `put_artifact` or by hand,
 counts for nothing, and one engagement's proposal never stands in for
