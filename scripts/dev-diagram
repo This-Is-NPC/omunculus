@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Draws a conversation of a dev project as a sequence diagram, read-only
 from its store: people's messages and answers, works handed down, requests,
-grants, stage moves, breaks, reopens, retires, works done and the hand-off
-and deploy tools. Writes dev/diagrams/<conversation>.mmd (Mermaid) and .svg.
+grants, stage moves, breaks, reopens, retires, works done, artifacts and the
+hand-off and deploy tools, each step tagged with its work (W1, W2, ...), and
+under it every work with its final state. Writes
+dev/diagrams/<conversation>.mmd (Mermaid) and .svg.
 
 Usage: dev-diagram [--project agency|dev] [conversation id], or through
 mise run dev:diagram.
@@ -22,6 +24,7 @@ TOOLS = {"deploy_preview", "promote", "start_design", "start_build", "start_sale
 CLIENT, OWNER = "Client", "Owner"
 COL, TOP, ROW, LEFT = 150, 70, 26, 40
 COLOURS = {CLIENT: "#b5651d", OWNER: "#7a1f1f"}
+STATES = {"done": "#3d7a3d", "cancelled": "#888888"}
 
 
 def short(text, n=90):
@@ -30,7 +33,8 @@ def short(text, n=90):
 
 
 def steps_of(db, conv, client_agent):
-    """The diagram's steps, in event order: (kind, from, to, text, dashed)."""
+    """The diagram's steps, in event order: (kind, from, to, text, dashed), and
+    the works as (tag, work), in the order they began."""
     works = {r["id"]: r for r in db.execute("select * from works where conversation_id = ?", (conv,))}
     by_event = {r["event_id"]: r for r in works.values()}
     requests = {r["id"]: r for r in db.execute("select * from requests")}
@@ -45,6 +49,15 @@ def steps_of(db, conv, client_agent):
         if e["type"] == "end" and e["work_id"]:
             last_end[e["work_id"]] = e["id"]
 
+    # Each work's tag, in the order the works began.
+    tags = {}
+    for e in events:
+        if e["id"] in by_event:
+            tags[by_event[e["id"]]["id"]] = f"W{len(tags) + 1}"
+
+    def tag(work_id):
+        return f"{tags[work_id]} " if work_id in tags else ""
+
     def person(requester):
         # A person answers for the agent that talks with the client, else as the owner.
         return CLIENT if requester.get("agent") == client_agent else OWNER
@@ -58,12 +71,12 @@ def steps_of(db, conv, client_agent):
         elif kind in ("delegate", "work") and e["id"] in by_event:
             w = by_event[e["id"]]
             flow = f"[{w['workflow']}] " if w["workflow"] else ""
-            steps.append(("arrow", actor, first_agent.get(w["id"]) or w["assignee"], f"{at} {flow}{w['title']}", False))
+            steps.append(("arrow", actor, first_agent.get(w["id"]) or w["assignee"], f"{at} {tag(w['id'])}{flow}{w['title']}", False))
         elif kind == "request" and e["id"] in req_by_event:
             r = req_by_event[e["id"]]
             arbiter = json.loads(r["arbiter"])
             to = arbiter.get("agent") if arbiter.get("kind") == "agent" else person(json.loads(r["requester"]))
-            steps.append(("arrow", actor, to, f"{at} ask: {body.get('reason', '')}", False))
+            steps.append(("arrow", actor, to, f"{at} {tag(e['work_id'])}ask: {body.get('reason', '')}", False))
         elif kind == "reply" and e["request_id"] in requests:
             requester = json.loads(requests[e["request_id"]]["requester"])
             sender = actor if e["actor_kind"] == "agent" else person(requester)
@@ -72,23 +85,32 @@ def steps_of(db, conv, client_agent):
         elif kind == "grant":
             steps.append(("arrow", OWNER, body.get("agent", "?"), f"{at} GRANT {body.get('name')} ({body.get('scope') or 'this work'})", False))
         elif kind == "continue" and body.get("to"):
-            steps.append(("note", actor, None, f"{at} stage {body.get('from')} → {body.get('to')}", False))
+            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}stage {body.get('from')} → {body.get('to')}", False))
         elif kind == "break" and e["work_id"] in works:
             parent = works.get(works[e["work_id"]]["parent_id"])
-            steps.append(("arrow", actor, parent["assignee"] if parent else actor, f"{at} BREAK: {body.get('body', '')}", True))
+            steps.append(("arrow", actor, parent["assignee"] if parent else actor, f"{at} {tag(e['work_id'])}BREAK: {body.get('body', '')}", True))
         elif kind == "reopen":
-            steps.append(("note", actor, None, f"{at} reopen at {body.get('stage')}", False))
+            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}reopen at {body.get('stage')}", False))
         elif kind == "cancel":
-            steps.append(("note", actor, None, f"{at} retire: {body.get('body', '')}", False))
+            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}retired: {body.get('body', '')}", False))
         elif kind == "end" and last_end.get(e["work_id"]) == e["id"]:
             w = works[e["work_id"]]
             parent = works.get(w["parent_id"])
             if parent and w["state"] == "done":
-                steps.append(("arrow", w["assignee"], parent["assignee"], f"{at} done: {w['title']}", True))
+                steps.append(("arrow", w["assignee"], parent["assignee"], f"{at} {tag(w['id'])}done: {w['title']}", True))
+        elif kind == "artifact":
+            steps.append(("note", actor, None, f"{at} {tag(e['work_id'])}artifact {body.get('name')} v{body.get('version')} ({body.get('kind')})", False))
         elif kind == "tool" and body.get("name") in TOOLS:
             ok = "ok" if body.get("ok") else "REFUSED"
             steps.append(("note", actor, None, f"{at} {body['name']} {ok}: {body.get('output', '')}", False))
-    return steps
+    return steps, [(tags[i], works[i]) for i in tags]
+
+
+def state_of(work):
+    """A work's final state, with what it waits for when it waits."""
+    if work["waiting"]:
+        return f"{work['state']}, waiting for {work['waiting_for'] or work['waiting']}"
+    return work["state"]
 
 
 def participants(steps):
@@ -101,7 +123,7 @@ def participants(steps):
     return [CLIENT] + ([OWNER] if OWNER in order else []) + [n for n in order if n not in (CLIENT, OWNER)]
 
 
-def mermaid(parts, steps):
+def mermaid(parts, steps, works):
     clean = lambda text: short(text).replace(";", ",").replace("#", "")
     lines = ["sequenceDiagram", "    autonumber"]
     lines += [f"    {'actor' if p in COLOURS else 'participant'} {p}" for p in parts]
@@ -110,18 +132,23 @@ def mermaid(parts, steps):
             lines.append(f"    Note over {a}: {clean(text)}")
         else:
             lines.append(f"    {a}{'-->>' if dashed else '->>'}{b}: {clean(text)}")
+    for t, w in works:
+        flow = f"[{w['workflow']}/{w['stage'] or '-'}] " if w["workflow"] else ""
+        lines.append(f"    Note over {parts[0]},{parts[-1]}: {t} {state_of(w).upper()} · {w['assignee']} · {clean(flow + w['title'])}")
     return "\n".join(lines) + "\n"
 
 
-def svg(parts, steps):
+def svg(parts, steps, works):
     x = {name: LEFT + COL // 2 + i * COL for i, name in enumerate(parts)}
-    width, height = LEFT * 2 + COL * len(parts), TOP + ROW * (len(steps) + 2)
+    width = LEFT * 2 + COL * len(parts)
+    table = TOP + ROW * (len(steps) + 2)
+    height = table + ROW * (len(works) + 2)
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="sans-serif" font-size="11">',
            '<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
            '<path d="M0,0 L8,4 L0,8 z" fill="#333"/></marker></defs>',
            f'<rect width="{width}" height="{height}" fill="#fffdf8"/>']
     for name in parts:
-        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{height - 10}" stroke="#ccc" stroke-dasharray="4 4"/>')
+        out.append(f'<line x1="{x[name]}" y1="{TOP - 20}" x2="{x[name]}" y2="{table - ROW}" stroke="#ccc" stroke-dasharray="4 4"/>')
         out.append(f'<rect x="{x[name] - 68}" y="10" width="136" height="30" rx="{15 if name in COLOURS else 4}" fill="{COLOURS.get(name, "#2f4858")}"/>')
         out.append(f'<text x="{x[name]}" y="30" fill="#fff" text-anchor="middle" font-weight="bold">{html.escape(name)}</text>')
     for i, (kind, a, b, text, dashed) in enumerate(steps):
@@ -140,6 +167,16 @@ def svg(parts, steps):
         dash = ' stroke-dasharray="5 3"' if dashed else ""
         out.append(f'<line x1="{x[a]}" y1="{y}" x2="{x[b]}" y2="{y}" stroke="{colour}"{dash} marker-end="url(#a)"/>')
         out.append(f'<text x="{min(x[a], x[b]) + 6}" y="{y - 4}" fill="{colour}">{label}</text>')
+    # The works, as they ended: done, retired, or still open.
+    out.append(f'<text x="{LEFT}" y="{table}" font-weight="bold" font-size="13">Works</text>')
+    for i, (t, w) in enumerate(works):
+        y = table + ROW * (i + 1)
+        colour = STATES.get(w["state"], "#c0392b")
+        flow = f"{w['workflow']}/{w['stage'] or '-'}" if w["workflow"] else "-"
+        cells = [(LEFT, t, "bold"), (LEFT + 40, state_of(w), "bold"), (LEFT + 300, w["assignee"], "normal"),
+                 (LEFT + 450, flow, "normal"), (LEFT + 600, w["title"], "normal")]
+        for cx, text, weight in cells:
+            out.append(f'<text x="{cx}" y="{y}" fill="{colour}" font-weight="{weight}">{html.escape(short(str(text)))}</text>')
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
@@ -164,12 +201,12 @@ def main():
     # The agent the person's first message went to is the one that talks with them.
     first = db.execute("select body from events where conversation_id = ? and type = 'prompt' order by sequence limit 1", (conv,)).fetchone()
     client_agent = json.loads(first["body"]).get("agent") if first else None
-    steps = steps_of(db, conv, client_agent)
+    steps, works = steps_of(db, conv, client_agent)
     parts = participants(steps)
 
     out = os.path.join(root, "dev", "diagrams")
     os.makedirs(out, exist_ok=True)
-    for ext, text in (("mmd", mermaid(parts, steps)), ("svg", svg(parts, steps))):
+    for ext, text in (("mmd", mermaid(parts, steps, works)), ("svg", svg(parts, steps, works))):
         with open(os.path.join(out, f"{conv}.{ext}"), "w") as f:
             f.write(text)
     print(os.path.join(out, f"{conv}.svg"))
