@@ -94,11 +94,11 @@ function tool(body) {
 }
 
 // The works a root `work` event opens, by their titles.
-function opened(body) {
+function opened(body, titled) {
   const works = Array.isArray(body.works) ? body.works : [];
   const titles = works.map(work => work && flat(work.title)).filter(title => title);
   if (body.reason === "reopened_by_prompt") return "reopened by a message";
-  if (titles.length === 0) return works.length > 0 ? "opened " + plural(works.length, "work", "works") : "work " + flat(body.state || "changed");
+  if (titles.length === 0) return works.length > 0 ? "opened " + plural(works.length, "work", "works") : (titled || "a work") + (body.state ? " is now " + flat(body.state) : " changed");
   return "opened " + titles[0] + (titles.length > 1 ? " +" + (titles.length - 1) + " more" : "");
 }
 
@@ -106,8 +106,9 @@ function opened(body) {
 // what was passed up, what a tool or hook did. `who` is the event's actor;
 // the event itself stays whole in the detail card, never on this line.
 // `asked` maps a request id to how many questions it asked, `askers` to who
-// asked; `requestId` is the event's own request.
-function what(type, body, who, asked, requestId, askers) {
+// asked; `requestId` is the event's own request; `titled` the title of the
+// event's work, "" when unknown.
+function what(type, body, who, asked, requestId, askers, titled) {
   const given = body && typeof body === "object" ? body : {};
   switch (type) {
   case "prompt":
@@ -166,7 +167,9 @@ function what(type, body, who, asked, requestId, askers) {
   case "delegate":
     return "handed down" + colon(flat(given.title));
   case "work":
-    return opened(given);
+    return opened(given, titled);
+  case "artifact":
+    return "saved " + (Phrases.document(given.name) || "a document") + (given.version ? ", version " + given.version : "");
   case "notify":
     return "notified" + colon(first(given.body));
   case "attach": {
@@ -188,7 +191,7 @@ function what(type, body, who, asked, requestId, askers) {
 
 // Tools whose result is an event row of its own (note, delegate, question,
 // move on...): their step row only repeats it.
-const echoed = ["comment", "delegate", "ask", "escalate", "continue", "next_stage", "work", "reply", "grant", "break", "reopen", "send"];
+const echoed = ["put_artifact", "comment", "delegate", "ask", "escalate", "continue", "next_stage", "work", "reply", "grant", "break", "reopen", "send"];
 
 // Whether an event is plumbing: it carries no news for the person — a run's
 // start and end, a hook, a model reply without text, a call whose result has
