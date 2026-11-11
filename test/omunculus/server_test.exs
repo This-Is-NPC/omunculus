@@ -1018,7 +1018,9 @@ defmodule Omunculus.ServerTest do
     assert {:ok, %{status: "closed", answer: nil}} =
              Store.view(reader.conn, "request", request_id)
 
-    late = local.(:post, reply_url, headers: [{"idempotency-key", "late"}], json: %{body: "Again."})
+    late =
+      local.(:post, reply_url, headers: [{"idempotency-key", "late"}], json: %{body: "Again."})
+
     assert {late.status, late.body["error"]} == {409, "request_not_pending"}
 
     escalated_id =
