@@ -100,6 +100,7 @@ defmodule Omunculus.GuiEventsTest do
     says("tool", {name: "on-request", args: {event: {actor_id: "sales"}}, ok: true}, "sales", "on-request hook ran");
     says("tool", {name: "on-break", args: {event: {}}, ok: false, output: "exit 1"}, "harness", "on-break hook failed: exit 1");
     check(Events.readable("is waiting on work 135a434edbcdd61f0c6ef1d29a363dbc, which broke") === "is waiting, which broke", "readable", Events.readable("is waiting on work 135a434edbcdd61f0c6ef1d29a363dbc, which broke"));
+    check(Events.readable("live at http://doce-ana-31a92b55f544.production.localhost:9080 for 135a434edbcdd61f0") === "live at http://doce-ana-31a92b55f544.production.localhost:9080 for ", "readable keeps addresses", Events.readable("live at http://doce-ana-31a92b55f544.production.localhost:9080 for 135a434edbcdd61f0"));
     check(Events.hook({args: {event: {}}}) && !Events.hook({args: {event: {}, path: "a"}}) && !Events.hook({}), "hook", "");
     says("end", {}, "sales", "finished");
     says("tool", {name: "end", args: {}, ok: false, output: "refused: work 3cb71b446f56d82a451f4caa6b5cb220 below yours broke and waits on you: reopen it"}, "sales", "could not finish: a work below is still open");

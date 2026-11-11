@@ -44,12 +44,16 @@ function released(id) {
 }
 
 // Text without the harness ids the model echoes: "request <hex>" and bare
-// hex runs of 12 characters or more.
+// hex runs of 12 characters or more, outside web addresses, whose hosts and
+// paths may hold such runs.
 function unid(text) {
   return String(text === undefined || text === null ? "" : text)
-    .replace(/\s*\(?\brequests?\s+[0-9a-f]{12,}\w*\)?/gi, "")
-    .replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{12,}\b/gi, "")
-    .replace(/[ \t]{2,}/g, " ");
+    .split(/(\bhttps?:\/\/\S+)/i)
+    .map((part, i) => i % 2 ? part : part
+      .replace(/\s*\(?\brequests?\s+[0-9a-f]{12,}\w*\)?/gi, "")
+      .replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{12,}\b/gi, "")
+      .replace(/[ \t]{2,}/g, " "))
+    .join("");
 }
 
 // Text the person reads: no ids, and no "on work" left dangling by one.
