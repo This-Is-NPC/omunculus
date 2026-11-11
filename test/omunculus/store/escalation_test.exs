@@ -266,7 +266,7 @@ defmodule Omunculus.Store.EscalationTest do
   end
 
   # A lead run opened for `request` that delegates, or not, and ends.
-  defp lead_run(conn, ctx, request, delegate?) do
+  defp lead_run(conn, ctx, request, step) do
     run =
       Fixtures.open_run(conn, %{
         agent: "lead",
@@ -284,11 +284,26 @@ defmodule Omunculus.Store.EscalationTest do
         }
       })
 
-    if delegate? do
-      run_ctx = %{ctx.lead_ctx | run_id: run.id}
+    run_ctx = %{ctx.lead_ctx | run_id: run.id}
 
-      assert {:ok, _} =
-               apply_action(conn, "delegate", %{"title" => "assess", "goal" => "g"}, run_ctx)
+    case step do
+      :delegate ->
+        assert {:ok, _} =
+                 apply_action(conn, "delegate", %{"title" => "assess", "goal" => "g"}, run_ctx)
+
+      :ask ->
+        :ok = Query.exec(conn, "UPDATE works SET state = 'open' WHERE id = ?", [ctx.lead])
+
+        assert {:ok, _} =
+                 apply_action(
+                   conn,
+                   "request",
+                   %{"reason" => "Review?", "options" => %{"answer" => []}},
+                   run_ctx
+                 )
+
+      :none ->
+        :ok
     end
 
     {:ok, _} = Store.close_run(conn, run.id)
@@ -303,7 +318,7 @@ defmodule Omunculus.Store.EscalationTest do
     end
 
     test "does not escalate; the request stays pending", %{conn: conn} = ctx do
-      closed = lead_run(conn, ctx, ctx.asked, true)
+      closed = lead_run(conn, ctx, ctx.asked, :delegate)
       unanswered = &Omunculus.Tools.Out.unanswered/3
 
       assert {:ok, []} = Store.unanswered(conn, closed, ctx.config, unanswered)
@@ -312,7 +327,7 @@ defmodule Omunculus.Store.EscalationTest do
     end
 
     test "answers the requester once the children closed", %{conn: conn} = ctx do
-      closed = lead_run(conn, ctx, ctx.asked, true)
+      closed = lead_run(conn, ctx, ctx.asked, :delegate)
 
       assert {:ok, []} =
                Store.unanswered(conn, closed, ctx.config, &Omunculus.Tools.Out.unanswered/3)
@@ -324,10 +339,60 @@ defmodule Omunculus.Store.EscalationTest do
     end
 
     test "escalates when it ends with nothing delegated", %{conn: conn} = ctx do
-      closed = lead_run(conn, ctx, ctx.asked, false)
+      closed = lead_run(conn, ctx, ctx.asked, :none)
       unanswered = &Omunculus.Tools.Out.unanswered/3
 
       assert {:ok, events} = Store.unanswered(conn, closed, ctx.config, unanswered)
+      assert Enum.any?(events, &(&1.type == "request"))
+      assert request(conn, ctx.asked).status == "escalated"
+    end
+  end
+
+  describe "a receiver that raised a request to answer" do
+    setup %{conn: conn} = ctx do
+      [first, _second] = ctx.child_ctxs
+      %{asked: ask(conn, first, "Can we build this?")}
+    end
+
+    test "does not escalate; its answer resumes the receiver with the request",
+         %{conn: conn} = ctx do
+      closed = lead_run(conn, ctx, ctx.asked, :ask)
+      unanswered = &Omunculus.Tools.Out.unanswered/3
+
+      assert {:ok, []} = Store.unanswered(conn, closed, ctx.config, unanswered)
+      assert request(conn, ctx.asked).status == "pending"
+      assert count(conn, "request_escalations") == 0
+
+      assert %{state: "waiting", waiting: "request", waiting_for: raised} = work(conn, ctx.lead)
+      assert {:ok, _} = reply(conn, ctx.root_ctx, raised, %{"body" => "Accepted."})
+      assert work(conn, ctx.lead).state == "open"
+
+      woken =
+        Fixtures.open_run(conn, %{
+          agent: "lead",
+          depth: 1,
+          work_id: ctx.lead,
+          conversation_id: ctx.conversation
+        })
+
+      assert {:ok, [%{requests: [%{id: id}]}]} = Store.received_inbox(conn, woken.id)
+      assert id == ctx.asked
+
+      woken_ctx = %{ctx.lead_ctx | run_id: woken.id}
+      assert {:ok, _} = reply(conn, woken_ctx, ctx.asked, %{"body" => "Yes."})
+      assert request(conn, ctx.asked).status == "closed"
+    end
+
+    test "passes on once a later run ends with nothing pending", %{conn: conn} = ctx do
+      closed = lead_run(conn, ctx, ctx.asked, :ask)
+      unanswered = &Omunculus.Tools.Out.unanswered/3
+      assert {:ok, []} = Store.unanswered(conn, closed, ctx.config, unanswered)
+
+      %{waiting_for: raised} = work(conn, ctx.lead)
+      assert {:ok, _} = reply(conn, ctx.root_ctx, raised, %{"body" => "Accepted."})
+
+      later = lead_run(conn, ctx, ctx.asked, :none)
+      assert {:ok, events} = Store.unanswered(conn, later, ctx.config, unanswered)
       assert Enum.any?(events, &(&1.type == "request"))
       assert request(conn, ctx.asked).status == "escalated"
     end

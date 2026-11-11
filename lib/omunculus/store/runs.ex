@@ -297,11 +297,11 @@ defmodule Omunculus.Store.Runs do
   def unanswered(conn, run, config, reason_text) do
     Query.transaction(conn, fn ->
       with {:ok, request} <- View.view(conn, "request", run.request_id),
-           {:ok, delegated?} <- delegated?(conn, run) do
+           {:ok, waiting?} <- waiting?(conn, run) do
         case left(request, Omunculus.Participant.agent(run.agent)) do
           [] -> {:ok, []}
-          # The run opened works to answer it and waits on them: not unanswered.
-          _parts when delegated? -> {:ok, []}
+          # The run waits on works or a request it opened to answer: not unanswered.
+          _parts when waiting? -> {:ok, []}
           parts -> pass_on(conn, run, config, reason_text, parts)
         end
       end
@@ -330,10 +330,10 @@ defmodule Omunculus.Store.Runs do
         %{status: status, work_id: work_id, request_id: request_id}
         when status != "open" and work_id == child.parent_id and request_id != nil ->
           with {:ok, request} <- View.view(conn, "request", request_id),
-               {:ok, delegated?} <- delegated?(conn, run),
+               {:ok, waiting?} <- waiting?(conn, run),
                do:
                  {:ok,
-                  not delegated? and left(request, Omunculus.Participant.agent(run.agent)) != []}
+                  not waiting? and left(request, Omunculus.Participant.agent(run.agent)) != []}
 
         _other ->
           {:ok, false}
@@ -341,10 +341,10 @@ defmodule Omunculus.Store.Runs do
     end
   end
 
-  # Whether the run opened a child of its work that is still unfinished.
-  defp delegated?(_conn, %{work_id: nil}), do: {:ok, false}
-
-  defp delegated?(conn, run) do
+  # Whether the run waits to answer: a child of its work it opened is still
+  # unfinished, or a request it raised itself (not a harness escalation or
+  # stop) is pending.
+  defp waiting?(conn, run) do
     with {:ok, rows} <-
            Query.all(
              conn,
@@ -353,9 +353,16 @@ defmodule Omunculus.Store.Runs do
              JOIN events ON events.id = works.event_id
              WHERE works.parent_id = ? AND works.state IN ('open', 'waiting')
                AND events.run_id = ?
+             UNION ALL
+             SELECT 1 FROM requests
+             WHERE run_id = ? AND status IN ('pending', 'escalated')
+               AND id NOT IN (SELECT escalated_id FROM request_escalations)
+               AND EXISTS (
+                 SELECT 1 FROM comments
+                 WHERE comments.request_id = requests.id AND comments.author = 'agent')
              LIMIT 1
              """,
-             [run.work_id, run.id]
+             [run.work_id, run.id, run.id]
            ),
          do: {:ok, rows != []}
   end

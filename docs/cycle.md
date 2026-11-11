@@ -343,7 +343,7 @@ closing `continue` or a `cancel` once each of the parent's children is
 done or cancelled. It also reopens when the closed child was opened by a
 finished run of the parent that was opened for a request still pending with
 the parent's agent, and no other child of that run is left open or waiting:
-the run ended without answering, waiting on those children (see
+the run ended without answering, waiting on those children, or on a request it raised itself, whose answer wakes it instead (see
 [requests](requests.md)), and other children of the parent, such as the work
 that asked, may stay open. One close batch wakes the parent once; a child
 of a run with nothing pending wakes nothing early. The resumed run sees the
