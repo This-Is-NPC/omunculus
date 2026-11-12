@@ -211,7 +211,7 @@ ShellRoot {
 
             Column {
               anchors.horizontalCenter: parent.horizontalCenter
-              width: Math.min(560, panel.width - 2 * panel.margin)
+              width: Math.min(panel.size === "narrow" ? 560 : 760, panel.width - 2 * panel.margin)
               // Whole pixels, or the first card's top hairline is not drawn;
               // never past the view's top on a short window.
               y: Math.round(Math.max(0, (parent.height - height) / 2))
@@ -233,20 +233,27 @@ ShellRoot {
                 font.pixelSize: Theme.type.input.size
                 font.bold: true
               }
-              // The first way in is the main one, and the only one filled.
-              Repeater {
-                id: wayCards
-                model: panel.ways
-                delegate: StartCard {
-                  required property var modelData
-                  required property int index
-                  width: parent ? parent.width : 0
-                  primary: index === 0
-                  title: modelData.text
-                  detail: modelData.detail
-                  key: String(index + 1).padStart(2, "0")
-                  enabled: Omunculus.connected
-                  onClicked: panel.enter(modelData.page)
+              // The first way in is the main one, and the only one filled; two
+              // by two where there is room.
+              Grid {
+                id: ways
+                width: parent.width
+                columns: panel.size === "narrow" ? 1 : 2
+                spacing: Theme.space.gap
+                Repeater {
+                  id: wayCards
+                  model: panel.ways
+                  delegate: StartCard {
+                    required property var modelData
+                    required property int index
+                    width: (ways.width - (ways.columns - 1) * ways.spacing) / ways.columns
+                    primary: index === 0
+                    title: modelData.text
+                    detail: modelData.detail
+                    key: String(index + 1).padStart(2, "0")
+                    enabled: Omunculus.connected
+                    onClicked: panel.enter(modelData.page)
+                  }
                 }
               }
               DecodeLabel {
