@@ -41,4 +41,47 @@ defmodule Omunculus.EvalScoreTest do
     assert Score.score(execution(%{"scenario" => "unneeded"})).exercised == nil
     assert Score.score(execution(%{"needs" => []})).exercised == nil
   end
+
+  describe "repeated_after_handoff" do
+    defp call(run, name, args, via \\ nil),
+      do: %{"name" => name, "ok" => true, "run" => run, "via" => via, "args" => args}
+
+    defp handoff(runs, tools) do
+      Score.score(execution(%{"runs" => runs, "tool_calls" => tools})).repeated_after_handoff
+    end
+
+    test "counts the calls of a run that the run before it on the work made" do
+      runs = [
+        %{"id" => "r1", "work" => "w1", "depth" => "0", "via" => "send"},
+        %{"id" => "r2", "work" => "w1", "depth" => "0", "via" => "retry"}
+      ]
+
+      tools = [
+        call("r1", "read", "a"),
+        call("r1", "bash", "b"),
+        call("r2", "read", "a"),
+        call("r2", "bash", "c"),
+        call("r2", "comment", "a", "done")
+      ]
+
+      assert handoff(runs, tools) == 1
+    end
+
+    test "ignores runs of other works and a call of two runs apart" do
+      runs = [
+        %{"id" => "r1", "work" => "w1", "depth" => "0", "via" => "send"},
+        %{"id" => "r2", "work" => "w2", "depth" => "0", "via" => "send"},
+        %{"id" => "r3", "work" => "w1", "depth" => "0", "via" => "retry"},
+        %{"id" => "r4", "work" => "w1", "depth" => "0", "via" => "retry"}
+      ]
+
+      tools = [call("r1", "read", "a"), call("r2", "read", "a"), call("r4", "read", "a")]
+      assert handoff(runs, tools) == 0
+      assert handoff(runs, [call("r3", "read", "a"), call("r4", "read", "a")]) == 1
+    end
+
+    test "is not known for an execution recorded without call args" do
+      refute Score.score(execution(%{})).repeated_after_handoff
+    end
+  end
 end

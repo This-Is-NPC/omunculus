@@ -37,6 +37,11 @@ defmodule EquivalentExchange.Score do
     the task does not need; `forbidden_grants`: what an agent granted that
     the task forbids agents to grant — a path or directory asked inside
     the workspace stands for `sandbox.write`;
+  - `repeated_after_handoff`: the calls a run made on a work that repeat a
+    call, same name and args, the work's run before it made: what a handoff
+    left the next run to read or run again (it measures
+    `[policy] last_run_output_bytes`); nil for an execution recorded
+    without call args;
   - `retries`: runs opened because a model stopped without a report;
   - the effort: runs, tool calls and failed ones, model calls, tokens, cost
     and time, and the prompt tokens the provider served from its cache —
@@ -102,6 +107,7 @@ defmodule EquivalentExchange.Score do
       unneeded_requests: Enum.reject(asked, &covered?.(&1, needs)),
       forbidden_grants: Enum.filter(agent_grants, &covered?.(&1, execution["forbidden"])),
       delegated: delegated,
+      repeated_after_handoff: repeated_after_handoff(runs, tools),
       retries: Enum.count(runs, &(&1["via"] == "retry")),
       runs: length(runs),
       tool_calls: length(tools),
@@ -116,6 +122,28 @@ defmodule EquivalentExchange.Score do
     }
 
     Map.put(score, :findings, findings(execution, score))
+  end
+
+  # The calls a run made, other than the steps of a chain, that the run
+  # of the same work before it already made with the same args.
+  defp repeated_after_handoff(runs, tools) do
+    if Enum.all?(tools, &Map.has_key?(&1, "args")) and Enum.all?(runs, &Map.has_key?(&1, "id")) do
+      calls =
+        tools
+        |> Enum.reject(& &1["via"])
+        |> Enum.group_by(& &1["run"], &{&1["name"], &1["args"]})
+
+      runs
+      |> Enum.filter(& &1["work"])
+      |> Enum.group_by(& &1["work"], & &1["id"])
+      |> Map.values()
+      |> Enum.flat_map(&Enum.chunk_every(&1, 2, 1, :discard))
+      |> Enum.map(fn [before, later] ->
+        seen = MapSet.new(calls[before] || [])
+        Enum.count(calls[later] || [], &MapSet.member?(seen, &1))
+      end)
+      |> Enum.sum()
+    end
   end
 
   # Whether a call used what the task is about: a tool by its name, or a

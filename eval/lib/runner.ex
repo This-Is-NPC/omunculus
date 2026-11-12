@@ -391,6 +391,8 @@ defmodule EquivalentExchange.Runner do
         Enum.map(
           facts.runs,
           &%{
+            id: &1.id,
+            work: &1.work_id,
             agent: &1.agent,
             depth: &1.depth,
             via: &1.via,
@@ -869,10 +871,16 @@ defmodule EquivalentExchange.Runner do
             file <- get_in(body, ["changes", "files"]) || [],
             do: Map.take(file, ~w(path op added))
           ),
-        command: if(name == "bash", do: get_in(body, ["args", "command"]))
+        command: if(name == "bash", do: get_in(body, ["args", "command"])),
+        args: args_digest(body["args"])
       }
     end
   end
+
+  # A short digest of a call's args, to tell a repeated call from a new one
+  # without keeping what a write carried.
+  defp args_digest(args),
+    do: :sha256 |> :crypto.hash(Jason.encode!(args || %{})) |> Base.encode16(case: :lower) |> binary_part(0, 16)
 
   # How often a run sent work back down — work or reopen — after a deeper
   # run had called it done: a supervisor not taking a child's word for it.
