@@ -67,8 +67,11 @@ defmodule Omunculus.Tools.Setup do
 
     The server runs with no project yet. Start one in an empty folder, then
     register it with a `[projects.<id>]` table holding its `config` in that
-    file and `systemctl --user restart omunculus`. The guide goes from there
-    to a first message:
+    file and `systemctl --user restart omunculus`. A registered project needs
+    an `[access]` table and a bootstrap (`omunculus access bootstrap`), or the
+    server refuses it:
+    https://github.com/This-Is-NPC/omunculus/blob/master/docs/server.md#project-access
+    The guide goes from an empty folder to a first message:
     https://github.com/This-Is-NPC/omunculus/blob/master/docs/how-to-start-a-project.md
     """
     |> String.trim_trailing()
