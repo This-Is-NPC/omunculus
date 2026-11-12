@@ -9,7 +9,6 @@
       "draft": false,
       "prerelease": false,
       "bump-minor-pre-major": true,
-      "release-as": "0.1.0",
       "pull-request-header": "## Before\n- Conventional Commits on `master` not yet released.\n\n## After\n- Merging tags the version below and publishes its GitHub release.\n\n## Summary of changes",
       "pull-request-footer": "## Validation\n| Scenario | Outcome |\n| --- | --- |\n| `local-check` on this pull request's head | required before merging |\n\n## Risks / follow-ups\n- Breaking changes are listed above under BREAKING CHANGES.\n\n## References\n- Branch: `release-please--branches--master--components--omunculus`"
     }
