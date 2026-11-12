@@ -78,7 +78,7 @@ Item {
       return place.concat([{ text: title }])
     const subject = { text: named }
     if (page !== "chat")
-      subject.run = () => view.go("chat")
+      subject.run = () => view.wholeConversation()
     return place.concat([subject], page === "thread" ? [{ text: Omunculus.titleOf(threadWork) }] : [])
   }
 
@@ -128,10 +128,23 @@ Item {
     show(name)
   }
 
+  // Leaves the work the chat is kept to, for the whole conversation.
+  function wholeConversation() {
+    threadWork = ""
+    go("chat")
+  }
+
   // Chooses a page of the level by its place, round from either end, and
-  // gives it the keyboard.
+  // gives it the keyboard. The chat tab comes back to the work it was kept
+  // to, while the conversation stays open, unless it is chosen on that work.
   function choose(index) {
-    go(pages[(index + pages.length) % pages.length])
+    const name = pages[(index + pages.length) % pages.length]
+    if (name !== "chat")
+      go(name)
+    else if (page === "thread" || threadWork === "")
+      wholeConversation()
+    else
+      show("thread")
     Qt.callLater(focusEntry)
   }
 
@@ -500,6 +513,7 @@ Item {
       if (!view.open && view.ofConversation.includes(view.page))
         view.show("conversations")
       view.pickedNode = ""
+      view.threadWork = ""
       if (view.events)
         view.events.picked = null
       Qt.callLater(view.focusEntry)
@@ -650,7 +664,7 @@ Item {
           trail: [{ agent: Omunculus.agent || Omunculus.lastAgent, tone: Omunculus.toneOf(Omunculus.agent || Omunculus.lastAgent) }]
             .concat(works.map(work => ({ agent: Omunculus.agentOf(work), tone: Omunculus.toneOf(Omunculus.agentOf(work)) })))
           level: works.length
-          onWholeWanted: view.go("chat")
+          onWholeWanted: view.wholeConversation()
         }
 
         TimelineView {
