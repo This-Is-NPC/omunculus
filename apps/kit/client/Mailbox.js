@@ -59,6 +59,37 @@ function suggest(list, query) {
   return list.filter(item => text === "" || item.name.toLowerCase().includes(text) || item.address.toLowerCase().includes(text));
 }
 
+// The recipients to offer for `query`, none until something is typed: those
+// whose name or address holds it, case aside, but the addresses in `taken`.
+function complete(list, query, taken) {
+  if (String(query || "").trim() === "") return [];
+  return suggest(list, query).filter(item => !(taken || []).includes(item.address));
+}
+
+// Every account a thread is with: its agent first, then each other who wrote
+// in it or whom you wrote to, once, as a person with an address.
+function counterparts(thread) {
+  const all = [thread.with];
+  for (const message of thread.messages) {
+    const other = message.mine ? message.to : message.from;
+    if (other && other.address && !all.some(item => item.address === other.address)) all.push(other);
+  }
+  return all;
+}
+
+// Whether a thread has more than one counterpart, so Reply all differs from Reply.
+function canReplyAll(thread) {
+  return counterparts(thread).length > 1;
+}
+
+// Whom a reply to `message` of `thread` is prefilled to: its other party, or,
+// for Reply all, every counterpart of the thread.
+function replyRecipients(thread, message, all) {
+  if (all) return counterparts(thread);
+  const other = message ? (message.mine ? message.to : message.from) : null;
+  return [other && other.address ? other : thread.with];
+}
+
 // A text on one line, without its Markdown marks, cut short when long.
 function oneLine(value) {
   const line = String(value || "").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "").replace(/[*`|]/g, "").replace(/\s+/g, " ").trim();
@@ -354,4 +385,10 @@ function inFolder(thread, folder, archived) {
 // of the last one read) does not hold.
 function isUnread(thread, seen) {
   return thread.heard !== "" && (seen[thread.key] || "") < thread.heard;
+}
+
+// What the folded list rail shows: how many e-mails the folder holds and how
+// many of them are unread, as {total, unread}.
+function railCount(threads, seen) {
+  return { total: threads.length, unread: threads.filter(thread => isUnread(thread, seen)).length };
 }

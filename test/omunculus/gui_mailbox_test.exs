@@ -51,6 +51,51 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
+  test "the type-ahead lists nothing until something is typed, then filters by name or address" do
+    run!("""
+    const list = Mailbox.recipients([{id: "agency", agents: ["sales", "steward"]}, {id: "dev", agents: ["sales"]}]);
+    if (Mailbox.complete(list, "", []).length !== 0) throw Error("empty shows nothing");
+    if (Mailbox.complete(list, "   ", []).length !== 0) throw Error("blank shows nothing");
+    if (Mailbox.complete(list, "ste", []).map(x => x.address).join() !== "steward@agency") throw Error("by name");
+    if (Mailbox.complete(list, "@dev", []).map(x => x.address).join() !== "sales@dev") throw Error("by address");
+    if (Mailbox.complete(list, "sales", ["sales@agency"]).map(x => x.address).join() !== "sales@dev") throw Error("not twice");
+    if (Mailbox.complete(list, "zzz", []).length !== 0) throw Error("no match");
+    """)
+  end
+
+  test "a reply is prefilled to the other party, Reply all to every counterpart" do
+    run!("""
+    const events = [
+      prompt("1", "2026-01-01T10:00:00Z", "Website\\n\\nI need a site."),
+      comment("2", "2026-01-01T10:01:00Z", "r1", "w1", "Thanks.")
+    ];
+    const one = build(snap({runs: [run("r1", "sales", "closed")]}), events);
+    if (Mailbox.counterparts(one).map(x => x.address).join() !== "sales@agency") throw Error("one counterpart");
+    if (Mailbox.canReplyAll(one)) throw Error("a thread with one counterpart has no Reply all");
+    const theirs = one.messages.find(m => !m.mine);
+    if (Mailbox.replyRecipients(one, theirs, false).map(x => x.address).join() !== "sales@agency") throw Error("to the sender");
+    const mine = one.messages.find(m => m.mine);
+    if (Mailbox.replyRecipients(one, mine, false).map(x => x.address).join() !== "sales@agency") throw Error("to whom I wrote");
+    const two = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("q1", {requester: agent("seller")})]}), events);
+    const all = Mailbox.counterparts(two).map(x => x.address).join();
+    if (all !== "sales@agency,seller@agency") throw Error(all);
+    if (!Mailbox.canReplyAll(two)) throw Error("several counterparts");
+    const ask = two.messages.find(m => m.request === "q1");
+    if (Mailbox.replyRecipients(two, ask, false).map(x => x.address).join() !== "seller@agency") throw Error("only the asker");
+    if (Mailbox.replyRecipients(two, ask, true).length !== 2) throw Error("everyone");
+    """)
+  end
+
+  test "the folded rail counts the e-mails and the unread ones" do
+    run!("""
+    const threads = [{key: "a", heard: "2026-01-01T10:00:00Z"}, {key: "b", heard: ""}, {key: "c", heard: "2026-01-02T10:00:00Z"}];
+    const seen = {a: "2026-01-01T10:00:00Z"};
+    const count = Mailbox.railCount(threads, seen);
+    if (count.total !== 3 || count.unread !== 1) throw Error(JSON.stringify(count));
+    if (Mailbox.railCount([], {}).total !== 0) throw Error("empty");
+    """)
+  end
+
   test "the default agent comes from the whole config and must be one to write to" do
     run!("""
     const roster = [{name: "sales", depth: 0}, {name: "seller", depth: 1}];
