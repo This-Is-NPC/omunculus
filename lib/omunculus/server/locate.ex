@@ -11,15 +11,24 @@ defmodule Omunculus.Server.Locate do
 
   @spec main([String.t()]) :: :ok
   def main(argv) do
+    case locate(argv) do
+      {:ok, line} ->
+        IO.puts(line)
+
+      {:error, reason} ->
+        IO.puts(:stderr, "socket: #{inspect(reason)}")
+        System.halt(1)
+    end
+  end
+
+  @doc "The line `main/1` prints for `argv`, or why there is none."
+  @spec locate([String.t()]) :: {:ok, String.t()} | {:error, term}
+  def locate(argv) do
     with {:ok, path, id, any} <- args(argv),
          {:ok, registry} <- Server.Config.load(path),
          {:ok, id, config_path} <- project(registry.projects, id, any),
          {:ok, config} <- Config.load(config_path) do
-      IO.puts(id <> "\t" <> Server.Socket.path(config.store.path))
-    else
-      {:error, reason} ->
-        IO.puts(:stderr, "socket: #{inspect(reason)}")
-        System.halt(1)
+      {:ok, id <> "\t" <> Server.Socket.path(config.store.path)}
     end
   end
 

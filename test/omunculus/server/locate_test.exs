@@ -1,10 +1,8 @@
-defmodule Mix.Tasks.Omunculus.SocketTest do
+defmodule Omunculus.Server.LocateTest do
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureIO
-
-  alias Mix.Tasks.Omunculus.Socket
   alias Omunculus.{Fixtures, Server}
+  alias Omunculus.Server.Locate
 
   # A registry of the projects `ids`, each with its own config and store;
   # its path and each project's socket by id.
@@ -36,7 +34,10 @@ defmodule Mix.Tasks.Omunculus.SocketTest do
     {path, sockets}
   end
 
-  defp printed(argv), do: capture_io(fn -> Socket.run(argv) end)
+  defp printed(argv) do
+    {:ok, line} = Locate.locate(argv)
+    line <> "\n"
+  end
 
   test "a registry of one prints its project, with or without an id or --any" do
     {path, %{"solo" => socket}} = registry(["solo"])
@@ -51,13 +52,13 @@ defmodule Mix.Tasks.Omunculus.SocketTest do
 
     assert printed([path, "beta"]) == "beta\t#{sockets["beta"]}\n"
     assert printed([path, "beta", "--any"]) == "beta\t#{sockets["beta"]}\n"
-    assert_raise Mix.Error, ~r/unknown/, fn -> printed([path, "gamma"]) end
+    assert {:error, {:project, :unknown, "gamma"}} = Locate.locate([path, "gamma"])
   end
 
   test "several without an id: refused, or with --any the first by id's socket" do
     {path, sockets} = registry(["beta", "alpha"])
 
-    assert_raise Mix.Error, ~r/ambiguous/, fn -> printed([path]) end
+    assert {:error, {:project, :ambiguous, _}} = Locate.locate([path])
     assert printed([path, "--any"]) == "\t#{sockets["alpha"]}\n"
   end
 end
