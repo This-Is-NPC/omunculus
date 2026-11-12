@@ -9,11 +9,12 @@ defmodule Omunculus.Tools.Patch do
   matched as the exact lines it removes and keeps, through the matching
   of `edit` (once in the file, apart from the other hunks, line endings
   kept). A file is written only when every section applies; a failed
-  write puts back the files already written.
+  write puts back the files already written. The files written are then
+  formatted ([`Format`](`Omunculus.Tools.Format`)).
   """
 
   alias Omunculus.Execution.Policy
-  alias Omunculus.Tools.{Args, Edit, Out}
+  alias Omunculus.Tools.{Args, Edit, Format, Out}
 
   @headers ["*** Add File: ", "*** Update File: ", "*** Delete File: "]
 
@@ -21,12 +22,18 @@ defmodule Omunculus.Tools.Patch do
   def run(%{args: args, roots: roots} = input, %Policy{} = policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
     events = Map.get(input.view, "run", [])
+    format = Map.get(input.view, "format", %{})
 
     with {:ok, text} <- Args.fetch(args, "patch"),
          {:ok, sections} <- parse(text),
          {:ok, plan} <- plan(sections, roots, permissions, policy, events),
          :ok <- commit(plan) do
-      Out.ok(Enum.map_join(plan, "\n", &"#{&1.verb} #{&1.path}"))
+      written = for %{after: content, absolute: absolute} <- plan, content, do: absolute
+      done = Enum.map_join(plan, "\n", &"#{&1.verb} #{&1.path}")
+
+      Out.ok(
+        Enum.join(Enum.reject([done, Format.run(format, written, policy)], &(&1 == "")), "\n")
+      )
     else
       {:error, message} -> Out.fail(message)
     end

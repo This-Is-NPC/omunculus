@@ -68,7 +68,7 @@ dev/                 the development environment, local and ignored by git
 
 ### `Omunculus.CLI`
 
-Direct entry point. `omunculus [--config <path>] <name> [--key value]` dispatches a tool with trigger `cli` through `Operations`, then follows up its events. `access bootstrap` seeds an administrator. The CLI only reads the command line into a tool and its arguments, through the tool's manifest, and calls `Operations`, as the HTTP router does with a request; `Errors.format/1` gives both the same sentence for an error, to which the CLI adds the command that resolves it. Without `--config` the file is `./omunculus.toml`; `bin/omunculus` passes `--config $PWD/omunculus.toml` unless the first argument is already `--config` or `serve`, and makes a relative `--config` absolute against the caller's directory. A missing file is a refusal, except for a tool with `config = false` (`preset`). When a server holds the project's lock, the tool and its arguments go to `POST /v1/call` on the project's local socket, and `access bootstrap` to `POST /v1/access/bootstrap`; the command returns once the runs it opened there have finished. Taking the lock itself, a command first recovers the project (`Run.recover/1`), in the same cycle as its own runs. Reads no environment variables.
+Direct entry point. `omunculus [--config <path>] <name> [--key value]` dispatches a tool with trigger `cli` through `Operations`, then follows up its events. `access bootstrap` seeds an administrator. The CLI only reads the command line into a tool and its arguments, through the tool's manifest, and calls `Operations`, as the HTTP router does with a request; `Errors.format/1` gives both the same sentence for an error, to which the CLI adds the command that resolves it. Without `--config` the file is `./omunculus.toml`; `bin/omunculus` passes `--config $PWD/omunculus.toml` unless the first argument is already `--config` or `serve`, and makes a relative `--config` absolute against the caller's directory. A missing file is a refusal, except for a tool with `config = false` (`preset`). When a server holds the project's lock, the tool and its arguments go to `POST /v1/call` on the project's local socket, and `access bootstrap` to `POST /v1/access/bootstrap`; the command returns once the runs it opened there have finished, with what they gave the person after its output (`Operations.reply/2`, [the command line](cli.md#output)). Taking the lock itself, a command first recovers the project (`Run.recover/1`), in the same cycle as its own runs. Reads no environment variables.
 
 ### `Omunculus.Project`
 
@@ -124,7 +124,7 @@ The documents agents make and hand on, as typed, versioned records over the cont
 
 ### `Omunculus.Operations`
 
-Shares tool dispatch, human authorization and cycle follow-up between the direct CLI and HTTP commands.
+Shares tool dispatch, human authorization and cycle follow-up between the direct CLI and HTTP commands. `reply/2` reads, once a command's runs have finished, what the runs it caused gave the person: the replies of agents without a work, their reports on root works and their questions to accounts (`Store.said/2`).
 
 ### `Omunculus.Server` and `Omunculus.Server.*`
 

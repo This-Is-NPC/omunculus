@@ -19,3 +19,6 @@ source = "paths"
 [views.run]
 source = "events"
 relation = "run"
+
+[views.format]
+source = "settings"

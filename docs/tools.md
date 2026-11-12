@@ -711,6 +711,18 @@ written. Each path follows the sandbox and workspace rules, and `edit` and
 each call changed are recorded for `changes` and `revert` like those of
 `write`.
 
+After they write, `write`, `edit` and `patch` format each file they wrote
+(not one `patch` deleted) with the command `[settings.format]` gives for its
+extension ([Settings](config.md#formatting-after-a-write)). The command runs in the
+workspace root, inside the run's sandbox, under the run's policy, so it can
+write only where the run can. Without the table, or without the file's
+extension in it, nothing runs. The call's output says in words when the
+formatter changed the file, so the model reads it again before it edits it,
+and when the formatter failed (its exit status and what it printed, cut to
+`[execution] max_output_bytes`); the file stays as it was written, and the
+call still succeeds. The files formatting changed are recorded by `changes`
+like the rest.
+
 ## Shell
 
 `bash` (shipped by the `codex-like` preset) runs a command as an `sh`

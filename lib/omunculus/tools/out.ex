@@ -260,6 +260,22 @@ defmodule Omunculus.Tools.Out do
   def news(subject, body),
     do: "A message arrived for this work while you worked.\nSubject: #{subject}\n\n" <> body
 
+  @spec formatted(String.t(), String.t()) :: String.t()
+  def formatted(path, command),
+    do: "#{path} was formatted by `#{command}`: read it again before editing it."
+
+  @spec format_failed(String.t(), String.t(), String.t(), String.t()) :: String.t()
+  def format_failed(path, command, why, output),
+    do:
+      String.trim(
+        "#{path} was written but not formatted: `#{command}` #{why}. The change stands.\n#{output}"
+      )
+
+  @spec format_unusable(String.t(), String.t()) :: String.t()
+  def format_unusable(path, extension),
+    do:
+      "#{path} was written but not formatted: [settings.format] #{extension} must be a command, a list of strings, one of them {file}."
+
   @spec media_follows() :: String.t()
   def media_follows, do: "The media the tool calls above showed:"
 

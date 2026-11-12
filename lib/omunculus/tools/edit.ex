@@ -8,11 +8,12 @@ defmodule Omunculus.Tools.Edit do
   a CRLF file is matched and edited as LF and written back as CRLF. The
   file is written whole or not at all. When this run read, edited or
   wrote the file before (its `run` view) and the file changed on disk
-  since, the edit is refused until it is read again.
+  since, the edit is refused until it is read again. The written file is
+  then formatted ([`Format`](`Omunculus.Tools.Format`)).
   """
 
   alias Omunculus.Execution.Policy
-  alias Omunculus.Tools.{Args, Out}
+  alias Omunculus.Tools.{Args, Format, Out}
 
   @bom "﻿"
 
@@ -29,7 +30,7 @@ defmodule Omunculus.Tools.Edit do
          :ok <- fresh(absolute, args["path"], roots, Map.get(input.view, "run", [])),
          {:ok, edited} <- apply_edits(content, edits),
          :ok <- Omunculus.Tools.Path.write_atomic(absolute, edited) do
-      Out.ok()
+      Out.ok(Format.run(Map.get(input.view, "format", %{}), [absolute], policy))
     else
       {:error, message} -> Out.fail(message)
       message when is_binary(message) -> Out.fail(message)

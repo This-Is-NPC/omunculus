@@ -283,6 +283,26 @@ The command runs in the workspace root, inside the run's sandbox
 a call may ask for; without it a call may not ask for more than
 `[execution] timeout_ms` ([Shell](tools.md#shell)).
 
+## Formatting after a write
+
+`[settings.format]` is optional: it maps a file extension, without its dot,
+to the command `write`, `edit` and `patch` run on each file they wrote. The
+command is a list of strings with `{file}` in at least one, which becomes the
+file's path; it has no default and nothing is formatted without it.
+
+```toml
+[settings.format]
+ex = ["mix", "format", "{file}"]
+js = ["prettier", "--write", "{file}"]
+```
+
+The command runs in the workspace root inside the run's sandbox, under its
+policy; its program must be one the run's runtimes hold
+([`[execution] runtimes`](#required-tables)). A key whose value is not such a
+command is reported in the call's output, and the file stays as written. A
+formatter that fails does not undo the write
+([Editing files](tools.md#editing-files)).
+
 ## Artifacts in a bucket
 
 `[settings.s3]` is optional: the S3-compatible bucket the artifact tools
