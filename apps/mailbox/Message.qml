@@ -7,8 +7,8 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 // Message is one e-mail of a thread, as a mail client stacks them: folded, a
 // line with who wrote, the start of the text and the time; open, its header
 // (from, to, date), its text, the files it carries, each a chip that saves
-// the file to the downloads directory and opens it, and Reply, Reply all and
-// Forward. The latest message's Reply is the screen's solid action while no
+// the file to the downloads directory and opens it, and Reply, Forward and,
+// only when the thread has several counterparts, Reply all. The latest message's Reply is the screen's solid action while no
 // reply is being written, unless that message is your own.
 SurfaceFrame {
   id: mail
@@ -20,6 +20,8 @@ SurfaceFrame {
   // Whether it is the thread's latest message, and a reply is being written.
   property bool latest: false
   property bool replying: false
+  // Whether the thread has more than one counterpart, so Reply all differs from Reply.
+  property bool several: false
 
   readonly property bool agent: !message.mine
   // The latest message is the one the screen's solid action answers, unless it
@@ -27,7 +29,7 @@ SurfaceFrame {
   readonly property bool answerable: latest && !replying && !message.mine
 
   signal toggled()
-  signal replyTo()
+  signal replyTo(bool all)
   signal forwardIt()
 
   implicitHeight: body.implicitHeight + (expanded ? 28 : 20)
@@ -134,14 +136,15 @@ SurfaceFrame {
         icon: "enter"
         text: "REPLY"
         tip: "reply  ctrl+r"
-        onClicked: mail.replyTo()
+        onClicked: mail.replyTo(false)
       }
       TraceButton {
+        visible: mail.several
         dense: true
         role: "action"
         text: "REPLY ALL"
-        tip: "reply to everyone on the thread, which is the one agent"
-        onClicked: mail.replyTo()
+        tip: "reply to everyone on the thread"
+        onClicked: mail.replyTo(true)
       }
       TraceButton {
         dense: true

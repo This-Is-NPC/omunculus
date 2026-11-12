@@ -235,7 +235,8 @@ Singleton {
   // A new thread: a conversation in `project` and your first message to
   // `agent` there, its subject its first line, with the files at the paths
   // `files` lists. `draft` is the draft it was written from, gone once sent.
-  function send(project, agent, subject, body, files, draft) {
+  // `stay` leaves what is on screen as it is, as a reply to several does.
+  function send(project, agent, subject, body, files, draft, stay) {
     const place = projectOf(project)
     const text = [subject.trim(), body.trim()].filter(part => part !== "").join("\n\n")
     if (text === "" || !place || agent === "")
@@ -246,8 +247,10 @@ Singleton {
           if (draft)
             discardDraft(draft)
           // What you sent is in Sent, not next to an empty Inbox.
-          folder = "sent"
-          selected = project + "/" + data.id
+          if (!stay) {
+            folder = "sent"
+            selected = project + "/" + data.id
+          }
           sweep()
         })
     })
