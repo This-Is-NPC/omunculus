@@ -4,18 +4,19 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // Recipient is whom the first message goes to: "TO", then a folded control
-// with the agent chosen and a chevron. Opened, it lists the other agents of
-// depth 0 that are not only in workflows, those for the person's work first,
-// then the project's own, each a name and its role: the first sentence of its
-// text without a leading "You are the". It opens with no agent chosen, and
-// is held open then. Up and Down move along the list, Enter picks, Esc folds
+// with the agent chosen, or, with none, who a message goes to when it is left
+// empty (the project's default agent), and a chevron. Opened, it lists the
+// other agents of depth 0 that are not only in workflows, those for the
+// person's work first, then the project's own, each a name and its role: the
+// first sentence of its text without a leading "You are the". No agent is
+// chosen for the person; it is held open only while the project has no default. Up and Down move along the list, Enter picks, Esc folds
 // it. A click picks too. With one agent to talk with, there is nothing to open.
 FocusScope {
   id: recipient
 
   // Whether the list was asked for; it is shown anyway while no agent is chosen.
   property bool expanded: false
-  readonly property bool listing: others.length > 0 && (expanded || Omunculus.agent === "")
+  readonly property bool listing: others.length > 0 && (expanded || (Omunculus.agent === "" && Omunculus.startAgent === ""))
   // Emitted once an agent is picked, so the box can take the keyboard.
   signal picked()
 
@@ -110,7 +111,7 @@ FocusScope {
           Label {
             id: who
             anchors.verticalCenter: parent.verticalCenter
-            text: Omunculus.agent !== "" ? Omunculus.agent.toUpperCase() : "CHOOSE WHO"
+            text: Omunculus.agent !== "" ? Omunculus.agent.toUpperCase() : Omunculus.startHint !== "" ? Omunculus.startHint.toUpperCase() : "CHOOSE WHO"
             color: Omunculus.agent !== "" ? Theme.foreground : Theme.dim
             font.pixelSize: 11
             font.letterSpacing: 1.5

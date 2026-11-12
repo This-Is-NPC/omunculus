@@ -5,7 +5,6 @@ import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
-import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // PagesView is the window's pages, one on screen at a time, in three levels.
@@ -19,12 +18,10 @@ import "kit/ui"
 // of these two levels gives the commands of its bar and the count of its
 // readout. A conversation's, once one is open, in place of the project's,
 // under its head: the header strip, with the conversation's meta, whose
-// counts open the tree and the cost, ANSWER while something waits on you
-// and its progress on two lines, and its tabs.
+// counts open the tree and the cost, ANSWER while something waits on you,
+// and its tabs.
 // The chat, the dialogue with the root agent, where each work handed down is
-// one card and what you answered a sentence, and, opened, the progress beside
-// the thread (a card over it on a medium window, a sheet over the page on a
-// narrow one); the tree, the works in the order they were made
+// one card and what you answered a sentence; the tree, the works in the order they were made
 // and the work picked in full (TreePage); the log, every event a row; and
 // what it cost. A work's thread also opens as a page of its own, under the
 // way down to it. The log, the tree and the cost are loaded when first on
@@ -89,11 +86,6 @@ Item {
     return place.concat([subject], page === "thread" ? [{ text: Omunculus.titleOf(threadWork) }] : [])
   }
 
-  // Whether the progress is open, as chosen on this conversation, or null
-  // while it shows as its place has it: the dock open once there is a work,
-  // the card and the sheet closed.
-  property var progressChoice: null
-  readonly property bool progressShown: progressChoice !== null ? progressChoice : chat.progressMode === "dock" && Omunculus.works.length > 0
   // The logged work the log is kept to, and, kept while the tree page is
   // not loaded, the work picked on it ("" for none).
   property string logFilter: ""
@@ -135,8 +127,6 @@ Item {
   function show(name) {
     if (name === "conversations" && Omunculus.connected)
       Omunculus.loadConversations()
-    if (name === "new")
-      Omunculus.address()
     level = name === "projects" ? "registry"
       : ofConversation.includes(name) ? "conversation"
       : ["conversations", "new"].includes(name) || level === "conversation" ? "project"
@@ -337,14 +327,11 @@ Item {
     return chain
   }
 
-  // Opens the pending queue over the page, when something waits on you; the
-  // progress sheet over a narrow chat closes first. The queue closes by itself
-  // once nothing waits.
+  // Opens the pending queue over the page, when something waits on you. The
+  // queue closes by itself once nothing waits.
   function openQueue() {
     if (pending.length === 0)
       return
-    if (progressShown && chat.progressMode === "sheet")
-      progressChoice = false
     queueOpen = true
   }
 
@@ -366,23 +353,6 @@ Item {
   function showResult() {
     go("chat")
     Qt.callLater(timeline.showResult)
-  }
-
-  // Opens or closes the progress; opened, the keyboard goes to its tree
-  // when `focusing`, or always over a narrow chat, where it covers the
-  // composer; closed, back to the composer. From another page of the
-  // conversation it opens on the chat.
-  function toggleProgress(focusing) {
-    if (page !== "chat") {
-      go("chat")
-      progressChoice = true
-      return
-    }
-    progressChoice = !progressShown
-    if (!progressShown)
-      mainComposer.focusEntry()
-    else if (focusing || chat.progressMode === "sheet")
-      Qt.callLater(() => { if (chat.progressArea()) chat.progressArea().focusTree() })
   }
 
   // Shows the oldest note to you on the chat and marks it read.
@@ -484,7 +454,7 @@ Item {
       return [chord("reply", () => view.answer()), chord("open-tree", () => view.openInTree(view.workKey))]
     if (!inside)
       return []
-    const all = [chord("reply", () => view.answer()), chord("progress", () => view.toggleProgress(true))]
+    const all = [chord("reply", () => view.answer())]
     if (page === "chat" && Omunculus.unread.length > 0)
       all.push(chord("mark-read", () => view.readNote()))
     if (page === "tree" && tree) {
@@ -545,22 +515,12 @@ Item {
     if (active)
       focusEntry()
   }
-  // Esc closes the pending queue; in the progress it returns to the composer,
-  // the progress sheet over a narrow chat closing first.
+  // Esc closes the pending queue.
   Keys.onEscapePressed: {
     if (queueOpen) {
       queueOpen = false
       focusEntry()
       return
-    }
-    if (page === "chat") {
-      const sheet = progressShown && chat.progressMode === "sheet"
-      if (sheet || Focus.within(Window.activeFocusItem, chat.progressArea())) {
-        if (sheet)
-          progressChoice = false
-        mainComposer.focusEntry()
-        return
-      }
     }
     back()
   }
@@ -584,14 +544,6 @@ Item {
       if (view.page === "new" && Omunculus.conversationId !== "")
         view.show("chat")
     }
-    function onWhomAskedChanged() {
-      if (Omunculus.whomAsked)
-        Omunculus.address()
-    }
-    function onStartAgentChanged() {
-      if (view.page === "new")
-        Omunculus.address()
-    }
   }
   Connections {
     target: Omunculus
@@ -605,7 +557,6 @@ Item {
       if (!view.open && view.ofConversation.includes(view.page))
         view.show("conversations")
       view.pickedNode = ""
-      view.progressChoice = null
       if (view.events)
         view.events.picked = null
       Qt.callLater(view.focusEntry)
@@ -624,13 +575,9 @@ Item {
       Layout.fillWidth: true
       progress: Omunculus.progress
       waiting: Omunculus.waiting.length
-      usage: Omunculus.usage.all
-      heading: view.named
-      expanded: view.progressShown && view.page === "chat"
-      onToggle: view.toggleProgress(false)
+      spent: Omunculus.spend.total.usd
       onAnswer: view.answer()
       onOpenResult: view.showResult()
-      onOpenTree: view.go("tree")
       onOpenCost: view.go("cost")
     }
 
@@ -736,33 +683,9 @@ Item {
       Item {
         id: chat
         anchors.fill: parent
-        // Where the progress opens, by the window's width: docked beside the
-        // thread, a card over it, or a sheet over the whole chat.
-        readonly property string progressMode: ({ wide: "dock", medium: "card", narrow: "sheet" })[Breakpoints.size(Window.width)]
-        // The item the progress is in, while it is open.
-        function progressArea(): ProgressSheet { return (dockLoader.item || cardLoader.item) as ProgressSheet }
-        readonly property bool docked: dockLoader.active && progressMode === "dock"
-
         ColumnLayout {
-          // A sheet covers the chat: nothing of it shows through.
-          visible: !(view.progressShown && chat.progressMode === "sheet")
-          anchors {
-            left: parent.left
-            top: parent.top
-            bottom: parent.bottom
-            right: chat.docked ? dockLoader.left : parent.right
-            rightMargin: chat.docked ? Theme.space.section : 0
-          }
+          anchors.fill: parent
           spacing: view.gap
-
-          // Medium: the progress under the tabs, pushing the thread down.
-          Loader {
-            id: cardLoader
-            Layout.fillWidth: true
-            visible: active
-            active: view.progressShown && chat.progressMode === "card"
-            sourceComponent: progressView
-          }
 
           TimelineView {
             id: timeline
@@ -785,38 +708,6 @@ Item {
           Composer {
             id: mainComposer
             Layout.fillWidth: true
-          }
-        }
-
-        // Wide: the progress beside the thread, the page's full height;
-        // narrow: a sheet over the whole chat.
-        Loader {
-          id: dockLoader
-          z: 2
-          anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
-          width: chat.progressMode === "dock" ? 380 : chat.width
-          active: view.progressShown && chat.progressMode !== "card"
-          visible: active
-          sourceComponent: progressView
-        }
-
-        // Each place loads it only in its own mode; the card is at most
-        // 55 % of the chat's height.
-        Component {
-          id: progressView
-          ProgressSheet {
-            mode: chat.progressMode
-            maximumHeight: chat.height * 0.55
-            progress: Omunculus.progress
-            onClosed: {
-              view.progressChoice = false
-              mainComposer.focusEntry()
-            }
-            onEscaped: mainComposer.focusEntry()
-            onAnswer: view.openQueue()
-            onOpenThread: work => view.openThread(work)
-            onOpenLog: work => view.showLog(work)
-            onOpenTree: work => view.openInTree(work)
           }
         }
       }
@@ -882,7 +773,7 @@ Item {
 
         Label {
           Layout.fillWidth: true
-          text: Omunculus.agent !== "" ? "Say what you need; it goes to " + Omunculus.agent + " unless you choose another." : "Say what you need, and choose who gets it."
+          text: Omunculus.agent !== "" ? "Say what you need; it goes to " + Omunculus.agent + "." : Omunculus.startAgent !== "" ? "Say what you need; it goes to " + Omunculus.startAgent + " unless you choose another." : "Say what you need, and choose who gets it."
           color: Theme.foreground
           font.pixelSize: Theme.type.cardBody.size
           wrapMode: Text.Wrap

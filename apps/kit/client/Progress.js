@@ -511,6 +511,52 @@ function standing(progress, front) {
   return Object.assign({ workflow: "", stage: "", step: 0, steps: 0 }, track(focus), { chain: chain, agent: chain[chain.length - 1] || "", state: state, waits: waits, head: focus.agent || "", asker: asking ? asking.agent : "" });
 }
 
+// An agent's name as a sentence has it: "front-desk" as "Front desk".
+function person(agent) {
+  const words = String(agent || "").replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// The one line that says what the conversation is doing now, for its head:
+// {icon, tone, text, clock}, or null when there is nothing to say. `icon` is
+// one of Icon's names and, with `text`, says the state in a picture and in
+// words; `tone` is "working", "warning", "error", "success" or "quiet"; `clock`
+// is how long, as "0:49", "took 3 minutes" or "". `input` is {progress,
+// standing, verb, tick, said, ran}: Omunculus.progress and its standing, what
+// the agent at work does, the time now, whether the person has written and
+// whether any run has started.
+function status(input) {
+  const progress = input.progress;
+  const here = input.standing;
+  const phase = progress ? progress.state : "idle";
+  const focus = progress ? progress.focus : null;
+  const working = phase === "working";
+  let elapsed = "";
+  if (focus) {
+    const took = (focus.finishedIn !== null && !working) || phase === "done";
+    const open = !closed(focus.state) || working;
+    const spent = focus.finishedIn !== null && !working ? focus.finishedIn : open ? Math.max(0, input.tick - focus.created) : focus.branch.seconds;
+    elapsed = took ? "took " + duration(spent) : clock(spent);
+  }
+  const make = (icon, tone, text) => ({ icon: icon, tone: tone, text: text, clock: elapsed });
+  if (phase === "needs-you") {
+    const asker = here && (here.asker || here.agent);
+    return make("warning", "warning", asker ? person(asker) + " is waiting for your answer" : "Waiting for your answer");
+  }
+  if (phase === "failed") return make("warning", "error", "Failed");
+  if (phase === "stopped") return make("warning", "warning", "Stopped");
+  if (phase === "done") return make("check", "success", "Done");
+  if (phase === "waiting" && here && here.waits !== "")
+    return make("clock", "quiet", (here.head !== "" ? person(here.head) + " is" : "Is") + " waiting for " + here.waits);
+  if (working) {
+    const agent = here ? here.agent : progress.now.agent;
+    const on = here && here.stage !== "" ? " on the " + here.stage + " stage" : input.verb !== "" ? ": " + input.verb.toLowerCase() : "";
+    return make("spinner", "working", (agent ? person(agent) + " is working" : "Working") + on);
+  }
+  if (!focus && !input.ran && input.said) return make("spinner", "working", "Starting");
+  return null;
+}
+
 // How many answers of yours a reply passes on: 0 when you answered none, else
 // the items of the numbered question answered, or one.
 function given(requests, answered, noted, me) {
