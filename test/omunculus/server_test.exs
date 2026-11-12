@@ -1436,6 +1436,42 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
+  test "a project without access is refused while the others are served" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+
+    bad_dir = Fixtures.tmp_dir()
+    Fixtures.install_default(bad_dir)
+
+    server_path = Path.join(dir, "server.toml")
+
+    File.write!(server_path, """
+    [server]
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    max_connections = 4
+
+    [projects.good]
+    config = "#{project_path}"
+
+    [projects.first]
+    config = "#{Fixtures.config_path(bad_dir)}"
+    """)
+
+    log =
+      capture_log(fn ->
+        {:ok, _server} = Server.start_link(server_path)
+        assert Server.project_ids(server_path) == ["good"]
+      end)
+
+    assert log =~ "project first refused"
+    assert log =~ "[access]"
+    assert log =~ "omunculus access bootstrap"
+  end
+
   # Bootstraps the local administrator of the project at `project_path`, serves
   # it alone as "solo", and gives a request on its local socket.
   defp serve_local(dir, project_path) do

@@ -220,8 +220,9 @@ defmodule Omunculus.Server.Project do
     end
   end
 
-  defp require_access(%{access: access}) when is_map(access), do: :ok
-  defp require_access(_), do: {:error, :access_required}
+  @doc "Whether a project config holds the `[access]` table the server needs."
+  def require_access(%{access: access}) when is_map(access), do: :ok
+  def require_access(_), do: {:error, :access_required}
 
   defp run_command(project, name, args, principal, conversation_id, command_id) do
     hash =

@@ -1,9 +1,13 @@
 defmodule Omunculus.Server do
   @moduledoc """
   Starts one runtime and one local socket per configured project, and the
-  TCP listener when the registry names a `host` and `port`. `register/3`
-  adds a project to the running server and to the registry file.
+  TCP listener when the registry names a `host` and `port`. A project that
+  cannot be served, such as one with no `[access]` table, is logged and
+  left out; the others keep running. `register/3` adds a project to the
+  running server and to the registry file.
   """
+
+  require Logger
 
   alias Omunculus.Server.{Auth, Config, Endpoint, Project, Socket, StreamLimiter}
 
@@ -16,10 +20,31 @@ defmodule Omunculus.Server do
       children =
         [{StreamLimiter, {stream_key, config.max_connections}}] ++
           Enum.flat_map(config.projects, fn {id, project_path} ->
-            project_children(id, project_path, config.limits, stream_key)
+            if servable?(id, project_path),
+              do: project_children(id, project_path, config.limits, stream_key),
+              else: []
           end) ++ http
 
       Supervisor.start_link(children, strategy: :one_for_one, name: via(stream_key))
+    end
+  end
+
+  defp servable?(id, project_path) do
+    with {:ok, config} <- Omunculus.Config.load(project_path),
+         :ok <- Project.require_access(config) do
+      true
+    else
+      {:error, :access_required} ->
+        Logger.error(
+          "project #{id} refused: #{project_path} has no [access] table; add one and run " <>
+            "`omunculus access bootstrap` (see docs/server.md#project-access)"
+        )
+
+        false
+
+      {:error, reason} ->
+        Logger.error("project #{id} refused: cannot load #{project_path}: #{inspect(reason)}")
+        false
     end
   end
 

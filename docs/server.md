@@ -2,7 +2,9 @@
 
 The server is optional. Direct CLI commands open the project store themselves. The server keeps each registered project open, with its own SQLite file and run cycle. Start only one owner of a project at a time: CLI and server commands acquire a `flock` lock next to the SQLite file. The server requires Linux `flock` and a project `[access]` table.
 
-Add access roles to a project config:
+## Project access
+
+A project registered without an `[access]` table is refused: the server logs one line naming it and the fix, leaves it out, and serves the others, or none. Add access roles to the project config:
 
 ```toml
 [access]
