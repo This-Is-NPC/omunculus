@@ -443,4 +443,13 @@ defmodule Omunculus.CeilingTest do
       assert Ceiling.classify(round_tripped, "mystery") == "blocked"
     end
   end
+
+  test "declared keeps pinned and tool_search once tool_search is there and something is left out" do
+    names = ["a", "b", "tool_search"]
+
+    assert Ceiling.declared(["a"], names) == ["a", "tool_search"]
+    assert Ceiling.declared(["a", "b"], names) == names
+    assert Ceiling.declared(nil, names) == names
+    assert Ceiling.declared(["a"], ["a", "b"]) == ["a", "b"]
+  end
 end

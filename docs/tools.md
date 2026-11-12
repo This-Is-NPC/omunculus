@@ -220,7 +220,7 @@ argument of the call.
 | `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
 | `artifacts` | the artifact versions of the run's conversation, oldest first, each as its event describes it with `event_id`, `at`, `by` and `tool`, the tool that wrote it | `prefix` keeps the names that begin with it; `include = ["data"]` adds `data`, the decoded content of the latest version of each name when it is `application/json` |
 | `memories` | the memory entries the run sees, oldest first: the project's, its agent's and its workspace's ([memory](#memory)) | from `run` |
-| `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
+| `catalog` | the cards of the run's effective `model` tools, each with its `parameters` and marked `pinned` (declared) or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
 | `agents` | the agents and workflows a new work may name, one depth below the run (1 when the run has no work). The run's depth is the work's place in the tree, or its assignee's depth when that is deeper. Listed: the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
 | `paths` | the path permissions of the run's ceiling | |
@@ -573,12 +573,45 @@ The assembled prompt names the cards and says the tools are in
 `tools.*`. The coordinator is the process `[execution.sandbox]`
 described. Each `await tools.<name>(args)` is one trip through the
 contract. `tool_search` returns cards; the code then calls the `name` it
-wants. Schema and heavy data come back as `output` of a `load`, not as
+wants, among the tools it was declared. Schema and heavy data come back as `output` of a `load`, not as
 description text.
 
 The coordinator itself cannot read the workspace, open a network, see
 the host environment or spawn a process. Those are tools, classified by
 the ceiling, run in their own sandboxed sessions.
+
+## On-demand schemas
+
+A schema is the biggest part of a tool for the model. With `tool_search`
+effective and a `pinned` that leaves some tools out
+([the ceiling](ceiling.md)), a run is declared only the schemas of the
+`pinned` tools and of `tool_search`; `Ceiling.declared/2` is the one place
+that decides it, for the adapters' `tools` and for the cards.
+
+`tool_search` lists the cards of the run's effective `model` tools that
+match `q` and `tags`. Each one the run was not declared gets, on the line
+after its card, `schema <name>: <JSON schema>`. From that call on, the run
+may call it; before, the call is refused (`has no schema in this run yet`).
+A tool outside the ceiling is not in the catalog the search reads, so it is
+never found, and a call to it is refused as not the run's. Whether a project
+works this way is its TOML: without `pinned`, or without `tool_search` in the
+effective set, every schema is declared and nothing changes.
+
+The schema comes back as a tool result, after the stable prefix, instead of
+growing the `tools` array. All three adapter protocols cache a prefix that
+starts with the tools: Anthropic Messages caches tools, then `system`, then the
+messages up to a `cache_control` block; OpenAI Chat Completions and Responses
+cache the longest identical prefix (`prompt_cache_key` routes it), and the
+tools come first in it. A tool added to the array mid-run changes the first
+bytes and drops the cache of the instructions and of every message after it;
+a tool result only extends the end. The cost is that the model calls a tool
+its `tools` array does not list; the name and schema are in the result it
+just read.
+
+Limits: a `command` model and `code_mode` bind only the declared tools, so
+they cannot call one found later. With `send_catalog`, a run is sent the
+declared tools only. A search with no `q` returns every schema of the
+catalog, cut to `[policy] tool_output_bytes`.
 
 ## Editing files
 

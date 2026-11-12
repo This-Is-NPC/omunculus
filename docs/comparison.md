@@ -37,7 +37,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Prompt caching | **P** stable prefix, `prompt_cache_key`, Anthropic `cache_control` breakpoints | **P** | **P** | **P** |
 | | Tokens and cost | **P** every HTTP adapter records `usage`; `runs` sums tokens and cost | **P** | **P** | **P** |
 | **Tools for the model** | Code mode | **P** with a model's `code_mode`, every tool | **P** `ptc` | **P** MCP and plugins | ◐ 7 tools |
-| | On-demand schemas | ◐ `tool_search`/`pinned` exist; every schema is sent (**K**) | ✗ | **P** | **P** |
+| | On-demand schemas | **P** `pinned` tools and `tool_search` are declared; `tool_search` returns the schema of the rest, added after the cached prefix | ✗ | **P** | **P** |
 | | MCP | **P** inside the sandbox | **P** | **P** | **P** |
 | **Context** | Context per run | **P** rebuilt each run: agent, tools, work, goal, last comment, last run; or a paused session continued (`session_ttl_ms`) | Accumulated session | Accumulated session | Accumulated session |
 | | Compaction | ◐ a session past `session_max_bytes` starts over with fresh context; `compact_comments` | **P** | **P** | **P** |
@@ -71,7 +71,6 @@ supports, not written yet · **K** needs a change in the harness core ·
 
 Core changes (**K**):
 
-- on-demand schemas (send only `pinned`, `tool_search` returns the rest)
 - a deeper history view, for search beyond the last run
 - execution outside Linux and Bubblewrap
 

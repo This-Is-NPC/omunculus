@@ -68,7 +68,7 @@ defmodule Omunculus.Run do
 
   alias Omunculus.Execution.{Limiter, Policy}
   alias Omunculus.Tool.{Catalog, Overrides}
-  alias Omunculus.Tools.Out
+  alias Omunculus.Tools.{Out, ToolSearch}
 
   # What a run whose context is full may still call: the tools that report.
   @report_tools ~w(comment done continue break)
@@ -254,7 +254,8 @@ defmodule Omunculus.Run do
          {:ok, catalog} <- Overrides.apply(catalog, snapshot.overrides),
          model_catalog = Catalog.with_trigger(catalog, "model"),
          names = effective_names(snapshot, model_catalog),
-         tools = effective_tools(sent(config, names, model_catalog), model_catalog),
+         declared = Ceiling.declared(snapshot.pinned, names),
+         tools = effective_tools(sent(config, names, declared, model_catalog), model_catalog),
          {:ok, execution} <-
            Policy.build(
              config,
@@ -299,7 +300,8 @@ defmodule Omunculus.Run do
            ),
          cursor = :atomics.new(1, []),
          context = context_watch(Config.handoff_tokens(config, name), agent, work),
-         call = build_call(project, run, names, config, prepared, execution, cursor, context) do
+         call =
+           build_call(project, run, names, declared, config, prepared, execution, cursor, context) do
       run_model(
         project,
         %{
@@ -496,8 +498,11 @@ defmodule Omunculus.Run do
   # With `send_catalog` every run is sent the same tools, the catalog's
   # model tools, so all agents' requests start alike; it may still call
   # only its own, `names`.
-  defp sent(%{send_catalog: true}, _names, catalog), do: catalog |> Map.keys() |> Enum.sort()
-  defp sent(_config, names, _catalog), do: names
+  # Under on-demand schemas it is only the declared ones.
+  defp sent(%{send_catalog: true}, names, declared, catalog) when names == declared,
+    do: catalog |> Map.keys() |> Enum.sort()
+
+  defp sent(_config, _names, declared, _catalog), do: declared
 
   defp effective_tools(names, catalog) do
     Enum.map(names, fn name ->
@@ -506,13 +511,25 @@ defmodule Omunculus.Run do
     end)
   end
 
-  defp build_call(project, run, names, config, prepared, execution, cursor, context) do
-    allowed = MapSet.new(names)
+  defp mark_found(found, own, output) do
+    for name <- ToolSearch.found(output), index = own[name], do: :atomics.put(found, index, 1)
+    :ok
+  end
+
+  # A run calls the tools it was declared and those `tool_search` returned
+  # the schema of, marked in `found` by the place of their name in `names`.
+  defp build_call(project, run, names, declared, config, prepared, execution, cursor, context) do
+    own = names |> Enum.with_index(1) |> Map.new()
+    callable = MapSet.new(declared)
+    found = :atomics.new(max(length(names), 1), [])
 
     fn name, args ->
       cond do
-        not MapSet.member?(allowed, name) ->
+        not Map.has_key?(own, name) ->
           refuse(project, run, name, args, Out.not_yours(name))
+
+        not MapSet.member?(callable, name) and :atomics.get(found, own[name]) == 0 ->
+          refuse(project, run, name, args, Out.not_found(name))
 
         full?(context) and name not in @report_tools ->
           refuse(project, run, name, args, Out.context_full(full_at(context), context.limit))
@@ -535,6 +552,7 @@ defmodule Omunculus.Run do
             {:ok, out, _events} ->
               # Past the limit, the comment is the run's report: it ends the run.
               if name == "comment" and full?(context), do: throw({:context_full, run.id})
+              if name == "tool_search", do: mark_found(found, own, out.output)
               {:ok, Out.cut(out.output, config.tool_output_bytes)}
 
             {:error, _reason} = error ->

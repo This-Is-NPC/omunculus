@@ -275,7 +275,8 @@ No tags, no suffix. What becomes a card is `pinned` ∩ effective. The rest
 of the effective set is reached through `tool_search`. Without `pinned` on
 a layer, every effective tool is a card. Without `tool_search` in the
 effective set, `pinned` is ignored and everything is a card. The `catalog`
-view `tool_search` searches is the whole effective set.
+view `tool_search` searches is the whole effective set, and the model is sent
+the schemas of the cards only ([on-demand schemas](tools.md#on-demand-schemas)).
 
 There is no `message` section when the opening came from `continue`,
 `break`, `delegate`, `cancel`, `request` or `reply`.

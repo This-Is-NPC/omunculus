@@ -618,12 +618,10 @@ defmodule Omunculus.Harness do
   defp catalog_view(%{tools: tools}, catalog, event) do
     model_catalog = Catalog.with_trigger(catalog, "model")
     names = if tools, do: Jason.decode!(tools), else: []
-    pinned = event_pinned(event)
+    names = names |> Enum.filter(&Map.has_key?(model_catalog, &1)) |> Enum.sort()
+    declared = Ceiling.declared(event_pinned(event), names)
 
-    names
-    |> Enum.filter(&Map.has_key?(model_catalog, &1))
-    |> Enum.sort()
-    |> Enum.map(&catalog_card(Map.fetch!(model_catalog, &1), pinned))
+    Enum.map(names, &catalog_card(Map.fetch!(model_catalog, &1), declared))
   end
 
   defp event_pinned(nil), do: nil
@@ -638,20 +636,24 @@ defmodule Omunculus.Harness do
   defp event_pinned(_event), do: nil
 
   defp catalog_card(
-         %Manifest{name: name, description: description, tags: tags, groups: groups},
-         pinned
+         %Manifest{
+           name: name,
+           description: description,
+           tags: tags,
+           groups: groups,
+           parameters: parameters
+         },
+         declared
        ) do
     %{
       name: name,
       description: description,
       tags: tags,
       groups: groups,
-      pinned: pinned?(pinned, name)
+      parameters: parameters,
+      pinned: name in declared
     }
   end
-
-  defp pinned?(nil, _name), do: true
-  defp pinned?(list, name) when is_list(list), do: name in list
 
   defp store_ctx(ctx, work_id, config, catalog),
     do: %{

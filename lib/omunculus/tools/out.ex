@@ -241,6 +241,10 @@ defmodule Omunculus.Tools.Out do
   @spec failure(term) :: String.t()
   def failure(reason) when is_binary(reason), do: reason
 
+  @spec not_found(String.t()) :: String.t()
+  def not_found(name),
+    do: "refused: #{inspect(name)} has no schema in this run yet; find it with tool_search first"
+
   def failure({:artifact, {:conflict, name, base, current}}),
     do: "#{name} is at version #{current}, not #{base}: read it again and build on that"
 

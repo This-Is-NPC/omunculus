@@ -74,6 +74,21 @@ defmodule Omunculus.Ceiling do
     |> Map.put(:overrides, merge_overrides(layers))
   end
 
+  @doc """
+  The tools of `names` a run is declared the schemas of. With `tool_search`
+  among them and a `pinned` that leaves some out, only `pinned` and
+  `tool_search`; the rest come back, schema and all, from a search. Otherwise
+  all of `names`.
+  """
+  @spec declared([String.t()] | nil, [String.t()]) :: [String.t()]
+  def declared(pinned, names) when is_list(pinned) do
+    if "tool_search" in names and Enum.any?(names, &(&1 not in pinned)),
+      do: Enum.filter(names, &(&1 in pinned or &1 == "tool_search")),
+      else: names
+  end
+
+  def declared(nil, names), do: names
+
   @spec overrides(map(), %{
           agent: String.t() | nil,
           depth: integer() | nil,

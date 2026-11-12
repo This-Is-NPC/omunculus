@@ -538,6 +538,11 @@ a ceiling layer: `mode`, `granted` / `tools`, `negotiable`, `human`,
 `deny`, `pinned`, and the per-tool `overrides` below. Intersected, not unioned. [The ceiling](ceiling.md) is
 the rule.
 
+`pinned` (names or groups) turns on [on-demand schemas](tools.md#on-demand-schemas):
+a run whose effective tools include `tool_search` is sent only the schemas of
+its `pinned` tools and of `tool_search`, and finds the others with it. There is
+no code default: a layer without `pinned` sends every schema.
+
 `text` is what the assemble tool puts first in the prompt. It is not a
 system role and it is not the message from `send`.
 

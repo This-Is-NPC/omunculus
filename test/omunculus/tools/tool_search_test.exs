@@ -114,4 +114,25 @@ defmodule Omunculus.Tools.ToolSearchTest do
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.output == ToolSearch.run(input)["output"]
   end
+
+  test "a card not pinned carries its schema, and found reads its name back" do
+    cards = [
+      %{name: "read", description: "Reads.", tags: [], pinned: true, parameters: %{}},
+      %{
+        name: "write",
+        description: "Writes.",
+        tags: [],
+        pinned: false,
+        parameters: %{"type" => "object"}
+      }
+    ]
+
+    output = ToolSearch.run(%{@input | view: %{"catalog" => cards}})["output"]
+
+    assert output ==
+             "- read: Reads.\n- write: Writes.\nschema write: " <>
+               ~s({"type":"object"})
+
+    assert ToolSearch.found(output) == ["write"]
+  end
 end

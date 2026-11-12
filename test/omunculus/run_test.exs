@@ -712,6 +712,92 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  describe "on-demand schemas" do
+    @agency_tools ~w(bash break catalog changes comment continue delegate deliver end forward fs.read fs.write grant reopen retire ask escalate reply sandbox.write skills store work)
+
+    defp agency_config(dir, pinned) do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = #{inspect(@agency_tools)}
+      #{pinned}
+      """)
+    end
+
+    defp declared_tools(dir, pinned) do
+      agency_config(dir, pinned)
+      project = open_project(dir)
+      test_pid = self()
+
+      Fixtures.use_model(project, fn _assembled, tools, call ->
+        send(test_pid, {:tools, tools})
+        send(test_pid, {:before, call.("reopen", %{})})
+        send(test_pid, {:search, call.("tool_search", %{"q" => "reopen"})})
+        send(test_pid, {:after, call.("reopen", %{})})
+        {:ok, "done"}
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
+      Project.close(project)
+      assert_received {:tools, tools}
+      tools
+    end
+
+    test "a run is declared only pinned tools and tool_search, and finds the rest", %{dir: dir} do
+      tools =
+        declared_tools(dir, ~s(pinned = ["fs.read", "fs.write", "store"]))
+
+      names = Enum.map(tools, & &1.name)
+
+      assert "tool_search" in names and "read" in names and "comment" in names
+      refute "reopen" in names or "retire" in names
+
+      assert_received {:before, {:error, before}}
+      assert before == Out.not_found("reopen")
+      assert_received {:search, {:ok, found}}
+      assert found =~ ~r/^- reopen: /m
+      assert found =~ ~r/^schema reopen: \{/m
+      refute found =~ "schema read"
+      assert_received {:after, {_status, later}}
+      refute later == Out.not_found("reopen")
+      refute later == Out.not_yours("reopen")
+    end
+
+    test "a tool outside the ceiling is neither found nor callable", %{dir: dir} do
+      agency_config(dir, ~s(pinned = ["store"]))
+      project = open_project(dir)
+      test_pid = self()
+
+      Fixtures.use_model(project, fn _assembled, _tools, call ->
+        send(test_pid, {:search, call.("tool_search", %{"q" => "merge"})})
+        send(test_pid, {:call, call.("merge", %{})})
+        {:ok, "done"}
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
+      assert_received {:search, {:ok, found}}
+      refute found =~ "schema merge"
+      assert_received {:call, {:error, refused}}
+      assert refused == Out.not_yours("merge")
+      Project.close(project)
+    end
+
+    test "on demand, the tools payload is smaller than every schema", %{dir: dir} do
+      all = dir |> declared_tools("") |> payload_bytes()
+
+      few =
+        Fixtures.tmp_dir()
+        |> declared_tools(~s(pinned = ["read", "write", "comment", "end"]))
+        |> payload_bytes()
+
+      IO.puts("tools payload bytes: every schema #{all}, pinned and tool_search #{few}")
+      assert few < all
+    end
+
+    defp payload_bytes(tools), do: tools |> Jason.encode!() |> byte_size()
+  end
+
   test "a 13th effective tool does not hide the others unless pinned is set", %{dir: dir} do
     write_config(dir, """
     [agents.concierge]

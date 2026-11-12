@@ -35,7 +35,7 @@ Lists, in any mode:
 | `negotiable` | askable — another agent |
 | `human` | sealed — only the person, through `REQUESTS` |
 | `deny` | blocked — nobody |
-| `pinned` | card on the assembled prompt (does not classify have / askable) |
+| `pinned` | card on the assembled prompt and schema sent to the model (does not classify have / askable) |
 
 Precedence in the effective set: `deny` > `human` > `negotiable` >
 `granted`. A layer that lists `human` beats `auto` on the others.
@@ -65,9 +65,11 @@ original request, directly or through named reply parts. The arbiter's
 of them as have in its run. See [who a request goes to](requests.md#who-a-request-goes-to).
 
 `pinned` intersects the same way `granted` does: an empty list on a layer
-does not restrict. Tools in `pinned` ∩ effective become cards; the rest
-of the effective set is `tool_search`. Without `tool_search` in the
-effective set, `pinned` is ignored.
+does not restrict. Tools in `pinned` ∩ effective become cards and are the
+only ones whose schema the model is sent; the rest of the effective set is
+`tool_search`, which returns their schemas and makes them callable in the run
+([on-demand schemas](tools.md#on-demand-schemas)). Without `tool_search` in
+the effective set, `pinned` is ignored.
 
 ## Grants
 

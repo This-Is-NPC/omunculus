@@ -1,8 +1,11 @@
 defmodule Omunculus.Tools.ToolSearch do
   @moduledoc """
   Builtin `tool_search` tool: searches this run's already
-  authorized catalog by name, description or tag, without exposing schemas
-  or reaching past the ceiling.
+  authorized catalog by name, description or tag, without reaching past the
+  ceiling. A tool the run was not declared the schema of (not `pinned`) comes
+  back with its schema on the line after its card, `schema <name>: <json>`;
+  `found/1` reads those names from the output, and the run may call them from
+  then on.
   """
 
   alias Omunculus.Tool.Manifest
@@ -47,6 +50,17 @@ defmodule Omunculus.Tools.ToolSearch do
     end
   end
 
+  @doc "The tools whose schema an `output` of this tool carries."
+  @spec found(String.t()) :: [String.t()]
+  def found(output) do
+    for [_, name] <- Regex.scan(~r/^schema (\S+): /m, output), do: name
+  end
+
   defp format([]), do: Out.no_tools_found()
-  defp format(cards), do: cards |> Enum.map(&Manifest.card/1) |> Enum.join("\n")
+  defp format(cards), do: cards |> Enum.map_join("\n", &entry/1)
+
+  defp entry(%{pinned: false, name: name, parameters: parameters} = card),
+    do: Manifest.card(card) <> "\nschema #{name}: " <> Jason.encode!(parameters)
+
+  defp entry(card), do: Manifest.card(card)
 end

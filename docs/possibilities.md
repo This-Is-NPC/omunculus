@@ -436,8 +436,9 @@ error at load, not a resource the model can invent.
 ## 8. Short cards, long catalog
 
 Without `pinned`, every effective tool is a card. With `tool_search` in the
-effective set, `pinned` ∩ effective become cards and the rest hide behind
-search. Without `tool_search`, `pinned` is ignored.
+effective set, `pinned` ∩ effective become cards, the only schemas sent, and
+the rest hide behind search, which returns their schemas. Without
+`tool_search`, `pinned` is ignored.
 
 ```mermaid
 flowchart LR
