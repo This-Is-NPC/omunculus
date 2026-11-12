@@ -656,13 +656,19 @@ A conversation's level, in place of the project's once one is opened:
   whose model has none shows "-", and a line says "no price set for haiku in the
   project config" for each such model;
 - ARTIFACTS, the documents agents made in the conversation (`ArtifactsView`),
-  read from `GET .../artifacts` each time the page opens: a rule per artifact
-  headed by its title, the artifact's name without its id and extension, and
-  what it is ("Proposal · document"), and a row per version under it, oldest
-  first, with its size, by whom and when it was written; the media type is in a
-  row's tooltip.
-  Enter on a version saves it to the downloads directory through the versions
-  route and opens it, as an attachment is. A conversation without one says so.
+  read from `GET .../artifacts` each time the page opens, BY WORK or BY NAME.
+  BY WORK, the default, groups the files by the work that wrote them: each work
+  is a lineage row as in the tree (the agent that talks with you holds the files
+  written outside any work), the works above it kept so the hierarchy reads
+  whole, and its files hang under it with their size and when they were written.
+  A work shows the latest version it wrote of each name. BY NAME is a rule per
+  artifact headed by its title, the artifact's name without its id and
+  extension, and what it is ("Proposal · document"), and a row per version
+  under it, oldest first, with its size, by whom and when it was written; the
+  media type is in a row's tooltip.
+  Enter on a file or version saves it to the downloads directory through the
+  versions route and opens it, as an attachment is. A conversation without one
+  says so.
 
 A work also opens as a scope of the chat, from its row's open arrow: the chat
 kept to its branch, under the agents down to it (`ScopeBar`, "SCOPE front-desk
