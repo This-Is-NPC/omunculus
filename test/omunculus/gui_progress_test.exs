@@ -3,7 +3,7 @@ defmodule Omunculus.GuiProgressTest do
 
   alias Omunculus.GuiModules
 
-  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress"]
+  @modules ["Requests", "Questions", "Phrases", "Time", "Progress"]
 
   # A sale at its design stage (w1), a design-lead work handed down in it
   # waiting on its child (w2), and a design work sent back once from review
@@ -392,17 +392,14 @@ defmodule Omunculus.GuiProgressTest do
       run("r4", "designer", "w3", {status: "done", started_at: iso(1400), finished_at: iso(1500)}),
       run("r3", "designer", "w3", {started_at: iso(1900)})
     ];
-    const tally = (calls, cost) => Object.assign(Usage.tally(), {calls, input: calls * 10, cost, priced: calls});
-    const usage = {w1: tally(2, 0.5), w2: tally(1, 0.25), w3: tally(3, 0.125)};
     const calls = {w1: {count: 5, failed: 1, last: {text: "moved on to design", at: 1200}}, w2: {count: 2, failed: 0, last: null}, w3: {count: 7, failed: 2, last: null}};
-    const n = nodes(Progress.build(Object.assign({}, base, {runs, runStarts: {r3: 1900}, usage, calls})));
-    check(JSON.stringify(n.w3.own) === JSON.stringify({seconds: 600, agentSeconds: 200, calls: 7, failed: 2, usage: usage.w3}), "w3 own", n.w3.own);
+    const n = nodes(Progress.build(Object.assign({}, base, {runs, runStarts: {r3: 1900}, calls})));
+    check(JSON.stringify(n.w3.own) === JSON.stringify({seconds: 600, agentSeconds: 200, calls: 7, failed: 2}), "w3 own", n.w3.own);
     check(n.w3.calls === 7 && n.w3.failed === 2 && n.w1.last.text === "moved on to design", "calls", n.w1.last);
     const b = n.w1.branch;
     check(b.agentSeconds === 360 && b.works === 3 && b.calls === 14 && b.running === 1 && b.agents === 3 && b.seconds === 1000, "w1 branch", b);
-    check(b.usage.calls === 6 && b.usage.input === 60 && b.usage.cost === 0.875 && b.usage.priced === 6, "usage", b.usage);
     check(n.w2.branch.agents === 2 && n.w2.branch.agentSeconds === 260 && n.w2.calls === 2 && n.w2.branch.calls === 9, "w2 branch", n.w2.branch);
-    check(n.w1.own.usage.calls === 2 && n.w1.own.agentSeconds === 100, "w1 own", n.w1.own);
+    check(n.w1.own.agentSeconds === 100, "w1 own", n.w1.own);
     """)
   end
 

@@ -6,19 +6,20 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/client/Tree.js" as Tree
 import "kit/client/Usage.js" as Usage
 
-// CostView is what the conversation open has used. At the top, BY WORK and BY
-// AGENT, and its cost in dollars at the right; under them what it used in all
-// — the model replies, the tokens read by the model (with those from cache)
-// and written by it. BY WORK is the lineage tree of the works, each row with
-// the model its agent runs on, the tokens it used and those of everything
-// below it, and its branch's share of all the tokens as a bar; the server
-// prices an agent, not a work, so a work has tokens and no dollars. BY AGENT
-// is a row per agent, the busiest first, its name in its colour, its model
-// and the same figures in columns, or, under 700 px, on lines of their own,
-// never cut; its cost at the top right. The dollars are the server's: each
-// agent's tokens at the price its model has in the project config. An agent
-// whose model has none shows "-", and a line says "no price set for <model> in
-// the project config" for each such model. Esc leaves.
+// CostView is what the conversation open has used and cost. At the top, BY
+// WORK and BY AGENT, and its cost in dollars at the right; under them what it
+// used in all — the model replies, the tokens read by the model (with those
+// from cache) and written by it. BY WORK is the lineage tree of the works,
+// each row with the models its calls used, the dollars it spent and those of
+// everything below it, and its branch's share of all the dollars as a bar;
+// the work picked has its calls listed under the tree, each with the model it
+// used, its tokens and its dollars. BY AGENT is a row per agent, the busiest
+// first, its name in its colour, its models and its tokens in columns, or,
+// under 700 px, on lines of their own, never cut; its cost at the top right.
+// The dollars are the server's (`GET /usage?conversation=`): each call's
+// tokens at the price the model it used has in the project config. A call
+// whose model has none has no dollars, and a line says "no price set for
+// <model> in the project config" for each such model. Esc leaves.
 FocusScope {
   id: view
 
@@ -27,37 +28,36 @@ FocusScope {
   // "work" or "agent".
   property string by: "work"
 
-  readonly property var all: Omunculus.usage.all
-  readonly property var agents: Object.keys(Omunculus.usage.agents).sort((a, b) => {
-    const used = name => Omunculus.usage.agents[name].input + Omunculus.usage.agents[name].output
+  readonly property var all: Omunculus.spend.total
+  readonly property var agents: Object.keys(Omunculus.spend.agents).sort((a, b) => {
+    const used = name => Omunculus.spend.agents[name].input + Omunculus.spend.agents[name].output
     return used(b) - used(a) || a.localeCompare(b)
-  }).map(name => Object.assign({ name: name }, Omunculus.usage.agents[name]))
+  }).map(name => Object.assign({ name: name }, Omunculus.spend.agents[name]))
   readonly property var total: Omunculus.spend.total
-  // Whether any model that ran has a price, so there are dollars to show.
-  readonly property bool priced: view.agents.some(entry => view.spent(entry) !== "-")
+  // Whether any call has a price, so there are dollars to show.
+  readonly property bool priced: view.total.usd > 0 || view.agents.some(entry => entry.usd !== null)
 
-  // An agent's model, "-" while the server has not said.
-  function modelOf(name) { return (Omunculus.spend.agents[name] || {}).model || "-" }
-  // The works, every one open, with their tokens and shares.
+  // The models an entry's calls used, "-" while there are none.
+  function modelsOf(entry) { return entry.models.length > 0 ? entry.models.join(", ") : "-" }
+  // The works, every one open, with their dollars and shares.
   readonly property var works: {
     const opened = {}
     for (const node of Omunculus.progress ? Omunculus.progress.flat : [])
       opened[node.work] = true
-    return Usage.byWork(Tree.rows(Omunculus.progress, opened, null), Omunculus.usage.works, view.all, Omunculus.spend.agents)
+    return Usage.byWork(Tree.rows(Omunculus.progress, opened, null), Omunculus.spend)
   }
 
-  // A tally's replies, tokens read and tokens written.
-  function replies(tally) { return tally.calls + (tally.calls === 1 ? " reply" : " replies") }
+  // An entry's replies, tokens read and tokens written.
+  function replies(tally) { return tally.replies + (tally.replies === 1 ? " reply" : " replies") }
   function read(tally) { return Omunculus.tokens(tally.input) + " read" + (tally.cached > 0 ? " (" + Omunculus.tokens(tally.cached) + " from cache)" : "") }
   function written(tally) { return Omunculus.tokens(tally.output) + " written" }
-  // Tokens read and written, as one short line.
-  function tokensOf(tally) { return Omunculus.tokens(tally.input) + " read" + Theme.type.meta.separator + written(tally) }
   // The three as one line.
   function used(tally) { return [replies(tally), read(tally), written(tally)].join(Theme.type.meta.separator) }
-  // An agent's cost, "-" when its model has no price.
-  function spent(entry) {
-    const found = Omunculus.spend.agents[entry.name]
-    return found && found.usd !== null && found.usd !== undefined ? Usage.money(found.usd) : "-"
+  // An entry's cost, "-" when none of its calls has a price.
+  function spent(entry) { return entry.usd === null || entry.usd === undefined ? "-" : Usage.money(entry.usd) }
+  // One call of a work: its model, tokens and dollars.
+  function callLine(call) {
+    return [call.model || "-", Omunculus.tokens(call.fresh + call.cache_write + call.cached) + " read", Omunculus.tokens(call.output) + " written", spent(call)].join(Theme.type.meta.separator)
   }
 
   Keys.onEscapePressed: leave()
@@ -72,8 +72,8 @@ FocusScope {
       spacing: Theme.space.gap
       ChipStrip {
         Layout.fillWidth: true
-        Chip { text: "BY WORK"; checked: view.by === "work"; tip: "the works, each with the tokens its branch used"; onClicked: view.by = "work" }
-        Chip { text: "BY AGENT"; checked: view.by === "agent"; tip: "each agent, with its model and what it cost"; onClicked: view.by = "agent" }
+        Chip { text: "BY WORK"; checked: view.by === "work"; tip: "the works, each with what its branch cost"; onClicked: view.by = "work" }
+        Chip { text: "BY AGENT"; checked: view.by === "agent"; tip: "each agent, with its models and what it cost"; onClicked: view.by = "agent" }
       }
       Label {
         visible: view.priced
@@ -121,7 +121,7 @@ FocusScope {
         implicitHeight: Theme.size.rule
         readonly property real room: width - Theme.space.cell * 2
         Repeater {
-          model: [["WORK", 0], ["MODEL", 0.26], ["OWN", 0.46], ["WITH THE WORKS BELOW", 0.66], ["SHARE OF TOKENS", 0.86]]
+          model: [["WORK", 0], ["MODEL", 0.26], ["OWN", 0.46], ["WITH THE WORKS BELOW", 0.66], ["SHARE OF COST", 0.86]]
           delegate: Label {
             required property var modelData
             x: Theme.space.cell + titles.room * modelData[1]
@@ -194,7 +194,7 @@ FocusScope {
               x: Theme.space.cell + work.room * 0.26
               width: work.room * 0.2 - Theme.space.gap
               anchors.verticalCenter: parent.verticalCenter
-              text: view.modelOf(work.modelData.agent)
+              text: view.modelsOf(work.modelData.own)
               color: Theme.dim
               font.pixelSize: Theme.type.meta.size
               elide: Text.ElideRight
@@ -203,7 +203,7 @@ FocusScope {
               x: Theme.space.cell + work.room * 0.46
               width: work.room * 0.2 - Theme.space.gap
               anchors.verticalCenter: parent.verticalCenter
-              text: view.tokensOf(work.modelData.own)
+              text: view.spent(work.modelData.own)
               color: Theme.foreground
               font.pixelSize: Theme.type.meta.size
               elide: Text.ElideRight
@@ -212,7 +212,7 @@ FocusScope {
               x: Theme.space.cell + work.room * 0.66
               width: work.room * 0.2 - Theme.space.gap
               anchors.verticalCenter: parent.verticalCenter
-              text: view.tokensOf(work.modelData.branch)
+              text: view.spent(work.modelData.branch)
               color: Theme.foreground
               font.pixelSize: Theme.type.meta.size
               elide: Text.ElideRight
@@ -254,7 +254,7 @@ FocusScope {
               Label {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
-                text: view.modelOf(work.modelData.agent)
+                text: view.modelsOf(work.modelData.own)
                 color: Theme.dim
                 font.pixelSize: Theme.type.meta.size
                 elide: Text.ElideRight
@@ -267,14 +267,14 @@ FocusScope {
             }
             Label {
               Layout.fillWidth: true
-              text: "own" + Theme.type.meta.separator + view.tokensOf(work.modelData.own)
+              text: "own" + Theme.type.meta.separator + view.spent(work.modelData.own)
               color: Theme.foreground
               font.pixelSize: Theme.type.meta.size
               wrapMode: Text.Wrap
             }
             Label {
               Layout.fillWidth: true
-              text: "with the works below" + Theme.type.meta.separator + view.tokensOf(work.modelData.branch)
+              text: "with the works below" + Theme.type.meta.separator + view.spent(work.modelData.branch)
               color: Theme.foreground
               font.pixelSize: Theme.type.meta.size
               wrapMode: Text.Wrap
@@ -297,6 +297,25 @@ FocusScope {
           font.pixelSize: Theme.type.tab.size
         }
       }
+
+      // The calls of the work picked, each with the model it used.
+      ListView {
+        id: callList
+        readonly property var picked: workList.currentIndex >= 0 && workList.currentIndex < view.works.length ? view.works[workList.currentIndex] : null
+        visible: count > 0
+        Layout.fillWidth: true
+        Layout.preferredHeight: Math.min(contentHeight, Theme.size.rule * 6)
+        clip: true
+        model: picked ? picked.calls : []
+        delegate: Label {
+          required property var modelData
+          width: callList.width
+          text: view.callLine(modelData)
+          color: Theme.dim
+          font.pixelSize: Theme.type.meta.size
+          elide: Text.ElideRight
+        }
+      }
     }
 
     // By agent.
@@ -309,7 +328,7 @@ FocusScope {
       rows: view.agents
       idOf: entry => entry.name
       columns: [{ title: "Agent", weight: 0.16 }, { title: "Model", weight: 0.2 }, { title: "Replies", weight: 0.1 }, { title: "Read", weight: 0.26 }, { title: "Written", weight: 0.12 }, { title: "Cost", weight: 0.16 }]
-      cells: entry => [entry.name, view.modelOf(entry.name), view.replies(entry), view.read(entry), view.written(entry), view.spent(entry)]
+      cells: entry => [entry.name, view.modelsOf(entry), view.replies(entry), view.read(entry), view.written(entry), view.spent(entry)]
       tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 1 ? Theme.dim : column === 5 && view.spent(entry) === "-" ? Theme.dim : ""
       stacked: [[0], [1], [2, 3], [4]]
       status: 5

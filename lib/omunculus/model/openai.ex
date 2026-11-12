@@ -105,7 +105,7 @@ defmodule Omunculus.Model.OpenAI do
 
   defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),
-         :ok <- record.(Maps.maybe_put(strip_message(message), "usage", message["usage"])) do
+         :ok <- record.(recorded(client, message)) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
           tool_messages = Enum.map(tool_calls, &run_tool_call(&1, call, catalog, execution))
@@ -126,6 +126,15 @@ defmodule Omunculus.Model.OpenAI do
     end
   end
 
+  # The reply as recorded: with its usage and the model that answered, the
+  # one the request named when the provider does not say.
+  defp recorded(client, message) do
+    message
+    |> strip_message()
+    |> Maps.maybe_put("usage", message["usage"])
+    |> Map.put("model", message["model"] || client.model)
+  end
+
   defp request_body(client, tools, messages) do
     %{model: client.model, messages: messages, tools: tools}
     |> Maps.maybe_put(:temperature, client.temperature)
@@ -136,7 +145,7 @@ defmodule Omunculus.Model.OpenAI do
   end
 
   defp post(%{stream: true} = client, body) do
-    reply = %{content: nil, tool_calls: %{}, usage: nil}
+    reply = %{content: nil, tool_calls: %{}, usage: nil, model: nil}
 
     case EventStream.post(client, body, reply, &chunk(&1, &2, client)) do
       {:ok, reply} -> {:ok, streamed_message(reply)}
@@ -152,18 +161,25 @@ defmodule Omunculus.Model.OpenAI do
   end
 
   defp extract_message(%{"choices" => [%{"message" => message} | _]} = body),
-    do: {:ok, Maps.maybe_put(message, "usage", body["usage"])}
+    do:
+      {:ok,
+       message |> Maps.maybe_put("usage", body["usage"]) |> Maps.maybe_put("model", body["model"])}
 
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
 
   defp chunk(%{"choices" => [%{"delta" => delta} | _]} = data, reply, client) do
     reply
+    |> chunk_model(data["model"])
     |> chunk_usage(data["usage"])
     |> chunk_content(delta["content"], client)
     |> chunk_tool_calls(delta["tool_calls"])
   end
 
-  defp chunk(data, reply, _client), do: chunk_usage(reply, data["usage"])
+  defp chunk(data, reply, _client),
+    do: reply |> chunk_model(data["model"]) |> chunk_usage(data["usage"])
+
+  defp chunk_model(reply, nil), do: reply
+  defp chunk_model(reply, model), do: %{reply | model: model}
 
   defp chunk_usage(reply, nil), do: reply
   defp chunk_usage(reply, usage), do: %{reply | usage: usage}
@@ -198,8 +214,11 @@ defmodule Omunculus.Model.OpenAI do
 
   defp chunk_tool_calls(reply, _calls), do: reply
 
-  defp streamed_message(%{content: content, tool_calls: calls, usage: usage}) do
-    message = Maps.maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
+  defp streamed_message(%{content: content, tool_calls: calls, usage: usage, model: model}) do
+    message =
+      %{"role" => "assistant", "content" => content}
+      |> Maps.maybe_put("usage", usage)
+      |> Maps.maybe_put("model", model)
 
     case calls |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1)) do
       [] -> message

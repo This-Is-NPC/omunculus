@@ -31,7 +31,7 @@ agent at work, what waits on you, and each branch's time, calls and cost. The
 stages a work went through, its rounds and who sent it back or stopped it
 come from the `continue`, `reopen` and `break` events (`Progress.journal`,
 in `journeys`); the calls and the last thing done on each work (`callsOf`) and
-the model usage by work come from the `tool` and `model` events. A clock,
+the `tool` events. A clock,
 `tick`, moves every second while a run is open, and the views count their
 elapsed times from it. It keeps when each run started and why it ended
 (`runStarts`, from the events), and, for each request being answered,
@@ -640,21 +640,24 @@ A conversation's level, in place of the project's once one is opened:
   preview is now done"), a call as a verb and its object, never a command. The event opened shows in a card
   under the list, with its local time and the server's ISO stamp as UTC and
   its copy and close tools at the top right;
-- COST, what the conversation used (`CostView`): BY WORK and BY AGENT at the
-  top left and TOTAL, in dollars, at the right, then the model calls and the
-  tokens read by the model (with those from cache) and written in all. BY WORK
-  is the lineage tree of the works (`Tree.rows`, every work open): each row has
-  its agent's model (from `GET /usage`), the tokens of the work itself, those
-  of its branch (itself and every work below) and a bar with the branch's share
-  of all the tokens (`Usage.byWork`); under 1000 px a row stacks its figures on
-  lines of their own. A work has tokens and no dollars, since the server prices
-  an agent's tokens, not a work's. BY AGENT is a row per agent, the busiest
-  first, its model, replies, tokens read and tokens written in columns, or,
-  under 700 px, on lines of their own so none is cut, and its cost at the top
-  right. The dollars are the server's (`GET /usage?conversation=`): each
-  agent's tokens at the `price` of its model in the project config. An agent
-  whose model has none shows "-", and a line says "no price set for haiku in the
-  project config" for each such model;
+- COST, what the conversation used and cost (`CostView`): BY WORK and BY AGENT
+  at the top left and TOTAL, in dollars, at the right, then the model replies
+  and the tokens read by the model (with those from cache) and written in all.
+  BY WORK is the lineage tree of the works (`Tree.rows`, every work open):
+  each row has the models its calls used, the dollars of the work itself,
+  those of its branch (itself and every work below) and a bar with the
+  branch's share of all the dollars (`Usage.byWork`); under 1000 px a row
+  stacks its figures on lines of their own. The work picked on the list has
+  its calls listed under it, each with the model it used, its tokens and its
+  dollars. BY AGENT is a row per agent, the busiest first, its models,
+  replies, tokens read and tokens written in columns, or, under 700 px, on
+  lines of their own so none is cut, and its cost at the top right. The
+  figures are the server's (`GET /usage?conversation=`), which prices each
+  call at the `price` of the model that answered it in the project config;
+  the console only displays them and refreshes them as model events arrive. A
+  call whose model has no price has no dollars, an entry with none shows "-",
+  and a line says "no price set for haiku in the project config" for each such
+  model;
 - ARTIFACTS, the documents agents made in the conversation (`ArtifactsView`),
   read from `GET .../artifacts` each time the page opens, BY WORK or BY NAME.
   BY WORK, the default, groups the files by the work that wrote them: each work

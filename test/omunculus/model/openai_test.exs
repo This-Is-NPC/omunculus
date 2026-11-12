@@ -20,6 +20,9 @@ defmodule Omunculus.Model.OpenAITest do
       assert Enum.all?(replies, fn reply ->
                Jason.decode!(reply.body)["usage"]["prompt_tokens_details"]["cached_tokens"] == 2
              end)
+
+      # The stub names no model: the one the request asked for is recorded.
+      assert Enum.all?(replies, &(Jason.decode!(&1.body)["model"] == "stub"))
     end
   end
 

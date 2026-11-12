@@ -845,7 +845,8 @@ defmodule Omunculus.ServerTest do
     }
 
     call = fn fresh, cached, output ->
-      %{"model" => "fake", "usd" => nil, "fresh" => fresh, "cache_write" => 0} |> Map.merge(%{"cached" => cached, "output" => output})
+      %{"model" => "fake", "usd" => nil, "fresh" => fresh, "cache_write" => 0}
+      |> Map.merge(%{"cached" => cached, "output" => output})
     end
 
     calls = [call.(10, 0, 4), call.(7, 3, 2)]

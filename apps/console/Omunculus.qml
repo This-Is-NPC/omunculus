@@ -149,7 +149,6 @@ Singleton {
   // What the open conversation's model calls used, as their providers reported
   // it: {calls, input, cached, output, cost, priced}, in all, by agent and by
   // work ("" for runs without one). Shown only when asked for.
-  property var usage: ({ all: Usage.tally(), agents: {}, works: {} })
   // Work id -> its tool calls: {count, failed, firstFailed, last: {text, at}},
   // `firstFailed` the tool of the first failed call, `last` the newest call or
   // outcome.
@@ -513,7 +512,6 @@ Singleton {
     gatheredBy = {}
     cardNotes = {}
     drafts = {}
-    usage = { all: Usage.tally(), agents: {}, works: {} }
     spend = Usage.spend(null)
     callsOf = {}
     questionsOf = {}
@@ -899,8 +897,8 @@ Singleton {
     return count >= 1e6 ? (count / 1e6).toFixed(1) + "M" : count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
   }
 
-  // What the conversation cost at its models' prices, from the server:
-  // {agents: name -> entry, total: {usd, unpriced}}.
+  // What the conversation used and cost, priced by the server per call:
+  // {agents: name -> entry, works: id -> entry, total}.
   property var spend: Usage.spend(null)
 
   function loadSpend() {
@@ -916,18 +914,6 @@ Singleton {
     id: spendTimer
     interval: 1500
     onTriggered: root.loadSpend()
-  }
-
-  // Adds one model call's reported usage to the conversation's, its agent's
-  // and its work's.
-  function count(who, work, reported) {
-    const next = { all: Object.assign({}, usage.all), agents: Object.assign({}, usage.agents), works: Object.assign({}, usage.works) }
-    next.agents[who] = Object.assign(Usage.tally(), next.agents[who] || {})
-    next.works[work] = Object.assign(Usage.tally(), next.works[work] || {})
-    Usage.add(next.all, reported)
-    Usage.add(next.agents[who], reported)
-    Usage.add(next.works[work], reported)
-    usage = next
   }
 
   // Adds a line to the turn of the run it happened in, and makes it the
@@ -1046,7 +1032,7 @@ Singleton {
       break
     case "model": {
       if (body.usage)
-        count(who, work, body.usage)
+        spendTimer.restart()
       keep("pendingCalls", work, Model.calls(body))
       const said = Model.text(body)
       const place = rows[event.run_id]
@@ -1168,7 +1154,7 @@ Singleton {
     progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
       works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, asked: pendingCalls, runStarts: runStarts,
-      journeys: journeys, rootAgent: agent || lastAgent, me: me, now: tick, usage: usage.works, calls: callsOf
+      journeys: journeys, rootAgent: agent || lastAgent, me: me, now: tick, calls: callsOf
     })
   }
   onWorksChanged: progressTimer.restart()
@@ -1181,10 +1167,6 @@ Singleton {
   onRunErrorsChanged: progressTimer.restart()
   onSetupChanged: progressTimer.restart()
   onJourneysChanged: progressTimer.restart()
-  onUsageChanged: {
-    progressTimer.restart()
-    spendTimer.restart()
-  }
   onCallsOfChanged: progressTimer.restart()
   onAgentChanged: progressTimer.restart()
   Timer {

@@ -2,7 +2,6 @@
 .import "Requests.js" as Requests
 .import "Questions.js" as Questions
 .import "Phrases.js" as Phrases
-.import "Usage.js" as Usage
 .import "Time.js" as Time
 
 // Where the conversation's works are, derived from the state and the stage
@@ -147,13 +146,6 @@ function journal(journeys, event) {
   return next;
 }
 
-function plus(a, b) {
-  const sum = Object.assign({}, a);
-  for (const key of Object.keys(b || {}))
-    if (typeof b[key] === "number") sum[key] = (sum[key] || 0) + b[key];
-  return sum;
-}
-
 function counted(nodes) {
   return {
     working: nodes.filter(node => node.state === "working").length,
@@ -188,11 +180,10 @@ function intervals(lane, journey, created, end) {
 // waits on you, as its card asks it, and the agents that ran, first first;
 // `front`, the agent that talks with the person when the works are other
 // agents' ({agent, agents, asking, ask, asker, state, doing, since}), else null. A node's `calls` are its
-// tool calls, shown as steps: the model calls are in `usage`.
+// tool calls, shown as steps.
 // input: {works, lanes (work id -> laneOf), runs (with error), requests,
 // noted (request id -> true for one the harness passed on), calling,
-// callArgs, runStarts, journeys, rootAgent, me (the viewer), now, usage (work id -> Usage
-// tally), calls (work id -> tool calls {count, failed, last: {text, at}})}.
+// callArgs, runStarts, journeys, rootAgent, me (the viewer), now, calls (work id -> tool calls {count, failed, last: {text, at}})}.
 function build(input) {
   const works = input.works || [];
   const lanes = input.lanes || {};
@@ -201,7 +192,6 @@ function build(input) {
   const callArgs = input.callArgs || {};
   const starts = input.runStarts || {};
   const journeys = input.journeys || {};
-  const usage = input.usage || {};
   const callsOf = input.calls || {};
   const noted = input.noted || {};
   const me = input.me || null;
@@ -320,17 +310,16 @@ function build(input) {
       const to = each.status === "open" ? now : seconds(each.finished_at);
       return from === null || to === null ? sum : sum + Math.max(0, to - from);
     }, 0);
-    const own = { seconds: ownSeconds, agentSeconds: agentSeconds, calls: tally.count, failed: tally.failed, usage: plus(Usage.tally(), usage[id]) };
+    const own = { seconds: ownSeconds, agentSeconds: agentSeconds, calls: tally.count, failed: tally.failed };
     const agents = new Set(mine.map(each => each.agent));
     kids.forEach(kid => inner.get(kid).agents.forEach(name => agents.add(name)));
     const reach = kids.reduce((latest, kid) => Math.max(latest, inner.get(kid).reach), end);
     const branch = kids.reduce((sum, kid) => ({
       agentSeconds: sum.agentSeconds + kid.branch.agentSeconds,
       works: sum.works + kid.branch.works,
-      usage: plus(sum.usage, kid.branch.usage),
       running: sum.running + kid.branch.running,
       calls: sum.calls + kid.branch.calls
-    }), { agentSeconds: agentSeconds, works: 1, usage: own.usage, running: mine.filter(each => each.status === "open").length, calls: own.calls });
+    }), { agentSeconds: agentSeconds, works: 1, running: mine.filter(each => each.status === "open").length, calls: own.calls });
     branch.seconds = Math.max(0, reach - created);
     branch.agents = agents.size;
 

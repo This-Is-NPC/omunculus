@@ -292,7 +292,8 @@ failed request fails the call. `code_mode = true` also offers the model
 `tools.<name>(args)` through the same authorized, recorded path as its
 other calls. Every HTTP adapter records, with each turn in
 `EVENTS(model)`, the `usage` object the server returns (input, cached
-input and output tokens); streamed, `openai-completions` asks for it
+input and output tokens) and the `model` that answered, the one the request
+named when the reply names none; streamed, `openai-completions` asks for it
 with `stream_options.include_usage`. The two OpenAI adapters also take an optional
 `prompt_cache_key`, sent as is in every request, which OpenAI uses with
 the prompt's prefix to route requests to the server holding that prefix
@@ -322,9 +323,9 @@ price = { input = 0.10, output = 0.50, cache_write = 0.125, cache_read = 0.01 }
 that entered the provider's cache, `cache_read` for those it served from the
 cache and `output` for the tokens written. A rate is a number of at least
 zero; a missing rate, an extra key or another type refuses the config.
-With it the server prices each agent's replies by its model, in
+With it the server prices each reply by the model that answered, in
 [`GET /usage`](server.md), and the console's COST tab shows the dollars per
-agent and in all. A model with no `price` has no dollars: the tab says "no
+work, per agent and in all. A model with no `price` has no dollars: the tab says "no
 price set for <model> in the project config".
 
 Every HTTP adapter takes an optional `body` table, merged over the

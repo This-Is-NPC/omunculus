@@ -393,24 +393,38 @@ defmodule Omunculus.Store.Access do
   end
 
   @doc """
-  The tokens and cost of every model reply recorded in the project, or in
-  one conversation, per agent. The project's are for a principal who manages
-  its config, a conversation's for one who may read it.
+  Every model reply recorded in the project, or in one conversation, in the
+  order recorded: `%{agent, work, model, totals}`, `work` being "" outside any
+  work and `model` nil when the reply names none; and the parent of each
+  work. The project's are for a principal who manages its config, a
+  conversation's for one who may read it.
   """
-  @spec usage(Project.t(), principal, String.t() | nil) :: {:ok, [map]} | {:error, term}
+  @spec usage(Project.t(), principal, String.t() | nil) ::
+          {:ok, %{calls: [map], parents: %{String.t() => String.t() | nil}}} | {:error, term}
   def usage(project, actor, conversation_id \\ nil) do
     with :ok <- usage_access(project, actor, conversation_id),
          {:ok, rows} <-
            Query.all(
              project.conn,
-             "SELECT runs.agent AS agent, events.body AS body FROM events JOIN runs ON runs.id = events.run_id WHERE events.type = 'model' AND (?1 IS NULL OR events.conversation_id = ?1) ORDER BY runs.agent, events.sequence",
+             "SELECT runs.agent AS agent, events.work_id AS work, events.body AS body FROM events JOIN runs ON runs.id = events.run_id WHERE events.type = 'model' AND (?1 IS NULL OR events.conversation_id = ?1) ORDER BY events.sequence",
              [conversation_id]
-           ) do
+           ),
+         {:ok, works} <- Query.all(project.conn, "SELECT id, parent_id FROM works") do
       {:ok,
-       rows
-       |> Enum.group_by(& &1.agent, &Omunculus.Usage.reply(&1.body))
-       |> Enum.sort()
-       |> Enum.map(fn {agent, replies} -> {agent, Omunculus.Usage.sum(replies)} end)}
+       %{
+         calls:
+           for row <- rows do
+             reply = Omunculus.Usage.reply(row.body)
+
+             %{
+               agent: row.agent,
+               work: row.work || "",
+               model: reply["model"],
+               totals: Omunculus.Usage.sum([reply])
+             }
+           end,
+         parents: Map.new(works, &{&1.id, &1.parent_id})
+       }}
     end
   end
 

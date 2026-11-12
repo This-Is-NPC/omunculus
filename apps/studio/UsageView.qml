@@ -50,7 +50,7 @@ ItemPage {
         required property var modelData
         Layout.fillWidth: true
         spacing: 4
-        Kicker { Layout.fillWidth: true; text: row.modelData.agent + (row.modelData.model ? "  ·  " + row.modelData.model : ""); tone: Studio.toneOf(row.modelData.agent) }
+        Kicker { Layout.fillWidth: true; text: row.modelData.agent + (row.modelData.models.length > 0 ? "  ·  " + row.modelData.models.join(", ") : ""); tone: Studio.toneOf(row.modelData.agent) }
         Label { Layout.fillWidth: true; text: page.summary(row.modelData); font.pixelSize: 11; wrapMode: Text.Wrap }
       }
     }

@@ -72,7 +72,7 @@ defmodule Omunculus.Model.OpenAIResponses do
 
   defp loop(client, tools, input, call, record, catalog, execution) do
     with {:ok, %{"output" => output} = reply} <- post(client, request_body(client, tools, input)),
-         :ok <- record.(reply) do
+         :ok <- record.(Map.put(reply, "model", reply["model"] || client.model)) do
       case function_calls(output) do
         [] ->
           {:ok, output_text(output)}
@@ -112,7 +112,10 @@ defmodule Omunculus.Model.OpenAIResponses do
   defp extract_output(body), do: {:error, {:openai, {:invalid_response, body}}}
 
   defp reply(response),
-    do: Maps.maybe_put(%{"output" => response["output"]}, "usage", response["usage"])
+    do:
+      %{"output" => response["output"]}
+      |> Maps.maybe_put("usage", response["usage"])
+      |> Maps.maybe_put("model", response["model"])
 
   defp event(%{"type" => "response.output_text.delta", "delta" => text}, output, client)
        when is_binary(text) do

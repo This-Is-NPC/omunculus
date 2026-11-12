@@ -89,7 +89,7 @@ defmodule Omunculus.Model.AnthropicMessages do
 
   defp loop(client, system, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, system, tools, messages)),
-         :ok <- record.(strip_message(message)) do
+         :ok <- record.(recorded(client, message)) do
       case tool_uses(message) do
         [] ->
           {:ok, output_text(message)}
@@ -266,8 +266,13 @@ defmodule Omunculus.Model.AnthropicMessages do
     end)
   end
 
-  defp strip_message(message),
-    do: Map.take(message, ["role", "content", "stop_reason", "usage"])
+  # The reply as recorded, with the model that answered, or the one the
+  # request named when the provider does not say.
+  defp recorded(client, message) do
+    message
+    |> Map.take(["role", "content", "stop_reason", "usage"])
+    |> Map.put("model", message["model"] || client.model)
+  end
 
   defp assistant_turn(message) do
     %{role: "assistant", content: Map.get(message, "content", [])}

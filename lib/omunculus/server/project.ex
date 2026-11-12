@@ -152,16 +152,19 @@ defmodule Omunculus.Server.Project do
 
   @doc """
   The usage of the project's recorded model replies, or of one conversation's,
-  per agent with its configured model and what that costs at the model's price.
+  per agent and per work, each with the models its calls used and what they
+  cost at the models' prices.
   """
   def usage(id, principal, conversation_id \\ nil) do
     project = project(id)
 
-    with {:ok, per_agent} <- Access.usage(project, principal, conversation_id),
+    with {:ok, %{calls: calls, parents: parents}} <-
+           Access.usage(project, principal, conversation_id),
          {:ok, config} <- Config.load(project.config_path) do
       {:ok,
        Omunculus.Server.Contract.usage(
-         per_agent,
+         calls,
+         parents,
          Map.new(config.agents, fn {name, agent} -> {name, agent.model} end),
          Map.new(config.models, fn {name, _model} -> {name, Config.price(config, name)} end)
        )}

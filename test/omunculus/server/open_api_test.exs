@@ -146,7 +146,7 @@ defmodule Omunculus.Server.OpenAPITest do
 
     assert paths["/v1/projects/{project_id}/members"]["post"]
     assert paths["/v1/projects/{project_id}/usage"]["get"]["operationId"] == "get_usage"
-    assert document["components"]["schemas"]["Usage"]["required"] == ~w(agents total)
+    assert document["components"]["schemas"]["Usage"]["required"] == ~w(agents works total)
   end
 
   defp local_references(%{"$ref" => "#/components/schemas/" <> name} = map),

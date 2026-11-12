@@ -6,20 +6,15 @@ defmodule Omunculus.GuiLogCostTest do
   @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Tree", "LogGroups"]
 
   # A front agent over one root work (pm) with two works under it (seller and
-  # designer), the designer's having run on a model; tokens as tallies.
+  # designer), as the server's usage prices them.
   @fixtures """
   const check = (ok, what, value) => { if (!ok) throw Error(what + " " + JSON.stringify(value)); };
-  const tally = (input, output) => Object.assign(Usage.tally(), {calls: 1, input, output});
-  const node = (work, parent, level, agent, own, kids) => {
-    const made = {work, parent, level, agent, title: work, state: "working", created: level, steps: [], groups: [{nodes: kids}],
-      own: {usage: own}, branch: {usage: own}};
-    return made;
-  };
-  const seller = node("w2", "w1", 1, "seller", tally(10, 5), []);
-  const designer = node("w3", "w1", 1, "designer", tally(20, 5), []);
+  const node = (work, parent, level, agent, kids) =>
+    ({work, parent, level, agent, title: work, state: "working", created: level, steps: [], groups: [{nodes: kids}]});
+  const seller = node("w2", "w1", 1, "seller", []);
+  const designer = node("w3", "w1", 1, "designer", []);
   seller.created = 1; designer.created = 2;
-  const pm = node("w1", "", 0, "pm", tally(30, 10), [seller, designer]);
-  pm.branch = {usage: tally(60, 20)};
+  const pm = node("w1", "", 0, "pm", [seller, designer]);
   const progress = {front: {agent: "front", state: "idle", doing: ""}, roots: [pm], flat: [pm, seller, designer]};
   const line = (id, work, who) => ({id, work, who, time: "10:00:00", kind: "step", what: id, ok: true, minor: false, retried: false, request: "", head: "", day: ""});
   const lines = [line("a", "", "front"), line("b", "w1", "pm"), line("c", "w2", "seller"), line("d", "w3", "designer"), line("e", "w2", "seller")];
@@ -51,16 +46,27 @@ defmodule Omunculus.GuiLogCostTest do
     """)
   end
 
-  test "the cost's works carry their agent's model and their branch's share of the tokens" do
+  test "the cost's works carry the server's dollars, their models and their branch's share" do
     run!("""
     const rows = Tree.rows(progress, {w1: true}, null);
-    const all = tally(100, 20);
-    const found = Usage.byWork(rows, {"": tally(40, 0)}, all, {designer: {model: "m-1"}});
+    const entry = (usd, models) => Object.assign({}, {replies: 1, input: 10, cached: 0, output: 5, usd, models, unpriced: []});
+    const call = (model, usd) => ({model, usd, fresh: 10, cache_write: 0, cached: 0, output: 5});
+    const found = Usage.byWork(rows, Usage.spend({
+      agents: [],
+      works: [
+        {work: "", own: entry(0.5, ["m-0"]), branch: entry(0.5, ["m-0"]), calls: []},
+        {work: "w1", own: entry(null, []), branch: entry(1.5, ["m-1", "m-2"]), calls: []},
+        {work: "w3", own: entry(1, ["m-1"]), branch: entry(1, ["m-1"]), calls: [call("m-1", 0.25), call("m-1", 0.75)]}
+      ],
+      total: {usd: 2, models: ["m-0", "m-1", "m-2"], unpriced: []}
+    }));
     check(found.map(each => each.agent).join() === "front,pm,seller,designer", "agents", found);
-    check(found[0].own.input === 40 && found[0].share === 1, "the front's own are the calls of no work, its branch is all", found[0]);
-    check(found[1].share === 80 / 120 && found[1].model === "", "pm 80 of 120, no model known", found[1]);
-    check(found[3].model === "m-1" && found[3].own.input === 20 && found[3].share === 25 / 120, "designer", found[3]);
-    check(Usage.byWork([], {}, tally(0, 0), {}).length === 0 && Usage.byWork(rows, {}, tally(0, 0), {})[1].share === 0, "nothing used", 0);
+    check(found[0].own.usd === 0.5 && found[0].branch.usd === 2 && found[0].share === 1, "the front's own are the calls of no work, its branch is all", found[0]);
+    check(found[1].own.usd === null && found[1].share === 0.75, "pm 1.5 of 2", found[1]);
+    check(found[2].own.models.length === 0 && found[2].share === 0 && found[2].calls.length === 0, "seller used nothing", found[2]);
+    check(found[3].own.models[0] === "m-1" && found[3].calls[1].usd === 0.75 && found[3].share === 0.5, "designer", found[3]);
+    const none = Usage.byWork(rows, Usage.spend(null));
+    check(none.length === 4 && none.every(each => each.share === 0), "nothing used", none);
     """)
   end
 end
