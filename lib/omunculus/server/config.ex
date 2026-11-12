@@ -112,7 +112,8 @@ defmodule Omunculus.Server.Config do
     end)
   end
 
-  defp projects(_, _), do: {:error, {:server, :missing_projects}}
+  defp projects(data, _dir) when data in [nil, %{}], do: {:ok, %{}}
+  defp projects(_, _), do: {:error, {:server, :invalid_table}}
 
   defp keys(data, allowed) when is_map(data) do
     case Map.keys(data) -- allowed do
