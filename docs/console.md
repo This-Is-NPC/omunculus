@@ -685,10 +685,16 @@ A conversation's level, in place of the project's once one is opened:
   preview is now done"), a call as a verb and its object, never a command. The event opened shows in a card
   under the list, with its local time and the server's ISO stamp as UTC and
   its copy and close tools at the top right;
-- COST, what the conversation used (`CostView`): a header strip with the
-  model calls and the tokens read by the model (with those from cache) and
-  written in all, and the cost at its right; then a row per agent, the
-  busiest first, its replies, tokens read and tokens written in columns, or,
+- COST, what the conversation used (`CostView`): BY WORK and BY AGENT at the
+  top left and TOTAL, in dollars, at the right, then the model calls and the
+  tokens read by the model (with those from cache) and written in all. BY WORK
+  is the lineage tree of the works (`Tree.rows`, every work open): each row has
+  its agent's model (from `GET /usage`), the tokens of the work itself, those
+  of its branch (itself and every work below) and a bar with the branch's share
+  of all the tokens (`Usage.byWork`); under 1000 px a row stacks its figures on
+  lines of their own. A work has tokens and no dollars, since the server prices
+  an agent's tokens, not a work's. BY AGENT is a row per agent, the busiest
+  first, its model, replies, tokens read and tokens written in columns, or,
   under 700 px, on lines of their own so none is cut, and its cost at the top
   right. The dollars are the server's (`GET /usage?conversation=`): each
   agent's tokens at the `price` of its model in the project config. An agent

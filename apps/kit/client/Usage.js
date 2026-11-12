@@ -42,3 +42,21 @@ function spend(data) {
 function unpriced(total) {
   return (total.unpriced || []).map(model => "no price set for " + model + " in the project config");
 }
+
+// The works of the tree (Tree.rows) with what each used, for the cost view's
+// BY WORK: {row, agent, model, own, branch, share}. `own` and `branch` are
+// token tallies — the work's, and with every work below it — never dollars:
+// the server prices an agent, not a work. The front agent's own are the
+// tokens of the calls made outside any work (`works[""]`) and its branch is
+// everything. `share` is the branch's part of the tokens of `all`, 0 to 1.
+// `models` maps an agent to its entry in the server's usage (`spend().agents`).
+function byWork(rows, works, all, models) {
+  const used = tally => number(tally.input) + number(tally.output);
+  return rows.map(row => {
+    const front = row.kind === "front";
+    const agent = front ? row.front.agent : row.node.agent;
+    const own = front ? Object.assign(tally(), works[""] || {}) : row.node.own.usage;
+    const branch = front ? all : row.node.branch.usage;
+    return { row: row, agent: agent, model: (models[agent] || {}).model || "", own: own, branch: branch, share: used(all) > 0 ? used(branch) / used(all) : 0 };
+  });
+}

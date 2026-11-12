@@ -274,9 +274,13 @@ the tree, it is kept to that work.
 
 ### 9. Cost
 
-What the conversation used: model replies, tokens and cost in all in a
-header strip, then a row per agent, its figures in columns or, on a narrow
-window, on lines of their own. The cost is in dollars, at the price each model
+What the conversation used, with TOTAL, in dollars, at the top right and, under
+the toggle, the model replies and tokens in all. BY WORK is the tree of the
+works: each row has the model its agent runs on, the tokens it used, those of
+everything below it, and a bar with its branch's share of all the tokens. A work
+has tokens and no dollars: the server prices an agent, not a work. BY AGENT is a
+row per agent with its model, replies, tokens and cost, in columns or, on a
+narrow window, on lines of their own. The dollars are at the price each model
 has in the project config; for a model with none a line says "no price set for
 haiku in the project config". It has no keys of its own.
 
