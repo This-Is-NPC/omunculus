@@ -1,6 +1,6 @@
 # Omunculus compared with DeepSeek Harness, OpenCode v2 and Hermes Agent
 
-The Omunculus column was checked against this tree on 2026-10-13. The other
+The Omunculus column was checked against this tree on 2026-11-12. The other
 three are as of 2026-10-08: DeepSeek Harness 0.2.1-alpha.1, OpenCode v2.0.24
 and Hermes Agent v0.21.5, read from their repositories and documentation.
 
@@ -40,7 +40,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | On-demand schemas | **P** `pinned` tools and `tool_search` are declared; `tool_search` returns the schema of the rest, added after the cached prefix | ✗ | **P** | **P** |
 | | MCP | **P** inside the sandbox | **P** | **P** | **P** |
 | **Context** | Context per run | **P** rebuilt each run: agent, tools, work, goal, last comment, last run; or a paused session continued (`session_ttl_ms`) | Accumulated session | Accumulated session | Accumulated session |
-| | Compaction | ◐ a session past `session_max_bytes` starts over with fresh context; `compact_comments` | **P** | **P** | **P** |
+| | Compaction | **—** the work tree is the compaction: every run starts from the work's goal, last comment, last run, children and results (`docs/cycle.md`), not from a long chat history | **P** | **P** | **P** |
 | | Tool output cut | **P** whole output kept in the event | **P** | **P** | **P** |
 | | History search beyond the last run | ◐ through comments and reports; deeper search needs a new view (**K**) | **P** | **P** | **P** FTS5 |
 | | Long-term memory / skills | **P** Agent Skills (`[skills] paths`, `skill`) for authored procedures; `remember`, `recall` and `forget` for what agents learn, by scope and kind, searched by words, optionally in the prompt (`[policy] memory_bytes`) | ◐ | ◐ | **P** |
