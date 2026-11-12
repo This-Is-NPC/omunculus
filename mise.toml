@@ -213,3 +213,11 @@ run = "scripts/bench-shell"
 [tasks."validate:sandbox"]
 description = "Run Bubblewrap integration tests on a supported Linux host"
 run = "scripts/validate-sandbox"
+
+[tasks."local-check"]
+description = "Run the gate on HEAD and post the local-check status master requires (options: --post-only --state=success --sha=SHA, --dry-run)"
+run = "scripts/local-check"
+
+[tasks."hooks:install"]
+description = "Install the git hooks of .githooks: pre-commit checks formatting, pre-push runs local-check"
+run = "scripts/install-hooks"
