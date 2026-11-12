@@ -769,7 +769,7 @@ needs what is missing:
 
 | Line | When |
 | --- | --- |
-| `` no config at <path>; run `omunculus preset <name> --from <dir>` `` | file missing |
+| `` no config at <path>; run `omunculus preset <name>` `` | file missing |
 | `omunculus.toml is missing [execution]; required keys: …` | table or keys absent |
 | `omunculus.toml is missing [execution.sandbox]` | sandbox table absent |
 | `omunculus.toml [execution] resources includes unknown name <name>` | a resource the executor does not know |

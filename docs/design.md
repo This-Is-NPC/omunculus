@@ -39,7 +39,7 @@ apps/kit/            what the apps share: ui/, the theme and controls, client/, 
                      requests to the server's sockets, the request helpers and the scripts
                      that send and open attached files, and run, the launcher of every app
 lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
-lib/mix/tasks/       the omunculus and omunculus.presets mix tasks
+lib/mix/tasks/       the omunculus mix task
 priv/tools/          builtin tool and hook manifests
 priv/presets/        default, codex-like, pi-like
 priv/packs/system/   the system team: the steward, the auditor and the refiner, their portraits and their
@@ -226,8 +226,7 @@ The store refuses tables that differ from its schema with
 There is no release and no installer yet. Omunculus runs from a checkout:
 `bin/omunculus` is a shell wrapper that runs `mise exec -- mix omunculus`
 in the checkout, so the Elixir, OTP and Deno pins of `mise.toml` are the
-ones that run, and `mix omunculus.presets` prints the folder of the
-presets. Teams come as packs: the system team under `priv/packs/system`,
+ones that run. Teams come as packs: the system team under `priv/packs/system`,
 the others under `packs/` ([packs](packs.md)). The apps run on Quickshell
 from `apps/`, each through `apps/kit/run` ([clients](clients.md)).
 
@@ -243,7 +242,7 @@ mise run docs:cli               # write docs/cli.md from the commands
 mise run validate:regular       # mix test --exclude cargo --exclude sandbox
 mise run validate:sandbox       # needs Linux with Bubblewrap namespaces
 mise run pre-push               # validate:regular
-bin/omunculus preset default --from priv/presets/default
+bin/omunculus preset default
 bin/omunculus send "text" --agent concierge
 bin/omunculus serve --config server.toml
 apps/kit/run console --config server.toml [--project <id>]

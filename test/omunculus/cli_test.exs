@@ -414,18 +414,15 @@ defmodule Omunculus.CLITest do
     refute File.dir?(Path.join(dir, ".omunculus"))
 
     assert CLI.message({:config, :missing, path}) ==
-             "no config at #{path}; run `omunculus preset <name> --from <dir>`"
+             "no config at #{path}; run `omunculus preset <name>`"
   end
 
-  test "preset default writes the config file without opening the store", %{dir: dir} do
+  test "preset default finds the bundled preset and writes the config file without opening the store",
+       %{dir: dir} do
     path = Path.expand("omunculus.toml", dir)
     File.rm!(path)
 
-    assert {:ok, applied} =
-             CLI.run(
-               ["preset", "default", "--from", Fixtures.preset_dir("default")],
-               dir
-             )
+    assert {:ok, applied} = CLI.run(["preset", "default"], dir)
 
     assert applied == Out.preset_applied("default")
     {:ok, config} = Omunculus.Config.load(path)

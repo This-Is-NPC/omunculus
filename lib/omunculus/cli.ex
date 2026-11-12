@@ -72,7 +72,7 @@ defmodule Omunculus.CLI do
   def message({:forwarded, message}), do: message
 
   def message({:config, :missing, _path} = reason),
-    do: Errors.format(reason) <> "; run `omunculus preset <name> --from <dir>`"
+    do: Errors.format(reason) <> "; run `omunculus preset <name>`"
 
   def message({:auth, :not_logged_in, id} = reason),
     do: Errors.format(reason) <> "; run `omunculus login --provider #{id}`"

@@ -1,9 +1,11 @@
 defmodule Omunculus.Tools.Preset do
   @moduledoc """
-  `preset` tool: copies `omunculus.toml` and `tools/` from `--from <dir>`
-  onto the resolved config path, rewriting `[tools] paths`, the `path` of
-  each of its `[[packs]]` and `execution.sandbox.script` to absolute
-  locations resolved against that source directory.
+  `preset` tool: copies `omunculus.toml` and `tools/` of a preset onto the
+  resolved config path. The preset is the bundled one named `name`, found in
+  the application's `priv/presets`, or the folder `--from <dir>` names.
+  It rewrites `[tools] paths`, the `path` of each of its
+  `[[packs]]` and `execution.sandbox.script` to absolute locations resolved
+  against that source directory.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -11,13 +13,15 @@ defmodule Omunculus.Tools.Preset do
 
   @spec run(map) :: map
   def run(%{args: args, config_path: path}) when is_binary(path) do
-    case Args.missing(args, ~w(name from)) do
-      nil -> apply_preset(path, args["name"], args["from"])
+    case Args.missing(args, ~w(name)) do
+      nil -> apply_preset(path, args["name"], args["from"] || bundled(args["name"]))
       message -> Out.fail(message)
     end
   end
 
   def run(_input), do: Out.fail("config_path required")
+
+  defp bundled(name), do: Application.app_dir(:omunculus, Path.join(["priv", "presets", name]))
 
   defp apply_preset(config_path, name, from) do
     toml = Path.join(from, "omunculus.toml")

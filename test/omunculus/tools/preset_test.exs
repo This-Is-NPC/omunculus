@@ -105,6 +105,13 @@ defmodule Omunculus.Tools.PresetTest do
     assert found == Path.join(from, "packs/team")
   end
 
+  test "a bundled preset is found without from", %{root: root} do
+    path = Path.join(root, "omunculus.toml")
+    assert %{"ok" => true} = Preset.run(input(root, %{"name" => "pi-like"}))
+    assert File.regular?(path)
+    assert {:ok, _config} = Config.load(path)
+  end
+
   test "an unknown preset fails and writes nothing", %{root: root} do
     assert Preset.run(input(root, %{"name" => "nope", "from" => Path.join(root, "missing")})) ==
              %{
@@ -120,14 +127,6 @@ defmodule Omunculus.Tools.PresetTest do
     assert Preset.run(input(root, %{"from" => from("default")})) == %{
              "ok" => false,
              "output" => "name required",
-             "emit" => []
-           }
-  end
-
-  test "refuses without from", %{root: root} do
-    assert Preset.run(input(root, %{"name" => "default"})) == %{
-             "ok" => false,
-             "output" => "from required",
              "emit" => []
            }
   end

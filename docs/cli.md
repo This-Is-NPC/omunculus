@@ -281,17 +281,17 @@ Also called by a chain.
 ### `omunculus preset`
 
 ```text
-omunculus preset <name> --from <from>
+omunculus preset <name> [--from <from>]
 ```
 
-Applies a preset: copies from's omunculus.toml onto the config path, and its tools/ beside it when there is one. [tools] paths, the path of each [[packs]] and [execution.sandbox] script are rewritten to absolute locations resolved against from, and the tools/ folder beside the written file is added to paths. A from that is not a folder holding omunculus.toml is unknown preset: &lt;name&gt;. It is the one command that runs without a config.
+Applies a preset: copies the omunculus.toml of the bundled preset called name, or of from when it is given, onto the config path, and its tools/ beside it when there is one. [tools] paths, the path of each [[packs]] and [execution.sandbox] script are rewritten to absolute locations resolved against from, and the tools/ folder beside the written file is added to paths. A from that is not a folder holding omunculus.toml is unknown preset: &lt;name&gt;. It is the one command that runs without a config.
 
 Runs without a project config.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | yes | The preset's name, recorded in the receipt preset &lt;name&gt; applied. |
-| `from` | string | yes | The folder that supplies the files; it holds omunculus.toml. |
+| `name` | string | yes | The preset's name: a bundled one (default, codex-like, pi-like) unless from names another folder; recorded in the receipt preset &lt;name&gt; applied. |
+| `from` | string | no | A folder that holds omunculus.toml, for a preset that is not bundled. |
 
 ### `omunculus prompt`
 

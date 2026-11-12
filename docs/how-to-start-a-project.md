@@ -8,11 +8,10 @@ on the `fake` model. Putting the agents on a real model is
 
 ## Before you start
 
-- A checkout of omunculus with `mise install` and `mix deps.get` run in it
-  ([the design](design.md#8-building-and-checking)). There is no release
-  yet, so the commands below run `bin/omunculus` from the checkout.
+- omunculus installed ([how to install](how-to-install-and-remove.md)).
+  Working from a checkout instead, run `bin/omunculus` in its place
+  ([the design](design.md#8-building-and-checking)).
 - Linux with Bubblewrap ([Requirements](../README.md#requirements)).
-- `<checkout>` below is a placeholder for the folder of the checkout.
 
 ## Steps
 
@@ -26,24 +25,27 @@ on the `fake` model. Putting the agents on a real model is
    other command reads.
 
    ```console
-   $ <checkout>/bin/omunculus preset default --from <checkout>/priv/presets/default
+   $ omunculus preset default
    preset default applied
    ```
 
-   The checkout ships three presets:
+   Omunculus bundles three presets:
 
-   | `--from` | What it is |
+   | Name | What it is |
    | --- | --- |
-   | `priv/presets/default` | a concierge at depth 0, a worker and a reviewer below it, on the `fake` model, no shell; it imports the [system team](packs.md#the-system-team) |
-   | `priv/presets/codex-like` | a Codex-shaped ceiling, with a `bash` tool |
-   | `priv/presets/pi-like` | a Pi-shaped ceiling, with an Anthropic login declared |
+   | `default` | a concierge at depth 0, a worker and a reviewer below it, on the `fake` model, no shell; it imports the [system team](packs.md#the-system-team) |
+   | `codex-like` | a Codex-shaped ceiling, with a `bash` tool |
+   | `pi-like` | a Pi-shaped ceiling, with an Anthropic login declared |
+
+   A preset of your own is a folder holding `omunculus.toml`:
+   `omunculus preset <name> --from <folder>`.
 
 3. Send the first message. The default preset has several agents at
    depth 0 — the concierge and the system team's steward, auditor and
    refiner — so the message names the one it is for.
 
    ```console
-   $ <checkout>/bin/omunculus send "count to 5" --agent concierge
+   $ omunculus send "count to 5" --agent concierge
    fake model: You are the project concierge; you talk with the person and hand work to the agents under ## Agents.
    ```
 
@@ -54,7 +56,7 @@ on the `fake` model. Putting the agents on a real model is
 4. Read what the run did.
 
    ```console
-   $ <checkout>/bin/omunculus runs
+   $ omunculus runs
    1 runs, newest first.
 
    run e4c093140ccb8e932b1c29eb4d6e21d0 · concierge · depth 0 · 2026-10-13T17:02:09.793268Z · 0 s · no work · via send
@@ -66,7 +68,7 @@ on the `fake` model. Putting the agents on a real model is
 5. Read the prompt the run was given.
 
    ```console
-   $ <checkout>/bin/omunculus prompt
+   $ omunculus prompt
    You are the project concierge; you talk with the person and hand work to the agents under ## Agents.
    …
    ## Message
@@ -81,13 +83,13 @@ on the `fake` model. Putting the agents on a real model is
 - `send` without `--agent` is refused:
 
   ```console
-  $ <checkout>/bin/omunculus send "count to 5"
+  $ omunculus send "count to 5"
   several agents have depth 0: auditor, concierge, refiner, steward; name one with --agent
   ```
 
   The list is the agents of depth 0; name one with `--agent`.
 - A command run in a folder without `omunculus.toml` is refused with
-  `` no config at <path>; run `omunculus preset <name> --from <dir>` ``.
+  `` no config at <path>; run `omunculus preset <name>` ``.
 - A run that stopped without `end` is retried up to `[policy] max_retries`
   times when it holds a work ([the cycle](cycle.md#a-run-without-a-report)).
 
