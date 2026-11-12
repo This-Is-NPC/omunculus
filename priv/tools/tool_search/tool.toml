@@ -1,7 +1,7 @@
 name = "tool_search"
 kind = "tool"
 triggers = ["model"]
-description = "Searches this run's catalog by name, description, or tag."
+description = "Searches this run's catalog by name, description, or tag; every word of q must match."
 tags = ["catalog"]
 groups = ["catalog"]
 module = "Omunculus.Tools.ToolSearch"

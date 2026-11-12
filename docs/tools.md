@@ -603,7 +603,9 @@ effective and a `pinned` that leaves some tools out
 that decides it, for the adapters' `tools` and for the cards.
 
 `tool_search` lists the cards of the run's effective `model` tools that
-match `q` and `tags`. Each one the run was not declared gets, on the line
+match `q` and `tags`. `q` is split into words, and a card matches when every
+word is found, in any case, in its name, its description or one of its tags.
+Each one the run was not declared gets, on the line
 after its card, `schema <name>: <JSON schema>`. From that call on, the run
 may call it; before, the call is refused (`has no schema in this run yet`).
 A tool outside the ceiling is not in the catalog the search reads, so it is

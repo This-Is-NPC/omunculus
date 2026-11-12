@@ -51,6 +51,21 @@ defmodule Omunculus.Tools.ToolSearchTest do
              "- compact_comments: Clear old comment history. [tags: compact]"
   end
 
+  test "q matches per word: every word in the name, description or a tag" do
+    input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "read FILE"}}
+
+    assert ToolSearch.run(input)["output"] ==
+             "- read: Reads a file from the workspace. [tags: fs.read]"
+
+    input = %{input | args: %{"q" => "file fs.write"}}
+
+    assert ToolSearch.run(input)["output"] ==
+             "- write: Writes a file in the workspace. [tags: fs.write]"
+
+    assert ToolSearch.run(%{input | args: %{"q" => "read comment"}})["output"] ==
+             Out.no_tools_found()
+  end
+
   test "q matches a tag case-insensitively" do
     input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "FS.READ"}}
 

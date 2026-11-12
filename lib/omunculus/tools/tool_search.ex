@@ -26,15 +26,16 @@ defmodule Omunculus.Tools.ToolSearch do
 
   defp filter_query(cards, nil), do: cards
 
+  # Every word of `q` must match the name, description or a tag, so a
+  # multi-word query narrows the result instead of matching nothing.
   defp filter_query(cards, q) do
-    q = String.downcase(q)
-    Enum.filter(cards, &matches_query?(&1, q))
+    words = q |> String.downcase() |> String.split()
+    Enum.filter(cards, &matches_query?(&1, words))
   end
 
-  defp matches_query?(%{name: name, description: description, tags: tags}, q) do
-    String.contains?(String.downcase(name), q) or
-      String.contains?(String.downcase(description), q) or
-      Enum.any?(tags, &String.contains?(String.downcase(&1), q))
+  defp matches_query?(%{name: name, description: description, tags: tags}, words) do
+    fields = Enum.map([name, description | tags], &String.downcase/1)
+    Enum.all?(words, fn word -> Enum.any?(fields, &String.contains?(&1, word)) end)
   end
 
   defp filter_tags(cards, []), do: cards
