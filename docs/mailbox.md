@@ -85,9 +85,12 @@ capitalised: `Front-desk <front-desk@agency>`.
 - **Archive**: threads you archived. A thread that gets new mail after it was
   archived returns to the inbox.
 
-The folders show their names, with the unread count on Inbox and the review count on Pending. Ctrl+B folds them
-to icons, and a window narrower than 760 px shows icons only, in one row that
-shows every folder without scrolling, the current one keeping its name.
+The folders, in the order Inbox, Pending, Sent, Drafts, Archive, show an icon,
+their name and a count: the unread threads on Inbox, the reviews on Pending,
+the threads of Sent and Archive, the drafts. COMPOSE sits above them. Ctrl+B
+folds them to a rail of counts under a plus that composes, and a window
+narrower than 760 px shows them as pills above the search, COMPOSE floating
+over the list.
 
 Only you opening a thread (a click, Enter, or Alt+Up and Alt+Down) marks it read; mail that arrives in the thread on screen stays unread until you open it again. MARK UNREAD marks it unread and goes back to the
 list. A row shows who wrote ("Front-desk, me (5)") and the time, then the subject
@@ -118,8 +121,9 @@ Opening a thread stacks its messages, the latest open and the others folded to
 a line. Click a message to open or fold it. An open message offers REPLY,
 FORWARD, and REPLY ALL only when the thread has several counterparts (the agent
 and others who wrote in it, such as a requester); with one, there is only REPLY.
-The latest message's REPLY is the screen's one filled action. The command bar
-offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
+The latest message's REPLY is filled only when it answers a request that waits
+for you. The command bar offers ARCHIVE (MOVE TO INBOX in the archive) and
+MARK UNREAD.
 
 A reply is written in a composer ([Composing](#composing)) docked over the
 mailbox at the bottom right, so the thread stays readable beside it. Its To is
@@ -152,12 +156,13 @@ FORWARD opens a composer with `Fwd:` and the message below your words.
 
 ## Reviews
 
-A review opens in the right pane as a message from the agent that acted. Its
-subject is the sentence of what it wants to do ("Seller wants to run promote").
-Its body is the action's arguments, one `name: value` line each, with the web
-addresses they hold as links; the text the action holds; and a last line that
-says what each answer does ("If you approve: Seller goes ahead as written. Edit
-changes its text. Deny tells Seller no."). The step of a review among several
+A review opens in the right pane as a card, bordered in the warning tone and
+marked REVIEW and WAITING FOR YOU, from the agent that acted. Its title is the
+sentence of what it wants to do ("Seller wants to run promote"), then the text
+the action holds. DETAILS shows the action's arguments, one `name: value` line
+each, with the web addresses they hold as links, and a last line that says what
+each answer does ("If you approve: Seller goes ahead as written. Edit changes
+its text. Deny tells Seller no."). The step of a review among several
 reviewers shows in the console, not here. It offers three actions:
 
 - APPROVE, the one filled action, lets the action go ahead as it is

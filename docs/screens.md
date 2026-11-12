@@ -310,13 +310,17 @@ How it maps a conversation to e-mail is in [the mailbox](mailbox.md).
 
 ### 13. The folders
 
-Inbox (with its unread count), Sent, Drafts, Pending (with its review count)
-and Archive, named, and the
-threads of the folder, newest first, each with its sender, subject, snippet, label and time;
-unread ones in bold. Pending lists instead the reviews that wait on you, newest
-first, each with the agent that acted and what it wants to do. At phone
-width the folders are icons, the current one keeping its name. A command bar
-holds COMPOSE and MARK ALL READ.
+COMPOSE (the filled action while the list is on screen) over the folders, each
+with its icon, its name and its count in a box: Inbox (unread threads), Pending
+(reviews), Sent, Drafts and Archive. The current one is outlined in the accent.
+Beside them, the threads of the folder, newest first, each with its sender,
+subject, snippet, label and time; unread ones in bold. An empty folder says
+"Nothing here yet" and offers COMPOSE. Pending lists instead the reviews that
+wait on you, newest first, each with the agent that acted and what it wants to
+do. A command bar holds MARK ALL READ and the search. Each column ends in the
+arrow that folds it: the folders to a rail of counts under a plus that
+composes, the list to its count. At phone width the folders are pills above the
+search and COMPOSE floats at the bottom right of the list.
 
 | Keys | What they do |
 | --- | --- |
@@ -334,10 +338,11 @@ FORWARD and, with several counterparts, REPLY ALL; each opens a
 [composer](#15-the-composers) docked over the mailbox, so the thread stays
 readable beside it.
 
-A review opened from Pending reads as a message in the same pane: its subject
-is what the agent wants to do; its body the arguments as lines, the text it
-holds and what each answer does. APPROVE is the filled action; EDIT opens a box with the held text and sends your words
-in its place; DENY opens it for an optional reason.
+A review opened from Pending is a card in the same pane, bordered in the
+warning tone and marked REVIEW and WAITING FOR YOU: who acted, what it wants to
+do and the text it holds. APPROVE is the filled action; EDIT opens a box with
+the held text and sends your words in its place; DENY opens it for an optional
+reason; DETAILS shows the arguments as lines and what each answer does.
 
 | Keys | What they do |
 | --- | --- |
@@ -365,8 +370,9 @@ footer row: Attach, the files as chips, DISCARD and SEND, the filled action. The
 three kinds have Attach. Ctrl+Enter sends.
 
 Under 700 px the composers are the tabs of one strip, each with its title and
-an x; the active one fills the screen, and the button at the strip's end
-minimizes it, returning to the mailbox with the strip docked at the bottom.
+an x; the active one fills the screen, a plus at the strip's end starts another
+message, and minimize returns to the mailbox with the strip docked at the bottom.
+A sent message or reply shows a toast.
 
 ## The studio
 
