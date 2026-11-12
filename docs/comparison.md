@@ -5,8 +5,8 @@ three are as of 2026-10-08: DeepSeek Harness 0.2.1-alpha.1, OpenCode v2.0.24
 and Hermes Agent v0.21.5, read from their repositories and documentation.
 
 Legend: **P** shipped · **T** a tool, hook or API client the architecture
-supports, not written yet · **K** needs a change in the harness core ·
-**—** unnecessary by design · **✗** not supported · **?** not verified
+supports, not written yet ·
+**—** unnecessary by design, or out of scope · **deferred** left for later, not started · **✗** not supported · **?** not verified
 
 | Area | Feature | Omunculus | DeepSeek Harness | OpenCode v2 | Hermes Agent |
 |---|---|---|---|---|---|
@@ -30,9 +30,9 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Decisions recorded as data | **P** requests, options, arbiter, grants | ◐ approval log | ◐ | ◐ logs |
 | **Interfaces** | CLI / API / real time | **P** / **P** OpenAPI / **P** WebSocket | **P** / ◐ / **P** | **P** / **P** / **P** | **P** / **P** / **P** SSE |
 | | Graphical client | **P** Quickshell apps: console, mailbox, studio | **P** | **P** | **P** |
-| | Messaging channels | **T** events + hooks; requests become buttons | ✗ | ✗ | **P** ~25 |
-| | IDE (ACP) | **T** | **P** | **P** | **P** |
-| | Installation | ◐ checkout + mise | **P** npm | **P** brew/npm | **P** |
+| | Messaging channels | deferred: events and hooks are there; requests could become buttons | ✗ | ✗ | **P** ~25 |
+| | IDE (ACP) | **—** out of scope: the project has its own apps | **P** | **P** | **P** |
+| | Installation | deferred: a checkout and mise for now | **P** npm | **P** brew/npm | **P** |
 | **Models** | Providers | **P** 3 protocols + **T** through `command` | ◐ | **P** 226 | **P** 40+ |
 | | Prompt caching | **P** stable prefix, `prompt_cache_key`, Anthropic `cache_control` breakpoints | **P** | **P** | **P** |
 | | Tokens and cost | **P** every HTTP adapter records `usage`; `runs` sums tokens and cost | **P** | **P** | **P** |
@@ -42,7 +42,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | **Context** | Context per run | **P** rebuilt each run: agent, tools, work, goal, last comment, last run; or a paused session continued (`session_ttl_ms`) | Accumulated session | Accumulated session | Accumulated session |
 | | Compaction | **—** the work tree is the compaction: every run starts from the work's goal, last comment, last run, children and results (`docs/cycle.md`), not from a long chat history | **P** | **P** | **P** |
 | | Tool output cut | **P** whole output kept in the event | **P** | **P** | **P** |
-| | History search beyond the last run | ◐ through comments and reports; deeper search needs a new view (**K**) | **P** | **P** | **P** FTS5 |
+| | History search beyond the last run | **—** by design: the work tree, `runs`, `read_work`, `recall`, `grep` and `find` for the agents, and the console and the events API for the person; a text search across conversations is not needed | **P** | **P** | **P** FTS5 |
 | | Long-term memory / skills | **P** Agent Skills (`[skills] paths`, `skill`) for authored procedures; `remember`, `recall` and `forget` for what agents learn, by scope and kind, searched by words, optionally in the prompt (`[policy] memory_bytes`) | ◐ | ◐ | **P** |
 | **Coding: reading** | Read with offset/limit | **P** | **P** | **P** | **P** |
 | | Image / PDF | **P** `read`, `read_attachment`, `get_artifact` and `browser_check` show images and PDFs to the model, through each adapter, within `[policy] media_bytes`; artifacts hold bytes | **P** | **P** | **P** |
@@ -50,31 +50,31 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | LSP | **P** `lsp`: diagnostics, definition, references, hover, symbols from servers the TOML declares, kept for the run | **P** | ✗ | ✗ |
 | **Coding: editing** | Exact, unique replacement | **P** | **P** | **P** | **P** |
 | | Multi-edit, patch, diff, read before edit | **P** `edit` applies several replacements atomically, `patch` several files; refuses a file that changed since it was read; per-call diff through `changes` | **P** | **P** | **P** |
-| | Formatter after edit | **T** hook | ? | **P** | ? |
+| | Formatter after edit | **P** `[settings.format]` maps an extension to a command; `write`, `edit` and `patch` run it on each written file inside the sandbox, and a failure is said in the output without undoing the write | ? | **P** | ? |
 | **Coding: execution** | Shell | **P** one `sh` per run, kept by `Tool.Resident` (codex-like preset) | **P** persistent | **P** | **P** persistent |
 | | Background processes | **—** event-driven | **P** | **P** | **P** |
 | | Timeout | **P** `timeout_ms` per call, up to `[settings.bash] max_timeout_ms`; the command is killed and the shell stays open | **P** | **P** | **P** |
 | | Network for dependencies | **P** through a `sandbox.network` grant | ◐ | **P** uncontrolled | **P** |
 | | Per-call latency | **P** sandbox built once per run: about 1 ms median per `true` against 7 to 8 ms before (`mise run bench:shell`) | Persistent process | On the host | Persistent process |
-| | Backends / platform | ◐ Bubblewrap and Linux only (**K**) | **P** | **P** | **P** 7 backends |
+| | Backends / platform | Linux and Bubblewrap only, by choice for now | **P** | **P** | **P** 7 backends |
 | **Coding: flow** | Plan → implement → review with distinct permissions | **P** workflow | ◐ | ◐ | ◐ |
 | | One model per stage and per workspace | **P** | ◐ | ◐ | ◐ |
 | | The agent cannot quit silently | **P** retry → break or request | ◐ goals | ✗ | ◐ `/goal` |
 | | Parallel subagents | **P** works + `max_concurrent` | **P** | **P** | **P** |
-| | Isolated writers (worktree) | **P** `isolate = "worktree"` on a workflow: the harness opens a worktree per work and removes it when the work ends; the parent merges the branch with `merge` | ? | ◐ plugin | ✗ |
-| | Message during a run | ◐ goes to the work's next run | **P** | **P** | **P** |
+| | Isolated writers (worktree) | **P** `isolate = "worktree"` on a workflow: the harness opens a worktree per work and removes it when the work ends; the parent merges the branch with `merge`. A worktree per run is **—**: the runs of a work are sequential, and parallel writers are already isolated by `isolate = "worktree"` per work | ? | ◐ plugin | ✗ |
+| | Message during a run | **P** a message to a running work reaches the run after its next tool call, as a user message after the results, so the cached prefix holds; the next run does not repeat it | **P** | **P** | **P** |
 | | Undo / checkpoints | **P** `changes` records each call's files; `revert` puts a work's back | ◐ fork | **P** git | **P** `/rollback` |
-| | Reply shown on the CLI | **T** (`send` prints nothing today) | **P** | **P** | **P** |
-| **Extras** | Web search / browser / scheduling | browser **P** `browser_check`: dev server, headless Chromium, per-viewport status, console errors, outline, screenshots the model sees; search and scheduling **T** | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
+| | Reply shown on the CLI | **P** `send` prints the agent's reply, the reports on the root work and the questions to the person, once its runs finish | **P** | **P** | **P** |
+| **Extras** | Web search / browser / scheduling | browser **P** `browser_check`: dev server, headless Chromium, per-viewport status, console errors, outline, screenshots the model sees; search and scheduling deferred | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
 
 ## Remaining gaps
 
-Core changes (**K**):
+Deferred, not started:
 
-- a deeper history view, for search beyond the last run
-- execution outside Linux and Bubblewrap
-
-Tools and hooks (**T**), a `coding` package for the presets: reply on the CLI, worktree per run, formatter. For reach: a messaging channel and web search.
+- a messaging channel
+- web search
+- scheduling
+- installation without a checkout
 
 ## Sources
 
