@@ -14,6 +14,11 @@ import "kit/ui"
 FocusScope {
   id: recipient
 
+  // The agent the message goes to when it is fixed (a conversation under
+  // way, a work's): shown, not chosen. Empty: the person chooses.
+  property string to: ""
+  readonly property string named: to !== "" ? to : Omunculus.agent
+
   // Whether the list was asked for; it is shown anyway while no agent is chosen.
   property bool expanded: false
   readonly property bool listing: others.length > 0 && (expanded || (Omunculus.agent === "" && Omunculus.startAgent === ""))
@@ -25,7 +30,7 @@ FocusScope {
     const pack = Omunculus.setup ? (Omunculus.setup.packs || []).find(each => each.name === "system") : null
     return pack ? pack.agents : []
   }
-  readonly property var others: Omunculus.talkable.filter(each => each.name !== Omunculus.agent)
+  readonly property var others: to !== "" ? [] : Omunculus.talkable.filter(each => each.name !== Omunculus.agent)
   readonly property var front: others.filter(each => !maintainers.includes(each.name))
   readonly property var care: others.filter(each => maintainers.includes(each.name))
   // The list in the order of the keys: the front ones, then the others.
@@ -74,13 +79,13 @@ FocusScope {
       Rectangle {
         id: control
         Layout.preferredHeight: Theme.size.chip
-        implicitWidth: who.implicitWidth + 34 + (Omunculus.agent !== "" ? 14 : 0)
+        implicitWidth: who.implicitWidth + 34 + (recipient.named !== "" ? 14 : 0)
         color: recipient.listing ? Qt.alpha(Theme.primary, 0.12) : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.05) : "transparent"
         border.color: recipient.listing ? Theme.primary : pointer.containsMouse ? Theme.dim : Theme.line
-        activeFocusOnTab: true
+        activeFocusOnTab: recipient.others.length > 0
         focus: true
         Accessible.role: Accessible.ComboBox
-        Accessible.name: "to " + (Omunculus.agent || "nobody chosen")
+        Accessible.name: "to " + (recipient.named || "nobody chosen")
         Keys.onPressed: event => {
           const enter = [Qt.Key_Return, Qt.Key_Enter].includes(event.key)
           const choice = recipient.choices[recipient.at]
@@ -105,14 +110,14 @@ FocusScope {
           spacing: Theme.space.tight
           Dot {
             anchors.verticalCenter: parent.verticalCenter
-            visible: Omunculus.agent !== ""
-            tone: Omunculus.toneOf(Omunculus.agent)
+            visible: recipient.named !== ""
+            tone: Omunculus.toneOf(recipient.named)
           }
           Label {
             id: who
             anchors.verticalCenter: parent.verticalCenter
-            text: Omunculus.agent !== "" ? Omunculus.agent.toUpperCase() : Omunculus.startHint !== "" ? Omunculus.startHint.toUpperCase() : "CHOOSE WHO"
-            color: Omunculus.agent !== "" ? Theme.foreground : Theme.dim
+            text: recipient.named !== "" ? recipient.named.toUpperCase() : Omunculus.startHint !== "" ? Omunculus.startHint.toUpperCase() : "CHOOSE WHO"
+            color: recipient.named !== "" ? Theme.foreground : Theme.dim
             font.pixelSize: 11
             font.letterSpacing: 1.5
           }

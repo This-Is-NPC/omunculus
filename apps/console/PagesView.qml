@@ -632,10 +632,12 @@ Item {
             onOpenLog: work => view.showLog(work)
           }
 
-          // An empty conversation may still be addressed to another agent.
+          // Whom the message goes to; an empty conversation may still be
+          // addressed to another agent.
           Recipient {
             id: chatRecipient
-            visible: Omunculus.addressable
+            to: Omunculus.addressable ? "" : Omunculus.agent
+            visible: Omunculus.addressable || to !== ""
             Layout.fillWidth: true
             onPicked: mainComposer.focusEntry()
           }
@@ -675,6 +677,12 @@ Item {
           emptyText: "NOTHING SAID HERE YET"
           onOpenWork: work => view.openThread(work)
           onOpenLog: work => view.showLog(work)
+        }
+
+        Recipient {
+          to: threadComposer.addressee
+          visible: to !== ""
+          Layout.fillWidth: true
         }
 
         Composer {
