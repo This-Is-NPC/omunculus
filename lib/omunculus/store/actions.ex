@@ -317,8 +317,8 @@ defmodule Omunculus.Store.Actions do
   end
 
   # A message without a work goes to the agent of depth 0 it names, else to
-  # the one its conversation began with, else to the only one there; the
-  # event says which.
+  # the one its conversation began with, else to the project's
+  # `default_agent`, else to the only one there; the event says which.
   defp addressed(_conn, %{"work_id" => work_id, "agent" => _agent}, _ctx)
        when is_binary(work_id),
        do: {:error, {:prompt, :agent_with_work}}
@@ -332,9 +332,17 @@ defmodule Omunculus.Store.Actions do
     case Map.get(body, "agent") || conversation_agent(conn, Map.get(ctx, :conversation_id)) do
       nil ->
         case front do
-          [only] -> {:ok, Map.put(body, "agent", only)}
-          [] -> {:error, {:prompt, {:no_agent_at_depth, 0}}}
-          several -> {:error, {:prompt, {:agent_required, 0, several}}}
+          _any when is_binary(ctx.config.default_agent) ->
+            {:ok, Map.put(body, "agent", ctx.config.default_agent)}
+
+          [only] ->
+            {:ok, Map.put(body, "agent", only)}
+
+          [] ->
+            {:error, {:prompt, {:no_agent_at_depth, 0}}}
+
+          several ->
+            {:error, {:prompt, {:agent_required, 0, several}}}
         end
 
       agent ->

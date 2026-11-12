@@ -1009,6 +1009,31 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    test "a message that names no agent goes to the project's default agent", %{dir: dir} do
+      write_config(dir, """
+      [policy]
+      default_agent = "desk"
+
+      [agents.front]
+      depth = 0
+      text = "I am front."
+      tools = ["end"]
+
+      [agents.desk]
+      depth = 0
+      text = "I am desk."
+      tools = ["end"]
+      """)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+      assert {:ok, ""} = CLI.run(["send", "hello"], dir)
+
+      project = open_project(dir)
+      assert {:ok, runs} = Query.all(project.conn, "SELECT agent FROM runs")
+      assert Enum.map(runs, & &1.agent) == ["desk"]
+      Project.close(project)
+    end
+
     test "with [policy] sessions, a message without a work continues the conversation",
          %{dir: dir} do
       config = Path.join(dir, "omunculus.toml")
