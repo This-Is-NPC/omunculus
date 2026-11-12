@@ -1,11 +1,11 @@
 import QtQuick
 import "kit/ui"
 
-// FolderTab is one folder: its name, dim until hovered,
-// in the accent with an underline while current, and how many threads in it
-// want you, behind a dot when any does. Choosing it nudges it. Folded to a
-// rail, only its icon shows, the count on a badge, and with `named` the
-// current one also keeps its name beside its icon.
+// FolderTab is one folder, in one of three forms. "full": its icon, its name
+// and its count in a box, outlined in the accent while current. "rail": the
+// count alone, for a folded rail. "pill": its name and count in a rounded
+// pill, for a phone. `attention` colours the count in the accent while it is
+// above zero: mail or reviews that want you.
 Item {
   id: tab
 
@@ -13,86 +13,72 @@ Item {
   property string icon
   property string label
   property int count: 0
-  property color tone: Theme.primary
-  property bool rail: false
-  property bool named: false
+  property bool attention: false
+  property string form: "full"
   readonly property bool current: Mail.folder === name
   readonly property bool hovered: pointer.containsMouse
+  readonly property color ink: attention && count > 0 ? Theme.primary : Theme.dim
 
-  implicitHeight: rail ? 44 : 34
-  readonly property bool showName: rail && named && current
-  implicitWidth: rail ? (showName ? 44 + 6 + railName.implicitWidth + 10 : 44) : row.implicitWidth + 28
+  implicitHeight: form === "pill" ? 30 : form === "rail" ? 34 : 30
+  implicitWidth: form === "pill" ? pill.implicitWidth + 24 : form === "rail" ? 34 : 160
 
-  Row {
-    id: row
-    visible: !tab.rail
-    anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
-    spacing: 10
-    transform: Translate { id: nudge }
-    Dot { anchors.verticalCenter: parent.verticalCenter; tone: tab.tone; opacity: tab.count > 0 ? 1 : 0 }
-    Label {
-      id: caption
-      anchors.verticalCenter: parent.verticalCenter
-      text: tab.label.toUpperCase()
-      color: tab.current ? Theme.primary : tab.hovered ? Theme.foreground : Theme.dim
-      font.pixelSize: 11
-      font.letterSpacing: 2
-      Behavior on color { ColorAnimation { duration: 150 } }
-      Rectangle {
-        anchors { left: parent.left; top: parent.bottom; topMargin: 3 }
-        height: 1
-        width: tab.current ? parent.width : 0
-        color: Theme.primary
-        Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-      }
-    }
-    Label {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: tab.count > 0
-      text: tab.count
-      color: tab.tone
-      font.pixelSize: 11
-    }
+  Rectangle {
+    anchors.fill: parent
+    color: tab.current ? Theme.highlight : tab.hovered ? Qt.alpha(Theme.primary, 0.05) : Qt.alpha(Theme.foreground, tab.form === "full" ? 0.03 : 0)
+    border.color: tab.current ? Theme.primary : tab.form === "pill" ? Theme.line : "transparent"
+    radius: tab.form === "pill" ? height / 2 : 0
+    Behavior on color { ColorAnimation { duration: 150 } }
   }
 
-  IconButton {
-    visible: tab.rail
-    anchors { left: tab.showName ? parent.left : undefined; leftMargin: 6; verticalCenter: parent.verticalCenter; horizontalCenter: tab.showName ? undefined : parent.horizontalCenter }
-    name: tab.icon
-    tip: tab.label
-    tone: tab.tone
-    highlighted: tab.current
-    count: tab.count
-    onClicked: tab.choose()
+  Row {
+    visible: tab.form === "full"
+    anchors { left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+    spacing: 10
+    Icon { anchors.verticalCenter: parent.verticalCenter; name: tab.icon; size: 14; color: tab.current ? Theme.foreground : Theme.dim }
+    Label {
+      anchors.verticalCenter: parent.verticalCenter
+      text: tab.label.toUpperCase()
+      color: tab.current ? Theme.foreground : tab.hovered ? Theme.foreground : Theme.dim
+      font.pixelSize: 10
+      font.letterSpacing: 2
+    }
+  }
+  Rectangle {
+    visible: tab.form === "full"
+    anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+    width: 22
+    height: 18
+    color: "transparent"
+    border.color: tab.ink
+    Label { anchors.centerIn: parent; text: tab.count; color: tab.ink; font.pixelSize: 10 }
   }
 
   Label {
-    id: railName
-    visible: tab.showName
-    anchors { left: parent.left; leftMargin: 44 + 6; verticalCenter: parent.verticalCenter }
-    text: tab.label.toUpperCase()
-    color: Theme.primary
+    visible: tab.form === "rail"
+    anchors.centerIn: parent
+    text: tab.count
+    color: tab.current ? Theme.foreground : tab.ink
     font.pixelSize: 11
-    font.letterSpacing: 2
+    font.bold: tab.current
   }
 
-  function choose() {
-    Mail.folder = tab.name
-    nudging.restart()
+  Label {
+    id: pill
+    visible: tab.form === "pill"
+    anchors.centerIn: parent
+    text: tab.label.toUpperCase() + (tab.count > 0 && tab.attention ? " " + tab.count : "")
+    color: tab.current ? Theme.foreground : tab.ink
+    font.pixelSize: 10
+    font.letterSpacing: 1
   }
 
-  SequentialAnimation {
-    id: nudging
-    NumberAnimation { target: nudge; property: "x"; to: 14; duration: 180; easing.type: Easing.OutCubic }
-    NumberAnimation { target: nudge; property: "x"; to: 0; duration: 240; easing.type: Easing.OutCubic }
-  }
+  Hint { active: pointer.containsMouse && tab.form === "rail"; text: tab.label + ", " + tab.count }
 
   MouseArea {
     id: pointer
     anchors.fill: parent
-    enabled: !tab.rail
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: tab.choose()
+    onClicked: Mail.folder = tab.name
   }
 }

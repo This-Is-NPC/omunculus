@@ -20,6 +20,9 @@ Item {
       view.currentIndex = 0
   }
 
+  // Whether the list is empty with nothing wrong: connected, read, no search.
+  readonly property bool calm: model.count === 0 && Mail.connected && Mail.primed && Mail.query === ""
+
   // Whether the model was filled once; what arrives after animates in.
   property bool filled: false
 
@@ -124,17 +127,42 @@ Item {
       height: 16
       running: visible
     }
+    Icon {
+      anchors.horizontalCenter: parent.horizontalCenter
+      visible: list.calm
+      name: "list"
+      size: 22
+      color: Theme.line
+    }
     Label {
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.Wrap
-      text: !Mail.connected ? "THE SERVER DOES NOT ANSWER"
+      text: list.calm ? "Nothing here yet"
+        : !Mail.connected ? "THE SERVER DOES NOT ANSWER"
         : !Mail.primed ? "READING YOUR MAIL"
-        : Mail.query !== "" ? "NO THREAD MATCHES “" + Mail.query.toUpperCase() + "”"
-        : "NO MAIL HERE"
+        : "NO THREAD MATCHES “" + Mail.query.toUpperCase() + "”"
+      color: list.calm ? Theme.foreground : Theme.dim
+      font.pixelSize: list.calm ? 13 : 11
+      font.bold: list.calm
+      font.letterSpacing: list.calm ? 0 : 2
+    }
+    Label {
+      width: parent.width
+      visible: list.calm
+      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.Wrap
+      text: Mail.folder === "sent" ? "Messages you send will show up here." : Mail.folder === "archive" ? "Threads you archive will show up here." : "Messages you receive will show up here."
       color: Theme.dim
       font.pixelSize: 11
-      font.letterSpacing: 2
+    }
+    TraceButton {
+      anchors.horizontalCenter: parent.horizontalCenter
+      visible: list.calm
+      dense: true
+      role: "action"
+      text: "COMPOSE"
+      onClicked: Mail.compose()
     }
     TraceButton {
       anchors.horizontalCenter: parent.horizontalCenter

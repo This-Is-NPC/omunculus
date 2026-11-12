@@ -28,6 +28,7 @@ Item {
     currentIndex: -1
     highlightFollowsCurrentItem: false
     C.ScrollBar.vertical: C.ScrollBar {}
+    header: Kicker { width: view.width; text: "Reviews waiting for you"; visible: view.count > 0; height: visible ? implicitHeight : 0 }
 
     delegate: Rectangle {
       id: row

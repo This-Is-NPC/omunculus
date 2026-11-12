@@ -7,12 +7,13 @@ import "kit/ui"
 
 ShellRoot {
   // The mailbox, an e-mail client: the masthead on top, whose notch sweeps
-  // when the folder changes, then the folders (Inbox, Sent, Drafts, Pending, Archive),
-  // the messages of the one picked and the thread open, parted by hairlines
-  // that fade downwards, under a command bar whose actions follow where you
-  // are. Each column is headed by its name and the arrow that folds it: the
-  // folders to a rail, the list away, sliding to their width; a narrow window
-  // shows one pane at a time. A message, a reply or a forward is written in a
+  // when the folder changes, then the folders (Inbox, Pending, Sent, Drafts,
+  // Archive) under COMPOSE, the messages of the one picked and the thread
+  // open, parted by hairlines that fade downwards, under a command bar whose
+  // actions follow where you are. Each column ends in the arrow that folds
+  // it: the folders to a rail of counts, the list to a count, sliding to
+  // their width; a narrow window shows one pane at a time, its folders as
+  // pills and COMPOSE floating over the list. A message, a reply or a forward is written in a
   // composer docked at the bottom right, over the mailbox.
   FloatingWindow {
     id: window
@@ -29,6 +30,13 @@ ShellRoot {
     property bool foldersFolded: false
     property bool listFolded: false
     readonly property bool reading: Mail.thread !== null || Mail.review !== null
+    readonly property var folders: [
+      { name: "inbox", icon: "import", label: "Inbox", attention: true },
+      { name: "pending", icon: "clock", label: "Pending", attention: true },
+      { name: "sent", icon: "send", label: "Sent", attention: false },
+      { name: "drafts", icon: "edit", label: "Drafts", attention: false },
+      { name: "archive", icon: "folder", label: "Archive", attention: false }
+    ]
 
     onClosed: Qt.quit()
 
@@ -57,7 +65,6 @@ ShellRoot {
           Layout.fillWidth: true
           place: window.reading ? "thread" : "list"
           narrow: window.narrow
-          onCompose: Mail.compose()
         }
 
         // The one search box: in the command bar, or over the list on a narrow window.
@@ -85,22 +92,48 @@ ShellRoot {
 
             ColumnLayout {
               anchors { fill: parent; rightMargin: 12 }
-              spacing: 4
+              spacing: 6
 
-              ColumnHead {
+              TraceButton {
+                visible: !window.foldersFolded
                 Layout.fillWidth: true
-                Layout.bottomMargin: 6
-                title: "folders"
-                folded: window.foldersFolded
-                shortcut: "ctrl+b"
-                onToggle: window.foldersFolded = !window.foldersFolded
+                Layout.bottomMargin: 8
+                role: "primary"
+                filled: !window.reading && !dock.items.length
+                text: "COMPOSE"
+                tip: "new message  ctrl+n"
+                enabled: Mail.connected
+                onClicked: Mail.compose()
               }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "sent"; icon: "send"; label: "Sent" }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "pending"; icon: "spark"; label: "Pending"; count: Mail.reviews.length }
-              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "archive"; icon: "folder"; label: "Archive" }
+              IconButton {
+                visible: window.foldersFolded
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: 8
+                name: "plus"
+                tip: "new message  ctrl+n"
+                enabled: Mail.connected
+                onClicked: Mail.compose()
+              }
+              Repeater {
+                model: window.folders
+                delegate: FolderTab {
+                  required property var modelData
+                  Layout.fillWidth: true
+                  form: window.foldersFolded ? "rail" : "full"
+                  name: modelData.name
+                  icon: modelData.icon
+                  label: modelData.label
+                  attention: modelData.attention
+                  count: Mail.counts[modelData.name]
+                }
+              }
               Item { Layout.fillHeight: true }
+              IconButton {
+                Layout.alignment: window.foldersFolded ? Qt.AlignHCenter : Qt.AlignLeft
+                name: window.foldersFolded ? "chevron-right" : "chevron-left"
+                tip: (window.foldersFolded ? "unfold" : "fold") + " the folders  ctrl+b"
+                onClicked: window.foldersFolded = !window.foldersFolded
+              }
             }
           }
 
@@ -119,24 +152,22 @@ ShellRoot {
               anchors { fill: parent; leftMargin: window.narrow ? 0 : 16; rightMargin: window.narrow ? 0 : 16 }
               spacing: 10
 
-              ColumnHead {
-                Layout.fillWidth: true
-                visible: !window.narrow
-                title: Mail.folder
-                count: String(Mail.folder === "drafts" ? Mail.shownDrafts.length : Mail.folder === "pending" ? Mail.shownReviews.length : Mail.shown.length)
-                shortcut: "ctrl+l"
-                onToggle: window.listFolded = true
-              }
-              RowLayout {
+              Flow {
                 Layout.fillWidth: true
                 visible: window.narrow
                 Layout.topMargin: 6
-                spacing: 2
-                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread }
-                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "sent"; icon: "send"; label: "Sent" }
-                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "drafts"; icon: "edit"; label: "Drafts"; count: Mail.drafts.length }
-                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "pending"; icon: "spark"; label: "Pending"; count: Mail.reviews.length }
-                FolderTab { Layout.fillWidth: true; Layout.minimumWidth: 0; rail: true; named: true; name: "archive"; icon: "folder"; label: "Archive" }
+                spacing: 6
+                Repeater {
+                  model: window.folders
+                  delegate: FolderTab {
+                    required property var modelData
+                    form: "pill"
+                    name: modelData.name
+                    label: modelData.label
+                    attention: modelData.attention
+                    count: Mail.counts[modelData.name]
+                  }
+                }
               }
               Item { id: narrowSearch; visible: window.narrow; Layout.fillWidth: true; Layout.preferredHeight: 30 }
               ThreadList {
@@ -157,6 +188,12 @@ ShellRoot {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
               }
+              IconButton {
+                visible: !window.narrow
+                name: "chevron-left"
+                tip: "fold the list  ctrl+l"
+                onClicked: window.listFolded = true
+              }
             }
           }
 
@@ -170,17 +207,16 @@ ShellRoot {
             Layout.leftMargin: 6
             Layout.rightMargin: 6
             spacing: 10
-            ColumnHead {
-              Layout.fillWidth: true
-              title: Mail.folder
-              folded: true
-              shortcut: "ctrl+l"
-              onToggle: window.listFolded = false
-            }
             ThreadRail {
               Layout.fillWidth: true
               Layout.fillHeight: true
               onUnfold: window.listFolded = false
+            }
+            IconButton {
+              Layout.alignment: Qt.AlignHCenter
+              name: "chevron-right"
+              tip: "unfold the list  ctrl+l"
+              onClicked: window.listFolded = false
             }
           }
 
@@ -253,6 +289,16 @@ ShellRoot {
         }
       }
 
+      // On a phone COMPOSE floats over the list.
+      TraceButton {
+        visible: window.narrow && !window.reading
+        anchors { right: parent.right; bottom: parent.bottom; margins: window.short ? 12 : 20; bottomMargin: (window.short ? 12 : 20) + dock.occupied }
+        role: "primary"
+        filled: true
+        text: "COMPOSE"
+        enabled: Mail.connected
+        onClicked: Mail.compose()
+      }
       // The composers, over the mailbox at its bottom right.
       ComposerDock {
         id: dock

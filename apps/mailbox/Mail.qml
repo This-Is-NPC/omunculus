@@ -80,6 +80,11 @@ Singleton {
   // Drafts, newest first: {id, project, agent, subject, body, at}.
   property var drafts: []
   readonly property int unread: all.filter(thread => Mailbox.inFolder(thread, "inbox", archived) && isUnread(thread)).length
+  // Folder -> the number the rail shows: unread threads, reviews, drafts, or the threads it holds.
+  readonly property var counts: ({
+    inbox: unread, pending: reviews.length, drafts: drafts.length,
+    sent: all.filter(thread => Mailbox.inFolder(thread, "sent", archived)).length,
+    archive: all.filter(thread => Mailbox.inFolder(thread, "archive", archived)).length })
 
   // What the window tells, as toasts; the server did not answer the last sweep.
   property bool unreachable: false
@@ -261,6 +266,8 @@ Singleton {
         Object.assign({ message: text }, apart, agent === "" ? {} : { agent: agent }), files, () => {
           if (draft)
             discardDraft(draft)
+          const to = agent !== "" ? agent : (defaultRecipient() || { agent: "" }).agent
+          notices.add("success", "Message sent" + (to !== "" ? " to " + to.charAt(0).toUpperCase() + to.slice(1) : ""), false)
           // What you sent is in Sent, not next to an empty Inbox.
           if (!stay) {
             folder = "sent"
@@ -282,6 +289,7 @@ Singleton {
     const base = "/v1/projects/" + thread.project + "/conversations/" + thread.id
     const socket = projectOf(thread.project).socket
     const sent = () => {
+      notices.add("success", "Reply sent", false)
       sweep()
     }
     if (request !== "")

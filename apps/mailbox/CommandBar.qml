@@ -5,10 +5,9 @@ import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 
 // CommandBar is the mailbox's one row of actions, under the masthead, as a
-// mail client keeps them, ranked: on the list COMPOSE is the solid action,
-// then MARK ALL READ. With a thread open the solid action is the latest
-// message's Reply, so the bar offers ARCHIVE (MOVE TO INBOX from the archive),
-// MARK UNREAD and COMPOSE, outlined. Moving between threads and closing one are
+// mail client keeps them: on the list MARK ALL READ; with a thread open
+// ARCHIVE (MOVE TO INBOX from the archive) and MARK UNREAD. COMPOSE is the
+// folder rail's. Moving between threads and closing one are
 // the thread's own, in its head; folding a column is the column's. Each action
 // says its name while the names fit; otherwise every one but the main one shows
 // only its icon, its name in the tip. The search sits at the end.
@@ -22,20 +21,15 @@ Item {
   // Where the search box sits while the bar has room for it.
   readonly property alias searchSlot: slot
 
-  signal compose()
-
   implicitHeight: Math.max(40, Breakpoints.target(Window.width) + 12)
 
-  readonly property var newMessage: ({ text: "COMPOSE", icon: "plus", tip: "new message  ctrl+n", enabled: Mail.connected, run: () => bar.compose() })
   // The actions of where you are, in order of importance.
   readonly property var commands: place === "thread" ? [
     Mail.folder === "archive"
       ? { text: "MOVE TO INBOX", icon: "import", tip: "move the thread back to the inbox", run: () => Mail.restore(Mail.selected) }
       : { text: "ARCHIVE", icon: "folder", tip: "archive the thread", run: () => Mail.archive(Mail.selected) },
-    { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) },
-    newMessage
+    { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) }
   ] : [
-    Object.assign({ role: "primary" }, newMessage),
     { text: "MARK ALL READ", icon: "check", tip: "mark every thread shown read", enabled: Mail.shown.some(thread => Mail.isUnread(thread)), run: () => Mail.markAllRead() }
   ]
 

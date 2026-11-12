@@ -62,6 +62,18 @@ Item {
     }
   }
 
+  // A phone's strip ends in the button that starts another message.
+  IconButton {
+    visible: dock.phone && dock.tabs.active !== ""
+    x: dock.width - dock.strip
+    width: dock.strip
+    height: dock.strip
+    z: 3
+    name: "plus"
+    tip: "new message"
+    onClicked: Mail.compose()
+  }
+
   Repeater {
     model: ids
     delegate: ComposerWindow {
