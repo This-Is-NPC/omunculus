@@ -854,9 +854,6 @@ defmodule Omunculus.SalesDeskProposalTest do
       assert %{"ok" => false, "output" => output} = stage("qualify", scope, root)
       assert output =~ "stage qualify does not hold yet"
       assert %{"ok" => false} = stage("qualify", forged("proposal-w1", 1, [], "proposal"), root)
-
-      assert %{"ok" => false, "output" => "report required"} =
-               call("next_stage", %{"report" => nil}, %{}, root)
     end
   end
 end

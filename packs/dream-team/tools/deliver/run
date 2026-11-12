@@ -21,10 +21,8 @@ def main():
     call = json.load(sys.stdin)
     view = call.get("view") or {}
     work = view.get("work") or {}
-    report = ((call.get("args") or {}).get("report") or "").strip()
+    report = call["args"]["report"]
     root = (call.get("roots") or [None])[0]
-    if not report:
-        answer(False, "report required")
     if not work:
         answer(False, "deliver concludes a work; this run has none")
 

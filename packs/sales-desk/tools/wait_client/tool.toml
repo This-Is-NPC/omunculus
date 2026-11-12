@@ -12,8 +12,10 @@ type = "object"
 required = ["report"]
 
 [parameters.properties.report]
-type = "string"
-description = "An internal report for the front desk, plain: what the client is to decide, and that they can write whenever they want."
+"$ref" = "report"
+
+[views.report_required]
+source = "report_required"
 
 [views.work]
 source = "works"

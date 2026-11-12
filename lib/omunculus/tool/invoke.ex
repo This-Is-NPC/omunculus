@@ -18,6 +18,7 @@ defmodule Omunculus.Tool.Invoke do
   alias Omunculus.Mcp
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.{Manifest, Resident}
+  alias Omunculus.Tools.Report
 
   @type out :: %{
           ok: boolean,
@@ -61,17 +62,32 @@ defmodule Omunculus.Tool.Invoke do
 
   def call(%Manifest{command: command} = manifest, input, %Policy{} = execution, secrets)
       when is_list(command) do
-    with {:ok, command} <- external_command(manifest, command, execution, secrets) do
+    with {:ok, input} <- render_report(manifest, input),
+         {:ok, command} <- external_command(manifest, command, execution, secrets) do
       case run_command(manifest, command, input, execution) do
         {:ok, stdout} -> decode(stdout)
         {:error, {:exit, status, _stdout, stderr}} -> {:error, {:exit, status, stderr}}
         {:error, _reason} = error -> error
       end
+    else
+      {:report, message} -> validate(%{"ok" => false, "output" => message})
+      {:error, _reason} = error -> error
     end
   end
 
   def call(%Manifest{command: command}, _input, nil, _secrets) when is_list(command),
     do: {:error, :execution_context_required}
+
+  # A command tool whose manifest takes the shared report gets it checked and
+  # rendered as the comment the next run reads, so `args.report` is that text.
+  defp render_report(%Manifest{report: true}, %{args: args, view: view} = input) do
+    case Report.fetch(args, view["report_required"] || []) do
+      {:ok, text} -> {:ok, %{input | args: Map.put(args, "report", text)}}
+      {:error, message} -> {:report, message}
+    end
+  end
+
+  defp render_report(_manifest, input), do: {:ok, input}
 
   # A tool that keeps alive has its process of the run take the call as one
   # line; outside a run, or without the option, a process serves one call.

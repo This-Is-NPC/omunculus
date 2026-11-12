@@ -483,7 +483,11 @@ work to it by naming it as the `workspace` of the work it opens with
 Every model tool that hands the work to someone else carries a `report`
 (one shape, [the report](cycle.md#the-report)) and ends the run through
 its manifest's `then = ["end"]`, so the agent needs `end` as have too.
-`retire` takes its report as plain text.
+`retire` takes its report as plain text. A command tool, pack tools such as
+`deliver`, `next_stage` and `wait_client` included, takes it the same way
+with `report = {"$ref" = "report"}` and the view `report_required`: the
+harness checks the object and renders it before the process runs, so
+`args.report` is the text of the comment.
 
 | Tool | Writes | Then |
 | --- | --- | --- |

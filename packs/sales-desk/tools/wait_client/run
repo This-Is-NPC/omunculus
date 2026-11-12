@@ -13,9 +13,7 @@ def refuse(message):
 
 
 def run(call):
-    report = str((call.get("args") or {}).get("report") or "").strip()
-    if not report:
-        return {"ok": False, "output": "report required", "emit": [], "chain": []}
+    report = call["args"]["report"]
     work = (call.get("view") or {}).get("work") or {}
     if work.get("stage") == "sale":
         sales = [child for child in (call.get("view") or {}).get("children") or [] if child.get("workflow") == "sale"]

@@ -90,6 +90,43 @@ defmodule Omunculus.Tool.InvokeTest do
              Invoke.call(manifest(dir), @input, policy(dir))
   end
 
+  describe "a command tool that takes the shared report" do
+    setup %{dir: dir} do
+      write_run!(dir, """
+      #!/bin/sh
+      text=$(sed -e 's/.*"report":"//' -e 's/".*//')
+      printf '{"ok": true, "output": "%s"}' "$text"
+      """)
+
+      :ok
+    end
+
+    defp reporting(dir), do: manifest(dir, %{report: true})
+
+    test "reads it rendered as the comment the next run reads", %{dir: dir} do
+      input = %{@input | args: %{"report" => %{"done" => "shipped"}}}
+
+      assert {:ok, %{ok: true, output: "**done:** shipped"}} =
+               Invoke.call(reporting(dir), input, policy(dir))
+    end
+
+    test "is refused without running when the report is not valid", %{dir: dir} do
+      input = %{@input | args: %{"report" => "plain text"}, view: %{"report_required" => []}}
+
+      assert {:ok, %{ok: false, output: "report must be an object"}} =
+               Invoke.call(reporting(dir), input, policy(dir))
+
+      input = %{
+        @input
+        | args: %{"report" => %{"done" => "x"}},
+          view: %{"report_required" => ["verify"]}
+      }
+
+      assert {:ok, %{ok: false, output: "report.verify required"}} =
+               Invoke.call(reporting(dir), input, policy(dir))
+    end
+  end
+
   test "non-zero exit returns the exit error", %{dir: dir} do
     write_run!(dir, """
     #!/bin/sh

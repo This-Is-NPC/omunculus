@@ -42,6 +42,7 @@ defmodule Omunculus.Tool.Manifest do
             root: nil,
             mcp: nil,
             keep_alive_ms: nil,
+            report: false,
             config: true
 
   @type t :: %__MODULE__{
@@ -66,6 +67,7 @@ defmodule Omunculus.Tool.Manifest do
           root: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
           keep_alive_ms: pos_integer | nil,
+          report: boolean,
           config: boolean
         }
 
@@ -116,6 +118,7 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
          {:ok, schemas} <- schemas(raw),
+         report = takes_report?(parameters),
          parameters = with_report(parameters),
          schemas = Map.new(schemas, fn {variant, schema} -> {variant, with_report(schema)} end),
          {:ok, views} <- Views.parse(Map.get(raw, "views", %{})),
@@ -147,10 +150,14 @@ defmodule Omunculus.Tool.Manifest do
          agent: agent,
          dir: dir,
          keep_alive_ms: keep_alive_ms,
+         report: report,
          config: config
        }}
     end
   end
+
+  defp takes_report?(%{"properties" => %{"report" => %{"$ref" => "report"}}}), do: true
+  defp takes_report?(_parameters), do: false
 
   # A `report` property of `{"$ref" = "report"}` takes the one report schema.
   defp with_report(%{"properties" => %{"report" => %{"$ref" => "report"}} = properties} = schema),

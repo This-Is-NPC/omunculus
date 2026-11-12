@@ -227,8 +227,8 @@ run's first, makes the context full. From there the run refuses every
 call but `comment`, `done`, `continue` and `break`, each refused call
 answered with `refused: this run's context reached N tokens, past its
 limit of M. Report now: ...`. The model reports as it would at any end:
-a `comment` saying what is done, what remains and the next step stops the
-run; `done`, `continue` or `break` hand the work on as always. A model
+a `comment` carrying a report of the fields `done`, `decided`, `pending`,
+`files` and `verify` stops the run; `done`, `continue` or `break` hand the work on as always. A model
 that replies twice more without reporting is stopped too. Either stop is
 a run without a report: the work's retry, a fresh run, has the report
 under `## Last comment` and the stopped run's calls under `## Last run`,

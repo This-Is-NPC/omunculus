@@ -49,9 +49,7 @@ def run(call):
     view = call.get("view") or {}
     work = view.get("work") or {}
     stage = work.get("stage")
-    report = str((call.get("args") or {}).get("report") or "").strip()
-    if not report:
-        raise proposal.Refusal("report required")
+    report = call["args"]["report"]
     if not stage:
         raise proposal.Refusal("next_stage moves a client's request through the stages of its workflow; this run has none")
 
