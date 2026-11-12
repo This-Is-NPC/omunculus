@@ -7,6 +7,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | Page | The question it answers |
 | --- | --- |
 | [The front door](../README.md) | What is omunculus, and how do I install and start it? |
+| [How to install, update and remove omunculus](how-to-install-and-remove.md) | How do I get omunculus onto this machine, keep it current and take it off? |
 | [How to start a project](how-to-start-a-project.md) | How do I get a project that answers a first message? |
 | [How to log in to a provider](how-to-log-in-to-a-provider.md) | How do I put the agents on a real model, with my key? |
 | [How to import a pack](how-to-import-a-pack.md) | How do I add a team that comes as a folder? |
@@ -36,11 +37,13 @@ Every page, in the order somebody meets it, with the question it answers.
 
 ## The shortest useful path
 
-1. [How to start a project](how-to-start-a-project.md): a first message on
+1. [How to install, update and remove omunculus](how-to-install-and-remove.md):
+   the packages and `omunculus setup`.
+2. [How to start a project](how-to-start-a-project.md): a first message on
    the `fake` model.
-2. [How to log in to a provider](how-to-log-in-to-a-provider.md): the
+3. [How to log in to a provider](how-to-log-in-to-a-provider.md): the
    agents on a real model.
-3. [How to run the server](how-to-run-the-server.md), then
+4. [How to run the server](how-to-run-the-server.md), then
    [the screens](screens.md): the apps on it.
 
 ## When you know what you want

@@ -13,9 +13,26 @@ say why and walk every screen in words.
 
 ## Install
 
-There is no release and no installer yet. Omunculus runs only from a
-checkout of this repository, as its contributors run it; the steps are in
-[the design](docs/design.md#8-building-and-checking).
+On Arch Linux (x86_64), from the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/This-Is-NPC/omunculus/master/install.sh | bash
+omunculus setup
+```
+
+You get:
+
+- the `omunculus` package: the server, the command line, the builtin tools
+  and the system pack, with a systemd user service;
+- the `omunculus-apps` package: the console, the mailbox and the studio,
+  with a launcher each (`APPS=0` skips it);
+- no domain packs: you [import](docs/how-to-import-a-pack.md) the ones you
+  want.
+
+Update with `omunculus update`; remove with
+`sudo pacman -R omunculus omunculus-apps`, which keeps your configuration
+and projects. [How to install, update and remove
+omunculus](docs/how-to-install-and-remove.md) has the steps.
 
 ## Start here
 
