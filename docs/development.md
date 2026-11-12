@@ -13,4 +13,6 @@
 | `dev:reset` | deletes the store and the workspace of each project config of `dev/` |
 | `up` | `dev:bootstrap`, then `dev:serve` unless a server already answers |
 
+`check:qml`, part of `mise run check`, starts each app of `apps/` under `quickshell`, headless (`QT_QPA_PLATFORM=offscreen`) and with no server to reach, and waits for it to report `Configuration Loaded`. It fails, with the `file[line:column]` Qt gives, on `Failed to load configuration` or any QML error: a binding to a property that does not exist, a property set twice, a type that is unavailable. The apps then show their connection state. It takes about two seconds.
+
 While the dev server runs, `bin/omunculus --config dev/omunculus.toml <command>` goes to it through the socket.

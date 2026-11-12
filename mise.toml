@@ -44,8 +44,8 @@ flag "--output <folder>" help="Result folder"
 '''
 
 [tasks.check]
-description = "Check that docs/cli.md is current, the documentation's links resolve and the console and kit read their spacing from the theme"
-depends = ["check:cli", "check:links", "check:spacing"]
+description = "Check that docs/cli.md is current, the documentation's links resolve, the console and kit read their spacing from the theme and every app's QML loads"
+depends = ["check:cli", "check:links", "check:qml", "check:spacing"]
 
 [tasks."check:cli"]
 description = "Check that docs/cli.md is what docs:cli writes"
@@ -54,6 +54,11 @@ run = "scripts/docs-cli --check"
 [tasks."check:links"]
 description = "Check that every relative link, image and anchor of the documentation resolves"
 run = "scripts/check-links"
+
+[tasks."check:qml"]
+description = "Check that every app's QML loads: each runs headless under quickshell and must report its configuration loaded without errors"
+run = "scripts/check-qml"
+sources = ["apps/**/*.qml", "apps/**/qmldir", "scripts/check-qml"]
 
 [tasks."check:spacing"]
 description = "Check that the console and the kit read margins, paddings, spacings and heights from Theme, not numbers"

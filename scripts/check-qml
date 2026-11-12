@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Fails when an app's QML does not load. Starts each app of apps/ with a
+# shell.qml under quickshell, headless and with no server to reach, waits for
+# "Configuration Loaded" or "Failed to load configuration", and fails on a load
+# failure or a QML error, listing file:line.
+set -u
+
+root=${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}
+timeout_s=${CHECK_QML_TIMEOUT:-30}
+tmp=$(mktemp -d)
+pids=()
+
+cleanup() {
+  for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null; done
+  for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null; done
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+command -v quickshell >/dev/null || { echo "check-qml: quickshell is not installed" >&2; exit 1; }
+
+apps=()
+for shell in "$root"/apps/*/shell.qml; do apps+=("$(basename "$(dirname "$shell")")"); done
+
+# Errors Qt reports at load, whatever the log level quickshell gives them.
+bad='Cannot assign|non-existent property|set multiple times|is not a type|unavailable|ReferenceError|TypeError|Failed to load|is not installed|ERROR'
+
+start() {
+  local app=$1 dir=$tmp/$1
+  mkdir -p "$dir/run"
+  chmod 700 "$dir/run"
+  XDG_RUNTIME_DIR=$dir/run XDG_CONFIG_HOME=$dir/config XDG_STATE_HOME=$dir/state XDG_CACHE_HOME=$dir/cache \
+    QT_QPA_PLATFORM=offscreen OMUNCULUS_SOCKET=$dir/none NO_COLOR=1 \
+    quickshell --no-color --path "$root/apps/$app" >"$dir/log" 2>&1 &
+  pids+=($!)
+}
+
+for app in "${apps[@]}"; do start "$app"; done
+
+deadline=$((SECONDS + timeout_s))
+status=0
+for i in "${!apps[@]}"; do
+  app=${apps[$i]} pid=${pids[$i]} log=$tmp/$app/log
+  until grep -qE 'Configuration Loaded|Failed to load configuration' "$log" || ! kill -0 "$pid" 2>/dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then echo "$app: no load report within ${timeout_s}s" >&2; status=1; break; fi
+    sleep 0.1
+  done
+  sleep 0.5 # errors of the first bindings come just after the report
+  errors=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -E "$bad" || true)
+  if [ -n "$errors" ]; then
+    echo "$app: QML does not load" >&2
+    sed "s#file://$root/##; s/^/  /" <<<"$errors" >&2
+    status=1
+  elif ! grep -q 'Configuration Loaded' "$log"; then
+    echo "$app: no 'Configuration Loaded' in its output" >&2
+    sed 's/^/  /' "$log" >&2
+    status=1
+  else
+    echo "$app: loads"
+  fi
+done
+exit $status

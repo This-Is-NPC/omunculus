@@ -238,7 +238,7 @@ mise install                    # toolchain from mise.toml
 mix deps.get
 mix compile --warnings-as-errors
 mise run pre-commit             # validate:boundaries, mix format --check-formatted, check:cli, check:links
-mise run check                  # check:cli and check:links
+mise run check                  # check:cli, check:links, check:qml and check:spacing
 mise run docs:cli               # write docs/cli.md from the commands
 mise run validate:regular       # mix test --exclude cargo --exclude sandbox
 mise run validate:sandbox       # needs Linux with Bubblewrap namespaces
