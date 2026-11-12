@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls.Basic as C
 import "kit/client/Tree.js" as Tree
 import "kit/ui"
 
@@ -7,7 +8,8 @@ import "kit/ui"
 // level, L0 for you and the agent that talks with you, then one for each level
 // of works down, a node per agent (TreeNode), elbow connectors from each work
 // to the works it handed down, and a bracket under works that ran at once
-// ("PARALLEL ×4 · 2 DONE · 2 WORKING"). It scrolls when wider than the page.
+// ("PARALLEL ×4 · 2 DONE · 2 WORKING"), each node as wide as the longest name
+// or state needs. It scrolls, with a bar, when wider than the page.
 // A node chosen emits chosen(work); `picked` is the work picked.
 Flickable {
   id: chart
@@ -16,7 +18,13 @@ Flickable {
   signal chosen(string work)
 
   readonly property var layout: Tree.chart(Omunculus.progress)
-  readonly property real nodeWidth: Theme.size.gutter * 6
+  // The width the widest node needs, as measured by the nodes themselves.
+  readonly property real nodeWidth: {
+    let widest = 0
+    for (let each = 0; each < nodes.count; each++)
+      widest = Math.max(widest, nodes.itemAt(each) ? nodes.itemAt(each).wanted : 0)
+    return widest
+  }
   readonly property real nodeHeight: Theme.size.row + Theme.space.gap
   readonly property real colWidth: nodeWidth + Theme.space.gap * 2
   readonly property real bandHeight: nodeHeight + Theme.size.row
@@ -35,6 +43,7 @@ Flickable {
 
   clip: true
   boundsBehavior: Flickable.StopAtBounds
+  C.ScrollBar.horizontal: C.ScrollBar { policy: C.ScrollBar.AsNeeded }
   contentWidth: Math.max(width, labelWidth + layout.columns * colWidth)
   contentHeight: layout.levels * bandHeight
   flickableDirection: Flickable.HorizontalAndVerticalFlick
@@ -128,6 +137,7 @@ Flickable {
 
   // The nodes.
   Repeater {
+    id: nodes
     model: chart.layout.cells
     delegate: TreeNode {
       id: cell
