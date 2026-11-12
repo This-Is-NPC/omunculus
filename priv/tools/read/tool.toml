@@ -1,7 +1,7 @@
 name = "read"
 kind = "tool"
 triggers = ["model"]
-description = "Reads a file, or limit lines of it from line offset (from 1)."
+description = "Reads a file, or limit lines of it from line offset (from 1). An image or a PDF is shown to you instead of read as text."
 tags = ["fs"]
 groups = ["fs.read"]
 module = "Omunculus.Tools.Read"

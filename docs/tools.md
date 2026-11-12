@@ -11,7 +11,7 @@ Builtin, default and third-party: one contract.
 
 ```text
 in:  { name, args, view, run_id, work_id, workspace, roots, config_path }
-out: { ok, output, emit, chain, instructions }
+out: { ok, output, emit, media, chain, instructions }
 ```
 
 `view` holds what the harness read for the call, one entry per
@@ -32,6 +32,9 @@ schema, the tool failed and nothing is written.
   "emit": [{ "type": "notify", "body": { "body": "need a look" } }]
 }
 ```
+
+`media` is optional: images and PDFs to show the model with `output`
+([Media](#media)).
 
 `instructions` is optional: what the `assemble` tool puts before its
 `output`, the part of a prompt that stays the same from run to run.
@@ -285,7 +288,9 @@ files: those a message carries ([server](server.md)) and those a run
 attaches. `assemble` lists them under `## Attachments`, each with its
 name, media type, size, who attached it and its `sha256`.
 `read_attachment` reads one by its `sha256`, refused when the file is not
-text or not attached in the run's conversation. `attach` keeps a file
+attached in the run's conversation; an image or a PDF is shown to the
+model ([Media](#media)), another file that is not text is refused with its
+size. `attach` keeps a file
 under the run's roots, read through the same checks as `read`, with the
 media type its name suggests and an optional `note`; the conversation
 keeps it as it was then, whatever the workspace does after. Or it hands
@@ -307,8 +312,8 @@ keeps no list.
 
 | Tool | Does |
 | --- | --- |
-| `put_artifact` | Writes the next version. `name` (a file name without a directory) and `kind`, then `data`, a JSON object kept as `application/json`, or `content` with its `media_type`; an optional `note`; an optional `base`, the number of the version it builds on (0 for none), which refuses the write when another version came since. Content equal to the latest version's (same SHA-256 and media type) makes no new version: the call succeeds and the output names the version that stands. A kind, name, size or `base` the store would refuse fails the call. The output names the version. |
-| `get_artifact` | Reads a version as text: `name`, and `version`, the latest when omitted. A version that is not text is refused with its size. |
+| `put_artifact` | Writes the next version. `name` (a file name without a directory) and `kind`, then `data`, a JSON object kept as `application/json`, `content` text with its `media_type`, or `base64` bytes with its `media_type` (an image, a PDF); an optional `note`; an optional `base`, the number of the version it builds on (0 for none), which refuses the write when another version came since. Content equal to the latest version's (same SHA-256 and media type) makes no new version: the call succeeds and the output names the version that stands. A kind, name, size or `base` the store would refuse fails the call. The output names the version. |
+| `get_artifact` | Reads a version: `name`, and `version`, the latest when omitted. An image or a PDF is shown to the model ([Media](#media)); another version that is not text is refused with its size. |
 | `list_artifacts` | Lists each artifact with its kind and versions, newest last; `kind` keeps those of one kind. |
 | `attach` | With `artifact`, gives the person that version ([attachments](#attachments)). |
 
@@ -348,7 +353,7 @@ ceiling decides which agents have them.
 | Tool | Does |
 | --- | --- |
 | `push_artifacts` | Uploads every version of this conversation's artifacts (`name` keeps one artifact). Each content is the object `<prefix>/objects/<sha256>`, and each version a record `<prefix>/conversations/<conversation>/<name>/<version>.json`, the version as its event describes it. What the bucket already holds is skipped, so the call may be repeated. A `chain` step too. |
-| `pull_artifacts` | Restores the versions the bucket holds for a conversation (`conversation`, this one when omitted) that this conversation lacks, as `artifact` actions in order, each checked against its SHA-256. A name restores only the versions after the ones it has, so a repeat restores nothing more. A version that is not text, or that follows a gap in the numbers, is left out and named. |
+| `pull_artifacts` | Restores the versions the bucket holds for a conversation (`conversation`, this one when omitted) that this conversation lacks, as `artifact` actions in order, each checked against its SHA-256. A name restores only the versions after the ones it has, so a repeat restores nothing more. Text and bytes come back as they were; a version that follows a gap in the numbers is left out and named. |
 
 Both fail, writing nothing, when there is no `[s3]` table, a credential does
 not resolve or the bucket refuses. A sync that follows every write is a
@@ -617,6 +622,49 @@ they cannot call one found later. With `send_catalog`, a run is sent the
 declared tools only. A search with no `q` returns every schema of the
 catalog, cut to `[policy] tool_output_bytes`.
 
+## Media
+
+A model sees images and PDFs, not only text. A tool's `out` may carry
+`media`, a list of parts, each a `media_type` and where the bytes are:
+
+| Field | Bytes |
+| --- | --- |
+| `data` | base64, in the part |
+| `sha256` | a file kept in `[store] attachments` |
+| `path` | a file under the run's roots, read through the same checks as `read` |
+
+A part may also have a `name`. Exactly one of `data`, `sha256` and `path`
+is given.
+
+`read` of an image or a PDF, `read_attachment`, `get_artifact` of a
+binary version and `browser_check` return parts. A command tool does the
+same by printing `media` in its `out`. The supported types are
+`image/png`, `image/jpeg`, `image/gif`, `image/webp` and
+`application/pdf`; `read` and its kin tell them by their first bytes.
+
+The harness keeps each part's bytes once in `[store] attachments`, under
+their SHA-256, within `[policy] media_bytes` and `[store] attachment_bytes`
+([config](config.md)). The recorded call holds a reference, `name`,
+`media_type`, `bytes` and `sha256`, not the bytes: the store already keeps
+them, so the log does not carry them again. A part the harness cannot keep
+is left out, and the call's `output` says why: no `media_bytes`, no
+`[store] attachments`, too large, a path outside the roots, or bytes that
+cannot be read.
+
+Each adapter turns the same part into its provider's content:
+`anthropic-messages` into `image` and `document` blocks in the
+`tool_result`; `openai-responses` into `input_image` and `input_file`
+items in the `function_call_output`; `openai-completions` into
+`image_url` and `file` parts of a user message after the tool messages,
+because a tool message holds text alone. A model's `media_types` in
+`[models.<name>]` ([config](config.md#the-adapters)) lists what it takes;
+a part of another type is not sent, and the result says which types the
+model takes. Under `code_mode` a call returns text, with the count of the
+media it did not show.
+
+A session that continues ([config](config.md)) does not send the media of
+earlier runs again: the output of that call says it was shown.
+
 ## Editing files
 
 `write` replaces a file whole. `edit` takes a `path` and a list of
@@ -730,11 +778,12 @@ when a page answers 400 or more, did not load, or a step failed; console
 errors are reported and do not fail it. A call that fails still stops the
 server.
 
-The screenshot is a PNG at `.browser_check/<path>-<W>x<H>.png` in the
-workspace, so it needs `sandbox.write`; without it the page is still
-checked and the output says the screenshot was not saved. The model reads
-the text outline: `read` refuses a PNG, and an artifact or an `emit` carries
-text only. `attach` with that `path` gives the person the image.
+Each screenshot is shown to the model ([Media](#media)), so it sees the
+page as well as the outline. It is also saved as a PNG at
+`.browser_check/<path>-<W>x<H>.png` in the workspace, which needs
+`sandbox.write`; without it the page is still checked and shown, and the
+output says the screenshot was not saved. `attach` with that `path` gives
+the person the image.
 
 It is a Deno script that speaks the DevTools protocol to the Chromium it
 finds on `PATH` (`chromium`, `chromium-browser`, `google-chrome-stable`,

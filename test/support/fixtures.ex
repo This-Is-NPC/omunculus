@@ -177,6 +177,14 @@ defmodule Omunculus.Fixtures do
     config_path(dir)
   end
 
+  @doc "A 1x1 PNG, the smallest image a test shows a model."
+  @spec png() :: binary
+  def png,
+    do:
+      Base.decode64!(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPj/HwADAgH/hgmlWAAAAABJRU5ErkJggg=="
+      )
+
   @doc "A fresh directory under the system temp dir, removed when the test exits."
   @spec tmp_dir() :: String.t()
   def tmp_dir do

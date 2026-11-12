@@ -45,7 +45,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | History search beyond the last run | ◐ through comments and reports; deeper search needs a new view (**K**) | **P** | **P** | **P** FTS5 |
 | | Long-term memory / skills | **P** Agent Skills (`[skills] paths`, `skill`) for authored procedures; `remember`, `recall` and `forget` for what agents learn, by scope and kind, searched by words, optionally in the prompt (`[policy] memory_bytes`) | ◐ | ◐ | **P** |
 | **Coding: reading** | Read with offset/limit | **P** | **P** | **P** | **P** |
-| | Image / PDF | **T** | **P** | **P** | **P** |
+| | Image / PDF | **P** `read`, `read_attachment`, `get_artifact` and `browser_check` show images and PDFs to the model, through each adapter, within `[policy] media_bytes`; artifacts hold bytes | **P** | **P** | **P** |
 | | Grep / find | **P** `grep` and `find` leave out `.git` and what `.gitignore` ignores | **P** | **P** | **P** |
 | | LSP | **P** `lsp`: diagnostics, definition, references, hover, symbols from servers the TOML declares, kept for the run | **P** | ✗ | ✗ |
 | **Coding: editing** | Exact, unique replacement | **P** | **P** | **P** | **P** |
@@ -65,7 +65,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Message during a run | ◐ goes to the work's next run | **P** | **P** | **P** |
 | | Undo / checkpoints | **P** `changes` records each call's files; `revert` puts a work's back | ◐ fork | **P** git | **P** `/rollback` |
 | | Reply shown on the CLI | **T** (`send` prints nothing today) | **P** | **P** | **P** |
-| **Extras** | Web search / browser / scheduling | browser **P** `browser_check`: dev server, headless Chromium, per-viewport status, console errors, outline, screenshot file; search and scheduling **T** | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
+| **Extras** | Web search / browser / scheduling | browser **P** `browser_check`: dev server, headless Chromium, per-viewport status, console errors, outline, screenshots the model sees; search and scheduling **T** | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
 
 ## Remaining gaps
 
@@ -74,8 +74,7 @@ Core changes (**K**):
 - a deeper history view, for search beyond the last run
 - execution outside Linux and Bubblewrap
 
-Tools and hooks (**T**), a `coding` package for the presets: reply on the CLI, worktree per run, formatter, image and PDF
-reading. For reach: a messaging channel and web search.
+Tools and hooks (**T**), a `coding` package for the presets: reply on the CLI, worktree per run, formatter. For reach: a messaging channel and web search.
 
 ## Sources
 

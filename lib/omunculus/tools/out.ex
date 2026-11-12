@@ -227,6 +227,38 @@ defmodule Omunculus.Tools.Out do
   @spec not_text(String.t(), non_neg_integer) :: String.t()
   def not_text(path, bytes), do: "#{path} is not a text file (#{bytes} bytes)"
 
+  @spec media_shown(String.t(), String.t(), non_neg_integer) :: String.t()
+  def media_shown(name, type, bytes), do: "#{name}: #{type}, #{bytes} bytes, shown to you"
+
+  @spec media_refused(String.t(), String.t()) :: String.t()
+  def media_refused(name, why), do: "#{name} is not shown: #{why}"
+
+  @spec media_limit_unset() :: String.t()
+  def media_limit_unset, do: "[policy] media_bytes is not set"
+
+  @spec media_too_large(non_neg_integer, pos_integer) :: String.t()
+  def media_too_large(bytes, limit),
+    do: "#{bytes} bytes is more than the #{limit} media_bytes allows"
+
+  @spec media_unreadable(String.t()) :: String.t()
+  def media_unreadable(reason), do: "its bytes could not be read (#{reason})"
+
+  @spec media_not_taken(String.t(), [String.t()]) :: String.t()
+  def media_not_taken(type, []), do: "this model takes no media, not #{type}"
+
+  def media_not_taken(type, accepted),
+    do: "this model takes #{Enum.join(accepted, ", ")}, not #{type}"
+
+  @spec media_text_only(non_neg_integer) :: String.t()
+  def media_text_only(count),
+    do: "#{count} media not shown: a call in code mode returns text"
+
+  @spec media_follows() :: String.t()
+  def media_follows, do: "The media the tool calls above showed:"
+
+  @spec media_not_resent(String.t()) :: String.t()
+  def media_not_resent(name), do: "(#{name} was shown then and is not sent again)"
+
   @spec resume() :: String.t()
   def resume,
     do:

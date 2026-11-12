@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --no-config --no-lock --no-prompt --allow-all
 // browser_check: dev server + headless Chromium over CDP, no dependencies.
-// Reads the call as JSON on stdin and prints { ok, output, emit }.
+// Reads the call as JSON on stdin and prints { ok, output, emit, media }.
 
 const input = JSON.parse(await new Response(Deno.stdin.readable).text());
 const args = input.args ?? {};
@@ -12,8 +12,11 @@ const steps = args.steps ?? [];
 const readyMs = args.ready_timeout_ms ?? 30000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Each screenshot is shown to the model as a media part.
+const media = [];
+
 function finish(ok, output) {
-  console.log(JSON.stringify({ ok, output, emit: [] }));
+  console.log(JSON.stringify({ ok, output, emit: [], media }));
   Deno.exit(0);
 }
 
@@ -219,6 +222,7 @@ async function check(cdp, path, width, height) {
   result.outline = outline.result.value;
   const shot = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: !!args.full_page }, s);
   const slug = (path.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "index") + `-${width}x${height}.png`;
+  media.push({ media_type: "image/png", name: slug, data: shot.data });
   try {
     await Deno.mkdir(`${root}/.browser_check`, { recursive: true });
     await Deno.writeFile(`${root}/.browser_check/${slug}`, Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0)));

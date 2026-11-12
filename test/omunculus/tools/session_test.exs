@@ -93,6 +93,20 @@ defmodule Omunculus.Tools.SessionTest do
     assert get_in(second, ["tool_calls", Access.at(0), "id"]) == "c2"
   end
 
+  test "the media a call showed is not sent again, and the output says so" do
+    shot = %{"name" => "page.png", "media_type" => "image/png", "bytes" => 68, "sha256" => "x"}
+
+    events = [
+      event("model", reply([{"c1", "read"}])),
+      call("read", "shown", %{"media" => [shot]})
+    ]
+
+    %{"history" => [_, %{"outputs" => [output]} | _]} =
+      Session.history([paused("r1", events)], given())
+
+    assert output == "shown\n" <> Out.media_not_resent("page.png")
+  end
+
   test "outputs are cut as the model got them" do
     %{"history" => [_, %{"outputs" => [output]} | _]} =
       Session.history([paused("r1", read_turn())], given(%{tool_output_bytes: 4}))

@@ -8,7 +8,8 @@ defmodule Omunculus.Tool.Invoke do
   `instructions` of `out`, empty by default, is the part of a prompt the
   tool assembles that stays the same from run to run, and its optional
   `session` the session the run continues (`Omunculus.Tools.Session`).
-  An `output` that is not valid UTF-8 has its invalid bytes replaced, so
+  Its optional `media` lists the images and PDFs to show the model
+  (`Omunculus.Media`). An `output` that is not valid UTF-8 has its invalid bytes replaced, so
   what a tool printed can always be recorded and sent to a model.
   """
 
@@ -22,6 +23,7 @@ defmodule Omunculus.Tool.Invoke do
           ok: boolean,
           output: String.t(),
           emit: [map],
+          media: [map],
           chain: [%{name: String.t(), args: map}],
           instructions: String.t(),
           session: map | nil
@@ -175,6 +177,7 @@ defmodule Omunculus.Tool.Invoke do
          {:ok, output} <- fetch_string(decoded, "output", ""),
          output = String.replace_invalid(output),
          {:ok, emit} <- fetch_emit(decoded),
+         {:ok, media} <- fetch_media(decoded),
          {:ok, chain} <- fetch_chain(decoded),
          {:ok, instructions} <- fetch_string(decoded, "instructions", ""),
          {:ok, session} <- fetch_session(decoded) do
@@ -183,6 +186,7 @@ defmodule Omunculus.Tool.Invoke do
          ok: ok,
          output: output,
          emit: emit,
+         media: media,
          chain: chain,
          instructions: instructions,
          session: session
@@ -235,6 +239,23 @@ defmodule Omunculus.Tool.Invoke do
         {:error, {:invalid_output, decoded}}
     end
   end
+
+  defp fetch_media(decoded) do
+    case Map.get(decoded, "media", []) do
+      list when is_list(list) ->
+        if Enum.all?(list, &valid_media?/1),
+          do: {:ok, list},
+          else: {:error, {:invalid_output, decoded}}
+
+      _ ->
+        {:error, {:invalid_output, decoded}}
+    end
+  end
+
+  defp valid_media?(%{"media_type" => type} = part) when is_binary(type),
+    do: Enum.count(~w(data sha256 path), &is_binary(part[&1])) == 1
+
+  defp valid_media?(_part), do: false
 
   defp fetch_chain(decoded) do
     case chain_steps(Map.get(decoded, "chain", [])) do

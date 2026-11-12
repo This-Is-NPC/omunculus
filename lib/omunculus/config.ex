@@ -20,7 +20,8 @@ defmodule Omunculus.Config do
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
   conversation_bytes` (how much of its conversation's works and exchanges
   a run without a work is shown), the optional `[policy] memory_bytes`
-  (how much of the memory a run's prompt carries under `## Memory`), the optional `[policy]
+  (how much of the memory a run's prompt carries under `## Memory`), the optional `[policy] media_bytes`
+  (the most an image or PDF a tool shows the model may hold), the optional `[policy]
   send_catalog` (send every run the catalog's model tools, not only its
   own, so all agents share the start of their requests), the optional
   `[policy] session_ttl_ms` and `session_max_bytes` (together, they let a
@@ -65,6 +66,7 @@ defmodule Omunculus.Config do
     :tool_output_bytes,
     :conversation_bytes,
     :memory_bytes,
+    :media_bytes,
     :send_catalog,
     :session_ttl_ms,
     :session_max_bytes,
@@ -162,6 +164,7 @@ defmodule Omunculus.Config do
           report_required: [String.t()],
           conversation_bytes: pos_integer | nil,
           memory_bytes: pos_integer | nil,
+          media_bytes: pos_integer | nil,
           send_catalog: boolean,
           session_ttl_ms: pos_integer | nil,
           session_max_bytes: pos_integer | nil,
@@ -214,7 +217,7 @@ defmodule Omunculus.Config do
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
-  @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream retries code_mode)
+  @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream retries code_mode media_types)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
@@ -782,6 +785,7 @@ defmodule Omunculus.Config do
                ),
              {:ok, default_agent} <- fetch_default_agent(data, agents),
              {:ok, memory_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :memory_bytes),
+             {:ok, media_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :media_bytes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, report_required} <- fetch_report_required(data),
@@ -815,6 +819,7 @@ defmodule Omunculus.Config do
               conversation_bytes: conversation_bytes,
               memory_bytes: memory_bytes,
               report_required: report_required,
+              media_bytes: media_bytes,
               send_catalog: send_catalog,
               session_ttl_ms: session.ttl_ms,
               session_max_bytes: session.max_bytes,
@@ -2336,6 +2341,7 @@ defmodule Omunculus.Config do
              {:ok, stream} <- model_boolean(data, "stream"),
              {:ok, code_mode} <- model_boolean(data, "code_mode"),
              {:ok, retries} <- model_retries(data),
+             {:ok, media_types} <- model_media_types(data),
              {:ok, prompt_cache_key} <- model_optional_string(data, "prompt_cache_key"),
              {:ok, provider} <- model_optional_string(data, "provider"),
              :ok <- validate_model_provider(provider, auth) do
@@ -2352,6 +2358,7 @@ defmodule Omunculus.Config do
             |> Maps.maybe_put("stream", stream)
             |> Maps.maybe_put("retries", retries)
             |> Maps.maybe_put("code_mode", code_mode)
+            |> Maps.maybe_put("media_types", media_types)
             |> Maps.maybe_put("prompt_cache_key", prompt_cache_key)
             |> Maps.maybe_put("provider", provider)
 
@@ -2460,6 +2467,22 @@ defmodule Omunculus.Config do
       :error -> {:ok, nil}
       {:ok, n} when is_integer(n) and n >= 0 -> {:ok, n}
       _ -> {:error, {:invalid, :retries}}
+    end
+  end
+
+  # The media types the model takes; an empty list is a model that takes none.
+  defp model_media_types(data) do
+    case Map.fetch(data, "media_types") do
+      :error ->
+        {:ok, nil}
+
+      {:ok, types} when is_list(types) ->
+        if Enum.all?(types, &(&1 in Omunculus.Media.supported())),
+          do: {:ok, types},
+          else: {:error, {:invalid, :media_types}}
+
+      _ ->
+        {:error, {:invalid, :media_types}}
     end
   end
 

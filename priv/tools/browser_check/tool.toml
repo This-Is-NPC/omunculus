@@ -1,7 +1,7 @@
 name = "browser_check"
 kind = "tool"
 triggers = ["model"]
-description = "Looks at a web page the way a person would: starts the project's dev server (command, port), waits for the port, loads each of paths in a headless browser at each of viewports, then stops the server. Per page it returns the HTTP status, console errors, failed requests, the title, an outline of the visible headings, links and buttons, and the checks of steps (click, fill, expect_text, wait_for); a screenshot is saved as a PNG under .browser_check/ of the workspace (needs sandbox.write), which attach hands to the person. With no command it loads an already running server on port. Fix what it reports and call it again."
+description = "Looks at a web page the way a person would: starts the project's dev server (command, port), waits for the port, loads each of paths in a headless browser at each of viewports, then stops the server. Per page it returns the HTTP status, console errors, failed requests, the title, an outline of the visible headings, links and buttons, and the checks of steps (click, fill, expect_text, wait_for); each screenshot is shown to you, and saved as a PNG under .browser_check/ of the workspace (needs sandbox.write), which attach hands to the person. With no command it loads an already running server on port. Fix what it reports and call it again."
 tags = ["web", "test"]
 command = ["./run"]
 

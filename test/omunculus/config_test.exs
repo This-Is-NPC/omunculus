@@ -373,6 +373,19 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{memory_bytes: 2000}} = load(dir)
   end
 
+  test "[policy] media_bytes is an optional positive integer, with no default", %{dir: dir} do
+    agents = "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n"
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{media_bytes: nil}} = load(dir)
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nmedia_bytes = 0\n")
+    assert {:error, {:policy, {:invalid, :media_bytes}}} = load(dir)
+
+    Fixtures.write_config(dir, agents <> "\n[policy]\nmedia_bytes = 5000\n")
+    assert {:ok, %Config{media_bytes: 5000}} = load(dir)
+  end
+
   test "[policy] last_run_output_bytes and tool_output_bytes are optional positive integers",
        %{dir: dir} do
     agents = """
@@ -555,6 +568,38 @@ defmodule Omunculus.ConfigTest do
 
     write_toml(dir, model.(~s(code_mode = "yes")))
     assert {:error, {:models, "m", {:invalid, :code_mode}}} = load(dir)
+  end
+
+  test "an HTTP model may list the media types it takes", %{dir: dir} do
+    model = fn line ->
+      """
+      [models.m]
+      api = "openai-completions"
+      url = "http://localhost/v1"
+      model = "x"
+      timeout_ms = 1000
+      #{line}
+
+      [agents.concierge]
+      depth = 0
+      model = "m"
+      text = "hi"
+
+      [policy]
+      max_retries = 0
+      """
+    end
+
+    write_toml(dir, model.(~s(media_types = ["image/png"])))
+
+    assert {:ok, %Config{models: %{"m" => %{input: %{"media_types" => ["image/png"]}}}}} =
+             load(dir)
+
+    write_toml(dir, model.("media_types = []"))
+    assert {:ok, %Config{models: %{"m" => %{input: %{"media_types" => []}}}}} = load(dir)
+
+    write_toml(dir, model.(~s(media_types = ["video/mp4"])))
+    assert {:error, {:models, "m", {:invalid, :media_types}}} = load(dir)
   end
 
   test "pinned is a layer list and is absent on the default preset" do

@@ -59,6 +59,7 @@ defmodule Omunculus.Run do
     Cycle,
     Harness,
     Mcp,
+    Media,
     Project,
     Prompt,
     Secrets,
@@ -553,7 +554,13 @@ defmodule Omunculus.Run do
               # Past the limit, the comment is the run's report: it ends the run.
               if name == "comment" and full?(context), do: throw({:context_full, run.id})
               if name == "tool_search", do: mark_found(found, own, out.output)
-              {:ok, Out.cut(out.output, config.tool_output_bytes)}
+
+              {:ok,
+               Media.result(
+                 config.store,
+                 Out.cut(out.output, config.tool_output_bytes),
+                 out.media
+               )}
 
             {:error, _reason} = error ->
               error

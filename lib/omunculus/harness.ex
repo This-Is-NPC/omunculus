@@ -42,6 +42,7 @@ defmodule Omunculus.Harness do
     ConversationRoot,
     Cycle,
     Interceptors,
+    Media,
     Participant,
     Project,
     Secrets,
@@ -853,6 +854,7 @@ defmodule Omunculus.Harness do
             ok: true,
             output: "",
             emit: [%{"type" => "hold", "body" => %{"tool" => manifest.name, "args" => args}}],
+            media: [],
             chain: [],
             instructions: "",
             session: nil
@@ -934,12 +936,28 @@ defmodule Omunculus.Harness do
         manifest
         |> Invoke.call(input, execution, secrets)
         |> Secrets.mask(secrets)
+        |> kept(env, input, execution)
       end
     end
   end
 
+  # The media a call shows is kept once and recorded as a reference.
+  defp kept({:ok, out}, env, input, execution) do
+    {:ok,
+     Media.keep(out, %{
+       store: env.config.store,
+       limit: env.config.media_bytes,
+       roots: input.roots,
+       permissions: Omunculus.Tools.Path.permissions(input),
+       policy: execution
+     })}
+  end
+
+  defp kept(error, _env, _input, _execution), do: error
+
   defp call_entry(manifest, args, out, via) do
     record = %{name: manifest.name, args: args, ok: out.ok, output: out.output}
+    record = if out.media == [], do: record, else: Map.put(record, :media, out.media)
     record = if via, do: Map.put(record, :via, via), else: record
     {record, if(out.ok, do: out.emit, else: [])}
   end

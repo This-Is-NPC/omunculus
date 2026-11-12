@@ -36,6 +36,23 @@ defmodule Omunculus.Tools.ReadTest do
     assert Read.run(input, policy(input)) == Out.fail(Out.not_text("call.wav", 8))
   end
 
+  test "an image or a PDF comes back as a media part, not as text", %{root: root} do
+    File.write!(Path.join(root, "page.png"), Omunculus.Fixtures.png())
+    File.write!(Path.join(root, "spec.pdf"), "%PDF-1.4 fixture")
+
+    read = fn path ->
+      input = %{@input | args: %{"path" => path}, roots: [root]}
+      Read.run(input, policy(input))
+    end
+
+    assert %{"ok" => true, "output" => output, "media" => [part]} = read.("page.png")
+
+    assert part == %{"media_type" => "image/png", "name" => "page.png", "path" => "page.png"}
+    assert output == Out.media_shown("page.png", "image/png", byte_size(Omunculus.Fixtures.png()))
+
+    assert %{"media" => [%{"media_type" => "application/pdf"}]} = read.("spec.pdf")
+  end
+
   test "offset and limit read those lines and say which of how many", %{root: root} do
     File.write!(Path.join(root, "lines.txt"), "one\ntwo\nthree\nfour")
 

@@ -3,10 +3,13 @@ defmodule Omunculus.Tools.Read do
   Builtin `read` tool: reads a file's contents from under
   the run's roots. With `offset` (the first line, from 1) or `limit` (how
   many lines), it reads those lines and a last line says which lines of
-  how many it shows. A file that is not text is refused with its size.
+  how many it shows. An image or a PDF is shown to the model
+  (`Omunculus.Media`); another file that is not text is refused with its
+  size.
   """
 
   alias Omunculus.Execution.Policy
+  alias Omunculus.Media
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map, Policy.t()) :: map
@@ -25,19 +28,18 @@ defmodule Omunculus.Tools.Read do
 
   defp read(roots, path, range, permissions, policy) do
     with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy),
-         {:ok, content} <- File.read(absolute),
-         :ok <- text(content, path) do
-      lines(content, range)
+         {:ok, content} <- File.read(absolute) do
+      Media.shown(path, content, %{"path" => path}) || text_lines(content, path, range)
     else
       {:error, reason} when is_atom(reason) -> Out.fail("no such file: #{path}")
       {:error, message} -> Out.fail(message)
     end
   end
 
-  defp text(content, path) do
+  defp text_lines(content, path, range) do
     if String.valid?(content),
-      do: :ok,
-      else: {:error, Out.not_text(path, byte_size(content))}
+      do: lines(content, range),
+      else: Out.fail(Out.not_text(path, byte_size(content)))
   end
 
   defp lines(content, {nil, nil}), do: Out.ok(content)

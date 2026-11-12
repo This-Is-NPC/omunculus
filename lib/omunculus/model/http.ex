@@ -4,9 +4,12 @@ defmodule Omunculus.Model.HTTP do
   makes, the tools a run declares (with `__omunculus_execute` under
   `code_mode`), a tool call decoded and dispatched to `call` or the
   sandbox, and a request posted without streaming. A reply outside 2xx
-  is returned whole as `{:http, status, body}`, as `EventStream` does.
+  is returned whole as `{:http, status, body}`, as `EventStream` does. A
+  tool call's result is text, or text and the media it shows
+  (`Omunculus.Media`).
   """
 
+  alias Omunculus.Media
   alias Omunculus.Model.{Arguments, Retry}
 
   @executor "__omunculus_execute"
@@ -19,6 +22,7 @@ defmodule Omunculus.Model.HTTP do
       timeout: spec["timeout_ms"],
       retries: spec["retries"],
       code_mode: spec["code_mode"] == true,
+      media_types: spec["media_types"],
       headers: headers,
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
@@ -63,14 +67,14 @@ defmodule Omunculus.Model.HTTP do
 
   @doc "Decodes a tool call's `arguments` and runs it through `call`, or the sandbox for the executor."
   @spec run(String.t(), term, function, [map], Omunculus.Execution.Policy.t()) ::
-          {:ok, String.t()} | {:error, term}
+          {:ok, Omunculus.Media.result()} | {:error, term}
   def run(name, arguments, call, catalog, execution) do
     with {:ok, args} <- Arguments.decode(arguments),
          do: invoke(name, args, call, catalog, execution)
   end
 
   defp invoke(@executor, %{"code" => code}, call, catalog, execution) when is_binary(code),
-    do: Omunculus.Sandbox.run(code, catalog, call, execution)
+    do: Omunculus.Sandbox.run(code, catalog, &Media.text_only(call.(&1, &2)), execution)
 
   defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
 

@@ -61,6 +61,17 @@ defmodule Omunculus.Attachments do
 
   def check(_store, _list), do: {:error, {:attachment, :invalid}}
 
+  @doc "The bytes of base64 `data`, the one way bytes enter an action or a tool's media."
+  @spec decode(term) :: {:ok, binary} | {:error, {:attachment, {:invalid, :base64}}}
+  def decode(data) when is_binary(data) do
+    case Base.decode64(data, ignore: :whitespace) do
+      {:ok, bytes} -> {:ok, bytes}
+      :error -> {:error, {:attachment, {:invalid, :base64}}}
+    end
+  end
+
+  def decode(_data), do: {:error, {:attachment, {:invalid, :base64}}}
+
   @doc "The file kept for the attachment of `sha256`."
   @spec path(store, String.t()) :: {:ok, String.t()} | {:error, {:attachment, term}}
   def path(%{attachments: nil}, _sha256), do: {:error, {:attachment, :not_configured}}

@@ -64,7 +64,11 @@ defmodule Omunculus.Tools.AttachmentsToolsTest do
   test "read_attachment reads a file attached in the conversation, and only those", ctx do
     {:ok, text} = Attachments.put(ctx.store, "notes.txt", "text/plain", "hello")
     {:ok, binary} = Attachments.put(ctx.store, "call.wav", "audio/wav", <<82, 73, 70, 70, 228>>)
-    view = %{"attachments" => [text, binary]}
+
+    {:ok, image} =
+      Attachments.put(ctx.store, "page.png", "image/png", binary_part(Fixtures.png(), 0, 8))
+
+    view = %{"attachments" => [text, binary, image]}
 
     read = fn sha256 ->
       ReadAttachment.run(%{args: %{"sha256" => sha256}, view: view, config_path: ctx.config_path})
@@ -72,6 +76,14 @@ defmodule Omunculus.Tools.AttachmentsToolsTest do
 
     assert read.(text["sha256"]) == Out.ok("hello")
     assert read.(binary["sha256"]) == Out.fail(Out.not_text("call.wav", 5))
+
+    assert %{"ok" => true, "media" => [part]} = read.(image["sha256"])
+
+    assert part == %{
+             "media_type" => "image/png",
+             "name" => "page.png",
+             "sha256" => image["sha256"]
+           }
 
     {:ok, other} = Attachments.put(ctx.store, "other.txt", "text/plain", "elsewhere")
 

@@ -52,6 +52,7 @@ defmodule Omunculus.Tool.InvokeTest do
              output: "done",
              emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
              chain: [],
+             media: [],
              instructions: "steady",
              session: nil
            }
@@ -128,6 +129,30 @@ defmodule Omunculus.Tool.InvokeTest do
     assert {:error, {:invalid_output, _decoded}} = Invoke.call(manifest(dir), @input, policy(dir))
   end
 
+  test "media parts name their bytes once, by data, sha256 or path", %{dir: dir} do
+    write_run!(dir, """
+    #!/bin/sh
+    echo '{"ok": true, "output": "", "media": [{"media_type": "image/png", "path": "a.png"}]}'
+    """)
+
+    assert {:ok, %{media: [%{"media_type" => "image/png", "path" => "a.png"}]}} =
+             Invoke.call(manifest(dir), @input, policy(dir))
+
+    for part <- [
+          ~s({"media_type": "image/png"}),
+          ~s({"media_type": "image/png", "path": "a", "data": "AA=="}),
+          ~s({"path": "a.png"})
+        ] do
+      write_run!(dir, """
+      #!/bin/sh
+      echo '{"ok": true, "output": "", "media": [#{part}]}'
+      """)
+
+      assert {:error, {:invalid_output, _decoded}} =
+               Invoke.call(manifest(dir), @input, policy(dir))
+    end
+  end
+
   test "external commands require an execution policy", %{dir: dir} do
     assert {:error, :execution_context_required} = Invoke.call(manifest(dir), @input)
   end
@@ -200,6 +225,7 @@ defmodule Omunculus.Tool.InvokeTest do
                output: "",
                emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
                chain: [],
+               media: [],
                instructions: "",
                session: nil
              }

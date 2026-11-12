@@ -21,7 +21,7 @@ defmodule Omunculus.Model.AnthropicMessages do
   host.
   """
 
-  alias Omunculus.Maps
+  alias Omunculus.{Maps, Media}
   alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
@@ -95,7 +95,8 @@ defmodule Omunculus.Model.AnthropicMessages do
           {:ok, output_text(message)}
 
         uses ->
-          results = Enum.map(uses, &run_tool_use(&1, call, catalog, execution))
+          results =
+            Enum.map(uses, &run_tool_use(&1, call, catalog, execution, client.media_types))
 
           loop(
             client,
@@ -299,13 +300,38 @@ defmodule Omunculus.Model.AnthropicMessages do
   defp text_chunks(%{"text" => text}) when is_binary(text), do: [text]
   defp text_chunks(_item), do: []
 
-  defp run_tool_use(%{"id" => id, "name" => name, "input" => input}, call, catalog, execution) do
-    tool_result(id, HTTP.run(name, input, call, catalog, execution))
+  defp run_tool_use(
+         %{"id" => id, "name" => name, "input" => input},
+         call,
+         catalog,
+         execution,
+         media_types
+       ) do
+    tool_result(id, HTTP.run(name, input, call, catalog, execution), media_types)
   end
 
-  defp tool_result(id, {:ok, output}),
-    do: %{type: "tool_result", tool_use_id: id, content: output}
+  # A result that shows media is a list of blocks: its text, then the
+  # images and documents.
+  defp tool_result(id, result, media_types \\ nil)
 
-  defp tool_result(id, {:error, reason}),
+  defp tool_result(id, {:ok, result}, media_types) do
+    {text, media} = Media.render(result, media_types)
+    %{type: "tool_result", tool_use_id: id, content: tool_content(text, media)}
+  end
+
+  defp tool_result(id, {:error, reason}, _media_types),
     do: %{type: "tool_result", tool_use_id: id, content: Omunculus.Tools.Out.failure(reason)}
+
+  defp tool_content(text, []), do: text
+
+  defp tool_content(text, media) do
+    texts = if text == "", do: [], else: [%{type: "text", text: text}]
+    texts ++ Enum.map(media, &media_block/1)
+  end
+
+  defp media_block(%{"media_type" => "application/pdf", "data" => data}),
+    do: %{type: "document", source: %{type: "base64", media_type: "application/pdf", data: data}}
+
+  defp media_block(%{"media_type" => type, "data" => data}),
+    do: %{type: "image", source: %{type: "base64", media_type: type, data: data}}
 end

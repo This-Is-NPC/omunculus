@@ -80,6 +80,12 @@ defmodule Omunculus.Tools.BrowserCheckTest do
                File.read!(Path.join(root, ".browser_check/index-#{size}.png"))
     end
 
+    # Each screenshot is shown to the model, saved or not.
+    assert [%{"name" => "index-1440x900.png", "data" => data}, %{"name" => "index-390x844.png"}] =
+             out.media
+
+    assert <<0x89, "PNG", _::binary>> = Base.decode64!(data)
+
     # The dev server stopped with the call.
     assert {:error, _} = :gen_tcp.connect(~c"127.0.0.1", 48_731, [], 200)
   end

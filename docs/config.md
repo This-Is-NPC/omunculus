@@ -132,6 +132,11 @@ of its conversation's works and exchanges a run without a work is shown
 under `## Works` and `## Conversation`, the newest that fit. Without it
 they are shown whole.
 
+`[policy] media_bytes` is optional: a positive integer, the most an image
+or a PDF a tool shows the model may hold ([Media](tools.md#media)). A
+larger one, or any without this key or without `[store] attachments`, is
+not shown and the call's output says why. There is no default.
+
 `[policy] memory_bytes` is optional: a positive integer. With it, a run's
 prompt carries the newest memory entries that fit in that many bytes
 under `## Memory`, in the context after the instructions
@@ -358,7 +363,7 @@ sandbox NDJSON protocol (a `{"type":"delta","text":"..."}` line passes
 partial reply text to the run without recording it) and takes `command`, `model`, optional `provider`
 and `params`. `module` takes optional `params`. The HTTP adapters take
 `url`, `model`, `timeout_ms`, and optional `temperature`, `headers`,
-`provider`, `stream`, `retries` and `code_mode`; an `anthropic-messages`
+`provider`, `stream`, `retries`, `code_mode` and `media_types`; an `anthropic-messages`
 model also needs `body = { max_tokens = n }`, the most a reply may take,
 thinking included. `timeout_ms` is a positive integer in milliseconds or
 `"infinity"` to wait without a receive timeout, useful for slow local inference.
@@ -378,6 +383,11 @@ with `stream_options.include_usage`. The two OpenAI adapters also take an option
 `prompt_cache_key`, sent as is in every request, which OpenAI uses with
 the prompt's prefix to route requests to the server holding that prefix
 in cache.
+`media_types` lists the media types the model takes, among `image/png`,
+`image/jpeg`, `image/gif`, `image/webp` and `application/pdf`; `[]` is a
+model that takes no media. Without it the adapter sends all of them. What
+the model does not take is not sent, and the tool result says so
+([Media](tools.md#media)).
 
 Every model takes an optional `handoff_tokens`, a positive integer: the
 size of a request, in the tokens the reply's `usage` reports, past which
@@ -725,7 +735,7 @@ needs what is missing:
 | `omunculus.toml [accounts.<name>] is also the name of an agent: pick another name` | an account named like an agent |
 | `omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only` | `default_agent` names no such agent |
 | `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
-| `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `memory_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
+| `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `memory_bytes`, `media_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
 | `omunculus.toml [policy] session_ttl_ms and session_max_bytes go together` | one of the two without the other |
 | `omunculus.toml [policy] report_required must list report fields: done, decided, pending, files, verify` | `report_required` is not a list of those names |
 | `omunculus.toml [policy] send_catalog must be true or false` | `send_catalog` invalid |

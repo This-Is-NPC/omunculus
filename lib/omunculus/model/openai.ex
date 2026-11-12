@@ -23,7 +23,8 @@ defmodule Omunculus.Model.OpenAI do
   arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
-  alias Omunculus.Maps
+  alias Omunculus.{Maps, Media}
+  alias Omunculus.Tools.Out
   alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
@@ -108,12 +109,15 @@ defmodule Omunculus.Model.OpenAI do
          :ok <- record.(recorded(client, message)) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
-          tool_messages = Enum.map(tool_calls, &run_tool_call(&1, call, catalog, execution))
+          {tool_messages, media} =
+            tool_calls
+            |> Enum.map(&run_tool_call(&1, call, catalog, execution, client.media_types))
+            |> Enum.unzip()
 
           loop(
             client,
             tools,
-            messages ++ [strip_message(message) | tool_messages],
+            messages ++ [strip_message(message) | tool_messages] ++ media_message(media),
             call,
             record,
             catalog,
@@ -226,20 +230,45 @@ defmodule Omunculus.Model.OpenAI do
     end
   end
 
+  # A tool message holds text alone: the media a call shows follows the
+  # call's messages as one user message.
   defp run_tool_call(
          %{"id" => id, "function" => %{"name" => name, "arguments" => arguments}},
          call,
          catalog,
-         execution
+         execution,
+         media_types
        ) do
-    tool_result_message(id, HTTP.run(name, arguments, call, catalog, execution))
+    case HTTP.run(name, arguments, call, catalog, execution) do
+      {:ok, result} ->
+        {text, media} = Media.render(result, media_types)
+        {%{role: "tool", tool_call_id: id, content: text}, media}
+
+      {:error, reason} ->
+        {%{role: "tool", tool_call_id: id, content: Omunculus.Tools.Out.failure(reason)}, []}
+    end
   end
 
-  defp tool_result_message(id, {:ok, output}),
-    do: %{role: "tool", tool_call_id: id, content: output}
+  defp media_message(media) do
+    case List.flatten(media) do
+      [] ->
+        []
 
-  defp tool_result_message(id, {:error, reason}),
-    do: %{role: "tool", tool_call_id: id, content: Omunculus.Tools.Out.failure(reason)}
+      parts ->
+        [
+          %{
+            role: "user",
+            content: [%{type: "text", text: Out.media_follows()} | Enum.map(parts, &media_part/1)]
+          }
+        ]
+    end
+  end
+
+  defp media_part(%{"media_type" => "application/pdf", "name" => name} = part),
+    do: %{type: "file", file: %{filename: name, file_data: Media.data_url(part)}}
+
+  defp media_part(part),
+    do: %{type: "image_url", image_url: %{url: Media.data_url(part)}}
 
   defp strip_message(message), do: Map.take(message, ["role", "content", "tool_calls"])
 end

@@ -2,11 +2,12 @@ defmodule Omunculus.Tools.ReadAttachment do
   @moduledoc """
   Builtin `read_attachment` tool: the content of a file attached in the
   run's conversation (the `attachments` view), named by its `sha256`, as
-  `Omunculus.Attachments` keeps it. A file that is not text is refused
-  with its size.
+  `Omunculus.Attachments` keeps it. An image or a PDF is shown to the
+  model (`Omunculus.Media`); another file that is not text is refused with
+  its size.
   """
 
-  alias Omunculus.{Attachments, Config}
+  alias Omunculus.{Attachments, Config, Media}
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
@@ -18,9 +19,11 @@ defmodule Omunculus.Tools.ReadAttachment do
          {:ok, config} <- Config.load(config_path),
          {:ok, path} <- Attachments.path(config.store, file["sha256"]),
          {:ok, content} <- File.read(path) do
-      if String.valid?(content),
-        do: Out.ok(content),
-        else: Out.fail(Out.not_text(file["name"], byte_size(content)))
+      cond do
+        shown = Media.shown(file["name"], content, %{"sha256" => file["sha256"]}) -> shown
+        String.valid?(content) -> Out.ok(content)
+        true -> Out.fail(Out.not_text(file["name"], byte_size(content)))
+      end
     else
       :unknown -> Out.fail("no file of sha256 #{args["sha256"]} is attached in this conversation")
       message when is_binary(message) -> Out.fail(message)

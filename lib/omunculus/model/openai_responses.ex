@@ -19,7 +19,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   module names a host.
   """
 
-  alias Omunculus.Maps
+  alias Omunculus.{Maps, Media}
   alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
@@ -78,7 +78,9 @@ defmodule Omunculus.Model.OpenAIResponses do
           {:ok, output_text(output)}
 
         calls ->
-          results = Enum.map(calls, &run_tool_call(&1, call, catalog, execution))
+          results =
+            Enum.map(calls, &run_tool_call(&1, call, catalog, execution, client.media_types))
+
           loop(client, tools, input ++ output ++ results, call, record, catalog, execution)
       end
     end
@@ -158,14 +160,31 @@ defmodule Omunculus.Model.OpenAIResponses do
          %{"call_id" => id, "name" => name, "arguments" => arguments},
          call,
          catalog,
-         execution
+         execution,
+         media_types
        ) do
-    function_call_output(id, HTTP.run(name, arguments, call, catalog, execution))
+    function_call_output(id, HTTP.run(name, arguments, call, catalog, execution), media_types)
   end
 
-  defp function_call_output(id, {:ok, output}),
-    do: %{type: "function_call_output", call_id: id, output: output}
+  # A result that shows media is a list of items: its text, then the
+  # images and files.
+  defp function_call_output(id, result, media_types \\ nil)
 
-  defp function_call_output(id, {:error, reason}),
+  defp function_call_output(id, {:ok, result}, media_types) do
+    {text, media} = Media.render(result, media_types)
+    %{type: "function_call_output", call_id: id, output: output(text, media)}
+  end
+
+  defp function_call_output(id, {:error, reason}, _media_types),
     do: %{type: "function_call_output", call_id: id, output: Omunculus.Tools.Out.failure(reason)}
+
+  defp output(text, []), do: text
+
+  defp output(text, media),
+    do: [%{type: "input_text", text: text} | Enum.map(media, &media_item/1)]
+
+  defp media_item(%{"media_type" => "application/pdf", "name" => name} = part),
+    do: %{type: "input_file", filename: name, file_data: Media.data_url(part)}
+
+  defp media_item(part), do: %{type: "input_image", image_url: Media.data_url(part)}
 end

@@ -17,6 +17,9 @@ defmodule Omunculus.Tools.Session do
   or anything it cannot rebuild exactly, there is no history: the run
   starts over.
 
+  The media a call showed (`Omunculus.Media`) is not sent again: its output
+  says it was shown.
+
   A history is a list of `%{"user" => text}` and `%{"model" => reply,
   "outputs" => [output]}`, the outputs in the order of the reply's calls.
   """
@@ -121,7 +124,7 @@ defmodule Omunculus.Tools.Session do
         {"tool", {:ok, %{"name" => name} = call}} when not is_map_key(call, "via") ->
           case pending do
             [^name | rest] ->
-              output = Out.cut(call["output"] || "", bytes)
+              output = replayed(call, bytes)
               {:cont, {:ok, add_output(turns, output), rest}}
 
             _not_the_next_call ->
@@ -136,6 +139,13 @@ defmodule Omunculus.Tools.Session do
       {:ok, turns, []} -> {:ok, turns}
       _unmatched -> :error
     end
+  end
+
+  # The media a call showed is not sent again: its result says so.
+  defp replayed(call, bytes) do
+    text = Out.cut(call["output"] || "", bytes)
+    shown = Enum.map(call["media"] || [], &Out.media_not_resent(&1["name"]))
+    Enum.join([text | shown], "\n")
   end
 
   defp add_output(turns, output) do
