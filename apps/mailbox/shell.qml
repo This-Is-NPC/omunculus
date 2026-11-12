@@ -185,6 +185,7 @@ ShellRoot {
             ThreadRail {
               Layout.fillWidth: true
               Layout.fillHeight: true
+              onUnfold: window.listFolded = false
             }
           }
 

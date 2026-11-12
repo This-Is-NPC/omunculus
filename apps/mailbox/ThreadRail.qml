@@ -1,67 +1,55 @@
-pragma ComponentBehavior: Bound
 import QtQuick
 import "kit/client/Mailbox.js" as Mailbox
 import "kit/ui"
 
-// ThreadRail is the threads of the folder while their column is folded: each
-// its agent's portrait, a dot at its
-// corner while unread, the thread on screen washed and outlined in the
-// accent; its agent, subject and label are the tip. A click opens a thread; with the keyboard on the rail, Up and Down
-// open the one before or after, as Alt+Up and Alt+Down do anywhere.
-ListView {
+// ThreadRail is the folder's list while its column is folded: only how many
+// e-mails it holds, in a square the width of the rail, and, in the accent on
+// its corner, how many of them are unread. A click opens the list again.
+Item {
   id: rail
 
-  clip: true
-  spacing: 6
-  model: Mail.shown
-  activeFocusOnTab: true
-  boundsBehavior: Flickable.StopAtBounds
-  readonly property int selectedIndex: Mail.shown.findIndex(thread => thread.key === Mail.selected)
-  onSelectedIndexChanged: if (selectedIndex >= 0) positionViewAtIndex(selectedIndex, ListView.Contain)
+  readonly property var count: Mailbox.railCount(Mail.shown, Mail.seen)
 
-  Keys.onUpPressed: Mail.step(-1)
-  Keys.onDownPressed: Mail.step(1)
+  signal unfold()
 
-  delegate: Rectangle {
+  Rectangle {
     id: tab
-
-    required property var modelData
-    required property int index
-    readonly property bool current: Mail.selected === modelData.key
-
     width: rail.width
     height: width
-    color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
-    border.color: current ? Theme.primary : pointer.containsMouse ? Theme.dim : Theme.line
-    Behavior on color { ColorAnimation { duration: 120 } }
-    Behavior on border.color { ColorAnimation { duration: 120 } }
+    color: pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
+    border.color: pointer.containsMouse ? Theme.dim : Theme.line
+    Accessible.role: Accessible.StaticText
+    Accessible.name: rail.count.total + " e-mails, " + rail.count.unread + " unread"
 
-    Portrait {
-      anchors { fill: parent; margins: 4 }
-      agent: tab.modelData.agent || "?"
-      source: Mail.imageOf(tab.modelData.project, tab.modelData.agent)
-      tone: Mail.toneOf(tab.modelData.project, tab.modelData.agent)
+    Label {
+      anchors.centerIn: parent
+      text: rail.count.total
+      color: Theme.foreground
+      font.pixelSize: 13
+      font.bold: true
     }
-    Dot {
-      anchors { right: parent.right; top: parent.top; margins: -2 }
-      size: 8
-      tone: Theme.primary
-      border.color: Theme.background
-      opacity: Mail.isUnread(tab.modelData) ? 1 : 0
-      Behavior on opacity { NumberAnimation { duration: 140 } }
+    Rectangle {
+      visible: rail.count.unread > 0
+      anchors { right: parent.right; top: parent.top; margins: -5 }
+      width: Math.max(height, tally.implicitWidth + 6)
+      height: 14
+      color: Theme.primary
+      Label {
+        id: tally
+        anchors.centerIn: parent
+        text: rail.count.unread
+        color: Theme.badgeForeground
+        font.pixelSize: 9
+        font.bold: true
+      }
     }
-
     MouseArea {
       id: pointer
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: { rail.forceActiveFocus(); Mail.open(tab.modelData.key) }
+      onClicked: rail.unfold()
     }
-    FocusRing { shown: rail.activeFocus && (tab.current || (rail.selectedIndex < 0 && tab.index === 0)) }
-    Hint {
-      active: pointer.containsMouse || (rail.activeFocus && tab.current)
-      text: tab.modelData.agent + " · " + tab.modelData.subject + (tab.modelData.label !== "" ? "\n" + Mailbox.labels[tab.modelData.label] : "")
-    }
+    Hint { active: pointer.containsMouse; text: rail.count.total + (rail.count.total === 1 ? " e-mail" : " e-mails") + ", " + rail.count.unread + " unread" }
   }
 }
