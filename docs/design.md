@@ -303,7 +303,11 @@ from the Conventional Commits on `master` (`.github/workflows/release.yml`,
 `master` updates a release pull request with the next version and its
 `CHANGELOG.md` entry. Merging it tags `vX.Y.Z` and publishes the GitHub
 release. Before 1.0, `feat` bumps the minor version and `fix` the patch. The
-version lives in `mix.exs`.
+version lives in `mix.exs`. Pull requests follow `.github/pull_request_template.md`; the
+release pull request carries the same sections around its changelog, set by
+`pull-request-header` and `pull-request-footer` in the release-please config,
+and no generated-by line. Neither commits nor pull requests carry AI
+attribution.
 
 A bot pushes the release pull request, so no hook ran for it. Check out its
 branch, run `mise run check` and `mise run validate:regular`, then post the
