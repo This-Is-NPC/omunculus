@@ -908,7 +908,6 @@ Singleton {
         spend = Usage.spend(data)
     })
   }
-  onUsageChanged: spendTimer.restart()
   Timer {
     id: spendTimer
     interval: 1500
@@ -1177,7 +1176,10 @@ Singleton {
   onRunErrorsChanged: progressTimer.restart()
   onSetupChanged: progressTimer.restart()
   onJourneysChanged: progressTimer.restart()
-  onUsageChanged: progressTimer.restart()
+  onUsageChanged: {
+    progressTimer.restart()
+    spendTimer.restart()
+  }
   onCallsOfChanged: progressTimer.restart()
   onAgentChanged: progressTimer.restart()
   Timer {
