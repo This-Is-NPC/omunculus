@@ -43,7 +43,7 @@ Flickable {
 
   clip: true
   boundsBehavior: Flickable.StopAtBounds
-  C.ScrollBar.horizontal: C.ScrollBar { policy: C.ScrollBar.AsNeeded }
+  C.ScrollBar.horizontal: C.ScrollBar { policy: chart.contentWidth > chart.width ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
   contentWidth: Math.max(width, labelWidth + layout.columns * colWidth)
   contentHeight: layout.levels * bandHeight
   flickableDirection: Flickable.HorizontalAndVerticalFlick
