@@ -56,6 +56,7 @@ ShellRoot {
         spacing: window.short ? 10 : 16
 
         Masthead {
+          id: masthead
           Layout.fillWidth: true
           crumbs: [{ text: window.narrow && window.reading ? "thread" : Mail.folder }]
         }
@@ -299,10 +300,14 @@ ShellRoot {
         enabled: Mail.connected
         onClicked: Mail.compose()
       }
-      // The composers, over the mailbox at its bottom right.
+      // The composers, over the mailbox at its bottom right; on a phone, the
+      // one that fills the screen leaves the masthead above it.
       ComposerDock {
         id: dock
-        anchors.fill: parent
+        anchors {
+          fill: parent
+          topMargin: dock.phone && dock.tabs.active !== "" ? masthead.mapToItem(parent, 0, masthead.height).y + (window.short ? 10 : 16) : 0
+        }
       }
       // What the window tells, at its bottom right, over the composers.
       ToastStack {

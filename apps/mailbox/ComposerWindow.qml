@@ -118,7 +118,7 @@ FocusScope {
 
     Rectangle {
       anchors.fill: parent
-      color: composer.tab || composer.phone ? Qt.alpha(Theme.foreground, composer.activeFocus ? 0.06 : 0.03) : "transparent"
+      color: composer.tab || composer.phone ? Qt.tint(Theme.background, Qt.alpha(Theme.foreground, composer.activeFocus ? 0.06 : 0.03)) : "transparent"
       border.color: composer.phone ? (composer.shape === "screen" ? Theme.primary : Theme.line) : "transparent"
     }
     MouseArea {
