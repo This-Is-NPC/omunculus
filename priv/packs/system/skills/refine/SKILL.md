@@ -8,7 +8,9 @@ description: Read how the project's last runs went — where an agent stopped wi
 Read before you judge: `runs` sums up the project's last closed runs; `runs`
 with `run` gives one call by call; `config` with `item` `agents.<name>` gives
 what an agent was told, and `overview` with `agent` what it had where it
-ran; without arguments, each lists what there is to read.
+ran; without arguments, each lists what there is to read. `config` with
+`section` `tools` lists every tool the project has, those an agent lacks
+too: check there before you say a tool does not exist.
 
 ## What to look for
 
@@ -34,8 +36,11 @@ ran; without arguments, each lists what there is to read.
 2. Find its cause in the config: the agent's text, its tools, its
    workflow, the model it runs on.
 3. Propose the change with `propose_config` (see configure), with a reason
-   that cites the runs, says what went wrong and what the change makes
-   go right. One cause, one proposal.
+   that says what went wrong and what the change makes go right, and `runs`
+   holding the ids of the runs that show it, as `runs` prints them. The
+   tool refuses an id that is not one of the recent runs and shows the
+   person the runs cited; a change that no run shows, such as granting a
+   tool the work needs, cites none. One cause, one proposal.
 4. For an agent or workflow a pack brings, an item of the project's own
    with the same name overrides the pack's key by key: propose only the
    keys that change. What should change in the pack itself, tell the

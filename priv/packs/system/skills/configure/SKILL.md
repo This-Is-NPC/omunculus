@@ -13,13 +13,19 @@ the config it would make loads.
    ...): its `file` is the table as the file holds it, logins' keys left
    out, and an agent's other keys are what the config runs, its pack's
    included. `config` without arguments lists the items; with `section`
-   `names`, the names a tool list may hold.
+   `names`, the names a tool list may hold, and with `section` `tools` the
+   catalog: each tool the project has, with its description, whether or not
+   your own agent is granted it. A tool is absent only when it is not there.
 2. Name the item: `agents.<name>`, `models.<name>`, `workflows.<name>`,
    `workspaces.<name>`, `auth.<name>`, `secrets.<tool>`, `policy` or
    `access`.
-3. Give its value as a table, whole, as it should be written: keys you
-   leave out are gone. To remove the item, give null. To rename one, give
-   the new name as `item` and the old one as `from`.
+3. Give its value as the keys that change: a key you leave out stays as
+   the file has it, a key you set to `null` is removed, a nested table is
+   changed key by key, and a list you give replaces the file's whole, so
+   write every name that should stay. To remove the item, give null as the
+   value. To rename one, give the new name as `item` and the old one as
+   `from`. The person sees the item as the config runs it, before and
+   after: check the after.
 4. Give a reason the person can decide on: what changes and why.
 
 ## Cutting one tool of a group
@@ -54,7 +60,11 @@ with the keys you change:
 A key you write replaces the pack's whole: `config` shows the key as the
 config runs it, so a `deny` or `tools` you write starts from that list,
 with the name you add or cut. `granted` instead adds its names to the
-pack's `tools`.
+pack's `tools`, but it too is replaced whole in the file: to add one name
+to the file's `granted`, give all of them.
+
+A change the person denied is not asked again: the tool refuses it with
+their reply. Read the reply and change the proposal, or leave it.
 
 If the proposal is refused because the config would not load, read why,
 fix the value and propose again. If the person's answer applies a change

@@ -195,6 +195,11 @@ MCP discovery runs in a restricted sandbox; a server that fails to list,
 or whose secrets do not resolve, is skipped and logged, not fatal to the
 run.
 
+A run reads the catalog the project has with `config` and `section`
+`tools`, or one tool with `item` `tools.<name>`: its description, groups
+and tags, whether or not the agent is granted it. The index lists each
+tool with its size. Reading does not widen what an agent may call.
+
 ## Skills
 
 ```toml
@@ -647,6 +652,20 @@ is positional.
 Checks against the manifest wait for the catalog: an override that does
 not fit its manifest keeps a run from opening, and fails a call outside a
 run. An override of a tool that is not in the catalog is ignored.
+
+## Proposing a change
+
+An agent of the system team changes the file through `propose_config`, and
+the person applies it ([the system team](../priv/packs/system/README.md),
+[requests](requests.md)). A proposal for `agents.<name>`, `models.<name>`
+and the other items is a patch over the table the file holds for the item:
+a key it gives replaces the file's, a nested table is changed key by key,
+a key given as `null` is removed, and a key it leaves out stays. A list is
+replaced whole, so a proposal for `granted = ["lsp"]` writes `["lsp"]`; to
+add `lsp` to `["memory"]` it gives `["memory", "lsp"]`. `null` as the value
+removes the item. The request shows the person the item as the config runs
+it, with its pack's keys, layers and overrides, before and after.
+`configure`, the tool that writes the file, still takes the whole table.
 
 ## Workspaces
 

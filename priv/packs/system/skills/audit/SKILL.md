@@ -37,7 +37,7 @@ Go through every section and every agent before you judge one.
 1. Name the finding to yourself with its evidence: the item, the key, what
    `config` or `overview` shows.
 2. Propose the change with `propose_config` (see configure): the item's
-   whole value as it should be written, and a reason that says what was
+   keys that change (`null` for a key to remove), and a reason that says what was
    found and what the cut changes, so the person can decide.
 3. One finding, one proposal. What you are not sure of, ask the person
    about instead of proposing.

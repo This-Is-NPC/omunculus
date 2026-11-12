@@ -177,6 +177,18 @@ capabilities, as in [Forms and effects](#forms-and-effects).
 | `wait` | A root work that only the person can move on later — a decision they will think over, something they will send — waits for their next message rather than asking again: their answer stays the answer, and the message reopens the work. A work below another cannot wait on a message. |
 | `promote` approval | The release's clerk calls `promote`, a tool of its own; the project declares an interceptor on it, and the review is the approval. Without an interceptor nothing holds the call. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, to whoever gave the agent its work. A text reply records advice without applying the proposal. |
+
+A `propose_config` change is a patch over the file's item: the keys it gives
+replace the file's (a list whole, a nested table key by key), a key given as
+`null` is removed, and a key it leaves out stays; `null` as the value removes
+the item. The request shows the item as the config runs it, with its pack's
+keys, layers and overrides, now and as it would run, and the runs the agent
+cited, each checked against the project's recent runs. It is refused before it
+reaches the person when it cites a run that does not exist, changes nothing, or
+equals a change the person already denied in the conversation; the agent is
+told what they replied. A run without a work is told, under `## Answered`, each
+request its agent raised in its conversation that was answered, with the option
+picked and the reply.
 | Harness retry/cancel | A request to the account that opened the conversation after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
 | Unanswered receiver | Not when the run opened child works (`delegate`, `work`) that are still open or waiting, or raised a request of its own (`ask`, `request_access`, `escalate` of something else) that is still pending: the receiver waits on them to answer, and the request stays pending with it. When the raised request is answered, the receiver's work is reopened and its run sees the received request in its inbox. When the last of those children closes, the receiver's work is reopened even if other children of it (the asker's work) are still open, and its run sees the results and the request; if that run ends without answering, this rule applies again. Otherwise, linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. When nobody is left to ask (the parent is excluded, see below), nothing is escalated: the request stays pending and an inbox note, once, names the question and says nobody is left to ask. An origin never goes again to an agent that answered it with text without escalating it (see below). |
 

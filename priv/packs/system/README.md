@@ -24,6 +24,15 @@ account for review, not only whoever the request passes through.
 Only the steward proposes importing a pack: the auditor and the refiner
 are granted `config`, `overview` and `propose_config`, not `propose_pack`.
 
+A proposal is a patch over the file's item: a key it gives replaces the
+file's, a key it leaves out stays, a key given as `null` is removed. The
+request shows the person the item as the config runs it, now and as it would
+run, and the runs the agent cited, which must exist. A change the person
+already denied in the conversation is refused before it is asked again, and
+the agent is told the reply. The agents read every tool the project has, with
+its description, through `config` with `section` `tools`, whether or not
+they are granted it.
+
 Their skills:
 
 - `team-design`: a new team, written as a pack under `packs/<name>/` of
@@ -36,4 +45,4 @@ Their skills:
 - `audit`: the auditor's — grants past the work, what never runs or cannot
   run, each cut proposed on its own.
 - `refine`: the refiner's — what the last runs show went wrong, its cause
-  in the config, and the change, with the runs that show it.
+  in the config, and the change, with the runs that show it, cited by id.
