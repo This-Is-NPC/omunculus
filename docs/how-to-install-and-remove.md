@@ -107,20 +107,32 @@ terminal, and restarts the user service when it is active.
 
 Running `install.sh` again does the same by hand.
 
-## Remove
+After a manual `pacman -U` or `pacman -Syu` upgrade, restart the service
+yourself so it runs the new version; pacman prints the command:
 
 ```bash
+systemctl --user restart omunculus
+```
+
+## Remove
+
+Stop the service first, as each user who ran it. pacman cannot reliably stop
+another user's service, so it only prints this command before it removes:
+
+```bash
+systemctl --user disable --now omunculus
 sudo pacman -R omunculus omunculus-apps
 ```
 
-This removes every file the packages installed. It stays:
+Without the first line the server keeps running from deleted files and
+leaves a dangling enable link in `~/.config/systemd/user`. The second line
+removes every file the packages installed. It stays:
 
 - `~/.config/omunculus/server.toml`, which `setup` wrote;
 - your projects, with their `omunculus.toml` and their data, wherever you
   keep them.
 
-Delete those yourself if you want them gone. Before removing, stop the
-service with `systemctl --user disable --now omunculus`.
+Delete those yourself if you want them gone.
 
 ## Troubleshooting
 

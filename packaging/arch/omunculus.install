@@ -1,0 +1,13 @@
+# pacman cannot reliably stop another user's systemd user units, so these
+# hooks print the command to run instead of acting.
+
+pre_remove() {
+  echo ":: omunculus: before the removal completes, stop the server as each user who ran it:"
+  echo "     systemctl --user disable --now omunculus"
+  echo "   Otherwise it keeps running from deleted files and leaves a dangling enable link."
+}
+
+post_upgrade() {
+  echo ":: omunculus: restart the server to run the new version:"
+  echo "     systemctl --user restart omunculus"
+}

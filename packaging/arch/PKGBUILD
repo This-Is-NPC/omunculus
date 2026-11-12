@@ -37,6 +37,7 @@ build() {
 package_omunculus() {
   pkgdesc='A hierarchy of AI agents that work a project: server, command line and tools'
   depends=('glibc' 'gcc-libs' 'ncurses' 'openssl' 'zlib' 'bubblewrap' 'git' 'util-linux')
+  install=omunculus.install
   optdepends=('deno: code mode and browser_check'
               'chromium: browser_check'
               'python: lsp')
