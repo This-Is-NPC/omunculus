@@ -95,14 +95,20 @@ defmodule Omunculus.Model.AnthropicMessages do
           {:ok, output_text(message)}
 
         uses ->
-          results =
-            Enum.map(uses, &run_tool_use(&1, call, catalog, execution, client.media_types))
+          {results, news} =
+            uses
+            |> Enum.map(&run_tool_use(&1, call, catalog, execution, client.media_types))
+            |> Enum.unzip()
 
           loop(
             client,
             system,
             tools,
-            messages ++ [assistant_turn(message), %{role: "user", content: results}],
+            messages ++
+              [
+                assistant_turn(message),
+                %{role: "user", content: results ++ text_blocks(List.flatten(news))}
+              ],
             call,
             record,
             catalog,
@@ -141,12 +147,17 @@ defmodule Omunculus.Model.AnthropicMessages do
 
   defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
 
-  defp turn(%{"model" => reply, "outputs" => outputs}) do
+  defp turn(%{"model" => reply, "outputs" => outputs} = item) do
     uses = for %{"type" => "tool_use"} = use <- reply["content"], do: use
     results = Enum.zip_with(uses, outputs, fn use, out -> tool_result(use["id"], {:ok, out}) end)
     answer = %{role: "assistant", content: reply["content"]}
-    if results == [], do: [answer], else: [answer, %{role: "user", content: results}]
+
+    if results == [],
+      do: [answer],
+      else: [answer, %{role: "user", content: results ++ text_blocks(item["news"])}]
   end
+
+  defp text_blocks(texts), do: Enum.map(texts || [], &%{type: "text", text: &1})
 
   defp blocks(text) when is_binary(text), do: [%{type: "text", text: text}]
   defp blocks(blocks), do: blocks
@@ -307,8 +318,12 @@ defmodule Omunculus.Model.AnthropicMessages do
          execution,
          media_types
        ) do
-    tool_result(id, HTTP.run(name, input, call, catalog, execution), media_types)
+    result = HTTP.run(name, input, call, catalog, execution)
+    {tool_result(id, result, media_types), news(result)}
   end
+
+  defp news({:ok, result}), do: Media.news(result)
+  defp news({:error, _reason}), do: []
 
   # A result that shows media is a list of blocks: its text, then the
   # images and documents.

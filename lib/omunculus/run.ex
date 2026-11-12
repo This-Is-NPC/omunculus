@@ -18,7 +18,11 @@ defmodule Omunculus.Run do
   resolved schema; an invalid override keeps the run from opening. With
   `[policy] tool_output_bytes`, the output of each call the model makes,
   directly or through `tools.*`, reaches it cut to that many bytes, while
-  the recorded call keeps it whole. After
+  the recorded call keeps it whole. After each tool call, the run is
+  handed the messages sent to its work since it began that no run has
+  been told (`Store.deliver/3`): the adapters put them after that turn's
+  results as user messages, so the cached prefix stays, and the next run
+  of the work does not hear them again. After
   each call of the model, the runs the actions of the call ask for are
   due at once, while this run goes on; the `end` action instead stops
   the model and closes the run before its action or hook continuations,
@@ -555,12 +559,12 @@ defmodule Omunculus.Run do
               if name == "comment" and full?(context), do: throw({:context_full, run.id})
               if name == "tool_search", do: mark_found(found, own, out.output)
 
-              {:ok,
-               Media.result(
-                 config.store,
-                 Out.cut(out.output, config.tool_output_bytes),
-                 out.media
-               )}
+              with {:ok, news} <- Store.deliver(project.conn, run, &Out.news/2) do
+                {:ok,
+                 config.store
+                 |> Media.result(Out.cut(out.output, config.tool_output_bytes), out.media)
+                 |> Media.with_news(news)}
+              end
 
             {:error, _reason} = error ->
               error

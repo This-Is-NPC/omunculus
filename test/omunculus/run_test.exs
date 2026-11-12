@@ -69,6 +69,111 @@ defmodule Omunculus.RunTest do
     assert run.status == "done"
   end
 
+  describe "a message sent to a work while a run of it goes on" do
+    setup %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["echo", "done", "sandbox.network"]
+
+      [policy]
+      max_retries = 1
+      """)
+
+      write_model_tool(dir, "echo", ~s({"ok": true, "output": "echoed", "emit": []}))
+      project = open_project(dir)
+      on_exit(fn -> Project.close(project) end)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
+      %{project: project, work_id: work_id}
+    end
+
+    # A message as `send` stores it: a prompt and the event that asks for its run.
+    defp send_to_work(project, work_id, text, fields \\ %{}) do
+      prompt_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: text})
+
+      {:ok, _event} =
+        Store.Events.append(
+          project.conn,
+          Map.merge(
+            %{
+              type: "prompt",
+              prompt_id: prompt_id,
+              work_id: work_id,
+              body: Jason.encode!(%{"message" => text, "work_id" => work_id})
+            },
+            fields
+          )
+        )
+
+      prompt_id
+    end
+
+    test "the run is told after its next call, once, and the message opens no run of its own",
+         %{project: project, work_id: work_id} do
+      opener = message(project.conn, "start")
+      test_pid = self()
+      {:ok, state} = Agent.start_link(fn -> %{runs: 0} end)
+
+      # The first run stops by itself, so the work gets a retry run, its next.
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        case Agent.get_and_update(state, &{&1.runs, %{&1 | runs: &1.runs + 1}}) do
+          0 ->
+            assert {:ok, "echoed"} = call.("echo", %{})
+            prompt_id = send_to_work(project, work_id, "also fix B")
+            Agent.update(state, &Map.put(&1, :prompt_id, prompt_id))
+            send(test_pid, {:second, call.("echo", %{})})
+            send(test_pid, {:third, call.("echo", %{})})
+            {:ok, "stopped"}
+
+          _next ->
+            send(test_pid, {:assembled, assembled})
+            call.("done", %{"report" => %{"done" => "finished"}})
+            {:ok, "finished"}
+        end
+      end)
+
+      assert {:ok, run} = Run.open(project, opening(opener, work_id))
+
+      assert_received {:second, {:ok, %{text: "echoed", news: [told]}}}
+      assert told == Out.news(nil, "also fix B")
+      assert_received {:third, {:ok, "echoed"}}
+
+      prompt_id = Agent.get(state, & &1.prompt_id)
+      assert {:ok, %{run_id: delivered_to}} = Store.view(project.conn, "prompt", prompt_id)
+      assert delivered_to == run.id
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert [%{body: ^told}] = Enum.filter(events, &(&1.type == "news"))
+
+      # The retry run has no message of it: the last run's record says it was told.
+      assert_received {:assembled, assembled}
+      refute assembled =~ "## Message"
+      assert assembled =~ "- news #{told}"
+
+      # The run that sending the message asked for has nothing left to tell.
+      assert {:error, {:not_open, ^work_id}} = Run.open(project, opening(prompt_id, work_id))
+    end
+
+    test "a message the run sent itself stays for the next run",
+         %{project: project, work_id: work_id} do
+      opener = message(project.conn, "start")
+      test_pid = self()
+
+      Fixtures.use_model(project, fn _assembled, _tools, call ->
+        {:ok, run_id} =
+          Query.one(project.conn, "SELECT id FROM runs") |> then(&{:ok, elem(&1, 1).id})
+
+        send_to_work(project, work_id, "for later", %{run_id: run_id})
+        send(test_pid, {:call, call.("echo", %{})})
+        {:ok, "done"}
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(opener, work_id))
+      assert_received {:call, {:ok, "echoed"}}
+    end
+  end
+
   describe "a tool a review released" do
     setup %{dir: dir} do
       write_config(dir, """

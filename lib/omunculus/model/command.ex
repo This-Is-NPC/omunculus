@@ -15,7 +15,7 @@ defmodule Omunculus.Model.Command do
 
   alias Omunculus.Execution
   alias Omunculus.Execution.{Command, Policy, Program, Session}
-  alias Omunculus.Prompt
+  alias Omunculus.{Media, Prompt}
 
   @spec new(map) ::
           (Prompt.t(),
@@ -27,7 +27,13 @@ defmodule Omunculus.Model.Command do
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
     fn %Prompt{} = prompt, tools, call, record, delta, execution ->
-      run(spec, prompt, tools, %{call: call, record: record, delta: delta}, execution)
+      run(
+        spec,
+        prompt,
+        tools,
+        %{call: &Media.text_only(call.(&1, &2)), record: record, delta: delta},
+        execution
+      )
     end
   end
 

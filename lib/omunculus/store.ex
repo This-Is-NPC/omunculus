@@ -75,5 +75,6 @@ defmodule Omunculus.Store do
   defdelegate begun?(conn, opening, event), to: Runs
   defdelegate stopped(conn), to: Runs
   defdelegate unended_messages(conn), to: Runs
+  defdelegate deliver(conn, run, text), to: Runs
   defdelegate runnable(conn, params), to: Runs
 end

@@ -78,6 +78,20 @@ defmodule Omunculus.Tools.SessionTest do
         fields
       )
 
+  test "a message delivered between the calls of a turn follows that turn's outputs" do
+    turn = [
+      event("model", reply([{"c1", "read"}, {"c2", "read"}])),
+      call("read", "first"),
+      %{type: "news", body: "also fix B"},
+      call("read", "second")
+    ]
+
+    assert %{"history" => [_context, item, _reply, _since]} =
+             Session.history([paused("r1", turn)], given())
+
+    assert %{"outputs" => ["first", "second"], "news" => ["also fix B"]} = item
+  end
+
   test "a paused run of the agent continues: its prompt, each reply with its outputs, then since" do
     assert %{"continues" => "r1", "instructions" => @instructions, "history" => history} =
              Session.history([paused("r1", read_turn())], given())

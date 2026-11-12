@@ -21,8 +21,11 @@ defmodule Omunculus.Media do
 
   @supported ~w(image/png image/jpeg image/gif image/webp application/pdf)
 
-  @typedoc "A call's result for the model: its text, or its text and the files to show."
-  @type result :: String.t() | %{text: String.t(), media: [map]}
+  @typedoc """
+  A call's result for the model: its text, or its text, the files to show
+  and the `news` (messages for the model) to follow the call's results.
+  """
+  @type result :: String.t() | %{required(:text) => String.t(), media: [map], news: [String.t()]}
 
   @doc "The media types the adapters can put on a wire."
   @spec supported() :: [String.t()]
@@ -182,10 +185,23 @@ defmodule Omunculus.Media do
   @spec data_url(map) :: String.t()
   def data_url(%{"media_type" => type, "data" => data}), do: "data:#{type};base64,#{data}"
 
+  @doc "`result` with the `news` that follow it."
+  @spec with_news(result, [String.t()]) :: result
+  def with_news(result, []), do: result
+  def with_news(text, news) when is_binary(text), do: %{text: text, media: [], news: news}
+  def with_news(result, news), do: Map.put(result, :news, news)
+
+  @doc "The messages that follow a call's `result`."
+  @spec news(result) :: [String.t()]
+  def news(%{news: news}), do: news
+  def news(_result), do: []
+
   @doc "A call's result as text alone, for a caller that cannot show media."
   @spec text_only({:ok, result} | {:error, term}) :: {:ok, String.t()} | {:error, term}
-  def text_only({:ok, %{text: text, media: media}}),
-    do: {:ok, join(text, [Out.media_text_only(length(media))])}
+  def text_only({:ok, %{text: text, media: media} = result}) do
+    notes = if media == [], do: [], else: [Out.media_text_only(length(media))]
+    {:ok, join(text, notes ++ news(result))}
+  end
 
   def text_only(other), do: other
 

@@ -85,10 +85,12 @@ defmodule Omunculus.Model.OpenAI do
 
   defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
 
-  defp turn(%{"model" => reply, "outputs" => outputs}) do
+  defp turn(%{"model" => reply, "outputs" => outputs} = item) do
     calls = Enum.zip(reply["tool_calls"] || [], outputs)
-    [strip_message(reply) | Enum.map(calls, &tool_message/1)]
+    [strip_message(reply) | Enum.map(calls, &tool_message/1)] ++ user_messages(item["news"])
   end
+
+  defp user_messages(news), do: Enum.map(news || [], &%{role: "user", content: &1})
 
   defp tool_message({%{"id" => id}, output}),
     do: %{role: "tool", tool_call_id: id, content: output}
@@ -109,15 +111,19 @@ defmodule Omunculus.Model.OpenAI do
          :ok <- record.(recorded(client, message)) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
-          {tool_messages, media} =
+          {tool_messages, shown} =
             tool_calls
             |> Enum.map(&run_tool_call(&1, call, catalog, execution, client.media_types))
             |> Enum.unzip()
 
+          {media, news} = Enum.unzip(shown)
+
           loop(
             client,
             tools,
-            messages ++ [strip_message(message) | tool_messages] ++ media_message(media),
+            messages ++
+              [strip_message(message) | tool_messages] ++
+              media_message(media) ++ user_messages(List.flatten(news)),
             call,
             record,
             catalog,
@@ -231,7 +237,7 @@ defmodule Omunculus.Model.OpenAI do
   end
 
   # A tool message holds text alone: the media a call shows follows the
-  # call's messages as one user message.
+  # call's messages as one user message, then the messages the run was told.
   defp run_tool_call(
          %{"id" => id, "function" => %{"name" => name, "arguments" => arguments}},
          call,
@@ -242,10 +248,11 @@ defmodule Omunculus.Model.OpenAI do
     case HTTP.run(name, arguments, call, catalog, execution) do
       {:ok, result} ->
         {text, media} = Media.render(result, media_types)
-        {%{role: "tool", tool_call_id: id, content: text}, media}
+        {%{role: "tool", tool_call_id: id, content: text}, {media, Media.news(result)}}
 
       {:error, reason} ->
-        {%{role: "tool", tool_call_id: id, content: Omunculus.Tools.Out.failure(reason)}, []}
+        {%{role: "tool", tool_call_id: id, content: Omunculus.Tools.Out.failure(reason)},
+         {[], []}}
     end
   end
 

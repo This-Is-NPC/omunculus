@@ -98,6 +98,8 @@ each tool
     hooks of those events, still in the unroll
     if end: nothing after it in this run executes
     no end: the runs its actions asked for open now
+    the messages sent to the run's work since it began that no run has
+      been told are delivered, once ([a message during a run](#a-message-during-a-run))
 close (end, or the model stopped or failed)
     EVENTS(end-run), status = done; {"error": why} when the model failed
     next runs the ending call's actions asked for, then hooks of end,
@@ -405,6 +407,31 @@ named, which may comment, delegate more and end but not `done`, `break`
 or request, and the last child back still wakes the work. A root work is only closed,
 parked, waiting on its person or cancelled. A cancelled work never opens a run again.
 `continue` does not name a stage, an agent or a model — the TOML does.
+
+## A message during a run
+
+A message sent to a work is stored as a prompt, and the run it asks for
+waits behind the work's open run. Waiting would leave the person unheard
+until the run ends, so after each tool call the harness checks the store
+for messages to the run's work that neither this run nor an earlier one has
+been told, oldest first, and appends each to the turn's results as a user
+message, in the order they were sent: the cached prefix stays as it was.
+Each is recorded as a `news` event of the run, linked to the run
+(`prompts.run_id`), which is what marks it told:
+
+- the run opened for that message does not begin, since nothing is left
+  to tell it; it is not an error;
+- a retry or any later run of the work does not read it under
+  `## Message`; the earlier run's record under `## Last run` lists it as
+  `news`, and a continued session replays it after the results it
+  followed;
+- a message the run sent itself is not told to it.
+
+A run whose model makes no tool call after the message arrived does not
+hear it: the message opens its run once this one ends, as before. A
+`command` model's program reads the messages at the end of the result of
+the call that carried them, and a call through `code_mode` returns them
+with its text.
 
 ## A worktree per work
 

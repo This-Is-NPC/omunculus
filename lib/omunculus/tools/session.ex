@@ -21,7 +21,9 @@ defmodule Omunculus.Tools.Session do
   says it was shown.
 
   A history is a list of `%{"user" => text}` and `%{"model" => reply,
-  "outputs" => [output]}`, the outputs in the order of the reply's calls.
+  "outputs" => [output]}`, the outputs in the order of the reply's calls,
+  with `"news" => [text]` when messages were delivered to the run after
+  them, which follow the outputs as user messages.
   """
 
   alias Omunculus.Tools.{Out, Record}
@@ -131,6 +133,9 @@ defmodule Omunculus.Tools.Session do
               {:cont, {:ok, turns, pending}}
           end
 
+        {"news", _body} ->
+          {:cont, {:ok, add_news(turns, event.body), pending}}
+
         _other ->
           {:cont, {:ok, turns, pending}}
       end
@@ -151,6 +156,12 @@ defmodule Omunculus.Tools.Session do
   defp add_output(turns, output) do
     {last, earlier} = List.pop_at(turns, -1)
     earlier ++ [Map.update!(last, "outputs", &(&1 ++ [output]))]
+  end
+
+  # The messages a run was told follow the results of the turn they came in.
+  defp add_news(turns, text) do
+    {last, earlier} = List.pop_at(turns, -1)
+    earlier ++ [Map.update(last, "news", [text], &(&1 ++ [text]))]
   end
 
   # A call through the sandbox bridge leaves no result of its own to send back.

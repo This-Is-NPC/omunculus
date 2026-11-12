@@ -54,12 +54,15 @@ defmodule Omunculus.Model.OpenAIResponses do
 
   defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
 
-  defp turn(%{"model" => %{"output" => output}, "outputs" => outputs}) do
+  defp turn(%{"model" => %{"output" => output}, "outputs" => outputs} = item) do
     calls = Enum.zip(function_calls(output), outputs)
 
     output ++
-      Enum.map(calls, fn {call, out} -> function_call_output(call["call_id"], {:ok, out}) end)
+      Enum.map(calls, fn {call, out} -> function_call_output(call["call_id"], {:ok, out}) end) ++
+      user_items(item["news"])
   end
+
+  defp user_items(news), do: Enum.map(news || [], &%{role: "user", content: &1})
 
   defp function_tool(%{name: name, description: description, parameters: parameters}) do
     %{
@@ -78,10 +81,20 @@ defmodule Omunculus.Model.OpenAIResponses do
           {:ok, output_text(output)}
 
         calls ->
-          results =
-            Enum.map(calls, &run_tool_call(&1, call, catalog, execution, client.media_types))
+          {results, news} =
+            calls
+            |> Enum.map(&run_tool_call(&1, call, catalog, execution, client.media_types))
+            |> Enum.unzip()
 
-          loop(client, tools, input ++ output ++ results, call, record, catalog, execution)
+          loop(
+            client,
+            tools,
+            input ++ output ++ results ++ user_items(List.flatten(news)),
+            call,
+            record,
+            catalog,
+            execution
+          )
       end
     end
   end
@@ -163,8 +176,12 @@ defmodule Omunculus.Model.OpenAIResponses do
          execution,
          media_types
        ) do
-    function_call_output(id, HTTP.run(name, arguments, call, catalog, execution), media_types)
+    result = HTTP.run(name, arguments, call, catalog, execution)
+    {function_call_output(id, result, media_types), news(result)}
   end
+
+  defp news({:ok, result}), do: Media.news(result)
+  defp news({:error, _reason}), do: []
 
   # A result that shows media is a list of items: its text, then the
   # images and files.

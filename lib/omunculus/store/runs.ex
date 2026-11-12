@@ -26,6 +26,10 @@ defmodule Omunculus.Store.Runs do
   stopped without `end` on a work still open and that no own run of the
   work followed: their retry, or what follows it, was never decided or
   never began.
+  `deliver/2` hands a run the messages sent to its work since it began, that
+  no run has been told: it links each to the run and records a `news`
+  event holding what the model is told, and a run opened for a message it
+  delivered does not begin (`runnable/2`).
   `unended_messages/1` lists the open runs of a message that did not
   end, which recovery opens again for the message.
   `left/1` lists the closed runs that left a request pending at their
@@ -67,6 +71,51 @@ defmodule Omunculus.Store.Runs do
       ORDER BY runs.started_at, runs.id
       """
     )
+  end
+
+  @doc """
+  The messages sent to the work of `run`, by another run or a person, that
+  no run has been told, oldest first, each as `text.(subject, body)` makes
+  it. A message that opened a run is linked to it already.
+  """
+  @spec deliver(Connection.t(), map, (String.t() | nil, String.t() -> String.t())) ::
+          {:ok, [String.t()]} | {:error, term}
+  def deliver(_conn, %{work_id: nil}, _text), do: {:ok, []}
+
+  def deliver(conn, run, text) do
+    Query.transaction(conn, fn ->
+      with {:ok, messages} <-
+             Query.all(
+               conn,
+               View.prompts_sql() <>
+                 """
+                  WHERE prompts.kind = 'message' AND prompts.run_id IS NULL AND prompts.id IN (
+                    SELECT prompt_id FROM events
+                    WHERE type = 'prompt' AND work_id = ? AND run_id IS NOT ?)
+                  ORDER BY prompts.created_at, prompts.id
+                 """,
+               [run.work_id, run.id]
+             ) do
+        Enum.reduce_while(messages, {:ok, []}, fn message, {:ok, told} ->
+          body = text.(message.subject, message.body)
+
+          with :ok <- link_message(conn, message.id, run.id),
+               {:ok, _event} <-
+                 Events.append(conn, %{
+                   type: "news",
+                   actor_kind: "harness",
+                   run_id: run.id,
+                   work_id: run.work_id,
+                   prompt_id: message.id,
+                   body: body
+                 }) do
+            {:cont, {:ok, told ++ [body]}}
+          else
+            {:error, _reason} = error -> {:halt, error}
+          end
+        end)
+      end
+    end)
   end
 
   @spec uncaused(Connection.t()) :: {:ok, [map]} | {:error, term}
@@ -564,7 +613,23 @@ defmodule Omunculus.Store.Runs do
   @spec runnable(Connection.t(), map) :: :ok | {:error, term}
   def runnable(conn, params) do
     with :ok <- runnable_work(conn, params.work_id, Map.get(params, :own, false)),
+         :ok <- runnable_message(conn, params.work_id, Map.get(params, :prompt_id)),
          do: runnable_request(conn, params)
+  end
+
+  # A message a run delivered while it went on opens no run of its own.
+  defp runnable_message(_conn, _work_id, nil), do: :ok
+
+  defp runnable_message(conn, work_id, prompt_id) do
+    case Query.one(
+           conn,
+           "SELECT 1 AS delivered FROM events WHERE type = 'news' AND prompt_id = ?",
+           [prompt_id]
+         ) do
+      {:ok, nil} -> :ok
+      {:ok, _delivered} -> {:error, {:not_open, work_id}}
+      {:error, _reason} = error -> error
+    end
   end
 
   defp runnable_request(conn, %{cause_id: cause_id, request_id: request_id, agent: agent})

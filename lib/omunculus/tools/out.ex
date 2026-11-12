@@ -253,6 +253,13 @@ defmodule Omunculus.Tools.Out do
   def media_text_only(count),
     do: "#{count} media not shown: a call in code mode returns text"
 
+  @doc "A message sent to the run's work while it went on, as the model is told it."
+  @spec news(String.t() | nil, String.t()) :: String.t()
+  def news(nil, body), do: "A message arrived for this work while you worked:\n\n" <> body
+
+  def news(subject, body),
+    do: "A message arrived for this work while you worked.\nSubject: #{subject}\n\n" <> body
+
   @spec media_follows() :: String.t()
   def media_follows, do: "The media the tool calls above showed:"
 
