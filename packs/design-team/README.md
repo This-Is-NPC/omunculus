@@ -102,6 +102,15 @@ own.
 omunculus pack --path packs/design-team --models team=<model> --depth 2
 ```
 
+## Tools worth configuring
+
+The designer holds `lsp`, and the designer and the reviewer hold
+`browser_check`, to look at each page at 1280 px and 375 px. `lsp` needs a
+`[settings.lsp.<language>]` table in the project's `omunculus.toml` for each
+language it serves (HTML, CSS or JavaScript servers, for example); the pack
+installs none ([Settings](../../docs/config.md#settings)). The publisher has
+neither: it commits and publishes.
+
 ## What it holds
 
 ```text
