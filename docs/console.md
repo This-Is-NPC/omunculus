@@ -149,10 +149,10 @@ stay in a work's detail. A turn's heading says how
 long the run has worked, in the short form used everywhere: "Working 12 s"
 while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
 it is named: the turns, its lines and the cards. Tones go
-by the order agents first appear in the conversation on screen, from the
-agent you wrote to, and stay while it is open; no two are within 30° of
+by the agent's place in its project's setup, the same in the chat, the tree,
+the board and the mailbox; no two are within 30° of
 hue, and none within 30° of the accent, success, warning or error. A theme
-whose colours leave little room yields fewer tones, and they then repeat. The board's agents have their own, in the order the window meets them.
+whose colours leave little room yields fewer tones, and they then repeat.
 While
 an agent works for a work's thread, its end holds a live line (`Progress.live`):
 a dot breathing in the tone of the agent at work, the agents from the one you

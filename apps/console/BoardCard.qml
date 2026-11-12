@@ -62,7 +62,7 @@ Rectangle {
     }
     AgentName {
       name: Omunculus.agentOf(card.work)
-      tone: Omunculus.toneOf(name)
+      tone: Omunculus.toneOf(name, card.work.project)
       limit: parent.width
     }
     Label {
