@@ -63,7 +63,7 @@ opened that passes on a question shows that question, from the request's
 requester.
 
 A conversation has no title in the core: its subject is the first line of its
-first message of yours, cut at 90 characters. The compose window's Subject is
+first message of yours, cut at 90 characters. A composer's Subject is
 sent as that first line, followed by a blank line and the message.
 
 An agent's address is `<agent>@<project>` and its display name the agent's name,
@@ -118,15 +118,17 @@ and others who wrote in it, such as a requester); with one, there is only REPLY.
 The latest message's REPLY is the screen's one filled action. The command bar
 offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
 
-A reply is written in a box under the messages, as wide as the pane and growing
-with its words; the pane scrolls, and keeps the caret in view. Its To is chips
-(the same field as compose, with its type-ahead and address book), prefilled
-with the sender, or with every counterpart for REPLY ALL. Taking a chip off or
-adding another is free; the thread's own accounts are answered in it, and any
-other recipient gets a message of its own with the same subject. Under your text it shows the e-mail it
-answers, quoted as mail does ("On <date>, Front-desk wrote:" and its lines behind
-"> ", folded after four lines, MORE shows the rest). Only your own words are
-sent, never the quote. What it does:
+A reply is written in a composer ([Composing](#composing)) docked over the
+mailbox at the bottom right, so the thread stays readable beside it. Its To is
+chips (the same field as a new message, with its type-ahead and address book),
+prefilled with the sender, or with every counterpart for REPLY ALL, and its
+Subject is the thread's, "Re: ...". Taking a chip off or adding another is
+free; the thread's own accounts are answered in it, and any other recipient gets
+a message of its own with the same subject. Behind MORE the composer shows the
+e-mail it answers, quoted as mail does ("On <date>, Front-desk wrote:" and its
+lines behind "> "). Only your own words are sent, never the quote. Asking for
+the reply to a message that already has a composer shows that one again. What it
+does:
 
 - replying to an open request's e-mail sends your words as the answer to that
   request (`POST .../requests/{id}/reply` with `{"body": text}`);
@@ -137,7 +139,7 @@ sent, never the quote. What it does:
 
 An answer to a question carries words only, never an option, and no files.
 
-FORWARD opens the compose window with `Fwd:` and the message quoted.
+FORWARD opens a composer with `Fwd:` and the message below your words.
 
 ## Reviews
 
@@ -168,11 +170,32 @@ queue holds the same reviews.
 
 ## Composing
 
-COMPOSE (Ctrl+N) opens a dialog laid out as a mail's header: a To line and a
-Subject line, label on the left and field on the right, then the message,
-Attach, DISCARD and SEND. SEND is the filled action, enabled once there is a
-recipient and some text. A sent message gets no toast: it appears in the
-thread.
+COMPOSE (Ctrl+N), REPLY and FORWARD each open one composer, the same window
+for all three. It is not part of the mailbox's layout: it floats over the
+content at the bottom right, as a mail client's compose window does, and the
+thread or list under it keeps its place and its width.
+
+- **Several side by side.** Each composer has its own words. The newest sits at
+  the right edge, the older ones shift left; when there is no room for another
+  window (each is 360 px wide), the older ones collapse to tabs, narrower as
+  they grow in number.
+- **The bar.** The title is the subject (or "New message"). MINIMIZE (or Esc)
+  folds the composer to a tab of its bar, docked at the bottom, which keeps
+  what is written; a click on the tab restores it. EXPAND shows the composer
+  large and centred over a dim backdrop, one at a time; a press on the backdrop
+  or EXPAND again docks it. CLOSE closes it; with something written (a body, a
+  new message's subject, a file; the prefilled subject, quote and forward text
+  do not count) it first asks: SAVE DRAFT keeps it in Drafts, DISCARD drops it,
+  KEEP WRITING goes back. Without words it closes at once.
+- **The content.** To, Subject, the body, which fills the window's height and
+  scrolls past it, the files, and the footer with the attach button, DISCARD
+  (which closes as above) and SEND, the filled action, enabled once there is a
+  recipient and some text. Ctrl+Enter sends. A sent message gets no toast: it
+  appears in the thread.
+- **A phone** (under 700 px). The composers are the tabs of one strip, each
+  with its title and an x. The active one fills the screen under the strip;
+  the button at the strip's end minimizes it, back to the mailbox with the
+  strip docked at its bottom. A tab opens its composer.
 
 - To holds one agent as a pill with its display name, its address in the tip
   and an x on the right (`RecipientField`). A click on the pill selects it; only
@@ -193,10 +216,9 @@ thread.
   empty" and a message with no recipient names no agent: the server sends it to
   the default agent. With none declared, the field says "name or address" and
   SEND waits for a recipient.
-- The message grows with its words; when the dialog would pass the window, it
-  scrolls instead of the message getting an inner scrollbar.
-- Closing the dialog with something written keeps it in Drafts; DISCARD drops
-  it. A draft opens in the dialog again, and is gone once sent.
+- A draft opens in a composer again, and is gone once sent. The state of the
+  composers lives in `apps/kit/client/Composers.js`, tested in
+  `test/omunculus/gui_composers_test.exs`.
 - Files are attached with the attach button (the kit's `FilePicker`) and sent
   through `Http.post` and `apps/kit/client/post-with-files`. A file waiting to be sent is a neutral chip as tall as the attach button (a file icon, its name and a small x). A file an e-mail
   carries shows as the kit's `FileChip`, which `Http.openAttachment` saves to
@@ -221,7 +243,8 @@ name; Esc clears it.
 | / | search |
 | Ctrl+B · Ctrl+L | fold the folders, or the list to a rail with its count |
 | Alt+Up · Alt+Down | the thread before or after |
-| Esc | close the reply, then the thread |
+| Esc | minimize the composer in focus; else close the thread |
+| Ctrl+Enter | send, in a composer |
 
 A narrow window shows one pane at a time; the thread's head has a way back to
 the list. Under 700 px every button and icon button is 44 px tall (`Theme.size.control`),

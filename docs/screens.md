@@ -328,24 +328,40 @@ holds COMPOSE and MARK ALL READ.
 
 One conversation with an agent of depth 0, stacked oldest first, the latest
 message open, with its label in the head. Each open message offers REPLY,
-FORWARD and, with several counterparts, REPLY ALL; a reply is written under
-the messages, in a box that grows with its words, with its To as editable chips.
+FORWARD and, with several counterparts, REPLY ALL; each opens a
+[composer](#15-the-composers) docked over the mailbox, so the thread stays
+readable beside it.
 
 A review opened from Pending reads as a message in the same pane: its subject
 is what the agent wants to do; its body the arguments as lines, the text it
-holds and what each answer does. APPROVE is the filled action; EDIT opens the reply box with the held text and sends your words
+holds and what each answer does. APPROVE is the filled action; EDIT opens a box with the held text and sends your words
 in its place; DENY opens it for an optional reason.
 
 | Keys | What they do |
 | --- | --- |
 | Ctrl+R | reply to the latest message |
 | Alt+Up · Alt+Down | the thread before or after |
-| Esc | close the reply, then the thread |
+| Esc | minimize the composer in focus; else close the thread |
 
-### 15. Compose
+### 15. The composers
 
-A dialog: To (one agent, as a chip, with autocomplete), Subject, the message,
-Attach and SEND, the filled action. It keeps what is written in Drafts when closed.
+A new message, a reply and a forward are each a composer, a window docked at
+the bottom right of the mailbox, over its content, never in its layout. Several
+stand side by side, the newest on the right; when there is no room the older
+ones become tabs along the bottom edge.
+
+A composer's bar holds its title (the subject, or "New message") and three
+buttons: minimize (Esc), which folds it to a tab that keeps what is written and
+which a click restores; expand, which shows it large and centred over a dim
+backdrop; and close, which asks to save a draft or discard only when something
+is written. Under the bar: To (one agent, as a chip, with autocomplete and the
+address book; a reply may hold several), Subject, the body, which fills the
+window, MORE for the message a reply answers, then the files, DISCARD and SEND,
+the filled action. Ctrl+Enter sends.
+
+Under 700 px the composers are the tabs of one strip, each with its title and
+an x; the active one fills the screen, and the button at the strip's end
+minimizes it, returning to the mailbox with the strip docked at the bottom.
 
 ## The studio
 
