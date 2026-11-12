@@ -42,6 +42,16 @@ defmodule Omunculus.EvalScoreTest do
     assert Score.score(execution(%{"needs" => []})).exercised == nil
   end
 
+  test "human requests count the requests the person is arbiter of" do
+    requests = [
+      %{request("0") | "arbiter" => %{"kind" => "human", "subject" => "p"}},
+      %{request("1") | "arbiter" => %{"kind" => "agent", "id" => "father"}}
+    ]
+
+    assert Score.score(execution(%{"requests" => requests})).human_requests == 1
+    assert Score.score(execution(%{"requests" => []})).human_requests == 0
+  end
+
   describe "repeated_after_handoff" do
     defp call(run, name, args, via \\ nil),
       do: %{"name" => name, "ok" => true, "run" => run, "via" => via, "args" => args}

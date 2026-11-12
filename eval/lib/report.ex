@@ -187,6 +187,8 @@ defmodule EquivalentExchange.Report do
       retries: Enum.sum(Enum.map(scores, & &1["retries"])),
       repeated: scores |> Enum.map(&(&1["repeated_after_handoff"] || 0)) |> Enum.sum(),
       tokens: Enum.sum(Enum.map(scores, & &1["tokens"])),
+      human_requests: scores |> Enum.map(&(&1["human_requests"] || 0)) |> Enum.sum(),
+      model_calls: scores |> Enum.map(&(&1["model_calls"] || 0)) |> Enum.sum(),
       cost: Float.round(Enum.sum(Enum.map(scores, &(&1["cost"] * 1.0))), 6),
       seconds: Float.round(Enum.sum(Enum.map(scores, & &1["duration_ms"])) / 1000, 1)
     }
@@ -333,13 +335,13 @@ defmodule EquivalentExchange.Report do
 
   defp table(title, rows) do
     header =
-      "| | passed | state right | report right | let through by a supervisor | sent back | unrecorded | delegated | asked when needed | exercised | forbidden grants | rated | judge unsure | retries | repeated after handoff | tokens | cache | cache, 1st call | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+      "| | passed | state right | report right | let through by a supervisor | sent back | unrecorded | delegated | asked when needed | exercised | forbidden grants | rated | judge unsure | retries | repeated after handoff | human requests | model calls | tokens | cache | cache, 1st call | cost USD | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 
     lines =
       rows
       |> Enum.sort()
       |> Enum.map_join("\n", fn {name, t} ->
-        "| #{name} | #{pct(t.passed)} | #{pct(t.state_ok)} | #{pct(t.report_ok)} | #{t.missed} | #{t.sent_back} | #{t.unrecorded} | #{pct(t.delegated)} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.repeated} | #{t.tokens} | #{pct(t.cache)} | #{pct(t.first_call_cache)} | #{t.cost} | #{t.seconds} |"
+        "| #{name} | #{pct(t.passed)} | #{pct(t.state_ok)} | #{pct(t.report_ok)} | #{t.missed} | #{t.sent_back} | #{t.unrecorded} | #{pct(t.delegated)} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.repeated} | #{t.human_requests} | #{t.model_calls} | #{t.tokens} | #{pct(t.cache)} | #{pct(t.first_call_cache)} | #{t.cost} | #{t.seconds} |"
       end)
 
     "## #{title}\n\n" <> header <> lines <> "\n"
@@ -434,7 +436,7 @@ defmodule EquivalentExchange.Report do
   defp hardware_delta(_before, _now), do: "Not sampled in both."
 
   defp delta_table(title, before, now) do
-    columns = @measures ++ ~w(tokens cost seconds)
+    columns = @measures ++ ~w(human_requests model_calls tokens cost seconds)
 
     header =
       "| | " <>

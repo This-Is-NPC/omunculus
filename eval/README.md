@@ -349,7 +349,8 @@ The score of an execution:
 | rated | the decider's 1 to 5 of the files, over the task's `[[judge]]` |
 | judge unsure | the decider was unsure of a question about the last words |
 | repeated after handoff | calls a run made on a work that repeat a call, same name and args, the work's run before it made: what the handoff left the next run to read or run again. Steps a tool chains are not counted. Not known for an execution recorded before call args were kept |
-| retries, runs, tool calls, tokens, cost, time | the effort |
+| human requests | the requests opened with the person as arbiter |
+| retries, runs, tool calls, model calls, tokens, cost, time | the effort: `cost` is in USD, from each call's reported cost or its model's `prices.toml` price; time is the wall time of the execution |
 | cache, cache on the 1st call | the share of the prompt tokens the provider served from its cache, over every call and on the first call of each run; `report.md` also gives it by agent |
 
 To tune `[policy] last_run_output_bytes`, run the same tasks, models and

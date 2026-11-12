@@ -44,9 +44,10 @@ defmodule EquivalentExchange.Score do
     without call args;
   - `retries`: runs opened because a model stopped without a report;
   - the effort: runs, tool calls and failed ones, model calls, tokens, cost
-    and time, and the prompt tokens the provider served from its cache —
+    (USD) and time, and the prompt tokens the provider served from its cache —
     over every call, on the first call of each run, and by agent.
 
+  - `human_requests`: the requests opened with the person as arbiter;
   Each failure comes with `findings`, a probable cause — `prompt` (an
   agent's text), `tool` (a tool's description or result) or `harness`
   (omunculus itself) — and what points to it.
@@ -122,6 +123,7 @@ defmodule EquivalentExchange.Score do
     }
 
     Map.put(score, :findings, findings(execution, score))
+      human_requests: Enum.count(execution["requests"], &human?/1),
   end
 
   # The calls a run made, other than the steps of a chain, that the run
@@ -134,6 +136,10 @@ defmodule EquivalentExchange.Score do
         |> Enum.group_by(& &1["run"], &{&1["name"], &1["args"]})
 
       runs
+  # A request whose arbiter is the person.
+  defp human?(%{"arbiter" => %{"kind" => "human"}}), do: true
+  defp human?(_request), do: false
+
       |> Enum.filter(& &1["work"])
       |> Enum.group_by(& &1["work"], & &1["id"])
       |> Map.values()
