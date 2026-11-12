@@ -6,7 +6,8 @@ import "kit/client/Tree.js" as Tree
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
-// TreePage is the TREE page: the conversation's works in the order they were
+// TreePage is the TREE page: the root work's stage path (StagePath) and under
+// it the conversation's works in the order they were
 // made (Tree.rows, a TreeNode each) and the work picked in full (NodeDetail).
 // The agent that talks with the person is the root when its works are other
 // agents'; each work sits under the work that handed it down, every level
@@ -207,6 +208,13 @@ FocusScope {
     anchors.fill: parent
     visible: !team.detailOpen
     spacing: Theme.space.block
+
+    // Where the root work is in its workflow.
+    StagePath {
+      Layout.fillWidth: true
+      size: Theme.type.cardBody.size
+      stages: team.flat.length > 0 ? Progress.trail(team.flat, Omunculus.journeys, team.flat[0].work, Infinity) : []
+    }
 
     FilterBox {
       id: filterBox

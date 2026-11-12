@@ -1093,7 +1093,7 @@ Singleton {
     }
     case "continue":
       step(event.run_id, work, { name: "continue", ok: true, text: body.to ? "moved on to " + body.to : "finished the work", output: "", outcome: true, at: at })
-      mark(work, who, body.to ? body.to + " started" : "finished", stamp, at)
+      mark(work, who, body.to ? body.to + " started" : "done", stamp, at)
       break
     case "grant":
       step(event.run_id, work, { name: "grant", ok: true, text: "granted " + body.name + (body.scope ? " for the " + body.scope : " for this work"), output: "", outcome: true, at: at })

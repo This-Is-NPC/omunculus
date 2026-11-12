@@ -144,7 +144,11 @@ the message's subject, when it has one, as the bubble's bold first line. A note
 an agent of the team left is an outlined card headed NOTE FROM SELLER. The
 progression is lines of the log between them: each stage started ("design
 started"), each work handed down ("handed down Build: Doce Ana"), a work
-finished or sent back. A request addressed to you is a card at the time it was
+done or sent back. A stage line carries the root work's whole stage path under
+it, on one line that wraps on a narrow window: the stages done with a check,
+the one reached with a filled dot, those to come with an empty one; so the
+newest stage line says where the work is, and the "done" line has every stage
+checked. A request addressed to you is a card at the time it was
 asked, which you answer in place (see [the cards](#6-the-request-cards)); once
 answered it stays there as history, with the word of what you did (ANSWERED,
 CHOSE, GRANTED, DENIED) and your answer. What the agents asked one another is
@@ -198,7 +202,8 @@ and your answer.
 
 ### 7. Tree
 
-The conversation's works in the order they were made, who handed work to
+The root work's stage path first, as in the chat, then the conversation's
+works in the order they were made, who handed work to
 whom, every level deep. The agent that talks with you is the root, with its
 own state and what it asks you; each work sits under the work that handed it
 down, lines joining it to its parent as in a file tree. A row is the work's

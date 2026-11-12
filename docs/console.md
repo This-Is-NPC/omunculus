@@ -220,10 +220,15 @@ A work handed down is one line of the log in the chat, where it was: the
 branch mark, the agent that handed it down and the one it went to, in their
 tones, "handed down \u201cBuild: Doce Ana\u201d", and the time. Each stage the
 work enters is a line too, the right-pointing mark and "design started"
-(from the `continue` events), "finished" when its last stage ends and "sent back
+(from the `continue` events), "done" when its last stage ends and "sent back
 to design" when it is reopened; a work nested below another adds its title
-after a dot. These lines are the progression: there is no header strip or
-card that says where the work stands, and what the agent at work does is the
+after a dot. Under each of these lines runs the stage path of the root work
+(`StagePath`, from `Progress.trail`), the stages as it stood at that line, on
+one line that wraps when the width is short: done `✓` in the success tone, the
+stage reached `●` in the accent and bold, those to come `○` dim, joined by
+"›". The newest stage line therefore says where the work is, and the "done"
+line has them all done. These lines are the progression: there is no header
+strip or card that says where the work stands, and what the agent at work does is the
 live line's. What waits now is the last of the chat, an open card with the
 composer under it. The runs are in the tree. In a
 work's own thread the same entry is a block (`SubWorkBlock`), where the run
@@ -620,7 +625,7 @@ The project's level:
 A conversation's level, in place of the project's once one is opened:
 
 - CHAT, the chat with the root agent, its progress and its composer;
-- TREE, the conversation's works in the order they were made, each with its stage
+- TREE, under the root work's stage path, the conversation's works in the order they were made, each with its stage
   track, its state and how long it has run, and the work picked in full. Its
   SHOW IN LOG opens the LOG kept to that work, and BACK returns;
 - LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word

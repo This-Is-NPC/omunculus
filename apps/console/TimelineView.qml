@@ -405,6 +405,8 @@ Item {
           icon: entry.kind === "work" ? "branch" : "chevron-right"
           names: [entry.who, assignee].filter(name => name !== "")
           text: entry.kind === "work" ? "handed down \u201c" + Omunculus.titleOf(entry.key) + "\u201d" : entry.text
+          // Where the root work stood at this line, so the latest one says where it is.
+          stages: entry.kind === "work" || !Omunculus.progress ? [] : Progress.trail(Omunculus.progress.flat, Omunculus.journeys, entry.key, entry.at)
           stamp: entry.stamp
         }
       }

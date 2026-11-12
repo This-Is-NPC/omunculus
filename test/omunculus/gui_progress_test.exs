@@ -273,6 +273,21 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
+  test "trail shows the root work's whole stage path with the stage reached" do
+    run!("""
+    const flat = Progress.build(base).flat;
+    const marks = path => path.map(step => ({done: "v", current: "*", next: "-"})[step.status] + step.name).join(" ");
+    check(marks(Progress.trail(flat, journeys, "w1", 1250)) === "vqualify *design -assess -propose -owner -build", "w1 at design", marks(Progress.trail(flat, journeys, "w1", 1250)));
+    check(marks(Progress.trail(flat, journeys, "w1", 1100)).startsWith("*qualify -design"), "before its first move", marks(Progress.trail(flat, journeys, "w1", 1100)));
+    check(Progress.trail(flat, journeys, "w3", 1500).length === 6, "a work below tells the root's path", "");
+    check(Progress.trail(flat, {}, "w1", 1250).filter(step => step.status === "current")[0].name === "design", "no journey: the work's current stage", "");
+    const ended = Progress.journal(journeys, {type: "continue", work_id: "w1", at: iso(1800), actor: by("seller"), body: {from: "build"}});
+    check(Progress.trail(flat, ended, "w1", 1800).every(step => step.status === "done"), "finished is all done", "");
+    check(Progress.trail(flat, ended, "w1", 1700).some(step => step.status !== "done"), "before the end it is not", "");
+    check(Progress.trail([], {}, "w9", 0).length === 0, "an unknown work has none", "");
+    """)
+  end
+
   test "stepper picks the longest form that fits" do
     run!("""
     const steps = sale.steps.map((step, i) => ({name: step.name, status: i < 1 ? "done" : i === 1 ? "current" : "next"}));

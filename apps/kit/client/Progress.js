@@ -570,6 +570,39 @@ function finished(nodes) {
     .concat(done > 0 && cancelled > 0 ? [cancelled + " cancelled"] : [], inAll(nodes)).join(" · ");
 }
 
+// The stages of a workflow as a path, [{name, status}], done before the stage
+// `reached`, that one current, the rest next; a `finished` work has them all done.
+function stagePath(names, reached, finished) {
+  const at = names.indexOf(reached);
+  return names.map((name, i) => ({ name: name, status: finished || i < at ? "done" : i === at ? "current" : "next" }));
+}
+
+// The stage a work was at at time `at` (seconds), from the stages its journey
+// entered; `current` when it entered none.
+function stageAt(names, journey, current, at) {
+  const entered = journey ? journey.entered : [];
+  if (entered.length === 0) return current;
+  let stage = entered[0].from || names[0];
+  for (const each of entered) if (each.at <= at) stage = each.stage;
+  return stage;
+}
+
+// The stage path of the root work of `work` as it stood at `at` (seconds):
+// the topmost work above it, itself included, that goes through a workflow;
+// [] when none does.
+function trail(flat, journeys, work, at) {
+  const byWork = {};
+  flat.forEach(each => { byWork[each.work] = each; });
+  const chain = [];
+  for (let node = byWork[work]; node; node = byWork[node.parent]) chain.unshift(node);
+  const root = chain.find(node => node.steps.length > 0);
+  if (!root) return [];
+  const names = root.steps.map(step => step.name);
+  const journey = journeys[root.work] || null;
+  const finished = !!journey && journey.finishedAt !== null && at >= journey.finishedAt;
+  return stagePath(names, stageAt(names, journey, names[root.at], at), finished);
+}
+
 function token(text, status) { return { text: text, status: status }; }
 
 function joined(tokens) { return tokens.map(each => each.text).join(""); }

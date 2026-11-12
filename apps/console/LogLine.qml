@@ -6,7 +6,8 @@ import "kit/ui"
 // LogLine is one system row of a thread, the log and not a message: an icon
 // in the row's mark column, the agents it names, each in its tone and joined
 // by "›", what happened in dim words, and the time at its right; a second
-// line, under the words, says more. Live, the mark is a dot that breathes
+// line, under the words, says more, and the stages of a workflow, when given,
+// run under them as a path (StagePath). Live, the mark is a dot that breathes
 // in the tone of the agent at work, and a trace runs at the row's end.
 Item {
   id: row
@@ -20,6 +21,8 @@ Item {
   // Words that say something went wrong.
   property bool failed: false
   property string detail: ""
+  // The stages of a workflow, as Progress.trail gives them; none draws none.
+  property var stages: []
   property string stamp: ""
   property bool live: false
 
@@ -114,6 +117,12 @@ Item {
       wrapMode: Text.Wrap
       maximumLineCount: 4
       elide: Text.ElideRight
+    }
+
+    StagePath {
+      Layout.fillWidth: true
+      Layout.leftMargin: Theme.size.mark
+      stages: row.stages
     }
   }
 }
