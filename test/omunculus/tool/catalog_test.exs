@@ -262,7 +262,7 @@ defmodule Omunculus.Tool.CatalogTest do
     assert log =~ "skipping tool fs.read: its name is the group of read"
   end
 
-  test "the builtin config and prompt tools are not groups; setup and assembly are" do
+  test "the builtin config and prompt tools are not groups; configuring and assembly are" do
     catalog = Catalog.unconfigured()
     groups = Catalog.groups(catalog)
 
@@ -270,7 +270,7 @@ defmodule Omunculus.Tool.CatalogTest do
     refute Map.has_key?(groups, "config")
     refute Map.has_key?(groups, "prompt")
 
-    assert groups["setup"] == [
+    assert groups["configuring"] == [
              "config",
              "overview",
              "propose_config",

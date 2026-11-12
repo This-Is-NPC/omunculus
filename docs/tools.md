@@ -837,8 +837,8 @@ sequence  = work, delegate, continue, break, wait, end, done, cancel, ask, escal
 catalog   = tool_search
 memory    = remember, recall, forget
 skills    = skill, and every skill.<name> of [skills] paths
-cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset
-setup     = config, overview, propose_config, propose_pack
+cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset, version, update, setup
+configuring = config, overview, propose_config, propose_pack
 assembly  = assemble
 artifacts = put_artifact, get_artifact, list_artifacts
 ```
