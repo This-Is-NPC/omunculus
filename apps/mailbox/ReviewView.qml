@@ -4,10 +4,10 @@ import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import "kit/ui"
 
-// ReviewView reads one review as a message: its subject is what the actor
-// wants to do, its body the arguments as lines, the text it holds and what
-// each answer does, then APPROVE (the one filled action), EDIT and DENY.
-// While an answer is on its way the buttons are off and SENDING shows. EDIT and DENY open the reply box under it, as a reply is written: EDIT
+// ReviewView reads one review as a card, bordered in the warning tone: who
+// acted, what it wants to do and the text it holds, then APPROVE (the one
+// filled action), EDIT and DENY. DETAILS shows the arguments as lines and what
+// each answer does. While an answer is on its way the buttons are off and SENDING shows. EDIT and DENY open the reply box under it, as a reply is written: EDIT
 // holds the text to rewrite and sends `edit` with the new words; DENY takes an
 // optional reason and sends `deny`.
 Item {
@@ -16,6 +16,8 @@ Item {
   required property var review
   // Whether a way back to the list shows, on a narrow window.
   property bool back: false
+  // Whether the action's arguments show under the card's buttons.
+  property bool details: false
   // "edit" or "deny" while the reply box is open, else "".
   property string mode: ""
   // Whether Esc is the review's: it closes the reply box, or else the review.
@@ -47,43 +49,13 @@ Item {
 
     RowLayout {
       Layout.fillWidth: true
-      spacing: 10
+      spacing: 6
       IconButton { visible: view.back; name: "chevron-left"; tip: "back to the list  esc"; onClicked: Mail.close() }
-      ColumnLayout {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        spacing: 6
-        Label {
-          Layout.fillWidth: true
-          text: view.review.summary
-          font.pixelSize: 16
-          font.bold: true
-          wrapMode: Text.Wrap
-          maximumLineCount: 2
-          elide: Text.ElideRight
-        }
-        Row {
-          spacing: 6
-          Icon { anchors.verticalCenter: parent.verticalCenter; name: "spark"; size: 11; color: Theme.primary }
-          Label {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "REVIEW"
-            color: Theme.primary
-            font.pixelSize: 10
-            font.letterSpacing: 1
-          }
-        }
-      }
-      Row {
-        Layout.alignment: Qt.AlignTop
-        spacing: 6
-        IconButton { name: "chevron-up"; tip: "previous review  alt+↑"; onClicked: Mail.stepReview(-1) }
-        IconButton { name: "chevron-down"; tip: "next review  alt+↓"; onClicked: Mail.stepReview(1) }
-        IconButton { visible: !view.back; name: "close"; tip: "close the review  esc"; onClicked: Mail.close() }
-      }
+      Item { Layout.fillWidth: true }
+      IconButton { name: "chevron-up"; tip: "previous review  alt+↑"; onClicked: Mail.stepReview(-1) }
+      IconButton { name: "chevron-down"; tip: "next review  alt+↓"; onClicked: Mail.stepReview(1) }
+      IconButton { visible: !view.back; name: "close"; tip: "close the review  esc"; onClicked: Mail.close() }
     }
-
-    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
 
     ScrollPage {
       id: scroll
@@ -98,16 +70,29 @@ Item {
         width: scroll.width
         spacing: 14
 
-        SurfaceFrame {
+        // The review as a card, bordered in the warning tone while it waits for you.
+        Rectangle {
           id: card
-          Layout.fillWidth: true
-          Layout.preferredHeight: body.implicitHeight + 28
-          variant: "outline"
+          Layout.alignment: Qt.AlignHCenter
+          Layout.preferredWidth: Math.min(560, stack.width)
+          Layout.preferredHeight: body.implicitHeight + 40
+          color: Theme.highlight
+          border.color: Theme.warning
 
           ColumnLayout {
             id: body
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
-            spacing: 10
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
+            spacing: 12
+
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: 6
+              Icon { name: "search"; size: 12; color: Theme.primary }
+              Label { text: "REVIEW"; color: Theme.primary; font.pixelSize: 10; font.letterSpacing: 3 }
+              Item { Layout.fillWidth: true }
+              Icon { name: "warning"; size: 12; color: Theme.warning }
+              Label { text: "WAITING FOR YOU"; color: Theme.warning; font.pixelSize: 10; font.letterSpacing: 3 }
+            }
 
             RowLayout {
               Layout.fillWidth: true
@@ -123,7 +108,7 @@ Item {
               Label { text: view.review.from.name; font.pixelSize: 12; font.bold: true }
               Label {
                 Layout.fillWidth: true
-                text: (view.review.from.address !== "" ? "<" + view.review.from.address + ">  " : "") + "acted, for your review"
+                text: view.review.from.address !== "" ? "<" + view.review.from.address + ">" : ""
                 color: Theme.dim
                 font.pixelSize: 11
                 elide: Text.ElideRight
@@ -131,23 +116,12 @@ Item {
               Label { text: Mail.stamp(view.review.at); color: Theme.dim; font.pixelSize: 10 }
             }
 
-            Repeater {
-              model: view.review.args
-              delegate: ColumnLayout {
-                id: line
-                required property var modelData
-                Layout.fillWidth: true
-                spacing: 2
-                Label { text: line.modelData.name.toUpperCase(); color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 2 }
-                Prose {
-                  Layout.fillWidth: true
-                  source: line.modelData.value
-                  color: Theme.foreground
-                  font.pixelSize: 13
-                  lineHeight: 1.25
-                  wrapMode: Text.Wrap
-                }
-              }
+            Label {
+              Layout.fillWidth: true
+              text: view.review.summary
+              font.pixelSize: 15
+              font.bold: true
+              wrapMode: Text.Wrap
             }
 
             ColumnLayout {
@@ -166,51 +140,82 @@ Item {
               }
             }
 
-            Label {
+            ColumnLayout {
               Layout.fillWidth: true
-              text: view.review.outcome
-              color: Theme.dim
-              font.pixelSize: 11
-              wrapMode: Text.Wrap
+              visible: view.details
+              spacing: 10
+              Repeater {
+                model: view.review.args
+                delegate: ColumnLayout {
+                  id: line
+                  required property var modelData
+                  Layout.fillWidth: true
+                  spacing: 2
+                  Label { text: line.modelData.name.toUpperCase(); color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 2 }
+                  Prose {
+                    Layout.fillWidth: true
+                    source: line.modelData.value
+                    color: Theme.foreground
+                    font.pixelSize: 13
+                    lineHeight: 1.25
+                    wrapMode: Text.Wrap
+                  }
+                }
+              }
+              Label {
+                Layout.fillWidth: true
+                text: view.review.outcome
+                color: Theme.dim
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
+              }
             }
 
-            Flow {
+            RowLayout {
               Layout.fillWidth: true
               spacing: 8
-              TraceButton {
-                dense: true
-                role: "primary"
-                enabled: !view.sending
-                filled: !view.writing
-                icon: "check"
-                text: "APPROVE"
-                tip: "let the action go ahead as it is"
-                onClicked: Mail.decide(view.review, "approve", "")
+              Flow {
+                Layout.fillWidth: true
+                spacing: 8
+                TraceButton {
+                  dense: true
+                  role: "primary"
+                  enabled: !view.sending
+                  filled: !view.writing
+                  text: "APPROVE"
+                  tip: "let the action go ahead as it is"
+                  onClicked: Mail.decide(view.review, "approve", "")
+                }
+                TraceButton {
+                  dense: true
+                  role: "action"
+                  enabled: !view.sending
+                  text: "EDIT"
+                  tip: "rewrite the text, then send it in place of the held one"
+                  onClicked: view.start("edit")
+                }
+                TraceButton {
+                  dense: true
+                  role: "action"
+                  enabled: !view.sending
+                  text: "DENY"
+                  tip: "refuse the action, with a reason if you like"
+                  onClicked: view.start("deny")
+                }
+                Row {
+                  visible: view.sending
+                  height: Theme.size.control
+                  spacing: 6
+                  Icon { anchors.verticalCenter: parent.verticalCenter; name: "send"; size: 12; color: Theme.primary }
+                  Label { anchors.verticalCenter: parent.verticalCenter; text: "SENDING…"; color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 2 }
+                }
               }
-              TraceButton {
-                dense: true
-                role: "action"
-                enabled: !view.sending
-                icon: "edit"
-                text: "EDIT"
-                tip: "rewrite the text, then send it in place of the held one"
-                onClicked: view.start("edit")
-              }
-              TraceButton {
-                dense: true
-                role: "action"
-                enabled: !view.sending
-                icon: "close"
-                text: "DENY"
-                tip: "refuse the action, with a reason if you like"
-                onClicked: view.start("deny")
-              }
-              Row {
-                visible: view.sending
-                height: Theme.size.control
-                spacing: 6
-                Icon { anchors.verticalCenter: parent.verticalCenter; name: "send"; size: 12; color: Theme.primary }
-                Label { anchors.verticalCenter: parent.verticalCenter; text: "SENDING…"; color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 2 }
+              Chip {
+                Layout.alignment: Qt.AlignTop
+                icon: view.details ? "chevron-up" : "chevron-down"
+                text: "DETAILS"
+                tip: "the action's arguments and what each answer does"
+                onClicked: view.details = !view.details
               }
             }
           }
