@@ -646,7 +646,10 @@ A conversation's level, in place of the project's once one is opened:
 - TREE, under the root work's stage path, the conversation's works in the order they were made, each with its stage
   track, its state and how long it has run, and the work picked in full. Its
   SHOW IN LOG opens the LOG kept to that work, and BACK returns;
-- LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
+- LOG, grouped BY LEVEL (a header per level of the hierarchy, each line's dot in
+  its level's column), BY WORK (each work as its lineage row, on the lifelines of
+  the tree, with its lines under it; `kit/client/LogGroups.js` orders them) or
+  BY TIME (oldest first), every event one line: when (local, `hh:mm:ss`), its kind in a word
   ("question", "decision", "permission", "review", "step", "reply", "passed up",
   "released"; a review has the review's spark icon), what it
   says as one plain sentence ("sales asks you 5 questions: …", "seller wants to
@@ -654,7 +657,7 @@ A conversation's level, in place of the project's once one is opened:
   approved review let go ahead ends "· released by review #<id>"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED,
   RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is
-  still open), under rules naming the day and each run. A failed event, such as a run
+  still open), under rules naming the day and each run in BY TIME. A failed event, such as a run
   that ended in an error, shows the warning icon in the error tone, not its
   kind's own.
   A call reads in plain words ("read design/rounds.md", "looked in design/",

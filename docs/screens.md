@@ -241,6 +241,12 @@ and LOG.
 | Alt+R | answer what waits on you nearest the work picked |
 | Alt+E | open the decision of what it asked you, to escalate (the detail's `⋯` ESCALATE) |
 | Alt+W | write to its agent (`⋯` WRITE TO ITS AGENT) |
+BY LEVEL, the first view, groups the rows under a header per level of the
+hierarchy ("LEVEL 2 · seller, design-lead · 6 events"), each row's dot in the
+column of its level; BY WORK puts them under the row of their work, on the
+lifelines of the tree; BY TIME lists them oldest first, a rule naming each day
+and each run.
+
 | Alt+C | leave it a note, without a run (`⋯` LEAVE A NOTE) |
 | Alt+M | mark its notes read (the detail's `⋯` MARK READ) |
 | Alt+L · Alt+G | its LOG and CHANGES tabs |

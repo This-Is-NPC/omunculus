@@ -100,12 +100,14 @@ QtObject {
     rows.clear()
   }
 
-  // Row `index` as a plain object, safe to keep after the row is gone.
-  function row(index) {
-    const r = rows.get(index)
+  // A row, or any object with a row's roles, as a plain object, safe to keep
+  // after the row is gone.
+  function plain(r) {
     return { id: r.id, at: r.at, time: r.time, type: r.type, kind: r.kind, minor: r.minor, who: r.who, run: r.run, work: r.work,
       what: r.what, ok: r.ok, retried: r.retried, request: r.request, raw: r.raw, head: r.head, day: r.day }
   }
+
+  function row(index) { return plain(rows.get(index)) }
 
   property Timer flushing: Timer {
     interval: 150

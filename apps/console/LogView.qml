@@ -2,14 +2,19 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Events.js" as Events
+import "kit/client/LogGroups.js" as LogGroups
 import "kit/client/Time.js" as Time
+import "kit/client/Tree.js" as Tree
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
-// LogView is the open conversation as a log: every event, oldest first, a
-// line each: when, its kind, what it says in a plain sentence and who, FAILED
-// or NEEDS YOU at the right — under a rule naming the day, and one naming each
-// run where it begins. Plumbing (run starts and ends, hooks, empty replies)
+// LogView is the open conversation as a log: every event a line: when, its
+// kind, what it says in a plain sentence and who, FAILED or NEEDS YOU at the
+// right. BY LEVEL groups the lines under a header per level of the hierarchy,
+// each line's dot in the column of its level; BY WORK puts them under the
+// lineage row of their work, on the same lifelines as the tree (LogGroups);
+// BY TIME lists them oldest first under a rule naming the day, and one naming
+// each run where it begins. Plumbing (run starts and ends, hooks, empty replies)
 // is dimmer and hidden until BEHIND THE SCENES is on. The search line keeps
 // the rows whose text holds it; chips, each with its count, keep the ones
 // that need you or failed, and a picker one agent's; they stay on one line
@@ -40,6 +45,13 @@ Item {
     break: { icon: "warning", tone: Theme.error }
   })
 
+  // How the lines are grouped: "level", "work" or "time".
+  property string grouping: "level"
+  // What the list shows (LogGroups.group), rebuilt once however many rows or
+  // filters changed together.
+  property var items: []
+  property int events: 0
+  readonly property var blank: ({ id: "", type: "", kind: "", ok: true, retried: false, request: "", minor: false, who: "", what: "", time: "", day: "", head: "" })
   property string filter: ""
   property bool asksOnly: false
   property bool failedOnly: false
@@ -83,6 +95,7 @@ Item {
     seen = 0
     hidden = 0
     extend()
+    rebuilding.restart()
   }
 
   function extend() {
@@ -96,6 +109,25 @@ Item {
       else if (matches(line, true))
         hidden++
     }
+  }
+
+  function rebuild() {
+    const lines = []
+    for (let i = 0; i < source.count; i++)
+      lines.push(Omunculus.eventLog.plain(source.get(i)))
+    events = lines.length
+    items = LogGroups.group(grouping, lines, Omunculus.progress)
+  }
+
+  Timer {
+    id: rebuilding
+    interval: 150
+    onTriggered: view.rebuild()
+  }
+  onGroupingChanged: rebuilding.restart()
+  Connections {
+    target: Omunculus
+    function onProgressChanged() { rebuilding.restart() }
   }
 
   function short(id) { return id ? id.slice(0, 8) : "" }
@@ -118,12 +150,8 @@ Item {
       Omunculus.copy(detail)
       return
     }
-    const lines = []
-    for (let i = 0; i < source.count; i++) {
-      const line = source.get(i)
-      lines.push([line.time, line.kind, line.who, short(line.run), short(line.work), line.what].join("\t"))
-    }
-    Omunculus.copy(lines.join("\n"))
+    Omunculus.copy(items.filter(item => item.kind === "line").map(item => item.line)
+      .map(line => [line.time, line.kind, line.who, short(line.run), short(line.work), line.what].join("\t")).join("\n"))
   }
 
   function back() {
@@ -135,6 +163,7 @@ Item {
 
   Component.onCompleted: {
     refilter()
+    rebuild()
     recount()
   }
   onFilterChanged: refilter()
@@ -160,12 +189,14 @@ Item {
         view.refilter()
       else
         view.extend()
+      rebuilding.restart()
       Qt.callLater(view.recount)
     }
     // A failure settled as retried leaves the FAILED rows.
     function onDataChanged() {
       if (view.failedOnly)
         view.refilter()
+      rebuilding.restart()
       Qt.callLater(view.recount)
     }
   }
@@ -191,6 +222,13 @@ Item {
       onLeave: list.forceActiveFocus()
     }
 
+    ChipStrip {
+      Layout.fillWidth: true
+      Chip { text: "BY LEVEL"; checked: view.grouping === "level"; tip: "the lines under the level of the hierarchy that made them"; onClicked: view.grouping = "level" }
+      Chip { text: "BY WORK"; checked: view.grouping === "work"; tip: "the lines under their work, in the order of the tree"; onClicked: view.grouping = "work" }
+      Chip { text: "BY TIME"; checked: view.grouping === "time"; tip: "every line, oldest first"; onClicked: view.grouping = "time" }
+    }
+
     // The filters, on one line that scrolls, then the count and the rare actions.
     ChipStrip {
       Layout.fillWidth: true
@@ -212,7 +250,7 @@ Item {
         id: tally
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events"
+        text: (view.events + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events"
           + (view.hidden > 0 ? " · " + view.hidden + (Breakpoints.tight(view.width) ? " hidden" : " behind the scenes hidden") : "")).toUpperCase()
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
@@ -233,9 +271,8 @@ Item {
       clip: true
       topMargin: 1
       bottomMargin: 1
-      spacing: Theme.space.row
       cacheBuffer: 0
-      model: view.source
+      model: view.items
       keyNavigationEnabled: true
       activeFocusOnTab: true
       // At the end when last moved, so a new row keeps it there.
@@ -243,17 +280,23 @@ Item {
       onMovementEnded: atEnd = atYEnd
       onCountChanged: if (atEnd) Qt.callLater(positionViewAtEnd)
       onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
-      Keys.onReturnPressed: if (currentIndex >= 0) view.pick(view.source.get(currentIndex))
+      Keys.onReturnPressed: if (currentIndex >= 0 && view.items[currentIndex].kind === "line") view.pick(view.items[currentIndex].line)
       Keys.onEscapePressed: view.back()
 
       delegate: Item {
         id: row
-        required property var model
+        required property var modelData
         required property int index
-        readonly property var line: model
-        readonly property var kind: view.kinds[model.type === "request" ? model.kind : model.type] || ({ icon: "more", tone: Theme.dim })
-        readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
-        readonly property string status: !model.ok ? (model.retried ? "RETRIED" : "FAILED") : view.waits(model) ? "NEEDS YOU" : ""
+        // A header has no line: the blank one reads as an empty row.
+        readonly property var line: modelData.line || view.blank
+        readonly property bool isLine: modelData.kind === "line"
+        readonly property bool timed: modelData.kind === "line" && modelData.col < 0
+        readonly property real unit: list.width < 560 ? Theme.size.mark : Theme.size.gutter
+        // Where the line's own columns start, right of its lifeline.
+        readonly property real indent: isLine && modelData.col >= 0 ? (modelData.col + 1) * unit : 0
+        readonly property var kind: view.kinds[line.type === "request" ? line.kind : line.type] || ({ icon: "more", tone: Theme.dim })
+        readonly property bool marked: isLine && ((view.picked !== null && view.picked.id === line.id) || (ListView.isCurrentItem && list.activeFocus))
+        readonly property string status: !line.ok ? (line.retried ? "RETRIED" : "FAILED") : view.waits(line) ? "NEEDS YOU" : ""
         // Its width is that of the longest status, so the agent column aligns.
         TextMetrics {
           id: statusWidth
@@ -269,34 +312,80 @@ Item {
           font.letterSpacing: Theme.type.header.tracking
         }
         // A failure a later call settled is dim, not red.
-        readonly property bool bad: !model.ok && !model.retried
+        readonly property bool bad: !line.ok && !line.retried
         // Narrow, a row is two lines, not columns.
         readonly property bool stacked: list.width < 560
 
         width: list.width
-        height: (model.day !== "" ? Theme.size.rule : 0) + (model.head !== "" ? Theme.size.rule : 0) + box.height
+        height: modelData.kind === "level" ? Theme.size.rule : modelData.kind === "work" ? lineage.implicitHeight
+          : (row.timed && line.day !== "" ? Theme.size.rule : 0) + (row.timed && line.head !== "" ? Theme.size.rule : 0) + box.height + Theme.space.row
+
+        // The level a group of lines is of, or the work it belongs to.
+        Kicker {
+          visible: row.modelData.kind === "level"
+          width: parent.width
+          height: Theme.size.rule
+          text: row.modelData.text || ""
+        }
+        LineageRow {
+          id: lineage
+          visible: row.modelData.kind === "work"
+          width: parent.width
+          depth: row.modelData.row ? row.modelData.row.depth : 0
+          rails: row.modelData.row ? row.modelData.row.rails : []
+          last: row.modelData.row ? row.modelData.row.last : false
+          stem: row.modelData.row ? row.modelData.row.stem : false
+          unit: row.unit
+          linked: false
+          agent: front ? row.modelData.row.front.agent : node ? node.agent : ""
+          tone: Omunculus.toneOf(agent)
+          title: front ? row.modelData.row.front.doing : node ? node.title : ""
+          meta: row.modelData.kind === "work" ? row.modelData.count + (row.modelData.count === 1 ? " event" : " events") : ""
+          state: look ? look.state : ""
+          stateText: look ? look.text : ""
+          readonly property bool front: !!row.modelData.row && row.modelData.row.kind === "front"
+          readonly property var node: row.modelData.row && row.modelData.row.kind === "work" ? row.modelData.row.node : null
+          readonly property var look: front ? Tree.frontState(row.modelData.row.front) : node ? Tree.stateOf(node) : null
+        }
+        // The lifeline of a line, and its mark at its level.
+        Lifeline {
+          visible: row.isLine && row.modelData.col >= 0
+          depth: row.isLine ? row.modelData.col : 0
+          rails: row.isLine ? row.modelData.rails : []
+          line: row.isLine && row.modelData.through ? "through" : "none"
+          unit: row.unit
+          markY: box.y + box.height / 2
+        }
+        Dot {
+          visible: row.isLine && row.modelData.col >= 0
+          x: row.isLine ? row.modelData.col * row.unit + row.unit / 2 - width / 2 : 0
+          y: box.y + box.height / 2 - height / 2
+          size: Theme.space.tight
+          tone: Omunculus.toneOf(row.line.who)
+        }
 
         // The day, then the run it begins.
         Kicker {
-          visible: row.model.day !== ""
+          visible: row.timed && row.line.day !== ""
           width: parent.width
           height: Theme.size.rule
-          text: row.model.day
+          text: row.line.day
         }
         Kicker {
-          visible: row.model.head !== ""
-          y: row.model.day !== "" ? Theme.size.rule : 0
+          visible: row.timed && row.line.head !== ""
+          y: row.timed && row.line.day !== "" ? Theme.size.rule : 0
           width: parent.width
           height: Theme.size.rule
-          text: row.model.head
+          text: row.line.head
           tone: Theme.primary
         }
 
         // A row is one line; plumbing is dimmer and shorter.
         Rectangle {
           id: box
-          anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-          height: row.stacked ? lines.implicitHeight + Theme.space.tight * 2 : Theme.size.stackedRow + (row.model.minor ? 0 : Theme.space.line)
+          visible: row.isLine
+          anchors { left: parent.left; right: parent.right; leftMargin: row.indent; bottom: parent.bottom; bottomMargin: Theme.space.row }
+          height: row.stacked ? lines.implicitHeight + Theme.space.tight * 2 : Theme.size.stackedRow + (row.line.minor ? 0 : Theme.space.line)
           color: row.marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
           border.color: row.marked ? Theme.primary : "transparent"
 
@@ -306,12 +395,12 @@ Item {
             visible: row.stacked
             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell }
             spacing: Theme.space.row
-            opacity: row.model.minor && !row.marked ? 0.6 : 1
+            opacity: row.line.minor && !row.marked ? 0.6 : 1
             RowLayout {
               Layout.fillWidth: true
               spacing: Theme.space.gap
               Label {
-                text: row.model.time
+                text: row.line.time
                 color: Theme.dim
                 font.pixelSize: Theme.type.meta.size
               }
@@ -321,35 +410,35 @@ Item {
                 color: row.bad ? Theme.error : row.kind.tone
               }
               Label {
-                text: row.model.kind.toUpperCase()
+                text: row.line.kind.toUpperCase()
                 color: row.bad ? Theme.error : row.kind.tone
                 font.pixelSize: Theme.type.header.size
                 font.letterSpacing: Theme.type.header.tracking
               }
               Label {
-                visible: row.model.who !== "" && row.model.who !== "harness"
+                visible: row.line.who !== "" && row.line.who !== "harness"
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
-                text: row.model.who
-                color: Omunculus.toneOf(row.model.who)
+                text: row.line.who
+                color: Omunculus.toneOf(row.line.who)
                 font.pixelSize: Theme.type.meta.size
                 elide: Text.ElideRight
               }
-              Item { visible: row.model.who === "" || row.model.who === "harness"; Layout.fillWidth: true }
+              Item { visible: row.line.who === "" || row.line.who === "harness"; Layout.fillWidth: true }
               Label {
                 text: row.status
-                color: row.bad ? Theme.error : row.model.ok ? Theme.warning : Theme.dim
+                color: row.bad ? Theme.error : row.line.ok ? Theme.warning : Theme.dim
                 font.pixelSize: Theme.type.header.size
                 font.letterSpacing: Theme.type.header.tracking
               }
             }
             Label {
               Layout.fillWidth: true
-              text: row.model.what
-              color: row.bad ? Theme.error : row.model.ok && !row.model.minor ? Theme.foreground : Theme.dim
+              text: row.line.what
+              color: row.bad ? Theme.error : row.line.ok && !row.line.minor ? Theme.foreground : Theme.dim
               font.pixelSize: Theme.type.body.size
               wrapMode: Text.Wrap
-              maximumLineCount: row.model.minor ? 1 : 3
+              maximumLineCount: row.line.minor ? 1 : 3
               elide: Text.ElideRight
             }
           }
@@ -358,9 +447,9 @@ Item {
             visible: !row.stacked
             anchors { fill: parent; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell }
             spacing: Theme.space.gap
-            opacity: row.model.minor && !row.marked ? 0.6 : 1
+            opacity: row.line.minor && !row.marked ? 0.6 : 1
             Label {
-              text: row.model.time
+              text: row.line.time
               color: Theme.dim
               font.pixelSize: Theme.type.meta.size
             }
@@ -371,7 +460,7 @@ Item {
             }
             Label {
               Layout.preferredWidth: kindWidth.advanceWidth
-              text: row.model.kind.toUpperCase()
+              text: row.line.kind.toUpperCase()
               color: row.bad ? Theme.error : row.kind.tone
               font.pixelSize: Theme.type.header.size
               font.letterSpacing: Theme.type.header.tracking
@@ -380,16 +469,16 @@ Item {
             Label {
               Layout.fillWidth: true
               Layout.minimumWidth: 0
-              text: row.model.what
-              color: row.bad ? Theme.error : row.model.ok && !row.model.minor ? Theme.foreground : Theme.dim
+              text: row.line.what
+              color: row.bad ? Theme.error : row.line.ok && !row.line.minor ? Theme.foreground : Theme.dim
               font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight
             }
             Label {
-              visible: row.model.who !== "" && row.model.who !== "harness"
+              visible: row.line.who !== "" && row.line.who !== "harness"
               Layout.maximumWidth: box.width * 0.2
-              text: row.model.who
-              color: Omunculus.toneOf(row.model.who)
+              text: row.line.who
+              color: Omunculus.toneOf(row.line.who)
               font.pixelSize: Theme.type.meta.size
               elide: Text.ElideRight
             }
@@ -397,7 +486,7 @@ Item {
               Layout.preferredWidth: statusWidth.advanceWidth
               horizontalAlignment: Text.AlignRight
               text: row.status
-              color: row.bad ? Theme.error : row.model.ok ? Theme.warning : Theme.dim
+              color: row.bad ? Theme.error : row.line.ok ? Theme.warning : Theme.dim
               font.pixelSize: Theme.type.header.size
               font.letterSpacing: Theme.type.header.tracking
             }
@@ -420,7 +509,7 @@ Item {
       // Beside the rows' content, centred while there are none.
       Label {
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.page }
-        visible: list.count === 0
+        visible: view.items.length === 0
         horizontalAlignment: Text.AlignHCenter
         text: Omunculus.replaying ? "reading the conversation" : "no event matches"
         color: Theme.dim
