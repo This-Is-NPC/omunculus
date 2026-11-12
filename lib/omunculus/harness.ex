@@ -301,10 +301,10 @@ defmodule Omunculus.Harness do
     })
   end
 
-  # The artifact versions of the run's conversation, with the data of the
+  # The artifact versions of the run's conversation (a run without one has
+  # the shared set, as its writes do), with the data of the
   # JSON ones when the view asks for it.
   defp artifacts_view(_project, nil, _config, _spec), do: []
-  defp artifacts_view(_project, %{conversation_id: nil}, _config, _spec), do: []
 
   defp artifacts_view(project, run, config, spec) do
     {:ok, versions} = Store.artifacts(project.conn, run.conversation_id)

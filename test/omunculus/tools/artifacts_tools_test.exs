@@ -486,4 +486,75 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
     assert_receive {:counted, "1 data, 3 names"}
     Project.close(project)
   end
+
+  test "a run without a conversation reads back what it wrote, and builds the next version on it",
+       %{dir: dir} do
+    Fixtures.write_config(
+      dir,
+      """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["put_artifact", "get_artifact", "list_artifacts", "counter"]
+
+      [store]
+      path = "s.sqlite3"
+      attachments = "files"
+      attachment_bytes = 256
+      """
+    )
+
+    Fixtures.write_tool(
+      dir,
+      "counter",
+      """
+      name = "counter"
+      kind = "tool"
+      triggers = ["model"]
+      command = ["./run"]
+
+      [views.artifacts]
+      source = "artifacts"
+      include = ["data"]
+      prefix = "p-"
+      """,
+      """
+      #!/bin/sh
+      input=$(cat)
+      data=$(echo "$input" | grep -o '"data"' | wc -l)
+      echo "{\\"ok\\": true, \\"output\\": \\"$data data\\", \\"emit\\": []}"
+      """
+    )
+
+    project = Fixtures.open_project(dir)
+    message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+    test_pid = self()
+
+    model = fn _assembled, _tools, call ->
+      put =
+        &call.("put_artifact", %{
+          "name" => "p-a",
+          "kind" => "k",
+          "data" => %{"n" => &1},
+          "base" => &2
+        })
+
+      {:ok, first} = put.(1, 0)
+      {:ok, counted} = call.("counter", %{})
+      {:ok, get} = call.("get_artifact", %{"name" => "p-a", "version" => 1})
+      {:ok, second} = put.(2, 1)
+      send(test_pid, {:calls, first, counted, get, second})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+    assert {:ok, _run} = Run.open(project, Fixtures.opening(message_id))
+
+    assert_receive {:calls, first, counted, get, second}
+    assert first =~ "put p-a version 1"
+    assert counted == "1 data"
+    assert get =~ ~s("n": 1)
+    assert second =~ "put p-a version 2"
+    Project.close(project)
+  end
 end

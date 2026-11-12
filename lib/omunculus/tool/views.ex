@@ -415,9 +415,7 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "events", relation: "attachments"}, _anchor, id, _scope) do
     with {:ok, run} <- Store.view(conn, "run", id) do
-      if run && run.conversation_id,
-        do: Store.attachments(conn, run.conversation_id),
-        else: {:ok, []}
+      if run, do: Store.attachments(conn, run.conversation_id), else: {:ok, []}
     end
   end
 
