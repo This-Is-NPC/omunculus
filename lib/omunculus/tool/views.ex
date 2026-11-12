@@ -37,7 +37,11 @@ defmodule Omunculus.Tool.Views do
     `cause`, the event that made the call's run due, or `attachments`, the
     files attached in the run's conversation, oldest first, each as its
     event describes it with `event_id`, `at` and `by`.
-  - `requests`: from `args.request_id` then `request` (default).
+  - `requests`: from `args.request_id` then `request` (default), or
+    `relation = "answered"`, from `run`: the closed requests the run's
+    agent raised in its conversation but for the one that opened the run,
+    oldest first, each with its `answer`, the option picked, and its
+    `reply`.
   - `prompts`: `relation` `message`, the prompt that opened the run, or
     `assembled`, the assembled prompt of the run named by `from` (default
     `args.run`, then `latest_run`).
@@ -185,8 +189,11 @@ defmodule Omunculus.Tool.Views do
   end
 
   defp source_spec("requests", table, spec) do
-    with :ok <- only_keys(table, ~w(from)),
-         do: {:ok, %{spec | from: ["args.request_id", "request"]}}
+    with :ok <- only_keys(table, ~w(from relation)),
+         {:ok, relation} <- one_of(table, "relation", ~w(answered), nil) do
+      from = if relation, do: ["run"], else: ["args.request_id", "request"]
+      {:ok, %{spec | from: from, relation: relation}}
+    end
   end
 
   defp source_spec("prompts", table, spec) do
@@ -247,7 +254,10 @@ defmodule Omunculus.Tool.Views do
   defp check_anchors(%{source: "comments", from: from} = spec),
     do: anchors_within(spec, from, ~w(work request inbox))
 
-  defp check_anchors(%{source: "requests", from: from} = spec) do
+  defp check_anchors(%{source: "requests", relation: "answered", from: ["run"]} = spec),
+    do: {:ok, spec}
+
+  defp check_anchors(%{source: "requests", relation: nil, from: from} = spec) do
     if Enum.all?(from, &(args_anchor?(&1) or &1 == "request")),
       do: {:ok, spec},
       else: {:error, {:anchors, from}}
@@ -421,6 +431,9 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "memories"}, _anchor, id, _scope),
     do: Store.memories(conn, id)
+
+  defp read_from(conn, %{source: "requests", relation: "answered"}, _anchor, id, _scope),
+    do: Store.answered_requests(conn, id)
 
   defp read_from(conn, %{source: "requests"}, _anchor, id, _scope),
     do: Store.view(conn, "request", id)

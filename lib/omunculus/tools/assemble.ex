@@ -49,7 +49,7 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.{Out, Record, Session}
 
   # The sections that begin the context of an assembled prompt.
-  @context_start ~r/\n\n(?=## (Environment|Memory|Work|Works|Conversation|Last comment|Last run|Children|Results|Request|Inbox|Attachments|Message)\n)/
+  @context_start ~r/\n\n(?=## (Environment|Memory|Work|Works|Conversation|Answered|Last comment|Last run|Children|Results|Request|Inbox|Attachments|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view} = input) do
@@ -86,6 +86,7 @@ defmodule Omunculus.Tools.Assemble do
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
         conversation_section(session, view["chat"], limit) ++
+        answered_section(session, view, limit) ++
         news
 
     context
@@ -263,6 +264,26 @@ defmodule Omunculus.Tools.Assemble do
   end
 
   defp conversation_section(_session, _runs, _limit), do: []
+
+  # The requests this agent raised in the conversation that were answered,
+  # for a run without a work whose session starts over: a proposal the
+  # person denied is not proposed again unknowingly.
+  defp answered_section(nil, %{"answered" => [_ | _] = requests} = view, limit)
+       when not is_map_key(view, "work") do
+    lines =
+      for request <- requests do
+        "- #{request.answer || "text answer"}: #{first_paragraph(request.reason)}\n  reply: #{request.reply}"
+      end
+
+    case newest(lines, limit) do
+      [] -> []
+      kept -> ["## Answered\n" <> Enum.join(kept, "\n")]
+    end
+  end
+
+  defp answered_section(_session, _view, _limit), do: []
+
+  defp first_paragraph(text), do: text |> String.split("\n\n", parts: 2) |> hd()
 
   # The last of `lines` that fit in `limit` bytes together; a nil limit keeps all.
   defp newest(lines, nil), do: lines

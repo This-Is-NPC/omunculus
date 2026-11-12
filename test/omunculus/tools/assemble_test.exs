@@ -92,6 +92,29 @@ defmodule Omunculus.Tools.AssembleTest do
              "## Conversation\n- person: Doce Ana\n- you: Handing it down.\n- person: thanks\n"
   end
 
+  test "a run without a work is told the requests it raised that were answered" do
+    answered = [
+      %{answer: "deny", reason: "Add lsp.\n\nagents.surgeon as it is:\n...", reply: "no server"},
+      %{answer: "apply", reason: "Cut memory.", reply: "ok"}
+    ]
+
+    output = Assemble.run(%{@input | view: %{"catalog" => [], "answered" => answered}})["output"]
+
+    assert output =~
+             "## Answered\n- deny: Add lsp.\n  reply: no server\n" <>
+               "- apply: Cut memory.\n  reply: ok"
+
+    refute output =~ "as it is"
+
+    with_work = %{
+      "catalog" => [],
+      "answered" => answered,
+      "work" => %{id: "w", title: "t", goal: "g"}
+    }
+
+    refute Assemble.run(%{@input | view: with_work})["output"] =~ "## Answered"
+  end
+
   test "the instructions hold what stays across runs, the output the run's context" do
     view = fn work, message ->
       %{

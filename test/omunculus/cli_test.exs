@@ -875,8 +875,8 @@ defmodule Omunculus.CLITest do
 
       reason = Jason.decode!(body)["reason"]
       assert request.status == "pending"
-      assert reason =~ "agents.helper as it is:\n(none)"
-      assert reason =~ "agents.helper as it would be:\n"
+      assert reason =~ "agents.helper as it runs now:\n(none)"
+      assert reason =~ "agents.helper as it would run:\n[agents]\n[agents.helper]"
       refute Toml.decode_file!(config)["agents"]["helper"]
 
       assert {:ok, _said} =
@@ -896,6 +896,74 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
       assert assembled =~ "answered apply: the reply is below"
+    end
+
+    test "a change the person denied is not proposed again, and the next run is told why",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.keeper]
+      depth = 0
+      text = "I keep the project."
+      tools = ["propose_config", "end"]
+      human = ["configure"]
+      """)
+
+      config = Path.join(dir, "omunculus.toml")
+      turns = :counters.new(1, [])
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        :counters.add(turns, 1, 1)
+        model = Toml.decode_file!(config)["agents"]["keeper"]["model"]
+
+        cond do
+          assembled =~ "## Request\n" or :counters.get(turns, 1) > 3 ->
+            call.("end", %{})
+
+          true ->
+            call.("propose_config", %{
+              "item" => "agents.helper",
+              "value" => %{
+                "depth" => 1,
+                "model" => model,
+                "text" => "I help.",
+                "tools" => ["end"]
+              },
+              "reason" => "a helper"
+            })
+        end
+      end)
+
+      assert {:ok, _said} = CLI.run(["send", "add a helper"], dir)
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      assert {:ok, _said} =
+               CLI.run(
+                 ["reply", "--request_id", request.id, "--option", "deny", "no helper"],
+                 dir
+               )
+
+      # The same change again is refused before it reaches the person.
+      assert {:ok, _said} = CLI.run(["send", "add a helper"], dir)
+      project = open_project(dir)
+      assert {:ok, [_only]} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, [%{body: told}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT body FROM prompts WHERE kind = 'assembled' AND body LIKE '%## Answered%' AND body LIKE '%## Message%'"
+               )
+
+      assert {:ok, [%{body: refusal}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT body FROM events WHERE type = 'tool' AND body LIKE '%already refused%'"
+               )
+
+      Project.close(project)
+      assert told =~ "## Answered\n- deny: a helper\n  reply: no helper"
+      assert refusal =~ "the person already refused this change: no helper"
     end
 
     test "a proposal goes to the person who opened the conversation", %{dir: dir} do

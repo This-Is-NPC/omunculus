@@ -65,6 +65,10 @@ include = ["runs"]
 source = "runs"
 relation = "conversation"
 
+[views.answered]
+source = "requests"
+relation = "answered"
+
 [views.conversation_works]
 source = "works"
 relation = "conversation"

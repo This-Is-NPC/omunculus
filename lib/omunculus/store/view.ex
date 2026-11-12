@@ -59,7 +59,8 @@ defmodule Omunculus.Store.View do
              conn,
              """
              SELECT requests.*, json_extract(requester_start.body, '$.ceiling') AS requester_ceiling, json_extract(opening.body, '$.reason') AS reason, json_extract(opening.body, '$.workflow') AS workflow, json_extract(opening.body, '$.stage') AS stage, COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id,
-               (SELECT json_extract(body, '$.option') FROM events WHERE request_id = requests.id AND type = 'reply' ORDER BY sequence DESC LIMIT 1) AS answer
+               (SELECT json_extract(body, '$.option') FROM events WHERE request_id = requests.id AND type = 'reply' ORDER BY sequence DESC LIMIT 1) AS answer,
+               (SELECT json_extract(body, '$.body') FROM events WHERE request_id = requests.id AND type = 'reply' ORDER BY sequence DESC LIMIT 1) AS reply
              FROM requests LEFT JOIN events opening ON opening.id = requests.event_id
              LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id
              LEFT JOIN events requester_start ON requester_start.id = runs.event_id
@@ -239,6 +240,39 @@ defmodule Omunculus.Store.View do
            ) do
       with_record(conn, run)
     end
+  end
+
+  @doc """
+  The closed requests the run's agent raised in the run's conversation,
+  oldest first, each with its question, the option picked and the reply,
+  but for the one that opened the run, which its prompt shows under
+  `## Request`.
+  """
+  @spec answered_requests(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  def answered_requests(conn, run_id) do
+    with {:ok, run} <- view(conn, "run", run_id),
+         {:ok, rows} <- answered_rows(conn, run) do
+      request_views(conn, rows)
+    end
+  end
+
+  defp answered_rows(_conn, nil), do: {:ok, []}
+
+  defp answered_rows(conn, run) do
+    Query.all(
+      conn,
+      """
+      SELECT requests.id FROM requests
+      JOIN events opening ON opening.id = requests.event_id
+      WHERE requests.status = 'closed'
+        AND opening.conversation_id IS ?
+        AND json_extract(requests.requester, '$.kind') = 'agent'
+        AND json_extract(requests.requester, '$.agent') = ?
+        AND requests.id IS NOT ?
+      ORDER BY requests.created_at, requests.id
+      """,
+      [run.conversation_id, run.agent, run.request_id]
+    )
   end
 
   @doc "The most recently started run."

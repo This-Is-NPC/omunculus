@@ -46,6 +46,7 @@ defmodule Omunculus.Store do
   defdelegate last_closed_run(conn, work_id), to: View
   defdelegate closed_runs(conn, work_id), to: View
   defdelegate conversation_runs(conn, conversation_id), to: View
+  defdelegate answered_requests(conn, run_id), to: View
   defdelegate recent_runs(conn, limit), to: View
   defdelegate conversation_roots(conn, conversation_id), to: View
   defdelegate opener_run(conn, request_id), to: View
