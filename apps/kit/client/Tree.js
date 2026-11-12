@@ -206,7 +206,7 @@ function summaryOf(nodes) {
 // "fold" has nodes, entries (their count, with the works below) and
 // `unfolded` (set by hand: each work follows the fold's line, to fold again); a "fork" has nodes,
 // summary ("PARALLEL ×4 · 2 DONE · 2 WORKING") and lanes; an "ask" and a
-// "team" row have id, place and level (the arbiter's level, "L0" for you);
+// "team" row have id, place and level (of the work that made the request, "L2");
 // an "entry" row has thread, index, role, who and `continued`.
 // input: {progress, scope (a work, or "" for the whole conversation), opened
 // (key -> true or false set by hand), requests, me, counts (work -> entries
@@ -225,18 +225,12 @@ function stream(input) {
   const asks = {};
   requests.slice().sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))).forEach(request => {
     const place = Pending.place(request, { me: input.me, contained: hidden });
-    if (place !== "none") (asks[request.work_id || ""] = asks[request.work_id || ""] || []).push({ request: request, place: place });
+    // A request passed up hangs on the work that first asked it.
+    const work = Requests.source(request).work_id || "";
+    if (place !== "none") (asks[work] = asks[work] || []).push({ request: request, place: place });
   });
 
   const entriesOf = node => (counts[node.work] || 0) + Progress.kidsOf(node).reduce((sum, kid) => sum + entriesOf(kid), 0);
-  // The level a request is decided at: "L0" for you, else its arbiter's work.
-  const levelOf = (request, node) => {
-    if (Requests.forYou(request, input.me)) return "L0";
-    const arbiter = Requests.label(request.arbiter);
-    for (let at = node; at; at = byWork[at.parent]) if (at.agent === arbiter) return "L" + (at.level + 1);
-    return "";
-  };
-
   const rows = [];
   const dialogueRows = (list, thread, depth, rails, through) => (list || []).map(item => ({
     kind: "entry", key: "entry:" + thread + ":" + item.index, thread: thread, index: item.index, role: item.role, who: item.who, at: item.at,
@@ -246,7 +240,9 @@ function stream(input) {
   const asksOf = (node, depth, rails, through) => {
     const mine = asks[node ? node.work : ""] || [];
     delete asks[node ? node.work : ""];
-    return mine.map(each => askRow(each, levelOf(each.request, node), depth, rails, through));
+    // The work's line runs on to each request's connector, the last one's
+    // too unless works go on below it.
+    return mine.map((each, nth) => askRow(each, node && byWork[node.work] ? "L" + level(byWork[node.work]) : "", depth, rails, through || nth < mine.length - 1));
   };
   function askRow(each, level, depth, rails, through) {
     return {
@@ -262,8 +258,10 @@ function stream(input) {
     const items = open ? plan(kids, true) : [];
     const kidRails = depth > 0 ? rails.concat([!last]) : [];
     const through = items.length > 0;
-    rows.push({ kind: "work", key: "work:" + node.work, node: node, depth: depth, rails: rails, last: last, kids: kids.length, open: open, stem: through, entries: entriesOf(node) });
-    if (node.steps.length > 0) rows.push({ kind: "stages", key: "stages:" + node.work, stages: node.steps, depth: depth + 1, rails: kidRails, through: through });
+    // The work's line also goes down to the requests it made.
+    const line = through || (asks[node.work] || []).length > 0;
+    rows.push({ kind: "work", key: "work:" + node.work, node: node, depth: depth, rails: rails, last: last, kids: kids.length, open: open, stem: line, entries: entriesOf(node) });
+    if (node.steps.length > 0) rows.push({ kind: "stages", key: "stages:" + node.work, stages: node.steps, depth: depth + 1, rails: kidRails, through: line });
     rows.push(...asksOf(node, depth + 1, kidRails, through), ...detailsOf(node, depth + 1, kidRails, through));
     emitItems(items, depth + 1, kidRails);
   };

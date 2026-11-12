@@ -3,7 +3,7 @@ defmodule Omunculus.GuiTreeTest do
 
   alias Omunculus.GuiModules
 
-  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Tree"]
+  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Pending", "Tree"]
 
   # An agency run four levels deep, as the TREE page shows it: sales talks
   # with you; seller's sale (w1) handed down a design preview to design-lead
@@ -136,6 +136,22 @@ defmodule Omunculus.GuiTreeTest do
     check(Tree.lead(live).map(item => item.key).join() === "you,front" && Tree.lead({roots: live.roots, front: null}).length === 1 && Tree.lead(null).length === 0, "lead", "");
     check(Tree.stream({progress: live}).every(row => row.kind !== "you" && row.kind !== "front"), "the chat has no heads", "");
     check(Tree.levelOf(nodes(live).order, node => nodes(live)[node.parent] || null) === Tree.level(nodes(live).order), "one count of levels", "");
+    """)
+  end
+
+  test "a request is labelled with the level of the work that made it, on that work's line" do
+    run!("""
+    const rows = Tree.stream({progress: live, me: human, opened: {w5: true}, requests: [
+      {id: "q5", status: "pending", arbiter: human, requester: agent("administrator"), work_id: "w5", reason: "Which photos?", origins: {}, created_at: iso(1000)}]});
+    const ask = rows.find(row => row.kind === "ask");
+    check(ask && ask.id === "q5" && ask.level === "L2", "the level of the requesting work, not of whoever decides", ask);
+    const work = rows.find(row => row.key === "work:w5");
+    check(work.stem && ask.depth === work.depth + 1, "the work's line goes down to the request", work);
+    const passed = Tree.stream({progress: live, me: human, requests: [
+      {id: "q6", status: "pending", arbiter: human, requester: agent("sales"), work_id: null, reason: "Which photos?", created_at: iso(1000),
+       origins: {p: {id: "q7", status: "escalated", arbiter: agent("sales"), requester: agent("seller"), work_id: "w1", reason: "Which photos?", origins: {}}}}]});
+    const climbed = passed.find(row => row.kind === "ask");
+    check(climbed && climbed.level === "L1" && climbed.depth === 1 && passed.find(row => row.key === "work:w1").stem, "a request passed up hangs on the work that first asked it", climbed);
     """)
   end
 end

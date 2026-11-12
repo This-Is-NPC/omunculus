@@ -247,20 +247,28 @@ function editable(request) {
   return found ? found[1] : "";
 }
 
+// The requests a request climbed from, depth first.
+function origins(request) {
+  return Object.keys(request.origins || {}).reduce((all, part) => all.concat([request.origins[part]], origins(request.origins[part])), []);
+}
+
 // The climb of a request, nearest origin first: each origin's requester and
-// question, depth first.
+// question.
 function chain(request) {
-  return Object.keys(request.origins || {}).reduce((all, part) => {
-    const origin = request.origins[part];
-    return all.concat([{ requester: origin.requester, reason: origin.reason }], chain(origin));
-  }, []);
+  return origins(request).map(origin => ({ requester: origin.requester, reason: origin.reason }));
+}
+
+// The request that started the climb: the deepest origin, else itself. It
+// carries the work that asked, which a request passed up does not.
+function source(request) {
+  const all = origins(request);
+  return all.length > 0 ? all[all.length - 1] : request;
 }
 
 // Who asked the question in a request: the deepest origin it climbed from, else
 // its own requester; a name for the card, the answered line and the strip.
 function asker(request) {
-  const climb = chain(request);
-  return label((climb.length > 0 ? climb[climb.length - 1] : request).requester);
+  return label(source(request).requester);
 }
 
 // The asker first, then who passed the question on toward you ("design-lead",
