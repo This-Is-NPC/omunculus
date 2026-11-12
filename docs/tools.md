@@ -626,9 +626,11 @@ a tool result only extends the end. The cost is that the model calls a tool
 its `tools` array does not list; the name and schema are in the result it
 just read.
 
-A model that finds a tool this way may send an object or array argument as
-JSON text, having no schema in its `tools` array; the harness decodes it when
-the tool's schema types the argument `object` or `array`.
+A model that finds a tool this way may send an argument as text, having no
+schema in its `tools` array: JSON text for an object or array, "8080" for an
+integer or number, "true" for a boolean. The harness converts it when the
+tool's schema types the argument so; anything ambiguous stays for the tool
+to refuse.
 
 Limits: a `command` model and `code_mode` bind only the declared tools, so
 they cannot call one found later. With `send_catalog`, a run is sent the
@@ -775,7 +777,7 @@ name it in an agent's `tools`.
 | Argument | Meaning |
 | --- | --- |
 | `url` | The page as one `http://` URL, such as `http://app.localhost:8080/pricing`. Its host, port (80 when missing) and path stand for `host`, `port` and `paths` (when `paths` is left out). Needed when `port` is not given |
-| `port` | The port the server listens on, on `127.0.0.1`. Needed when `url` is not given. A number in a string is accepted |
+| `port` | The port the server listens on, on `127.0.0.1`. Needed when `url` is not given |
 | `host` | The host name the pages are loaded by, for a server that tells sites apart by it, such as `app.localhost`; `127.0.0.1` by default |
 | `command` | The dev server command, run through `sh`; left out, a server already listening on `port` is used |
 | `cwd` | Where the command runs, relative to the workspace root |

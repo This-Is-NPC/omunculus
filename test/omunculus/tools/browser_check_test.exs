@@ -114,15 +114,6 @@ defmodule Omunculus.Tools.BrowserCheckTest do
     assert out.ok, out.output
     assert out.output =~ "## /about.html at 800x600"
     assert out.output =~ "title: About"
-
-    # A port given as a numeric string works too.
-    out =
-      call(root, args(48_737, %{"port" => "48737", "viewports" => ["800x600"]}),
-        read_only: [@tool],
-        read_write: [root]
-      )
-
-    assert out.ok, out.output
   end
 
   test "refuses a url that disagrees with port or host", %{root: root} do

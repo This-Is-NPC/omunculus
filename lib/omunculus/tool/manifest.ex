@@ -86,9 +86,12 @@ defmodule Omunculus.Tool.Manifest do
   end
 
   @doc """
-  `args` with each top-level argument the schema types `object` or `array`
-  and a model sent as JSON text decoded. A model that does not hold the
-  tool's schema in its `tools` array (one found by `tool_search`) often does.
+  `args` with each top-level argument a model sent as text for a schema type
+  of `object` or `array` (JSON text), `integer` or `number` (a numeric
+  string, quotes allowed) or `boolean` ("true" or "false") converted. A model
+  that does not hold the tool's schema in its `tools` array (one found by
+  `tool_search`) often does. Anything ambiguous stays, for the tool's own
+  validation to refuse.
   """
   @spec coerce_args(t, map) :: map
   def coerce_args(%__MODULE__{parameters: %{"properties" => properties}}, args)
@@ -103,6 +106,25 @@ defmodule Omunculus.Tool.Manifest do
     case Jason.decode(value) do
       {:ok, %{} = decoded} when type == "object" -> decoded
       {:ok, decoded} when is_list(decoded) and type == "array" -> decoded
+      _other -> value
+    end
+  end
+
+  defp coerce_arg(value, %{"type" => type})
+       when is_binary(value) and type in ["integer", "number"] do
+    text = value |> String.trim() |> String.trim("\"") |> String.trim()
+
+    case {type, Integer.parse(text), Float.parse(text)} do
+      {_type, {int, ""}, _float} -> int
+      {"number", _int, {float, ""}} -> float
+      _other -> value
+    end
+  end
+
+  defp coerce_arg(value, %{"type" => "boolean"}) when is_binary(value) do
+    case value |> String.trim() |> String.trim("\"") |> String.downcase() do
+      "true" -> true
+      "false" -> false
       _other -> value
     end
   end

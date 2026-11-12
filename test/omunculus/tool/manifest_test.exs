@@ -601,10 +601,37 @@ defmodule Omunculus.Tool.ManifestTest do
         "properties" => %{
           "fields" => %{"type" => "object"},
           "pages" => %{"type" => "array"},
-          "note" => %{"type" => "string"}
+          "note" => %{"type" => "string"},
+          "port" => %{"type" => "integer"},
+          "ratio" => %{"type" => "number"},
+          "full" => %{"type" => "boolean"}
         }
       }
     }
+
+    test "converts numeric and boolean text to the declared scalar type" do
+      args = %{"port" => "8080", "ratio" => "1.5", "full" => "true"}
+
+      assert Manifest.coerce_args(@manifest, args) == %{
+               "port" => 8080,
+               "ratio" => 1.5,
+               "full" => true
+             }
+
+      args = %{"port" => ~s("8080"), "ratio" => "2", "full" => "False", "note" => "42"}
+
+      assert Manifest.coerce_args(@manifest, args) == %{
+               "port" => 8080,
+               "ratio" => 2,
+               "full" => false,
+               "note" => "42"
+             }
+    end
+
+    test "keeps ambiguous scalar text" do
+      args = %{"port" => "80.5", "ratio" => "abc", "full" => "yes"}
+      assert Manifest.coerce_args(@manifest, args) == args
+    end
 
     test "decodes JSON text sent for an object or an array argument" do
       args = %{

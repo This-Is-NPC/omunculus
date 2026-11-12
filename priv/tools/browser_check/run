@@ -21,7 +21,6 @@ function finish(ok, output) {
 // One resolution of the target: a url is another way to state host, port and path.
 function resolveTarget() {
   let port = args.port;
-  if (typeof port === "string") port = Number(port.replace(/^"|"$/g, ""));
   let host = args.host;
   let paths = args.paths?.length ? args.paths : null;
   if (args.url) {
