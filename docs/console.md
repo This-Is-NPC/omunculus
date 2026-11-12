@@ -139,12 +139,10 @@ alpha; an agent's on the left, filled with a tint of its colour
 API gives one) shows it as the bubble's bold title line, above its words and
 not as a second message; a line that continues the same speaker's turn drops the
 heading. Body text in every bubble and card reads at more than 10:1 on its
-fill. The main thread, the chat, is the whole history of the conversation, in time
-order: the dialogue, a line for each stage started and each work handed down,
-the requests to you and what the agents asked one another (below). Everything
-else an agent did is the log, and shows in a
-work's own thread: system rows (`LogLine`, `ToolCalls`, `SubWorkBlock`, the
-exchange's line), unframed, at the log's smaller size (`Theme.type.log`), dim,
+fill. The chat is the conversation as a lineage stream (below): the
+dialogue in time order and, among it, the hierarchy of works with the requests
+they made. Everything else an agent did is the log, and shows when a work is
+opened as a scope: system rows (`LogLine`, `ToolCalls`), unframed, at the log's smaller size (`Theme.type.log`), dim,
 each with its icon in a mark column of their own (`Theme.size.mark`) and its
 time at the right, so they read as secondary to what was said. The chat shows no portraits; they
 stay in a work's detail. A turn's heading says how
@@ -168,10 +166,9 @@ between calls it says the last one in the past, after "Thinking"; a run that
 has made no call for 15 s reads "Thinking", not "Getting started"; "· round N"
 follows the clock once a work is sent back. It updates in place, and it gives
 way to that agent's own turn while the turn streams in the thread and shows
-something. A thread nested in a sub-work block has none, the block says it.
-In the chat it shows whoever works, down the team, at every width, with the
+something. In the chat it shows whoever works, down the team, at every width, with the
 chain from the agent you write to; a run that ends leaves no line, so the chat
-does not tell the team's work run by run; the work's thread, the tree and the
+does not tell the team's work run by run; a scope, the tree and the
 log do. A run of
 the agent you write to that fails shows in the log, whose tab is marked. A conversation opens
 at its end, and while earlier entries lie above the view an EARLIER pill at
@@ -216,49 +213,61 @@ turn that has said and done nothing yet is not drawn. An entry that draws
 nothing takes no room, not even the gap between entries, and words with no
 text and no files are not added to the thread.
 
-A work handed down is one line of the log in the chat, where it was: the
-branch mark, the agent that handed it down and the one it went to, in their
-tones, "handed down \u201cBuild: Doce Ana\u201d", and the time. Each stage the
-work enters is a line too, the right-pointing mark and "design started"
-(from the `continue` events), "done" when its last stage ends and "sent back
-to design" when it is reopened; a work nested below another adds its title
-after a dot. Under each of these lines runs the stage path of the root work
-(`StagePath`, from `Progress.trail`), the stages as it stood at that line, on
-one line that wraps when the width is short: done `✓` in the success tone, the
-stage reached `●` in the accent and bold, those to come `○` dim, joined by
-"›". The newest stage line therefore says where the work is, and the "done"
-line has them all done. These lines are the progression: there is no header
-strip or card that says where the work stands, and what the agent at work does is the
-live line's. What waits now is the last of the chat, an open card with the
-composer under it. The runs are in the tree. In a
-work's own thread the same entry is a block (`SubWorkBlock`), where the run
-handed it down; so is a root work a run opened. A system row
-behind the branch mark, "sub-work" with its agent, title and time, it says on
-a second line its state, for how long and
-how many steps (tool calls; hook runs are not steps, here and in the turn):
-with those of the works it handed down, then how many are its own ("34 steps
-· 20 its own"), so the count moves while the team works; and, when some
-failed, how many, what was attempted and why the first failed ("5 failed:
-could not move to the next stage (reason)"), in the error tone only if the work itself
-failed; when each failed tool later succeeded, a dim "5 retried" instead,
-its stages when it has a workflow, and the round with
-who sent it back. A comment on a work of the conversation's own (not one nested below it) also
-appears in the main thread at its own time, as a quoted card (`TeamNote`):
+### The chat as a lineage stream
+
+The chat (`TimelineView`) is the rows of `Tree.stream`, a list in the same
+order as the hierarchy: your words and the front agent's first, in time order,
+and each root work under the words that came before it, with the works it
+handed down under it, level by level. Every level is drawn with the one
+grammar of the hierarchy, the kit's `Lifeline` (a line per level, an elbow
+into each row's mark, a stem down to what hangs under it), `AgentName` (the
+agent's dot and name in its tone), `StateMark` (the state as icon and word) and
+`StagePath`; the same grammar is in the tree, the log, the cost and the
+artifacts.
+
+- A work is a row (`LineageRow`): its dot at the level's column, a chevron when
+  it handed works down, its agent, its title, the open arrow and its state
+  (WORKING, WAITING FOR DESIGN-LEAD, DONE...). A work with works below it shows
+  them while one of them is open, a root always; the chevron folds and unfolds
+  it by hand, and folded it says what it handed down ("4 sub-works, 1 working,
+  3 done") after its title. Narrow, its state goes under its title.
+- A work in a workflow has its stage path under its row (`StagePath`): the
+  stages done with a check in the success tone, the one reached with a filled
+  dot in the accent, those to come with an empty one, joined by hairlines.
+- Works finished (done or cancelled, with everything below them) that follow one
+  another fold into one row: "designer, design-reviewer  2 folded  ·  homepage
+  layout approved  ·  7 entries", the entries being those of their threads. A
+  single one reads the same without the count of folded. Its chevron unfolds
+  each work into a row of its own.
+- Works that ran at once, with one or more not finished yet, are a fork
+  (`ForkBlock`): a numbered mark on the lifeline and "PARALLEL ×4  ·  2 DONE  ·
+  2 WORKING", under it a card per work, side by side while they fit and
+  stacked when not. Choosing a card opens that work.
+- A request a work made hangs under its row, joined by a dashed connector from
+  the left edge, labelled with the level it goes to ("L0" for you): a card
+  (`RequestDecision`, see [Requests](#requests)) answered in place when it is
+  addressed to you, with its collapse in its heading, and a compact exchange
+  (`TeamRow`) when it is between agents. Once answered a card stays there as
+  history.
+- The open arrow of a row, a fork's card and the open arrow of a fold of one
+  work open a scope: the same view with `scope` set to that work. It shows only
+  that work's branch, under a bar (`ScopeBar`) that names the agents from the
+  front desk down to it and its level and has WHOLE CONVERSATION to go back. In
+  a scope each work's own thread is shown under its row: the runs with their
+  tool calls (`AgentTurn`) and the notes its agents left (`TeamNote`), the
+  operator's detail that the whole conversation leaves out. The composer under
+  it writes, as in the chat, to the agent you talk with.
+
+A comment on a work of the conversation's own appears in the main thread at its
+own time, as a quoted card (`TeamNote`):
 outlined, headed by a quote mark, NOTE FROM and the agent in its tone, the
 time at its right, and the text at the body size in the full tone, at most as
 wide as a bubble, six lines and then unfolding by its heading; for the
 newest note once the conversation's work is done, its result: DELIVERED BY and
 the agent, in the success tone, whole and as wide as the thread. Its addresses are links
-in the accent. It is the team's news, not a message to you. Until the work's data arrives, it shows the title the event
-named and "Handing down…", or nothing when the event named none. A work that
-waits on a branch says who works below it ("● designer working", in the
-working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
-as everywhere, in the line's frame, since only the card can be acted on; the
-conversation's own work leaves out its title, which the masthead shows. Choosing it unfolds it in place, in an outlined frame under its row, into the tabs
-01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
-scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
-The open glyph at its top right shows the work's thread as a page of its own
-(see [Pages](#pages)).
+in the accent. It is the team's news, not a message to you. Waiting on you reads
+"WAITING FOR YOU" on the work, as everywhere; only the card can be acted on.
+Until the work's data arrives, the chat shows nothing of it.
 
 The thread is in the order of the events' own times, which the server
 records in order: a row sits where its event happened, a run's end line at
@@ -270,7 +279,7 @@ A message is yours, on the right and headed YOU, only when its sender is your
 account; another account's, an agent's (the front desk's internal message) or
 the harness's shows under its own name on the left.
 
-Every request addressed to you is in the chat at the time it was asked, as a
+Every request addressed to you is in the chat, under the work that made it, as a
 card (`RequestDecision`, see [Requests](#requests)) answered in place: a
 question's boxes, a decision's options, a review's APPROVE, EDIT and DENY, a
 permission's GRANT, with the sending state on the button. Once answered it
@@ -287,25 +296,24 @@ than a row from the end, does. The NEW pill counts the entries below the view
 that draw something, so it is gone when the end is in view; it sits in a band
 of its own above the composer, so it never covers an entry.
 
-What an agent asks another is an exchange (`TeamRow`), a compact line in the
-chat and in a work's thread, not a card to answer: a system row behind the people mark, "seller asked design-lead ·
+What an agent asks another is an exchange (`TeamRow`), a compact line under the
+work that asked, not a card to answer: a system row behind the people mark, "seller asked design-lead ·
 design-lead decides", each agent in its tone, and under it, in an outlined
 frame at the body size, the question in its first three lines and, once
-answered, who answered and what. It is folded in the chat, where choosing the line opens it; in a work's
-thread it is open while it waits, and DECIDE INSTEAD opens the request's card in
+answered, who answered and what. It is folded in the chat, where choosing the line opens it; in a scope
+it is open while it waits, and DECIDE INSTEAD opens the request's card in
 place, to answer it yourself. A request another gathers (`Requests.contained`), as the
 lower ones of a question passed up, is not shown on its own.
 
 ## The progress
 
 The conversation has no header block that says what is happening: the
-chat is the progression, from the top down. Each stage started, each work handed
-down and each request to you is a line or a card where it happened (see
+chat is the progression, from the top down. Each work is a level of the
+hierarchy, with its stage path and its requests under it (see
 [Threads](#threads)); the live line at the end says who works now. What waits
 for you is simply the last card of the chat, open, with the composer under it.
 The head of a conversation is its tabs alone. The cost is in COST only, and the
-stages of a work, with the agent of each, are in the tree and in a work's
-block.
+stages of a work, with the agent of each, are in the tree and under the work's row.
 
 A work's state follows its questions up their climb. An escalated question
 is held by the pending request that gathers it, at any depth
@@ -692,10 +700,10 @@ A conversation's level, in place of the project's once one is opened:
   Enter on a version saves it to the downloads directory through the versions
   route and opens it, as an attachment is. A conversation without one says so.
 
-A work's thread also opens as a page of the chat, from a sub-work block's
-OPEN: the way down to it (`Breadcrumb`, "Conversation ›
-Bakery website › Home page", each crumb going back up, the first to the
-chat), its transcript and a composer to its agent. The masthead's menu has
+A work also opens as a scope of the chat, from its row's open arrow: the chat
+kept to its branch, under the agents down to it (`ScopeBar`, "SCOPE front-desk
+› project-manager › administrator (level 2)"), with WHOLE CONVERSATION to go
+back, each work's own thread under its row and the composer. The masthead's menu has
 OPEN IN TREE (Alt+O), the tree page with the work picked, and ITS LOG.
 
 The log, the tree, the cost and the artifacts are loaded when first on screen and let go

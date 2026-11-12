@@ -137,38 +137,41 @@ opens it at its tree or its log.
 
 ### 5. Chat
 
-The chat is the whole history of the conversation, read from the top down,
-in time order. What you said is a filled bubble on the right; what an agent says
-is a bubble on the left tinted with its colour, under its name and time, with
-the message's subject, when it has one, as the bubble's bold first line. A note
-an agent of the team left is an outlined card headed NOTE FROM SELLER. The
-progression is lines of the log between them: each stage started ("design
-started"), each work handed down ("handed down Build: Doce Ana"), a work
-done or sent back. A stage line carries the root work's whole stage path under
-it, on one line that wraps on a narrow window: the stages done with a check,
-the one reached with a filled dot, those to come with an empty one; so the
-newest stage line says where the work is, and the "done" line has every stage
-checked. A request addressed to you is a card at the time it was
-asked, which you answer in place (see [the cards](#6-the-request-cards)); once
+The chat is the conversation as a lineage stream, read from the top down. What
+you said is a filled bubble on the right; what an agent says is a bubble on the
+left tinted with its colour, under its name and time, with the message's
+subject, when it has one, as the bubble's bold first line. Under the words
+come the works, one level of the hierarchy each, joined by lines that run from
+a work down to the works it handed down: the agent's dot and name in its
+colour, its title, an open arrow and its state as an icon and a word. A work
+in a workflow shows its stages under its row, the ones done checked, the one
+reached filled, those to come empty. Finished works fold into one line ("2
+folded · homepage layout approved · 7 entries") that a chevron unfolds; works
+that ran at once are a fork, "PARALLEL ×4 · 2 DONE · 2 WORKING", with a card
+for each. A request addressed to you is a card under the work that made it,
+joined by a dashed connector marked with its level ("L0"), which you answer in
+place (see [the cards](#6-the-request-cards)) and fold from its heading; once
 answered it stays there as history, with the word of what you did (ANSWERED,
 CHOSE, GRANTED, DENIED) and your answer. What the agents asked one another is
-one compact line, folded, that opens to the question and the answer. There are no run rows or tool
-calls here: they are in the tree and the log. While any agent of the team
-works, a live line at the end of the thread, at every width, says who, down from
-the agent you write to, what it does in a plain verb and for how long. The "N
-NEW" pill, when the thread runs past the view, sits above the composer and
-never over an entry. There is no status block over the tabs: what waits on you is
-the last card of the chat, open, with the composer below it. The tabs are on
-one line, without their digits on a narrow window. The composer is a
-line with a clip that attaches files and SEND; it has no options of a request
-above it. A conversation with no message yet, opened from the conversations,
-shows the TO control of
-[a new conversation](#3-a-new-conversation) over the composer when several
-agents of depth 0 may take it.
+one compact line, folded, that opens to the question and the answer. A note
+an agent of the team left is an outlined card headed NOTE FROM SELLER. There
+are no run rows or tool calls here: they are in a scope, the tree and the log.
+While any agent of the team works, a live line at the end of the thread, at
+every width, says who, down from the agent you write to, what it does in a
+plain verb and for how long. The "N NEW" pill, when the thread runs past the
+view, sits above the composer and never over a row. There is no status block
+over the tabs: what waits on you is a card in the chat. The tabs are on one
+line, without their digits on a narrow window. The composer is a line with a
+clip that attaches files and SEND; it has no options of a request above it. A
+conversation with no message yet, opened from the conversations, shows the TO
+control of [a new conversation](#3-a-new-conversation) over the composer when
+several agents of depth 0 may take it.
 
-A sub-work's open glyph (an arrow out of a box) shows that work's thread as a
-page of its own, under the way down to it, with a composer to its agent;
-OPEN IN TREE (Alt+O) shows it on the tree page.
+A work's open arrow shows the chat kept to that work's branch, a scope: a bar
+names the agents from the front desk down to it, with its level, and WHOLE
+CONVERSATION goes back; under each work of the branch are its runs with their
+tool calls and the notes its agents left. OPEN IN TREE (Alt+O) shows it on the
+tree page.
 
 | Keys | What they do |
 | --- | --- |

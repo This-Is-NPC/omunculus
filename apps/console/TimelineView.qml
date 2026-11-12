@@ -3,56 +3,64 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
 import "kit/client/Pending.js" as Pending
-import "kit/client/Requests.js" as Requests
+import "kit/client/Tree.js" as Tree
 import "kit/client/Time.js" as Time
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
-// TimelineView is one thread of the conversation. The main thread is the
-// dialogue and the whole history of the conversation, in time order: what you
-// and the agent you write to said, each work handed down and each stage
-// started as a line of the log, every request addressed to you as a card
-// (RequestDecision) answered in place and, once answered, kept with the answer
-// given, and what the agents asked one another as a compact line (TeamRow);
-// what each run did is the tree's. A work's own thread also holds a work
-// handed down as a SubWorkBlock that unfolds into its own thread nested here,
-// and the notes its agents left (TeamNote).
+// TimelineView is the chat: the conversation as a lineage stream, the rows of
+// Tree.stream. What you and the agent you write to said come first, in time
+// order; each work handed down hangs under them as a level of the hierarchy
+// (LineageRow), with the stages of its workflow (StagePath), the requests it
+// made (RequestDecision, TeamRow, attached by a connector from their level and
+// answered in place), and what it handed down: a work, finished works folded
+// into one line, or works that ran at once as lanes (ForkBlock). A chevron
+// folds or unfolds a level; its arrow opens the work as a scope of its own:
+// `scope` set to a work, the view shows only that branch, and in it each work's
+// own thread, its runs with their tool calls and the notes its agents left.
 // Like a chat, it sits on the bottom and grows upwards, and it follows new
 // entries unless you scrolled up to read; then a pill counts what arrived out
 // of view and leads back to it. A turn streaming taller than the view is held
-// by its top, so its first words stay readable. The dialogue opens, above its
-// first entry, on a mark that says where the conversation starts. From the keyboard, Tab reaches
-// it on the newest entry: ↑/↓ and PgUp/PgDn move, Home goes to the first and
-// End back to the newest, and Tab moves into the tools of the entry it is on.
-// While an agent works for the thread, a live line at its end says who, from
-// the agent you wrote to down to the one at work, what that one does, in a
-// plain verb, and for how long, unless that agent's own turn streams here and
-// says it. Its
-// implicit height is its entries', for a thread nested in a block, which says
-// itself that its agents work.
+// by its top, so its first words stay readable. The conversation opens, above
+// its first entry, on a mark that says where it starts. From the keyboard, Tab
+// reaches it on the newest row: up/down and PgUp/PgDn move, Home goes to the
+// first and End back to the newest, and Tab moves into the tools of the row it
+// is on. While an agent works, a live line at its end says who, from the agent
+// you wrote to down to the one at work, what that one does, in a plain verb,
+// and for how long, unless that agent's own turn streams here and says it.
 Item {
   id: root
 
-  // The thread shown: "" for the main one, or a work's.
-  property string thread: ""
-  // How deep this thread is nested in sub-work blocks: 0 for a page's own.
-  property int nesting: 0
-  readonly property ListModel model: Omunculus.thread(thread)
+  // The work the view is kept to: "" for the whole conversation, whose words
+  // come first, or a work, whose branch alone shows.
+  property string scope: ""
   property string emptyText: ""
   // Whether requests show where they were made; beside the map they show on
   // the node that asked instead.
   property bool requestsShown: true
-  // Whether this is the main thread, the dialogue.
-  readonly property bool dialogue: thread === ""
-  // Counts changes to the entries, so each line knows again whether it
-  // continues the turn before it.
-  property int revision: 0
-  // Counts every change to the entries, a turn streaming included.
-  property int changes: 0
+  // Whether this is the whole conversation, the dialogue.
+  readonly property bool dialogue: scope === ""
+  // The thread of the scope's own work, whose entries the live line reads.
+  readonly property string thread: dialogue ? "" : Omunculus.threadOf(scope)
+  readonly property ListModel model: Omunculus.thread(thread)
+  // Counts the entries added or removed in any thread, and every change to
+  // them, a turn streaming included.
+  readonly property int revision: Omunculus.appended
+  readonly property int changes: Omunculus.appended + Omunculus.edited
+  // The column of a level, narrower on a phone, and where the first one
+  // starts: the room the connector of a request crosses.
+  readonly property real unit: Breakpoints.tight(width) ? Theme.size.mark : Theme.size.gutter
+  readonly property real origin: Breakpoints.tight(width) ? unit : unit * 2
+  // Folds and unfolds the person made, row key -> bool: a work's, "fold:<work>".
+  property var opened: ({})
+  // The rows, from Tree.stream, and the same by key.
+  property var stream: []
+  property var rowMap: ({})
 
-  // How many entries lie below the view: the ones the NEW pill counts. An
-  // entry that draws nothing, an empty turn or a request the queue holds, is
-  // not news, and a thread that fits has none.
+  // How many rows lie below the view: the ones the NEW pill counts. A row
+  // that draws nothing, an empty turn, is not news, and a thread that fits has
+  // none.
   readonly property int below: {
     if (changes < 0 || timeline.contentHeight < 0 || timeline.contentHeight + timeline.edge <= timeline.height)
       return 0
@@ -65,29 +73,117 @@ Item {
     }
     return count
   }
-  // The streaming turn whose top the view holds, and the one you jumped to
-  // the end of, which it does not hold.
+  // The key of the streaming turn whose top the view holds, and of the one
+  // you jumped to the end of, which it does not hold.
   property string held: ""
   property string released: ""
-  // A work is wanted as a transcript of its own.
+  // A work is wanted as a scope of its own.
   signal openWork(string work)
   // The log of a work is wanted ("" for the conversation's own).
   signal openLog(string work)
-  // The requests no other request gathers; the rest are its climb.
-  readonly property var contained: Requests.contained(Omunculus.requests)
 
+  // How an entry of a thread shows: "turn", "note" or "speech"; "none" for a
+  // work, a stage or a request, which the lineage draws.
+  function roleOf(kind) {
+    return ["work", "mark", "request"].includes(kind) ? "none" : ["turn", "note"].includes(kind) ? kind : "speech"
+  }
+
+  // The entries of a thread that are said, as Tree.stream wants them. Yours,
+  // still on its way, come last.
+  function spoken(key) {
+    const list = Omunculus.thread(key)
+    const found = []
+    for (let row = 0; row < list.count; row++) {
+      const entry = list.get(row)
+      const role = roleOf(entry.kind)
+      if (role !== "none")
+        found.push({ index: row, at: entry.pending ? Infinity : entry.at, who: entry.who, role: role })
+    }
+    return found
+  }
+
+  // Builds the rows again, once however much changed at once.
+  function refresh() {
+    const flat = Omunculus.progress ? Omunculus.progress.flat : []
+    const counts = {}
+    for (const node of flat) {
+      const key = Omunculus.threadOf(node.work)
+      counts[node.work] = key !== "" ? Omunculus.thread(key).count : 0
+    }
+    stream = Tree.stream({
+      progress: Omunculus.progress, scope: scope, opened: opened, me: Omunculus.me, counts: counts, pause: pause,
+      requests: requestsShown ? Omunculus.requests : [],
+      dialogue: dialogue ? spoken("") : [],
+      details: work => Omunculus.threadOf(work) === "" ? [] : spoken(Omunculus.threadOf(work))
+    })
+    const map = {}
+    for (const row of stream)
+      map[row.key] = row
+    rowMap = map
+    let at = 0
+    for (; at < stream.length; at++) {
+      const key = stream[at].key
+      if (at < rows.count && rows.get(at).key === key)
+        continue
+      let found = -1
+      for (let next = at + 1; next < rows.count && found < 0; next++) {
+        if (rows.get(next).key === key)
+          found = next
+      }
+      if (found >= 0)
+        rows.move(found, at, 1)
+      else
+        rows.insert(at, { key: key, kind: stream[at].kind, fresh: Omunculus.loaded && !Omunculus.replaying })
+    }
+    if (rows.count > at)
+      rows.remove(at, rows.count - at)
+  }
+  function later() { Qt.callLater(refresh) }
+
+  ListModel { id: rows }
+
+  Component.onCompleted: refresh()
+  onScopeChanged: {
+    rows.clear()
+    timeline.following = true
+    held = ""
+    released = ""
+    refresh()
+  }
+  onOpenedChanged: later()
+  onRequestsShownChanged: later()
+  Connections {
+    target: Omunculus
+    function onProgressChanged() { root.later() }
+    function onRequestsChanged() { root.later() }
+    function onAppendedChanged() { root.later() }
+    function onMeChanged() { root.later() }
+    // What the person sends or answers is seen at once, never as news.
+    function onActed() { root.jump() }
+  }
+
+  // Folds or unfolds a level; a fold unfolds into its works.
+  function toggle(key, now) {
+    const next = Object.assign({}, opened)
+    next[key] = now
+    opened = next
+  }
+
+  // The row of the view showing `key`: a row's own key, a request's id or an
+  // entry's key; -1 for none.
   function rowOf(key) {
-    for (let row = 0; row < model.count; row++) {
-      if (model.get(row).key === key)
+    for (let row = 0; row < rows.count; row++) {
+      const shown = stream[row]
+      if (shown.key === key || shown.id === key || (shown.kind === "entry" && Omunculus.thread(shown.thread).get(shown.index).key === key))
         return row
     }
     return -1
   }
 
-  // Brings the entry of `key` into view, and stops following the end unless
-  // the keyboard is inside an entry, where the view stays as it is kept. An
-  // entry that takes the keyboard, or is taller than most of the view, starts
-  // at its top, so a form shows its first questions.
+  // Brings the row of `key` into view, and stops following the end unless the
+  // keyboard is inside a row, where the view stays as it is kept. A row that
+  // takes the keyboard, or is taller than most of the view, starts at its top,
+  // so a form shows its first questions.
   function reveal(key, top = false) {
     const row = rowOf(key)
     if (row < 0)
@@ -116,40 +212,21 @@ Item {
     return true
   }
 
-  // How the entry at `row` shows: "turn", "note" and "speech" for what is
-  // said; "mark" for a work handed down in the dialogue or a stage started,
-  // "work" for a work handed down in a work's thread; "ask" for a request
-  // addressed to you, waiting or answered, and "team" for the agents' own;
-  // "none" for one another gathers or not read yet.
-  function roleAt(row) {
-    const entry = model.get(row)
-    if (!entry)
-      return "none"
-    if (entry.kind === "work")
-      return dialogue ? "mark" : "work"
-    if (entry.kind !== "request")
-      return ["turn", "note", "mark"].includes(entry.kind) ? entry.kind : "speech"
-    if (!requestsShown)
-      return "none"
-    const place = Pending.place(Omunculus.requests.find(item => item.id === entry.key), { me: Omunculus.me, contained: contained })
-    return place === "history" ? "ask" : place
-  }
-
-  // The row of the newest note a work's agent left, or -1.
-  readonly property int newestNote: {
+  // The key of the newest note a work's agent left in the dialogue, or "".
+  readonly property string newestNote: {
     if (revision < 0)
-      return -1
-    for (let row = model.count - 1; row >= 0; row--) {
-      if (roleAt(row) === "note")
-        return row
+      return ""
+    for (let row = stream.length - 1; row >= 0; row--) {
+      if (stream[row].kind === "entry" && stream[row].role === "note" && stream[row].thread === "")
+        return stream[row].key
     }
-    return -1
+    return ""
   }
   // Whether the conversation's work is done: its closing note shows whole.
   readonly property bool finished: !!Omunculus.progress && Omunculus.progress.state === "done"
   // Goes to the end and follows it again, past a turn still streaming.
   function jump() {
-    const newest = timeline.count > 0 ? timeline.model.get(timeline.count - 1) : null
+    const newest = timeline.count > 0 ? timeline.itemAtIndex(timeline.count - 1) : null
     root.released = newest && newest.streaming ? newest.key : ""
     root.held = ""
     timeline.following = true
@@ -158,32 +235,13 @@ Item {
     timeline.positionViewAtEnd()
   }
 
-  // What the person sends or answers is seen at once, never as news.
-  Connections {
-    target: Omunculus
-    function onActed() { root.jump() }
-  }
-
-  Connections {
-    target: root.model
-    function onDataChanged() { root.changes++ }
-    function onRowsInserted() {
-      root.revision++
-      root.changes++
-    }
-    function onRowsRemoved() {
-      root.revision++
-      root.changes++
-    }
-  }
-
   // Who works for this thread, as {chain, agent, doing, since, round}
-  // (Progress.live); null when no one does, in a thread nested in a block, or
-  // while that agent's own turn streams here and shows it. In the dialogue it
-  // is whoever works, down the team, at every width.
+  // (Progress.live); null when no one does, or while that agent's own turn
+  // streams here and shows it. In the dialogue it is whoever works, down the
+  // team, at every width.
   readonly property var working: {
     const front = Omunculus.agent || Omunculus.lastAgent
-    const live = nesting > 0 ? null : Progress.live(Omunculus.progress, thread, front)
+    const live = Progress.live(Omunculus.progress, scope, front)
     if (!live || changes < 0)
       return null
     for (let row = model.count - 1; row >= 0; row--) {
@@ -195,18 +253,10 @@ Item {
     return live
   }
 
-  // Another thread on screen starts at its end.
-  onModelChanged: {
-    changes++
-    timeline.following = true
-    held = ""
-    released = ""
-  }
-
-  // The keyboard is inside an entry, in a form being written, not on the list.
+  // The keyboard is inside a row, in a form being written, not on the list.
   readonly property bool inEntry: !timeline.activeFocus && Focus.within(Window.activeFocusItem, timeline.contentItem)
 
-  // The keyboard is on the timeline or in the entry it is on.
+  // The keyboard is on the timeline or in the row it is on.
   readonly property bool keyboard: timeline.activeFocus || (timeline.currentItem !== null && Focus.within(Window.activeFocusItem, timeline.currentItem))
 
   // Seconds of silence after which a working team is said to have no news.
@@ -215,20 +265,6 @@ Item {
   // Seconds of silence after which a speaker's next line starts a new turn.
   readonly property int pause: 120
 
-  // Whether the line at `index` is said by the speaker of the line just before
-  // it, yours after yours or the same agent's after its own, with no longer
-  // pause between them. A delegate may ask with its old index while the
-  // entries change under it.
-  function continues(index) {
-    if (index <= 0 || index >= timeline.model.count)
-      return false
-    const previous = timeline.model.get(index - 1)
-    const current = timeline.model.get(index)
-    const apart = ["request", "mark", "work", "note"]
-    return !apart.includes(previous.kind) && !apart.includes(current.kind)
-      && previous.who === current.who && current.at - previous.at < root.pause
-  }
-
   implicitHeight: timeline.contentHeight + timeline.edge
 
   ListView {
@@ -236,7 +272,7 @@ Item {
 
     property bool following: true
 
-    // Keeps the newest entry in view: its end, or the top of a turn streaming
+    // Keeps the newest row in view: its end, or the top of a turn streaming
     // taller than the view.
     function follow() {
       if (!following)
@@ -246,11 +282,11 @@ Item {
       if (entry && entry.streaming && entry.key !== root.released && entry.height > root.height - topMargin - bottomMargin)
         root.held = entry.key
       const heldRow = root.held !== "" ? root.rowOf(root.held) : -1
-      // A held entry that fits shows whole, its bottom with it.
+      // A held row that fits shows whole, its bottom with it.
       const held = heldRow >= 0 ? itemAtIndex(heldRow) : null
       if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin)) {
         positionViewAtIndex(heldRow, ListView.Beginning)
-        // The entry before it shows whole above it, never cut by the view.
+        // The row before it shows whole above it, never cut by the view.
         const before = heldRow > 0 ? itemAtIndex(heldRow - 1) : null
         if (before)
           contentY = Math.max(originY - topMargin, contentY - before.height)
@@ -261,12 +297,12 @@ Item {
     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: newerBand }
     height: Math.min(root.height - earlierBand - newerBand, contentHeight + edge)
     clip: true
-    // An entry's outline never lies on the clip's edge, where a fractional scale
+    // A row's outline never lies on the clip's edge, where a fractional scale
     // would cut it. Once the thread outgrows the view, each end has a band for
-    // a pill, so a pill never covers an entry; the band does not follow the
+    // a pill, so a pill never covers a row; the band does not follow the
     // pill, whose count follows the view.
     readonly property bool scrolls: contentHeight + edge > Math.min(root.height, Window.height / 2)
-    // The two pixels of an entry's outline, one at each end.
+    // The two pixels of a row's outline, one at each end.
     readonly property int edge: 2
     // The bands above and below the view hold the pills, so none covers a line.
     readonly property real earlierBand: scrolls ? earlier.height + Theme.space.gap + Theme.space.gap : 0
@@ -274,25 +310,25 @@ Item {
     topMargin: edge / 2
     bottomMargin: edge / 2
     spacing: 0
-    model: root.model
+    model: rows
     header: root.dialogue ? startMark : null
     footer: workingRow
     // Only the person's own scrolling ends it, and the end is within a row:
-    // the live row under the entries changes height as work goes on.
+    // the live row under the rows changes height as work goes on.
     onMovementEnded: following = contentHeight - (contentY + height) < Theme.size.control
     onContentHeightChanged: if (following) Qt.callLater(follow)
     onCountChanged: if (following) Qt.callLater(follow)
 
-    // No entry is current until the keyboard comes, so nothing pulls the view.
+    // No row is current until the keyboard comes, so nothing pulls the view.
     currentIndex: -1
     activeFocusOnTab: true
     keyNavigationEnabled: true
-    // Only the list itself taking the keyboard picks an entry: a field inside
-    // an entry also makes the list's activeFocus true, and making an entry
+    // Only the list itself taking the keyboard picks a row: a field inside
+    // a row also makes the list's activeFocus true, and making a row
     // current would take the keyboard from that field.
     onActiveFocusChanged: if (activeFocus && Window.activeFocusItem === timeline && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
     onCurrentIndexChanged: if (!root.inEntry && currentIndex >= 0) following = currentIndex === count - 1
-    // Entries beyond the view are kept for two views each way, so a form
+    // Rows beyond the view are kept for two views each way, so a form
     // scrolled away from while written in is not rebuilt.
     cacheBuffer: Window.height * 2
     Keys.onPressed: event => {
@@ -308,7 +344,7 @@ Item {
       event.accepted = true
     }
 
-    // Removed entries fade; what they leave behind closes up instead of jumping.
+    // Removed rows fade; what they leave behind closes up instead of jumping.
     remove: Transition {
       NumberAnimation { property: "opacity"; to: 0; duration: 140 }
     }
@@ -320,50 +356,58 @@ Item {
       id: entry
 
       required property int index
-      required property string kind
       required property string key
-      required property string who
-      required property string text
-      required property bool mine
-      required property bool note
-      required property string stamp
-      required property real at
-      required property bool streaming
-      required property string partial
-      required property string steps
-      required property string files
+      required property string kind
       required property bool fresh
-      required property bool pending
-      required property string work
-      required property string subject
 
-      // Entries are set apart by a margin above each one, so one that draws
-      // nothing leaves no gap.
-      readonly property int gap: Theme.space.line
-      readonly property string role: root.revision >= 0 ? root.roleAt(index) : kind
+      // The row as Tree.stream gave it, kept as it was while the view
+      // builds the rows again, and for a said entry its record in the thread
+      // it is in, read again whenever any thread changes; a blank one when it
+      // is gone.
+      property var row: null
+      readonly property var record: row && row.kind === "entry" && root.changes >= 0 ? Omunculus.thread(row.thread).get(row.index) || blank : blank
+      readonly property var blank: ({ key: "", who: "", text: "", mine: false, note: false, stamp: "", work: "", streaming: false, partial: "", steps: "[]", files: "[]", subject: "", pending: false })
+      function adopt() {
+        const next = root.rowMap[key]
+        if (next)
+          row = next
+      }
+      Component.onCompleted: adopt()
+      Connections {
+        target: root
+        function onRowMapChanged() { entry.adopt() }
+      }
+      readonly property bool streaming: !!record && record.streaming
+      readonly property bool mine: !!record && record.mine
+
+      // Said words are set apart by a margin above each one, so one that draws
+      // nothing leaves no gap; the levels of the hierarchy keep their lines whole.
+      readonly property int gap: kind === "entry" && row && row.depth === 0 ? Theme.space.line : 0
       readonly property alias content: slot.item
       readonly property bool drawn: slot.status === Loader.Ready && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
-      readonly property bool rises: kind === "request" || kind === "mark" || kind === "work"
+      readonly property bool rises: kind !== "entry"
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0
       // Not tied to the content's `visible`, which follows the page that holds
-      // the thread: hidden, every entry would measure 0 and the view fall to its top.
+      // the thread: hidden, every row would measure 0 and the view fall to its top.
       clip: !drawn
 
       Loader {
         id: slot
         y: entry.gap
         width: entry.width
-        sourceComponent: ({ mark: mark, ask: ask, team: team, turn: turn, work: handed, note: teamNote, speech: speech })[entry.role] || null
+        sourceComponent: !entry.row ? null : ({
+          work: work, fold: fold, fork: fork, stages: stages, ask: ask, team: ask, entry: entryRow
+        })[entry.kind] || null
 
         FocusRing { shown: entry.selected; anchors.margins: 0 }
       }
 
-      // A new line slides in from its speaker's side, a request or a work
-      // handed down rises from below. What the conversation held before it
-      // opened is just there.
+      // A new row slides in from its speaker's side, a level or a request
+      // rises from below. What the conversation held before it opened is just
+      // there.
       transform: Translate { id: shift }
       ListView.onAdd: if (entry.fresh) arrive.start()
       ParallelAnimation {
@@ -379,99 +423,216 @@ Item {
         }
       }
 
+      // A work: its level.
+      Component {
+        id: work
+        LineageRow {
+          readonly property var node: entry.row.node
+          readonly property var look: Tree.stateOf(node)
+          width: entry.width
+          depth: entry.row.depth
+          rails: entry.row.rails
+          last: entry.row.last
+          stem: entry.row.stem
+          unit: root.unit
+          origin: root.origin
+          agent: node.agent
+          tone: Omunculus.toneOf(node.agent)
+          title: node.title
+          // Folded, what it handed down.
+          meta: entry.row.kids > 0 && !entry.row.open ? Progress.below(Progress.kidsOf(node)) : ""
+          state: look.state
+          stateText: look.text
+          folds: entry.row.kids > 0
+          open: entry.row.open
+          linked: node.work !== root.scope
+          onToggled: root.toggle(node.work, !entry.row.open)
+          onChosen: if (folds) root.toggle(node.work, !entry.row.open)
+          onOpened: root.openWork(node.work)
+        }
+      }
+
+      // Finished works gathered in one line.
+      Component {
+        id: fold
+        LineageRow {
+          readonly property var nodes: entry.row.nodes
+          readonly property var last: nodes[nodes.length - 1]
+          readonly property var look: Tree.stateOf(last)
+          width: entry.width
+          depth: entry.row.depth
+          rails: entry.row.rails
+          unit: root.unit
+          origin: root.origin
+          agent: Array.from(new Set(nodes.map(node => node.agent))).join(", ")
+          tone: Omunculus.toneOf(last.agent)
+          title: (nodes.length > 1 ? nodes.length + " folded" + Theme.type.meta.separator : "") + last.title
+          meta: entry.row.entries + (entry.row.entries === 1 ? " entry" : " entries")
+          state: look.state
+          stateText: look.text
+          folds: true
+          linked: nodes.length === 1
+          onToggled: root.toggle(entry.row.key, true)
+          onChosen: root.toggle(entry.row.key, true)
+          onOpened: root.openWork(last.work)
+        }
+      }
+
+      // Works that ran at once.
+      Component {
+        id: fork
+        ForkBlock {
+          width: entry.width
+          depth: entry.row.depth
+          rails: entry.row.rails
+          last: entry.row.last
+          unit: root.unit
+          origin: root.origin
+          summary: entry.row.summary
+          lanes: entry.row.nodes.map(node => ({
+            work: node.work, agent: node.agent, tone: Omunculus.toneOf(node.agent), title: node.title,
+            state: Tree.stateOf(node).state, stateText: Tree.stateOf(node).text
+          }))
+          onOpened: work => root.openWork(work)
+        }
+      }
+
+      // A work's workflow, as a path.
+      Component {
+        id: stages
+        Item {
+          width: entry.width
+          implicitHeight: path.implicitHeight + Theme.space.tight * 2
+          Lifeline {
+            depth: entry.row.depth
+            rails: entry.row.rails
+            line: entry.row.through ? "through" : "none"
+            unit: root.unit
+            origin: root.origin
+          }
+          StagePath {
+            id: path
+            x: root.origin + (entry.row.depth + 1) * root.unit
+            y: Theme.space.tight
+            width: parent.width - x - Theme.space.cell
+            stages: entry.row.stages
+          }
+        }
+      }
+
+      // A request one of the works made, attached to it: the card that answers
+      // it while it waits and, once settled, keeps your answer; between agents,
+      // the exchange as a line.
+      Component {
+        id: ask
+        Attached {
+          readonly property var request: Omunculus.requests.find(item => item.id === entry.row.id) || null
+          width: entry.width
+          depth: entry.row.depth
+          rails: entry.row.rails
+          through: entry.row.through
+          unit: root.unit
+          origin: root.origin
+          level: entry.row.level
+          tone: entry.row.kind === "ask" ? Theme.warning : Theme.dim
+          // The keyboard goes to the card's first field.
+          function focusFirst() {
+            if (inner.item && inner.item.focusFirst)
+              inner.item.focusFirst()
+          }
+          Loader {
+            id: inner
+            width: parent ? parent.width : 0
+            sourceComponent: entry.row.kind === "ask" ? card : exchange
+          }
+          Component {
+            id: card
+            RequestDecision {
+              key: entry.row.id
+              stamp: request ? Time.clock(request.created_at, Date.now()) : ""
+              collapsible: true
+            }
+          }
+          Component {
+            id: exchange
+            TeamRow {
+              key: entry.row.id
+              stamp: request ? Time.clock(request.created_at, Date.now()) : ""
+              // In the chat it is history; a scope may decide it.
+              decidable: !root.dialogue
+            }
+          }
+        }
+      }
+
+      // Something said: yours, an agent's, a note, a run with its steps.
+      Component {
+        id: entryRow
+        Item {
+          readonly property real inset: entry.row.depth > 0 ? root.origin + (entry.row.depth + 1) * root.unit : 0
+          readonly property alias content: words.item
+          width: entry.width
+          implicitHeight: words.item ? words.item.implicitHeight : 0
+          Lifeline {
+            visible: entry.row.depth > 0
+            depth: entry.row.depth
+            rails: entry.row.rails
+            line: entry.row.through ? "through" : "none"
+            unit: root.unit
+            origin: root.origin
+          }
+          Loader {
+            id: words
+            x: parent.inset
+            width: parent.width - x
+            sourceComponent: ({ speech: speech, turn: turn, note: teamNote })[entry.row.role] || null
+          }
+        }
+      }
+
       Component {
         id: speech
         SpeechTurn {
-          width: entry.width
-          who: entry.who
-          text: entry.text
-          mine: entry.mine
-          pending: entry.pending
-          note: entry.note
-          stamp: entry.stamp
-          files: entry.files
-          subject: entry.subject
-          continued: root.revision >= 0 && root.continues(entry.index)
-        }
-      }
-
-      // A stage started, a work handed down: a line of the log, in time.
-      Component {
-        id: mark
-        LogLine {
-          readonly property var record: entry.kind === "work" ? Omunculus.work(entry.key) : null
-          readonly property string assignee: record ? Omunculus.agentOf(record) : ""
-          width: entry.width
-          icon: entry.kind === "work" ? "branch" : "chevron-right"
-          names: [entry.who, assignee].filter(name => name !== "")
-          text: entry.kind === "work" ? "handed down \u201c" + Omunculus.titleOf(entry.key) + "\u201d" : entry.text
-          // Where the root work stood at this line, so the latest one says where it is.
-          stages: entry.kind === "work" || !Omunculus.progress ? [] : Progress.trail(Omunculus.progress.flat, Omunculus.journeys, entry.key, entry.at)
-          stamp: entry.stamp
-        }
-      }
-
-      // A request addressed to you: the card that answers it while it waits,
-      // and with your answer once it is settled.
-      Component {
-        id: ask
-        RequestDecision {
-          width: entry.width
-          key: entry.key
-          stamp: entry.stamp
-          collapsible: true
-        }
-      }
-
-      Component {
-        id: team
-        TeamRow {
-          width: entry.width
-          key: entry.key
-          stamp: entry.stamp
-          // In the chat it is history; the work's thread may decide it.
-          decidable: !root.dialogue
-        }
-      }
-
-      Component {
-        id: handed
-        SubWorkBlock {
-          width: entry.width
-          work: entry.key
-          nesting: root.nesting
-          stamp: entry.stamp
-          onOpened: work => root.openWork(work)
+          width: parent ? parent.width : 0
+          who: entry.record.who
+          text: entry.record.text
+          mine: entry.record.mine
+          pending: entry.record.pending
+          note: entry.record.note
+          stamp: entry.record.stamp
+          files: entry.record.files
+          subject: entry.record.subject
+          continued: entry.row.continued
         }
       }
 
       Component {
         id: teamNote
         TeamNote {
-          width: entry.width
-          who: entry.who
-          text: entry.text
-          stamp: entry.stamp
-          unfolded: root.finished && entry.index === root.newestNote
-          result: root.finished && entry.index === root.newestNote
+          width: parent ? parent.width : 0
+          who: entry.record.who
+          text: entry.record.text
+          stamp: entry.record.stamp
+          unfolded: root.finished && entry.row.key === root.newestNote
+          result: root.finished && entry.row.key === root.newestNote
         }
       }
 
       Component {
         id: turn
         AgentTurn {
-          width: entry.width
-          run: entry.key
-          who: entry.who
-          text: entry.text
-          partial: entry.partial
-          streaming: entry.streaming
-          // The dialogue has the words only: the steps of a run are the tree's.
-          steps: root.dialogue ? "[]" : entry.steps
-          files: entry.files
-          stamp: entry.stamp
-          continued: root.revision >= 0 && root.continues(entry.index)
-          work: entry.work
+          width: parent ? parent.width : 0
+          run: entry.record.key
+          who: entry.record.who
+          text: entry.record.text
+          partial: entry.record.partial
+          streaming: entry.record.streaming
+          // The dialogue has the words only: the steps of a run are a scope's.
+          steps: root.dialogue ? "[]" : entry.record.steps
+          files: entry.record.files
+          stamp: entry.record.stamp
+          continued: entry.row.continued
+          work: entry.record.work
           selected: entry.selected
           onLogged: work => root.openLog(work)
         }

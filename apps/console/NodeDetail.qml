@@ -444,7 +444,7 @@ FocusScope {
       TimelineView {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        thread: Omunculus.threadOf(pane.key)
+        scope: pane.key
         emptyText: "NOTHING SAID HERE YET"
         requestsShown: false
         onOpenWork: work => pane.picked(work)

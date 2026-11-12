@@ -107,6 +107,10 @@ Singleton {
   // in, keyed by its id; a request for you, and every note to you, in the
   // main thread.
   property var threads: ({})
+  // Count the entries added to or removed from a thread, and the changes to
+  // one already there, so a view of the threads knows when to read them again.
+  property int appended: 0
+  property int edited: 0
   // Whether the person may still choose whom the first message goes to: a
   // conversation not made yet, or an empty one that several agents could take.
   readonly property bool addressable: conversationId === "" || (loaded && talkable.length > 1 && thread("").count === 0)
@@ -509,6 +513,7 @@ Singleton {
     callArgs = {}
     pendingCalls = {}
     threads = {}
+    appended++
     notes = {}
     replies = {}
     noted = {}
@@ -825,6 +830,7 @@ Singleton {
       threads = next
     }
     const model = threads[key]
+    appended++
     model.append(Object.assign({
       kind: "speech", key: "", who: "", text: "", mine: false, note: false, stamp: "", at: 0, work: "",
       streaming: false, partial: "", steps: "[]", files: "[]", subject: "",
@@ -863,12 +869,17 @@ Singleton {
 
   function dropPending(text) {
     const at = pendingRow(text)
-    if (at >= 0)
+    if (at >= 0) {
+      appended++
       threads[""].remove(at)
+    }
   }
 
   function entryAt(place) { return threads[place.thread].get(place.row) }
-  function update(place, role, value) { threads[place.thread].setProperty(place.row, role, value) }
+  function update(place, role, value) {
+    edited++
+    threads[place.thread].setProperty(place.row, role, value)
+  }
 
   // Whether a request is, or climbs into, one the harness opened: its
   // question reaches the person as a card.
@@ -1037,6 +1048,7 @@ Singleton {
       const waiting = key === "" ? pendingRow(body.message || "") : -1
       if (waiting >= 0) {
         // The server's copy takes the place of the words shown while sending.
+        edited++
         threads[""].set(waiting, { subject: body.subject || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []), pending: false })
       } else {
         append(key, { who: who, mine: who === "you", subject: body.subject || "", text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })

@@ -20,8 +20,8 @@ import "kit/ui"
 // The chat, the whole history of the conversation, the dialogue with the root
 // agent and the requests to you, answered in place; the tree, the works in the order they were made
 // and the work picked in full (TreePage); the log, every event a row; and
-// what it cost. A work's thread also opens as a page of its own, under the
-// way down to it. The log, the tree and the cost are loaded when first on
+// what it cost. A work also opens as a scope: the chat kept to its branch,
+// under the agents down to it, with WHOLE CONVERSATION to leave it. The log, the tree and the cost are loaded when first on
 // screen. A conversation's pages have no bar: their rarer actions are the
 // items of the masthead's menu (`more`), and their keys are chords. What
 // waits on you is a card in the chat; on the tree and a work's page a request
@@ -627,7 +627,6 @@ Item {
             id: timeline
             Layout.fillWidth: true
             Layout.fillHeight: true
-            thread: ""
             emptyText: Omunculus.agent ? "WITH " + Omunculus.agent.toUpperCase() : ""
             onOpenWork: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)
@@ -649,9 +648,9 @@ Item {
       }
     }
 
-    // A work's thread, as a page of its own: the way down to it, its
-    // transcript, and a composer to its agent. A crumb goes back up, the first
-    // one to the chat.
+    // A work as a scope: the agents down to it, its branch with the runs and
+    // notes of its works, and the composer, which writes to the same agent as
+    // the chat. WHOLE CONVERSATION goes back to the chat.
     Stage {
       anchors.fill: parent
       shown: view.page === "thread"
@@ -660,23 +659,19 @@ Item {
         anchors.fill: parent
         spacing: view.gap
 
-        Breadcrumb {
-          id: threadTrail
+        ScopeBar {
           readonly property var works: view.trailOf(view.threadWork)
           Layout.fillWidth: true
-          trail: [{ text: "Conversation" }].concat(works.map(work => ({ text: work.title || "a work" })))
-          onChosen: index => {
-            if (index === 0)
-              view.go("chat")
-            else if (works[index - 1].id !== view.threadWork)
-              view.openThread(works[index - 1].id)
-          }
+          trail: [{ agent: Omunculus.agent || Omunculus.lastAgent, tone: Omunculus.toneOf(Omunculus.agent || Omunculus.lastAgent) }]
+            .concat(works.map(work => ({ agent: Omunculus.agentOf(work), tone: Omunculus.toneOf(Omunculus.agentOf(work)) })))
+          level: works.length
+          onWholeWanted: view.go("chat")
         }
 
         TimelineView {
           Layout.fillWidth: true
           Layout.fillHeight: true
-          thread: Omunculus.threadOf(view.threadWork)
+          scope: view.threadWork
           emptyText: "NOTHING SAID HERE YET"
           onOpenWork: work => view.openThread(work)
           onOpenLog: work => view.showLog(work)
@@ -685,7 +680,6 @@ Item {
         Composer {
           id: threadComposer
           Layout.fillWidth: true
-          work: view.threadWork
         }
       }
     }

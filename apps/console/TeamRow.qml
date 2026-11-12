@@ -83,7 +83,7 @@ Item {
             }
           }
         }
-        Label { text: row.stamp; color: Theme.faint; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
+        Label { visible: row.width >= Theme.size.measureFrom; text: row.stamp; color: Theme.faint; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
         Icon { name: row.open ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
       }
       MouseArea {
