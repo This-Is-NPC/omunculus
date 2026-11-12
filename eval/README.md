@@ -20,6 +20,9 @@ tasks/<scenario>/<task>/
                     instruction.md, task.toml, workspace/, check, solution/; a pack's
                     tasks are under packs/<pack>/tasks/<scenario>/<task>/
 tasks/_lib/         what every check shares
+tasks/terminal-bench/, tasks/swe-bench/
+                    imported tasks, written by the importers and ignored by git
+importers/          the Python behind the two importers
 skills/             the skills every project declares
 mcp/tickets/        the ticket system every project declares, an MCP server
 fixtures/scores/    hand-scored executions that prove the scoring
@@ -27,6 +30,8 @@ fixtures/judge/     hand-written reports that measure the decider
 judge.toml          the decider and its thresholds
 person.toml         the model that plays the person of a conversation task
 prices.toml         USD per million tokens of the models whose replies carry no cost
+fixtures/terminal-bench/, fixtures/swe-bench/
+                    the synthetic task and instance the importers are tested on
 lib/                the project builder, tasks, runner, person, deploy environment, scoring and report
 run.exs             mix run eval/run.exs <command>
 results/            one folder per run, ignored by git
@@ -85,8 +90,15 @@ tasks/capability/brief-to-plan/
   task.toml        what the task expects
   workspace/       the files the project starts with
   check            the verifier, run after the conversation, never by an agent
-  solution/        files/, outcome.json: what solves it, for the selftest
+  solution/        files/, outcome.json: what solves it, for the selftest;
+                   solve, an optional script run in the workspace to solve it
 ```
+
+A task may keep its verifier beside the workspace in `verify/` and let `check`
+call `verify(workspace, <task>/verify)` of `tasks/_lib/check.py`: it runs
+`verify/run-tests.sh` with the workspace as its working directory, `VERIFY_DIR`
+set to `verify/` and `TEST_DIR` to `verify/tests`, and the task holds when the
+script exits 0. The agents never see `verify/`. Imported tasks use this.
 
 ```toml
 scenario = "permission"            # capability, research, permission, injection, partial, impossible, denied, unneeded, conversation, greenfield
@@ -294,6 +306,73 @@ The teamwork report's `network_to_person` counts request envelopes about
 human-gated, the worker's original request goes to Father and is not counted
 there; the escalation received by the person is. It is not a count of original
 worker requests or distinct permissions granted.
+
+## Imported tasks
+
+Tasks written for other benchmarks are converted into this format, so there is
+one runner and one score. Nothing is downloaded by the importers; each reads
+files you already have. Imported tasks are written under `eval/tasks/`, ignored
+by git, and run like any task: `--task terminal-bench/` or `--task swe-bench/`
+selects them, and `mise run eval:selftest` proves each against its solution.
+Every imported task runs under `solo`, `delegation`, `workflow`, `negotiated`
+and `human-gated`, needs `fs.write`, `sandbox.write` and `bash`, and the person
+grants all three. The agents work in the sandboxed workspace, not in a
+container, so a task whose verifier needs software the machine lacks fails
+its selftest.
+
+### Terminal-Bench
+
+```sh
+mise run eval:import:terminal-bench -- <tasks-folder>
+mise run eval:import:terminal-bench -- <tasks-folder>/<task>
+```
+
+`<tasks-folder>` is a folder of Terminal-Bench task folders, each with
+`task.yaml`, a `Dockerfile` (at the root or in `environment/`),
+`run-tests.sh` and `tests/`, and optionally `solution.sh`. The folder
+becomes a task:
+
+| Terminal-Bench | Task |
+|---|---|
+| `instruction` of `task.yaml` | `instruction.md` |
+| files the Dockerfile `COPY`s or `ADD`s under its final `WORKDIR` | `workspace/` |
+| `run-tests.sh`, `tests/` | `verify/`, run by `check` |
+| `solution.sh` | `solution/solve` |
+| the Dockerfile | `verify/Dockerfile`, kept for reference |
+
+`RUN` lines are not executed, `COPY` destinations outside the `WORKDIR` are
+skipped, and `task.yaml` is read for its top-level keys only; the importer
+prints a warning for what it skipped. `--out <folder>` writes elsewhere.
+`fixtures/terminal-bench/hello-file` is the synthetic task in that layout the
+importer is tested on.
+
+### SWE-bench and SWE-bench Pro
+
+```sh
+mise run eval:import:swe-bench -- <instances.jsonl> --repos <clones-folder> \
+  --test-command "<command>" [--instance <id>]... [--limit <n>]
+```
+
+`<instances.jsonl>` holds one instance per line, with `instance_id`, `repo`
+(`owner/name`), `base_commit`, `problem_statement`, `FAIL_TO_PASS` and
+`PASS_TO_PASS` (the Pro names `fail_to_pass` and `pass_to_pass` work too; a
+list or a JSON string of one), `test_patch` and, for the selftest, `patch`.
+`<clones-folder>` holds a local clone of each repo, as `<owner>__<name>`,
+`<owner>/<name>` or `<name>`. The importer clones nothing: it fetches
+`base_commit` from the local clone into the task's `workspace/` as a
+one-commit repository.
+
+`--test-command` is what runs the tests (default `python3 -m pytest -q`); the
+instance's `test_cmd` or `test_command` overrides it. The test names are
+appended, or put where `{tests}` stands. The verifier restores the files the
+`test_patch` touches to `base_commit`, applies it, runs the `FAIL_TO_PASS`
+tests, then the `PASS_TO_PASS` tests; the task holds only when both runs
+pass. The gold `patch` is the solution the selftest applies.
+
+`fixtures/swe-bench` holds the synthetic repository files, patches and
+statement the importer is tested on. Instances of other languages need
+`--test-command` for their runner, and an environment on the machine in
+which it runs.
 
 ## The decider
 

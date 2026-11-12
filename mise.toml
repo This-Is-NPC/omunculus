@@ -148,6 +148,14 @@ flag "--overlay <file>" help="Experimental TOML configuration overlay"
 flag "--resume <folder>" help="Continue the unfinished executions of a result folder; takes no other flag"
 '''
 
+[tasks."eval:import:terminal-bench"]
+description = "Equivalent Exchange: convert Terminal-Bench task folders into tasks (mise run eval:import:terminal-bench -- <folder>)"
+run = "scripts/eval-import-terminal-bench"
+
+[tasks."eval:import:swe-bench"]
+description = "Equivalent Exchange: convert SWE-bench or SWE-bench Pro instances into tasks (mise run eval:import:swe-bench -- <jsonl> --repos <folder>)"
+run = "scripts/eval-import-swe-bench"
+
 [tasks."eval:selftest"]
 description = "Equivalent Exchange: prove every task's check against its solution"
 run = "scripts/eval-selftest"

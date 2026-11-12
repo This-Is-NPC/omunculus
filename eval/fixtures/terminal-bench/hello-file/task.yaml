@@ -1,0 +1,11 @@
+instruction: |-
+  Read data/names.txt and write greeting.txt in the current directory.
+  It must hold one line, "Hello, <name>!", for each name in the file, in order.
+author_email: fixture@example.com
+difficulty: easy
+category: file-operations
+tags:
+  - files
+parser_name: pytest
+max_agent_timeout_sec: 180.0
+max_test_timeout_sec: 30.0

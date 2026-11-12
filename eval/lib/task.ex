@@ -56,7 +56,9 @@ defmodule EquivalentExchange.Task do
     |> Enum.map(fn {file, lead} -> file |> Path.dirname() |> load!(lead) end)
   end
 
-  defp load!(dir, lead) do
+  @doc "The task of `dir`, its id led by `lead`."
+  @spec load!(String.t(), String.t()) :: %__MODULE__{}
+  def load!(dir, lead \\ "") do
     data = Toml.decode_file!(Path.join(dir, "task.toml"))
     expect = Map.get(data, "expect", %{})
 

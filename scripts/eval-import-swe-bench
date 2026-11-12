@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Convert SWE-bench or SWE-bench Pro instances (JSONL) into Equivalent Exchange tasks under eval/tasks/swe-bench/."""
+
+import argparse
+import pathlib
+import sys
+
+root = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(root / "eval" / "importers"))
+import swe_bench  # noqa: E402
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("instances", help="the JSONL file, one instance per line")
+parser.add_argument("--repos", required=True, help="a folder of local clones: <owner>__<name>, <owner>/<name> or <name>")
+parser.add_argument("--out", default=str(root / "eval" / "tasks"), help="the tasks folder to write under")
+parser.add_argument("--test-command", default="python3 -m pytest -q", help="the command the test names follow, or hold {tests}")
+parser.add_argument("--instance", action="append", default=[], help="convert only this instance_id (repeatable)")
+parser.add_argument("--limit", type=int, help="convert at most this many instances")
+args = parser.parse_args()
+
+instances = [i for i in swe_bench.read(args.instances) if not args.instance or i["instance_id"] in args.instance]
+for instance in instances[: args.limit]:
+    print(swe_bench.convert(instance, args.repos, args.out, args.test_command))

@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Convert Terminal-Bench task folders into Equivalent Exchange tasks under eval/tasks/terminal-bench/."""
+
+import argparse
+import pathlib
+import sys
+
+root = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(root / "eval" / "importers"))
+import terminal_bench  # noqa: E402
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("source", help="a task folder, or a folder of task folders")
+parser.add_argument("--out", default=str(root / "eval" / "tasks"), help="the tasks folder to write under")
+args = parser.parse_args()
+
+source = pathlib.Path(args.source)
+folders = [source] if (source / "task.yaml").is_file() else sorted(p for p in source.iterdir() if (p / "task.yaml").is_file())
+if not folders:
+    sys.exit(f"no task.yaml under {source}")
+for folder in folders:
+    task, warnings = terminal_bench.convert(folder, args.out)
+    print(task)
+    for warning in warnings:
+        print(f"  warning: {warning}", file=sys.stderr)

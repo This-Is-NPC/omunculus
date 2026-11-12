@@ -16,3 +16,5 @@ __pycache__/
 /eval/.cache/
 /packs/dream-team/environment/.state/
 /dev/
+/eval/tasks/terminal-bench/
+/eval/tasks/swe-bench/

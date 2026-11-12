@@ -60,6 +60,33 @@ def bullets(block):
     return [line.strip()[2:] for line in block.splitlines() if re.match(r"\s*[-*]\s", line)]
 
 
+def verify(workspace, directory, script="run-tests.sh", timeout=900):
+    """Run `directory/script` with the workspace as its working directory; ok() when it exits 0.
+
+    `VERIFY_DIR` names the directory and `TEST_DIR` its `tests/`, as the
+    verify scripts of imported tasks expect.
+    """
+    import os
+    import subprocess
+
+    directory = pathlib.Path(directory)
+    env = dict(os.environ, VERIFY_DIR=str(directory), TEST_DIR=str(directory / "tests"))
+    try:
+        done = subprocess.run(
+            ["bash", str(directory / script)],
+            cwd=workspace,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        fail(f"{script} took more than {timeout} s")
+    if done.returncode != 0:
+        tail = "\n".join((done.stdout + done.stderr).strip().splitlines()[-20:])
+        fail(f"{script} exited {done.returncode}:\n{tail}")
+
+
 def expect_outcome(outcome, *allowed):
     global _ended_otherwise
     if outcome["outcome"] not in allowed:

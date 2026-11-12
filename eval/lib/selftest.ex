@@ -2,7 +2,7 @@ defmodule EquivalentExchange.Selftest do
   @moduledoc """
   Proves the checks and the scoring. Each task's check must pass on its
   starting workspace with its `solution/` applied — files written, paths
-  deleted, the outcome it gives — under every configuration it runs in, and
+  deleted, `solution/solve` run, the outcome it gives — under every configuration it runs in, and
   fail on the starting workspace untouched with a `done` that claims
   success. Each execution of `eval/fixtures/scores` must score as its
   hand-made expectation says.
@@ -41,7 +41,9 @@ defmodule EquivalentExchange.Selftest do
   defp scored(score, "causes"), do: Enum.map(score.findings, & &1.cause)
   defp scored(score, key), do: Map.fetch!(score, String.to_existing_atom(key))
 
-  defp problems(task, configuration) do
+  @doc "What fails in the proof of `task` under `configuration`: empty when its check holds."
+  @spec problems(%EquivalentExchange.Task{}, String.t()) :: [String.t()]
+  def problems(task, configuration) do
     solution = Jason.decode!(File.read!(Path.join([task.dir, "solution", "outcome.json"])))
 
     [solved, untouched] =
@@ -82,4 +84,22 @@ defmodule EquivalentExchange.Selftest do
       Enum.each(solution["delete"] || [], &File.rm_rf!(Path.join(dir, &1)))
     end
   end
+      solve(task, dir)
+    end
+  end
+
+  # An executable `solution/solve` is run in the workspace, as imported tasks
+  # carry their solution; `SOLUTION_DIR` names its folder.
+  defp solve(task, dir) do
+    script = Path.join([task.dir, "solution", "solve"])
+
+    if File.regular?(script) do
+      {said, status} =
+        System.cmd("bash", [script],
+          cd: dir,
+          env: [{"SOLUTION_DIR", Path.dirname(script)}],
+          stderr_to_stdout: true
+        )
+
+      if status != 0, do: raise("#{task.id}: solution/solve exited #{status}: #{said}")
 end
