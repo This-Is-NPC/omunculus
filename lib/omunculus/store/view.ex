@@ -142,6 +142,44 @@ defmodule Omunculus.Store.View do
     Query.all(conn, "SELECT * FROM comments WHERE #{column} = ? ORDER BY created_at, id", [id])
   end
 
+  @doc """
+  What the runs caused by `event_ids`, directly or through other runs,
+  gave the person, oldest first, as `%{kind, sequence, request_id, text}`:
+  the model replies of runs without a work (`"reply"`, as recorded), the
+  comments of those runs on a root work (`"report"`) and the requests they
+  opened at an account (`"question"`, its reason).
+  """
+  @spec said(Omunculus.Store.Connection.t(), [String.t()]) :: {:ok, [map]}
+  def said(_conn, []), do: {:ok, []}
+
+  def said(conn, event_ids) do
+    Query.all(
+      conn,
+      """
+      WITH RECURSIVE caused(id) AS (
+        SELECT id FROM runs WHERE cause_id IN (#{Query.placeholders(event_ids)})
+        UNION
+        SELECT runs.id FROM runs
+        JOIN events ON events.id = runs.cause_id
+        JOIN caused ON events.run_id = caused.id)
+      SELECT 'reply' AS kind, events.sequence, NULL AS request_id, events.body AS text
+      FROM events JOIN runs ON runs.id = events.run_id
+      WHERE runs.id IN caused AND runs.work_id IS NULL AND events.type = 'model'
+      UNION ALL
+      SELECT 'report', events.sequence, NULL, comments.body
+      FROM comments JOIN events ON events.id = comments.event_id
+      JOIN works ON works.id = comments.work_id
+      WHERE comments.run_id IN caused AND works.parent_id IS NULL
+      UNION ALL
+      SELECT 'question', opening.sequence, requests.id, json_extract(opening.body, '$.reason')
+      FROM requests JOIN events AS opening ON opening.id = requests.event_id
+      WHERE requests.run_id IN caused AND json_extract(requests.arbiter, '$.kind') = 'human'
+      ORDER BY sequence
+      """,
+      event_ids
+    )
+  end
+
   @doc "The last closed run of a work, with its record."
   @spec last_closed_run(Omunculus.Store.Connection.t(), String.t()) :: {:ok, map | nil}
   def last_closed_run(conn, work_id) do

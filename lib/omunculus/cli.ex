@@ -8,8 +8,10 @@ defmodule Omunculus.CLI do
   relative to it. Tools with `config = false` run without opening the
   store. A command returns once every run it opened, transitively, has
   finished; the error of any of them fails the command, several one per
-  line. When a server owns the project, the command goes to it over the
-  project's local socket and is answered the same way. Taking the
+  line. A tool command prints its output, then what the runs it caused
+  gave the person (`Operations.reply/2`). When a server owns the project,
+  the command goes to it over the project's local socket and is answered
+  the same way. Taking the
   project's lock itself, the command first recovers what a process that
   stopped left (`Run.recover/1`), and returns once those runs have
   finished too.
@@ -95,9 +97,11 @@ defmodule Omunculus.CLI do
     case Project.open(config, lock: true) do
       {:ok, project} ->
         try do
-          Cycle.run(project, nil, fn project ->
-            with :ok <- Run.recover(project), do: perform(project, command)
-          end)
+          with {:ok, started} <-
+                 Cycle.run(project, nil, fn project ->
+                   with :ok <- Run.recover(project), do: perform(project, command)
+                 end),
+               do: {:ok, Operations.reply(project, started)}
         after
           Project.close(project)
         end
@@ -110,10 +114,11 @@ defmodule Omunculus.CLI do
     end
   end
 
-  defp perform(project, {:tool, name, args}), do: Operations.command(project, name, args)
+  defp perform(project, {:tool, name, args}), do: Operations.start(project, name, args)
 
   defp perform(project, {:bootstrap, target}) do
-    with :ok <- Operations.bootstrap_access(project, target), do: {:ok, "access bootstrapped"}
+    with :ok <- Operations.bootstrap_access(project, target),
+         do: {:ok, {"access bootstrapped", []}}
   end
 
   # A project held without a socket, by another direct command, stays in use.

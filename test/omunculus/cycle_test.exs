@@ -121,7 +121,7 @@ defmodule Omunculus.CycleTest do
       end)
     )
 
-    assert {:ok, ""} = CLI.run(["send", "go"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "go"], dir)
     project = Fixtures.open_project(dir)
 
     {root, runs} = root_runs(project)
@@ -159,7 +159,7 @@ defmodule Omunculus.CycleTest do
       end)
     )
 
-    assert {:ok, ""} = CLI.run(["send", "go"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "go"], dir)
     assert Agent.get(active, & &1.most) == 1
 
     project = Fixtures.open_project(dir)
@@ -212,7 +212,7 @@ defmodule Omunculus.CycleTest do
         end)
       )
 
-      assert {:ok, ""} = CLI.run(["send", "go"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "go"], dir)
       assert_receive {:asked, "Goal A", first_pid}
       assert_receive {:asked, "Goal B", second_pid}
       refute Process.alive?(first_pid)
@@ -382,7 +382,7 @@ defmodule Omunculus.CycleTest do
       end
     end)
 
-    assert {:ok, ""} = CLI.run(["send", "go"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "go"], dir)
     project = Fixtures.open_project(dir)
 
     {_root, runs} = root_runs(project)

@@ -93,7 +93,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
   end
 
   test "write in the default workspace writes into its root, not the project dir", %{
@@ -111,7 +111,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
     assert File.read!(Path.join(one, "note.txt")) == "hi"
     refute File.exists?(Path.join(dir, "note.txt"))
@@ -146,7 +146,7 @@ defmodule Omunculus.WorkspaceTest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
     project = open_project(dir)
     {:ok, events} = Query.all(project.conn, "SELECT body FROM events WHERE type = 'tool'")
@@ -194,7 +194,7 @@ defmodule Omunculus.WorkspaceTest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     assert {:ok, "- write (concierge)\n  A note.txt (+1 -0)"} =
              CLI.run(["changes", "--work_id", work_id], dir)
@@ -238,7 +238,7 @@ defmodule Omunculus.WorkspaceTest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
     assert File.read!(kept) == "kept\n"
     refute File.exists?(Path.join(one, "note.txt"))
@@ -274,7 +274,7 @@ defmodule Omunculus.WorkspaceTest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
     assert File.exists?(Path.join(three, "note.txt"))
 
     denied =
@@ -305,7 +305,7 @@ defmodule Omunculus.WorkspaceTest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
     assert_received {:scratch, [_one_run]}
     assert File.ls!(root) == []
 
@@ -329,7 +329,7 @@ defmodule Omunculus.WorkspaceTest do
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open_project(dir)
 
@@ -366,7 +366,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
   end
 
   test "a child delegated from a workspace-two work inherits workspace two", %{
@@ -399,7 +399,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open_project(dir)
 
@@ -431,7 +431,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     assert_received {:output, output}
     assert output == "one #{one}\nthree #{three}\ntwo #{two} *"
@@ -460,7 +460,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     assert_received {:output, output}
     assert output == "#{three}\n  marker.txt"
@@ -486,7 +486,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, request_model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open_project(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
@@ -495,7 +495,7 @@ defmodule Omunculus.WorkspaceTest do
     reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
     Fixtures.use_model(dir, reply_model)
 
-    assert {:ok, ""} =
+    assert {:ok, _reply} =
              CLI.run(
                [
                  "reply",
@@ -573,7 +573,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, request_model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open_project(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
@@ -582,7 +582,7 @@ defmodule Omunculus.WorkspaceTest do
     reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
     Fixtures.use_model(dir, reply_model)
 
-    assert {:ok, ""} =
+    assert {:ok, _reply} =
              CLI.run(
                [
                  "reply",
@@ -618,7 +618,7 @@ defmodule Omunculus.WorkspaceTest do
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
     project = open_project(dir)
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -657,7 +657,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
   end
 
   test "a run in the default workspace uses the workspace file execution timeout", %{
@@ -684,7 +684,7 @@ defmodule Omunculus.WorkspaceTest do
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
     project = open_project(dir)
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -728,6 +728,6 @@ defmodule Omunculus.WorkspaceTest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
   end
 end

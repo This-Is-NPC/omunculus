@@ -124,7 +124,7 @@ defmodule Omunculus.McpTest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       assert_received {:assembled, assembled}
       assert assembled =~ "- echo:"

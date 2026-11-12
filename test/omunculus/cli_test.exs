@@ -52,6 +52,63 @@ defmodule Omunculus.CLITest do
     |> Enum.map(&Jason.decode!(&1.body)["name"])
   end
 
+  describe "what a send prints" do
+    test "the reply of an agent that had no work", %{dir: dir} do
+      Fixtures.use_model(dir, fn _assembled, _tools, _call -> {:ok, "pong"} end)
+
+      assert {:ok, "pong"} = CLI.run(["send", "ping"], dir)
+    end
+
+    test "nothing when the agent said nothing", %{dir: dir} do
+      Fixtures.use_model(dir, fn _assembled, _tools, _call -> {:ok, ""} end)
+
+      assert {:ok, ""} = CLI.run(["send", "ping"], dir)
+    end
+
+    test "the report on a root work, then the reply once the work is done", %{dir: dir} do
+      model = fn assembled, _tools, call ->
+        cond do
+          assembled =~ "## Last comment\n**done:** opened" ->
+            call.("done", %{"report" => %{"done" => "closed"}})
+
+          assembled =~ "## Work\n" ->
+            {:ok, "unused"}
+
+          true ->
+            create_root(call, "Root")
+        end
+      end
+
+      Fixtures.use_model(dir, model)
+
+      assert {:ok, output} = CLI.run(["send", "go"], dir)
+      assert output == "**done:** opened\n\n**done:** closed"
+    end
+
+    test "a question to the person, with the request to answer", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["ask", "end", "work"]
+      """)
+
+      model = fn assembled, _tools, call ->
+        if assembled =~ "## Work\n",
+          do: call.("ask", %{"question" => "Which file?"}),
+          else: create_root(call, "Edit")
+      end
+
+      Fixtures.use_model(dir, model)
+
+      assert {:ok, output} = CLI.run(["send", "go"], dir)
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT id FROM requests")
+      Project.close(project)
+      assert output == "**done:** opened\n\nQuestion (request #{request.id}): Which file?"
+    end
+  end
+
   test "CLI refuses an unknown account and an ask nobody could receive without creating a request",
        %{
          dir: dir
@@ -97,7 +154,7 @@ defmodule Omunculus.CLITest do
   end
 
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
-    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "count to 5"], dir)
 
     project = open_project(dir)
 
@@ -156,7 +213,7 @@ defmodule Omunculus.CLITest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
     project = open_project(dir)
 
@@ -199,7 +256,7 @@ defmodule Omunculus.CLITest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "Alo"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "Alo"], dir)
 
     assert_received {:results, assembled}
 
@@ -217,7 +274,7 @@ defmodule Omunculus.CLITest do
   end
 
   test "the --message form works", %{dir: dir} do
-    assert {:ok, ""} = CLI.run(["send", "--message", "hello"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--message", "hello"], dir)
 
     project = open_project(dir)
 
@@ -264,8 +321,8 @@ defmodule Omunculus.CLITest do
   end
 
   test "prompt prints the last run assembled prompt", %{dir: dir} do
-    assert {:ok, ""} = CLI.run(["send", "first message"], dir)
-    assert {:ok, ""} = CLI.run(["send", "second message"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "first message"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "second message"], dir)
 
     assert {:ok, output} = CLI.run(["prompt"], dir)
     assert output =~ "## Message\nsecond message"
@@ -279,13 +336,13 @@ defmodule Omunculus.CLITest do
   end
 
   test "prompt --run prints that run assembled prompt", %{dir: dir} do
-    assert {:ok, ""} = CLI.run(["send", "first message"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "first message"], dir)
     project = open_project(dir)
     assert {:ok, [first]} = Query.all(project.conn, "SELECT * FROM runs")
     first_id = first.id
     Project.close(project)
 
-    assert {:ok, ""} = CLI.run(["send", "second message"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "second message"], dir)
 
     assert {:ok, output} = CLI.run(["prompt", "--run", first_id], dir)
     assert output =~ "first message"
@@ -382,7 +439,7 @@ defmodule Omunculus.CLITest do
     Fixtures.install_default(other)
     config = Path.join(other, "omunculus.toml")
 
-    assert {:ok, ""} = CLI.run(["--config", config, "send", "x"], dir)
+    assert {:ok, _reply} = CLI.run(["--config", config, "send", "x"], dir)
     assert File.dir?(Path.join(other, ".omunculus"))
     refute File.dir?(Path.join(dir, ".omunculus"))
   end
@@ -405,7 +462,7 @@ defmodule Omunculus.CLITest do
     """)
 
     path = Path.join(config_dir, "omunculus.toml")
-    assert {:ok, ""} = CLI.run(["--config", path, "send", "x"], dir)
+    assert {:ok, _reply} = CLI.run(["--config", path, "send", "x"], dir)
     assert File.dir?(Path.join(config_dir, ".omunculus"))
     refute File.dir?(Path.join(repo, ".omunculus"))
   end
@@ -432,7 +489,7 @@ defmodule Omunculus.CLITest do
 
     Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "x"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "x"], dir)
   end
 
   test "a missing [execution] table lists the required keys" do
@@ -472,8 +529,8 @@ defmodule Omunculus.CLITest do
   end
 
   test "a second send never reuses the old assembled prompt", %{dir: dir} do
-    assert {:ok, ""} = CLI.run(["send", "first"], dir)
-    assert {:ok, ""} = CLI.run(["send", "second"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "first"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "second"], dir)
 
     project = open_project(dir)
 
@@ -498,7 +555,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Count to 5"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Count to 5"], dir)
 
       project = open_project(dir)
 
@@ -533,7 +590,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "keep going"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work.id, "keep going"], dir)
 
       assert_received {:second_assembled, second_assembled}
       assert second_assembled =~ "## Work\n"
@@ -603,7 +660,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(args, dir)
+      assert {:ok, _reply} = CLI.run(args, dir)
 
       project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
@@ -673,7 +730,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} =
+      assert {:ok, _reply} =
                CLI.run(
                  ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
                  dir
@@ -792,7 +849,7 @@ defmodule Omunculus.CLITest do
       end
 
       Fixtures.use_model(dir, asking)
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "save this"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "save this"], dir)
 
       project = open_project(dir)
       assert {:ok, [paused]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -1168,7 +1225,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} =
+      assert {:ok, _reply} =
                CLI.run(
                  [
                    "reply",
@@ -1198,7 +1255,7 @@ defmodule Omunculus.CLITest do
       end
 
       Fixtures.use_model(dir, model)
-      assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir)
 
       project = open_project(dir)
 
@@ -1237,7 +1294,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "save"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "save"], dir)
       assert_received {:refused, {:ok, refused}}
       assert refused == Out.refused({:request, {:blocked, "write"}})
 
@@ -1271,7 +1328,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
       assert_received {:asked, {:ok, refused}}
       assert refused == Out.refused({:request, {:already_have, "comment"}})
 
@@ -1307,7 +1364,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       assert_received {:output, output}
       assert output == Out.refused({:request, {:already_have, "comment"}})
@@ -1340,7 +1397,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} =
+      assert {:ok, _reply} =
                CLI.run(
                  ["reply", "--request_id", request_id, "--option", "deny", "not allowed"],
                  dir
@@ -1397,7 +1454,7 @@ defmodule Omunculus.CLITest do
         {:ok, "unused"}
       end)
 
-      assert {:ok, ""} =
+      assert {:ok, _reply} =
                CLI.run(["reply", "--request_id", request_id, "--option", "deny", "no"], dir)
 
       assert_received {:assembled, assembled}
@@ -1571,7 +1628,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Ship it please"], dir)
 
       project = open_project(dir)
 
@@ -1627,7 +1684,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
 
@@ -1682,7 +1739,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
@@ -1733,7 +1790,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "go on"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "go on"], dir)
 
       project = open_project(dir)
 
@@ -1773,7 +1830,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "handle this"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "handle this"], dir)
 
       project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
@@ -1797,7 +1854,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "come back"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work.id, "come back"], dir)
 
       project = open_project(dir)
 
@@ -1854,7 +1911,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Big task please"], dir)
 
       project = open_project(dir)
 
@@ -1948,7 +2005,7 @@ defmodule Omunculus.CLITest do
 
         Fixtures.use_model(dir, model)
 
-        assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
+        assert {:ok, _reply} = CLI.run(["send", "Big task please"], dir)
 
         project = open_project(dir)
 
@@ -2016,7 +2073,7 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", child, "finish it"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", child, "finish it"], dir)
 
       project = open_project(dir)
       assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", child)
@@ -2082,7 +2139,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Big task2 please"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Big task2 please"], dir)
 
       project = open_project(dir)
 
@@ -2170,7 +2227,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Big task3 please"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Big task3 please"], dir)
 
       assert {:ok, [request]} = Query.all(reader.conn, "SELECT * FROM requests")
       assert request.status == "closed"
@@ -2220,7 +2277,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
 
@@ -2316,7 +2373,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
@@ -2360,7 +2417,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
@@ -2408,7 +2465,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "handle this"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "handle this"], dir)
 
       project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
@@ -2472,7 +2529,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "handle"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "handle"], dir)
 
       project = open_project(dir)
 
@@ -2526,7 +2583,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
 
@@ -2560,7 +2617,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model1)
 
-      assert {:ok, ""} = CLI.run(["send", "count the steps"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "count the steps"], dir)
 
       project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
@@ -2582,7 +2639,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model2)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "compact"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work.id, "compact"], dir)
 
       assert_received {:load_output, load_output}
       expected = comments |> Enum.map(&"#{&1.id} #{&1.author}: #{&1.body}") |> Enum.join("\n")
@@ -2619,7 +2676,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model3)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "again"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work.id, "again"], dir)
 
       assert_received {:third_assembled, third_assembled}
       assert third_assembled =~ "## Last comment\nsummary: 1 2 3"
@@ -2658,7 +2715,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", my_work_id, "compact"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", my_work_id, "compact"], dir)
 
       project = open_project(dir)
 
@@ -2722,7 +2779,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Ship it please"], dir)
 
       project = open_project(dir)
 
@@ -2793,7 +2850,7 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "Ship it please"], dir)
 
       project = open_project(dir)
 

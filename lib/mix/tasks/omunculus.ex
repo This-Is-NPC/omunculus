@@ -29,9 +29,12 @@ defmodule Mix.Tasks.Omunculus do
 
   ## Output
 
-  Stdout is the tool's `output` and nothing else; an empty one is a
-  success with nothing to print. A refusal or a failure is one line on
-  stderr, a reason without a sentence of its own printed as the Elixir
+  Stdout is the tool's `output`, then what the runs it caused gave the
+  person, a blank line apart: the text of each reply of an agent that had
+  no work, each report on a root work and each question to an account,
+  as `Question (request <id>): <reason>`, in the order they were written.
+  An empty one is a success with nothing to print. A refusal or a
+  failure is one line on stderr, a reason without a sentence of its own printed as the Elixir
   term, and the exit status 1; success is 0, and there is no other. A
   command that opens runs returns once every run it opened, directly or
   through other runs, has finished, and fails with the errors of any of

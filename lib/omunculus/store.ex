@@ -43,6 +43,7 @@ defmodule Omunculus.Store do
   defdelegate settled(conn, workflows), to: View
   defdelegate children(conn, work_id, states, since_last_run), to: View
   defdelegate comments(conn, target, id), to: View
+  defdelegate said(conn, event_ids), to: View
   defdelegate last_closed_run(conn, work_id), to: View
   defdelegate closed_runs(conn, work_id), to: View
   defdelegate conversation_runs(conn, conversation_id), to: View

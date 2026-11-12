@@ -71,7 +71,7 @@ defmodule Omunculus.Server.RevertTest do
       {:ok, "done"}
     end)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
     note = Path.join(root, "note.txt")
     assert File.read!(note) == "hi\n"
 

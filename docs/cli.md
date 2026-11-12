@@ -33,9 +33,12 @@ Every value arrives as text; a tool that takes JSON decodes it.
 
 ### Output
 
-Stdout is the tool's `output` and nothing else; an empty one is a
-success with nothing to print. A refusal or a failure is one line on
-stderr, a reason without a sentence of its own printed as the Elixir
+Stdout is the tool's `output`, then what the runs it caused gave the
+person, a blank line apart: the text of each reply of an agent that had
+no work, each report on a root work and each question to an account,
+as `Question (request <id>): <reason>`, in the order they were written.
+An empty one is a success with nothing to print. A refusal or a
+failure is one line on stderr, a reason without a sentence of its own printed as the Elixir
 term, and the exit status 1; success is 0, and there is no other. A
 command that opens runs returns once every run it opened, directly or
 through other runs, has finished, and fails with the errors of any of
@@ -349,7 +352,7 @@ Also called by a model.
 omunculus send <message> [--agent <agent>] [--attachments <attachments>] [--subject <subject>] [--work_id <work_id>]
 ```
 
-Delivers the message and opens the first run: of the work work_id names, else of the agent of depth 0 agent names, else of the agent the conversation began with, else of the only agent of depth 0. It writes PROMPTS(message) and EVENTS(prompt); it creates no work and copies the message onto no title. A work waiting on a request, or parked by break, is reopened first, with EVENTS(work) reason reopened_by_prompt; a work waiting on its children stays waiting, and the message opens a run of its agent. A successful send prints nothing: the assembled prompt and the model's text are in the store.
+Delivers the message and opens the first run: of the work work_id names, else of the agent of depth 0 agent names, else of the agent the conversation began with, else of the only agent of depth 0. It writes PROMPTS(message) and EVENTS(prompt); it creates no work and copies the message onto no title. A work waiting on a request, or parked by break, is reopened first, with EVENTS(work) reason reopened_by_prompt; a work waiting on its children stays waiting, and the message opens a run of its agent. A send prints, once the runs it caused have finished, what they gave the person: the text of each reply of an agent that had no work, each report on a root work and each question to an account.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |

@@ -151,7 +151,7 @@ defmodule Omunculus.Tools.WorkTest do
     defp setup_project(dir, toml, model) do
       Fixtures.write_config(dir, toml)
       Fixtures.use_model(dir, model)
-      assert {:ok, ""} = CLI.run(["send", "go"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "go"], dir)
       project = Fixtures.open_project(dir)
       project
     end
@@ -632,7 +632,7 @@ defmodule Omunculus.Tools.WorkTest do
         model.(assembled, tools, call)
       end)
 
-      assert {:ok, ""} = CLI.run(["send", "go"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "go"], dir)
 
       assert_received {:assembled, "lead", without_work}
       assert without_work =~ "## Agents\n- alpha\n- beta: also break\n\n## Tools"
@@ -675,7 +675,7 @@ defmodule Omunculus.Tools.WorkTest do
         {:ok, "idle"}
       end)
 
-      assert {:ok, ""} = CLI.run(["send", "go"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "go"], dir)
 
       assert_received {:assembled, assembled}
 

@@ -58,8 +58,8 @@ defmodule Omunculus.ConversationRootTest do
                dir
              )
 
-    assert {:ok, ""} = CLI.run(["send", "first"], dir)
-    assert {:ok, ""} = CLI.run(["send", "second"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "first"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "second"], dir)
 
     assert [one, two] = folders(dir)
     quotes = Enum.map([one, two], &File.read!(Path.join([dir, "clients", &1, "quote.md"])))

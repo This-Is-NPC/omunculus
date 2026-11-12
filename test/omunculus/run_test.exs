@@ -1930,7 +1930,7 @@ defmodule Omunculus.RunTest do
         assert {:ok, _run} = Run.open(project, opening(nil, work_id))
         request = root_request(project, work_id)
 
-        assert {:ok, ""} =
+        assert {:ok, _reply} =
                  CLI.run(["reply", "--request_id", request.id] ++ unquote(args) ++ ["go on"], dir)
 
         assert [_first, again] = runs_of(project, work_id)
@@ -2101,7 +2101,7 @@ defmodule Omunculus.RunTest do
 
       Project.close(project)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "I accept"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "I accept"], dir)
 
       project = open_project(dir)
       assert [_waited, %{via: "send"}] = runs_of(project, work_id)

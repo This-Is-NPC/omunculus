@@ -36,6 +36,8 @@ defmodule Omunculus.Tools.RecordTest do
     }
 
     assert Record.calls(noting) == ["end"]
+    assert Record.answer("plain text") == "plain text"
+    assert Record.answer(%{"type" => "text", "output" => "from a program"}) == "from a program"
     assert Record.answer(noting) == ""
 
     assert Record.calls(%{
@@ -47,7 +49,5 @@ defmodule Omunculus.Tools.RecordTest do
 
     assert Record.calls(%{"output" => [%{"type" => "function_call", "name" => "work"}]}) ==
              ["work"]
-
-    assert Record.answer("not json") == ""
   end
 end

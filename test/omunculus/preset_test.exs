@@ -34,7 +34,7 @@ defmodule Omunculus.PresetTest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "run a command"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "run a command"], dir)
 
       project = open_project(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -66,7 +66,7 @@ defmodule Omunculus.PresetTest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -88,7 +88,7 @@ defmodule Omunculus.PresetTest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "hi"], dir)
 
       project = open_project(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -135,7 +135,7 @@ defmodule Omunculus.PresetTest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "write the file"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "write the file"], dir)
 
       project = open_project(dir)
 
@@ -182,7 +182,7 @@ defmodule Omunculus.PresetTest do
 
       Fixtures.use_model(dir, model)
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "need the vault"], dir)
+      assert {:ok, _reply} = CLI.run(["send", "--work_id", work_id, "need the vault"], dir)
 
       project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
@@ -196,7 +196,7 @@ defmodule Omunculus.PresetTest do
       reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
       Fixtures.use_model(dir, reply_model)
 
-      assert {:ok, ""} =
+      assert {:ok, _reply} =
                CLI.run(
                  ["reply", "--request_id", request.id, "--option", "grant", "allowed"],
                  dir

@@ -4,8 +4,9 @@ defmodule Omunculus.Operations do
   local callers and the HTTP server.
   """
 
-  alias Omunculus.{Config, Harness}
+  alias Omunculus.{Config, Harness, Store}
   alias Omunculus.Store.Access
+  alias Omunculus.Tools.Record
 
   @spec call(Omunculus.Project.t(), String.t(), map, map, boolean) ::
           {:ok, map, [map]} | {:error, term}
@@ -40,10 +41,46 @@ defmodule Omunculus.Operations do
   @spec command(Omunculus.Project.t(), String.t(), map, boolean) ::
           {:ok, String.t()} | {:error, term}
   def command(project, name, args, follow_up? \\ true) do
-    with {:ok, out, _events} <- call(project, name, args, %{}, follow_up?) do
-      if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
-    end
+    with {:ok, out, _events} <- call(project, name, args, %{}, follow_up?),
+         do: output(out)
   end
+
+  @doc """
+  `command/4` for a caller that waits for the runs it opened: its output and
+  the ids of the events it wrote, which `reply/2` takes once they have
+  finished.
+  """
+  @spec start(Omunculus.Project.t(), String.t(), map) ::
+          {:ok, {String.t(), [String.t()]}} | {:error, term}
+  def start(project, name, args) do
+    with {:ok, out, events} <- call(project, name, args, %{}),
+         {:ok, output} <- output(out),
+         do: {:ok, {output, Enum.map(events, & &1.id)}}
+  end
+
+  @doc """
+  The output of a command begun with `start/3`, after the runs it caused
+  have finished, followed by what they gave the person: each reply of an
+  agent that had no work, each report on a root work and each question
+  to an account, in the order they were written, a blank line apart.
+  """
+  @spec reply(Omunculus.Project.t(), {String.t(), [String.t()]}) :: String.t()
+  def reply(project, {output, event_ids}) do
+    {:ok, said} = Store.said(project.conn, event_ids)
+
+    [output | Enum.map(said, &told/1)]
+    |> Enum.reject(&(String.trim(&1) == ""))
+    |> Enum.join("\n\n")
+  end
+
+  defp told(%{kind: "reply", text: body}), do: Record.answer(body)
+  defp told(%{kind: "report", text: text}), do: text
+
+  defp told(%{kind: "question", request_id: id, text: reason}),
+    do: "Question (request #{id}): #{reason}"
+
+  defp output(%{ok: true, output: output}), do: {:ok, output}
+  defp output(%{output: output}), do: {:error, {:tool_failed, output}}
 
   @doc """
   Seeds the first project administrator; only the owner of the project

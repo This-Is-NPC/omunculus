@@ -44,11 +44,12 @@ on the `fake` model. Putting the agents on a real model is
 
    ```console
    $ <checkout>/bin/omunculus send "count to 5" --agent concierge
-   $
+   fake model: You are the project concierge; you talk with the person and hand work to the agents under ## Agents.
    ```
 
-   A send that worked prints nothing. The `fake` model answers with the
-   first line of its prompt, so the run needs no network.
+   A send prints what the run gave you once it has finished: the agent's
+   reply. The `fake` model answers with the first line of its prompt, so
+   the run needs no network.
 
 4. Read what the run did.
 

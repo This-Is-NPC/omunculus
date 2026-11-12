@@ -131,7 +131,11 @@ defmodule Omunculus.Server.Project do
   have finished.
   """
   def local_command(id, name, args),
-    do: Cycle.command(project(id), nil, &Operations.command(&1, name, args))
+    do:
+      with(
+        {:ok, started} <- Cycle.command(project(id), nil, &Operations.start(&1, name, args)),
+        do: {:ok, Operations.reply(project(id), started)}
+      )
 
   @doc "Seeds the first project administrator, for the owner of the project config."
   def bootstrap_access(id, target), do: Operations.bootstrap_access(project(id), target)

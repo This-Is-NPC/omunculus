@@ -32,6 +32,11 @@ defmodule Omunculus.Tools.Record do
         do: text
   end
 
+  # What a `command` model ends its turn with.
+  defp texts(%{"type" => type, "output" => text})
+       when type in ["text", "result"] and is_binary(text),
+       do: [text]
+
   defp texts(_reply), do: []
 
   @doc "The names of the tools a recorded model reply calls, in each provider's shape."
@@ -50,13 +55,14 @@ defmodule Omunculus.Tools.Record do
   @doc """
   What a recorded model reply says to whoever it answers: its text when it
   calls no tool. A reply that calls one is the agent acting, and its text
-  narrates the call to itself.
+  narrates the call to itself. A model that records plain text, as `Fake`
+  does, said that text.
   """
   @spec answer(String.t() | map) :: String.t()
   def answer(body) when is_binary(body) do
     case Jason.decode(body) do
       {:ok, reply} when is_map(reply) -> answer(reply)
-      _not_a_reply -> ""
+      _plain -> body
     end
   end
 

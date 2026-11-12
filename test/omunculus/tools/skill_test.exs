@@ -71,7 +71,7 @@ defmodule Omunculus.Tools.SkillTest do
       {:ok, "reviewed"}
     end)
 
-    assert {:ok, ""} = CLI.run(["send", "review this"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "review this"], dir)
     assert_received {:assembled, assembled}
 
     assert assembled =~

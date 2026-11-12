@@ -95,7 +95,7 @@ defmodule Omunculus.Tools.ReadWorkTest do
     end
 
     Fixtures.use_model(dir, model)
-    assert {:ok, ""} = CLI.run(["send", "Alo"], dir)
+    assert {:ok, _reply} = CLI.run(["send", "Alo"], dir)
 
     assert_received {:child, {:ok, read}}
     assert read =~ "# Answer"
