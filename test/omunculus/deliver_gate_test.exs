@@ -8,8 +8,9 @@ defmodule Omunculus.DeliverGateTest do
   @run Path.expand("../../packs/dream-team/tools/deliver/run", __DIR__)
   @plan "# Plan\n\n## base\n\n## page: home\n\n## Release\n"
 
-  @moduletag :tmp_dir
-  setup %{tmp_dir: dir} do
+  setup do
+    dir = Path.join(System.tmp_dir!(), "deliver-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(dir) end)
     File.mkdir_p!(Path.join(dir, "docs"))
     File.write!(Path.join([dir, "docs", "plan.md"]), @plan)
     {:ok, root: dir}
