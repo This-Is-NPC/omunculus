@@ -60,6 +60,12 @@ Item {
     }
     return { kept: kept, overflow: flatten(left) }
   }
+  // The main action has no room for even its short name. It is looked up in
+  // `commands`, not by the delegate's copy of it.
+  readonly property bool crowded: {
+    const main = leading.length > 0 ? leading[0][0] : null
+    return !!main && !!main.icon && measured && (widths[commands.indexOf(main)] || { brief: 0 }).brief > room - (overflow.length > 0 ? reserve : 0)
+  }
   // The actions that left the row, in their rank.
   readonly property var overflow: plan.overflow
   readonly property var keptLeading: leading.filter(run => plan.kept.includes(run))
@@ -160,9 +166,7 @@ Item {
           required property var modelData
           // The main action never leaves; with no room for even its short
           // name it shows its icon, rather than a name cut to a dash.
-          readonly property bool crowded: row.isMain(modelData) && !!modelData.icon && row.measured
-            && (row.widths[row.commands.indexOf(modelData)] || { brief: 0 }).brief > row.room - (row.overflow.length > 0 ? row.reserve : 0)
-          readonly property bool iconOnly: row.iconOnly(modelData) || crowded
+          readonly property bool iconOnly: row.iconOnly(modelData) || (row.isMain(modelData) && row.crowded)
           dense: true
           implicitHeight: row.control
           role: modelData.group ? (modelData.checked ? "primary" : "action")
