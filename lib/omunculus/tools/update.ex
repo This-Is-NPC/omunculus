@@ -28,20 +28,24 @@ defmodule Omunculus.Tools.Update do
     end
   end
 
-  defp update(release, latest, running, check?) do
-    with {:ok, assets} <- packages(release) do
-      names = Enum.map(assets, & &1["name"])
-
-      if check? do
+  defp update(%{"tag_name" => tag} = release, latest, running, check?) do
+    case packages(release) do
+      {:ok, assets} when check? ->
         Out.ok(
-          "omunculus #{latest} is available, you run #{running}. " <>
-            "`omunculus update` installs #{Enum.join(names, ", ")}."
+          "omunculus #{latest} is available (installed #{running}). " <>
+            "`omunculus update` installs #{Enum.map_join(assets, ", ", & &1["name"])}."
         )
-      else
+
+      {:ok, assets} ->
         install(release, assets, latest)
-      end
-    else
-      {:error, message} -> Out.fail(message)
+
+      :error when check? ->
+        Out.ok(
+          "omunculus #{latest} is available (installed #{running}), but it has no package yet."
+        )
+
+      :error ->
+        Out.fail("#{tag} is out but carries no omunculus package yet; nothing was installed")
     end
   end
 
@@ -71,14 +75,14 @@ defmodule Omunculus.Tools.Update do
     with {:ok, core} <- find(assets, @core) do
       case find(assets, @apps) do
         {:ok, apps} -> {:ok, [core | if(installed?("omunculus-apps"), do: [apps], else: [])]}
-        {:error, _absent} -> {:ok, [core]}
+        :error -> {:ok, [core]}
       end
     end
   end
 
   defp find(assets, pattern) do
     case Enum.find(assets, &Regex.match?(pattern, &1["name"])) do
-      nil -> {:error, "the latest release has no #{inspect(pattern.source)} package"}
+      nil -> :error
       asset -> {:ok, asset}
     end
   end
@@ -103,7 +107,7 @@ defmodule Omunculus.Tools.Update do
   end
 
   defp sums(%{"assets" => assets}, dir) do
-    with {:ok, asset} <- find(assets, ~r/^SHA256SUMS$/),
+    with {:ok, asset} <- find(assets, ~r/^SHA256SUMS$/) |> checksums(),
          {:ok, path} <- fetch(asset, dir),
          {:ok, text} <- File.read(path) do
       sums =
@@ -115,6 +119,9 @@ defmodule Omunculus.Tools.Update do
       {:ok, sums}
     end
   end
+
+  defp checksums({:ok, _asset} = found), do: found
+  defp checksums(:error), do: {:error, "the release carries no SHA256SUMS; nothing was installed"}
 
   defp download(assets, sums, dir) do
     Enum.reduce_while(assets, {:ok, []}, fn %{"name" => name} = asset, {:ok, files} ->

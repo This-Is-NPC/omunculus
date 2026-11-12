@@ -54,9 +54,7 @@ defmodule Omunculus.ReleaseCommandsTest do
 
   defp sha(data), do: :crypto.hash(:sha256, data) |> Base.encode16(case: :lower)
 
-  defp serve(tag, sums_for \\ %{}) do
-    files = %{@core => "core bytes", @apps => "apps bytes"}
-
+  defp serve(tag, sums_for \\ %{}, files \\ %{@core => "core bytes", @apps => "apps bytes"}) do
     sums =
       Enum.map_join(files, fn {name, data} ->
         "#{Map.get(sums_for, name, sha(data))}  #{name}\n"
@@ -135,9 +133,23 @@ defmodule Omunculus.ReleaseCommandsTest do
   test "update --check reports and installs nothing", %{dir: dir} do
     serve("v0.2.0")
     assert {:ok, output} = CLI.run(["update", "--check"], dir)
-    assert output =~ "0.2.0 is available"
+    assert output =~ "0.2.0 is available (installed 0.1.0)"
     assert output =~ @core
     refute output =~ @apps
+    assert sudo_files() == []
+  end
+
+  test "a release with no package is said in words, and checked without failing", %{dir: dir} do
+    serve("v0.2.0", %{}, %{"notes.txt" => "n"})
+
+    assert {:error, reason} = CLI.run(["update"], dir)
+
+    assert CLI.message(reason) ==
+             "v0.2.0 is out but carries no omunculus package yet; nothing was installed"
+
+    assert {:ok, output} = CLI.run(["update", "--check"], dir)
+    assert output =~ "omunculus 0.2.0 is available (installed 0.1.0), but it has no package yet."
+    refute output =~ "^"
     assert sudo_files() == []
   end
 
@@ -154,6 +166,8 @@ defmodule Omunculus.ReleaseCommandsTest do
     path = Path.join([dir, "omunculus", "server.toml"])
     assert {:ok, first} = CLI.run(["setup"], dir)
     assert first =~ "Wrote #{path}"
+    assert first =~ "[access]"
+    assert first =~ "server.md#project-access"
     assert first =~ "how-to-start-a-project.md"
     assert {:ok, _config} = Omunculus.Server.Config.load(path)
 

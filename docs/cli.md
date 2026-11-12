@@ -393,7 +393,7 @@ Prints the project's catalog as JSON. Under tools, each tool, hook and skill wit
 omunculus update [--check true]
 ```
 
-Updates the installed packages to the latest release. It asks GitHub for the latest release once, with no telemetry, and compares it with the running version. When the release is newer it downloads the omunculus package, and omunculus-apps when that is installed, checks both against SHA256SUMS, installs them with `sudo pacman -U`, which asks on the terminal, and restarts the user unit when it is active. With check, it only says what it would do. It runs without a config.
+Updates the installed packages to the latest release. It asks GitHub for the latest release once, with no telemetry, and compares it with the running version. When the release is newer it downloads the omunculus package, and omunculus-apps when that is installed, checks both against SHA256SUMS, installs them with `sudo pacman -U`, which asks on the terminal, and restarts the user unit when it is active. With check, it only says what it found: whether a newer release is out and what it would install, or that it has no package yet. It runs without a config.
 
 Runs without a project config.
 
