@@ -150,5 +150,4 @@ defmodule Omunculus.GuiPendingTest do
     check(shown === "q1:history,p1:ask,a1:team,d1:ask", "order", shown);
     """)
   end
-
 end
