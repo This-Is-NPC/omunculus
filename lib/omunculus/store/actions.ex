@@ -277,6 +277,7 @@ defmodule Omunculus.Store.Actions do
 
   defp prompt(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:prompt, body, "message"),
+         :ok <- one_line(body["subject"]),
          :ok <-
            Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])),
          {:ok, body} <- prompt_attachments(body, ctx),
@@ -285,6 +286,16 @@ defmodule Omunculus.Store.Actions do
       {:ok, Enum.reject([reopened, prompt_event], &is_nil/1)}
     end
   end
+
+  # A subject is one line of text.
+  defp one_line(nil), do: :ok
+
+  defp one_line(subject),
+    do:
+      if(String.trim(subject) != "" and not String.contains?(subject, ["\n", "\r"]),
+        do: :ok,
+        else: {:error, {:prompt, :subject_line}}
+      )
 
   defp reopen_waiting_work(_conn, nil), do: {:ok, nil}
 

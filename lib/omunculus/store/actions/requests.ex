@@ -100,6 +100,7 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, request} <- Helpers.fetch_request(:reply, conn, body["request_id"]),
          :ok <- Omunculus.RequestOptions.validate(request, body, linked?),
          :ok <- Helpers.ensure_text(:reply, body, "body"),
+         {:ok, body} <- reply_attachments(body, ctx),
          :ok <- Interception.validate_reply(request, body),
          :ok <- Omunculus.RequestOptions.authorize(request, body, ctx.author == "human"),
          :ok <- if(linked?, do: :ok, else: authorize_reply(request, ctx)),
@@ -110,6 +111,14 @@ defmodule Omunculus.Store.Actions.Requests do
       {:ok, events ++ returned ++ settled}
     end
   end
+
+  # An answer's files, each one `Omunculus.Attachments` keeps, as a message's.
+  defp reply_attachments(%{"attachments" => [_ | _] = list} = body, ctx) do
+    with {:ok, checked} <- Omunculus.Attachments.check(ctx.config.store, list),
+         do: {:ok, Map.put(body, "attachments", checked)}
+  end
+
+  defp reply_attachments(body, _ctx), do: {:ok, Map.delete(body, "attachments")}
 
   defp ensure_actor_run(nil, %{author: "human"}), do: :ok
   defp ensure_actor_run(nil, _ctx), do: {:error, {:request, :no_run}}

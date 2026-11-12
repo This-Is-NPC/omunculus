@@ -139,6 +139,7 @@ defmodule Omunculus.Errors do
 
   def format({:prompt, {:no_agent_at_depth, depth}}), do: "no agent has depth #{depth}"
   def format({:prompt, {:not_at_depth_0, name}}), do: "#{name} is not an agent of depth 0"
+  def format({:prompt, :subject_line}), do: "a subject is one line of text"
 
   def format(:access_disabled), do: "omunculus.toml has no [access] table"
 

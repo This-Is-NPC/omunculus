@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.Reply do
   @moduledoc """
   Builtin `reply` tool: answers a `request` with a comment body and
-  optionally one of its options. A null or empty option is omitted.
+  optionally one of its options and the `attachments` it carries, as a message does. A null or empty option is omitted.
   Named parts select calls on their original requests recursively.
   A text-only answer chains no calls. Emits
   `reply` and chains the chosen option's tool calls
@@ -21,7 +21,10 @@ defmodule Omunculus.Tools.Reply do
         normalize(if Map.has_key?(args, "parts"), do: Map.put(args, "parts", parts), else: args)
 
       Out.ok("", [
-        %{"type" => "reply", "body" => Map.take(args, ["parts", "option" | @required])}
+        %{
+          "type" => "reply",
+          "body" => Map.take(args, ["parts", "option", "attachments" | @required])
+        }
       ])
       |> Map.put("chain", option_calls(view["request"], args))
     else

@@ -406,6 +406,75 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "events") == 0
     end
 
+    test "a reply carries files, which its conversation lists", %{
+      conn: conn,
+      ctx: ctx,
+      meta: meta
+    } do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+      body = %{"request_id" => request_id, "body" => "see the notes", "attachments" => [meta]}
+      human = Map.put(human_ctx(), :config, ctx.config)
+
+      assert {:ok, [_tool, event]} =
+               record_tool(conn, [%{"type" => "reply", "body" => body}], human)
+
+      assert Jason.decode!(event.body)["attachments"] == [meta]
+    end
+
+    test "a conversation lists the files of a reply as a person's", %{conn: conn, meta: meta} do
+      conversation_id = Omunculus.Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation_id,
+          created_at: "2026-01-01T00:00:00Z",
+          created_issuer: "local",
+          created_subject: "1000"
+        })
+
+      Fixtures.insert(conn, :events, %{
+        type: "reply",
+        sequence: 1,
+        conversation_id: conversation_id,
+        body: Jason.encode!(%{"body" => "see", "attachments" => [meta]})
+      })
+
+      assert {:ok, [listed]} = Store.attachments(conn, conversation_id)
+      assert listed["sha256"] == meta["sha256"]
+      assert listed["by"] == "person"
+    end
+
+    test "a reply naming a file not kept writes no reply", %{conn: conn, ctx: ctx, meta: meta} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+      missing = %{meta | "sha256" => String.duplicate("0", 64)}
+      body = %{"request_id" => request_id, "body" => "see", "attachments" => [missing]}
+      human = Map.put(human_ctx(), :config, ctx.config)
+
+      assert {:error, {:attachment, :not_found}} =
+               record_tool(conn, [%{"type" => "reply", "body" => body}], human)
+
+      assert {:ok, %{status: "pending"}} = Store.view(conn, "request", request_id)
+    end
+
+    test "a prompt keeps its subject apart, one line", %{conn: conn, ctx: ctx} do
+      body = %{"message" => "the words", "subject" => "A site"}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "prompt", "body" => body}], ctx)
+
+      assert Jason.decode!(event.body)["subject"] == "A site"
+
+      assert {:ok, %{subject: "A site", body: "the words"}} =
+               Store.view(conn, "prompt", event.prompt_id)
+
+      two = %{body | "subject" => "A\nsite"}
+
+      assert {:error, {:prompt, :subject_line}} =
+               record_tool(conn, [%{"type" => "prompt", "body" => two}], ctx)
+    end
+
     test "a run attaches files to its conversation", %{conn: conn, ctx: ctx, meta: meta} do
       conversation_id = Omunculus.Id.new()
 

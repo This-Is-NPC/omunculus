@@ -14,6 +14,10 @@ required = ["message"]
 [parameters.properties.message]
 type = "string"
 
+[parameters.properties.subject]
+type = "string"
+description = "The message's subject, one line, kept apart from its text."
+
 [parameters.properties.work_id]
 type = "string"
 description = "The work the message is for."

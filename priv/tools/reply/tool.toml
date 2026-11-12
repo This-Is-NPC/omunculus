@@ -20,6 +20,14 @@ type = "string"
 [parameters.properties.option]
 type = "string"
 
+[parameters.properties.attachments]
+type = "array"
+description = "The files the answer carries, each as the server kept it: name, media_type, bytes and sha256."
+
+[parameters.properties.attachments.items]
+type = "object"
+required = ["name", "media_type", "bytes", "sha256"]
+
 [views.request]
 source = "requests"
 

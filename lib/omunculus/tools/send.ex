@@ -2,7 +2,7 @@ defmodule Omunculus.Tools.Send do
   @moduledoc """
   Builtin `send` tool: delivers a message, aimed at an
   existing work when `work_id` is given, or else at the `agent` of depth 0
-  it names, as a `prompt` emit, with the `attachments` it carries.
+  it names, as a `prompt` emit, with its optional one-line `subject` and the `attachments` it carries.
   """
 
   alias Omunculus.Tools.{Args, Out}
@@ -13,6 +13,7 @@ defmodule Omunculus.Tools.Send do
       {:ok, message} ->
         body =
           %{"message" => message}
+          |> Args.put_present("subject", args)
           |> Args.put_present("work_id", args)
           |> Args.put_present("agent", args)
           |> attachments(args)

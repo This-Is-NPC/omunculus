@@ -191,7 +191,9 @@ defmodule Omunculus.Store.Access do
   @list_sql %{
     works: "SELECT * FROM works WHERE conversation_id = ? ORDER BY created_at, id",
     runs: "SELECT * FROM runs WHERE conversation_id = ? ORDER BY started_at, id",
-    prompts: "SELECT * FROM prompts WHERE conversation_id = ? ORDER BY created_at, id",
+    prompts:
+      Omunculus.Store.View.prompts_sql() <>
+        " WHERE prompts.conversation_id = ? ORDER BY prompts.created_at, prompts.id",
     requests:
       "SELECT requests.* FROM requests LEFT JOIN events opening ON opening.id = requests.event_id LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id WHERE COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) = ? ORDER BY requests.created_at, requests.id",
     inbox:

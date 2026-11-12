@@ -298,7 +298,7 @@ Prints the assembled prompt of a run, by default the last one to start. No run i
 ### `omunculus reply`
 
 ```text
-omunculus reply <body> --request_id <request_id> [--option <option>] [--parts <parts>]
+omunculus reply <body> --request_id <request_id> [--attachments <attachments>] [--option <option>] [--parts <parts>]
 ```
 
 Answers a request with text, optionally picking one of its options to run its tool calls.
@@ -309,6 +309,7 @@ Also called by a model.
 | --- | --- | --- | --- |
 | `body` | string | yes |  |
 | `request_id` | string | yes |  |
+| `attachments` | JSON array | no | The files the answer carries, each as the server kept it: name, media_type, bytes and sha256. |
 | `option` | string | no |  |
 | `parts` | JSON object | no |  |
 
@@ -345,7 +346,7 @@ Also called by a model.
 ### `omunculus send`
 
 ```text
-omunculus send <message> [--agent <agent>] [--attachments <attachments>] [--work_id <work_id>]
+omunculus send <message> [--agent <agent>] [--attachments <attachments>] [--subject <subject>] [--work_id <work_id>]
 ```
 
 Delivers the message and opens the first run: of the work work_id names, else of the agent of depth 0 agent names, else of the agent the conversation began with, else of the only agent of depth 0. It writes PROMPTS(message) and EVENTS(prompt); it creates no work and copies the message onto no title. A work waiting on a request, or parked by break, is reopened first, with EVENTS(work) reason reopened_by_prompt; a work waiting on its children stays waiting, and the message opens a run of its agent. A successful send prints nothing: the assembled prompt and the model's text are in the store.
@@ -355,6 +356,7 @@ Delivers the message and opens the first run: of the work work_id names, else of
 | `message` | string | yes |  |
 | `agent` | string | no | The agent of depth 0 the message is for, when there is more than one. |
 | `attachments` | JSON array | no | The files the message carries, each as the server kept it: name, media_type, bytes and sha256. |
+| `subject` | string | no | The message's subject, one line, kept apart from its text. |
 | `work_id` | string | no | The work the message is for. |
 
 ### `omunculus tools`

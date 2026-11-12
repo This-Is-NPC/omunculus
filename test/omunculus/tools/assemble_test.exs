@@ -149,6 +149,13 @@ defmodule Omunculus.Tools.AssembleTest do
              "## Attachments\n- notes.txt (text/plain, 5 bytes) from person, sha256 2cf2\n\n## Message\nsee the notes"
   end
 
+  test "the message's subject is its first line, apart from its body" do
+    output =
+      whole(%{@input | view: %{"message" => %{subject: "A site", body: "for my shop"}}})
+
+    assert output =~ "## Message\nSubject: A site\n\nfor my shop"
+  end
+
   test "with the work card, each agent comes with the tools it has that this run has not" do
     cards =
       for name <- ["work", "read"],

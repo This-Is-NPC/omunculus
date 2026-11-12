@@ -31,6 +31,18 @@ defmodule Omunculus.Store.View do
   WHERE runs.work_id = ? AND runs.status = 'done'
   """
 
+  # A prompt with its `subject`, which only its event keeps.
+  @prompts """
+  SELECT prompts.*,
+    (SELECT json_extract(events.body, '$.subject') FROM events
+      WHERE events.prompt_id = prompts.id AND events.type = 'prompt') AS subject
+  FROM prompts
+  """
+
+  @doc "The SQL selecting prompts with their `subject`, to which a WHERE follows."
+  @spec prompts_sql() :: String.t()
+  def prompts_sql, do: @prompts
+
   @replay_columns %{run: :run_id, work: :work_id, request: :request_id, inbox: :inbox_id}
 
   @spec view(Omunculus.Store.Connection.t(), String.t(), String.t()) ::
@@ -59,7 +71,9 @@ defmodule Omunculus.Store.View do
     end
   end
 
-  def view(conn, "prompt", id), do: Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
+  def view(conn, "prompt", id),
+    do: Query.one(conn, @prompts <> " WHERE prompts.id = ?", [id])
+
   def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
 
   @doc """
@@ -362,7 +376,7 @@ defmodule Omunculus.Store.View do
   """
   @spec attachments(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def attachments(conn, conversation_id) do
-    carried(conn, conversation_id, "'prompt', 'attach'", fn body ->
+    carried(conn, conversation_id, "'prompt', 'reply', 'attach'", fn body ->
       Map.fetch!(body, "attachments")
     end)
   end
@@ -428,7 +442,9 @@ defmodule Omunculus.Store.View do
 
   defp with_record(conn, run) do
     with {:ok, message} <-
-           Query.one(conn, "SELECT * FROM prompts WHERE run_id = ? AND kind = 'message'", [run.id]),
+           Query.one(conn, @prompts <> " WHERE prompts.run_id = ? AND prompts.kind = 'message'", [
+             run.id
+           ]),
          {:ok, assembled} <-
            Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [run.prompt_id]),
          {:ok, events} <- replay(conn, {:run, run.id}) do

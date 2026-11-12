@@ -498,11 +498,21 @@ defmodule Omunculus.Server.OpenAPI do
       "SendMessage" => %{
         oneOf: [
           object(
-            %{message: string(), agent: string(), attachments: array(ref("Attachment"))},
+            %{
+              message: string(),
+              subject: string(),
+              agent: string(),
+              attachments: array(ref("Attachment"))
+            },
             ~w(message agent)
           ),
           object(
-            %{message: string(), work_id: string(), attachments: array(ref("Attachment"))},
+            %{
+              message: string(),
+              subject: string(),
+              work_id: string(),
+              attachments: array(ref("Attachment"))
+            },
             ~w(message work_id)
           )
         ]
@@ -532,6 +542,7 @@ defmodule Omunculus.Server.OpenAPI do
           %{
             option: string(),
             body: string(),
+            attachments: array(ref("Attachment")),
             parts: %{type: "object", additionalProperties: ref("ReplyRequest")}
           },
           ~w(body)
@@ -583,6 +594,7 @@ defmodule Omunculus.Server.OpenAPI do
             id: string(),
             kind: string(),
             body: string(),
+            subject: nullable_string(),
             run_id: nullable_string(),
             created_at: string(),
             actor_issuer: nullable_string(),

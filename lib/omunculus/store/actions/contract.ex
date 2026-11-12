@@ -5,12 +5,12 @@ defmodule Omunculus.Store.Actions.Contract do
 
   @fields %{
     "comment" => ~w(body work_id request_id inbox_id),
-    "prompt" => ~w(message work_id agent attachments),
+    "prompt" => ~w(message subject work_id agent attachments),
     "attach" => ~w(attachments note),
     "artifact" => ~w(name kind media_type content note base),
     "work" => ~w(report works),
     "request" => ~w(reason options to),
-    "reply" => ~w(request_id option body parts),
+    "reply" => ~w(request_id option body parts attachments),
     "escalate" => ~w(reason origins to),
     "grant" => ~w(request_id name kind scope),
     "hold" => ~w(tool args),

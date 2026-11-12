@@ -287,6 +287,10 @@ defmodule Omunculus.Tools.Assemble do
   defp attachments_section(_attachments), do: []
 
   defp message_section(nil), do: []
+
+  defp message_section(%{subject: subject} = message) when is_binary(subject),
+    do: ["## Message\nSubject: #{subject}\n\n#{message.body}"]
+
   defp message_section(message), do: ["## Message\n#{message.body}"]
 
   defp work_section(nil), do: []

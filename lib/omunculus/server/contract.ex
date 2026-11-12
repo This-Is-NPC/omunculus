@@ -85,7 +85,7 @@ defmodule Omunculus.Server.Contract do
       )
 
   def item(:prompts, row),
-    do: Map.take(row, ~w(id kind body run_id created_at actor_issuer actor_subject)a)
+    do: Map.take(row, ~w(id kind body subject run_id created_at actor_issuer actor_subject)a)
 
   def item(:requests, row) do
     row

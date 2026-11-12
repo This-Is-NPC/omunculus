@@ -387,13 +387,20 @@ defmodule Omunculus.Server.Router do
          {:ok, command_id} <- command_id(conn),
          {:ok, _body} <- required_string(conn.body_params, "body"),
          {:ok, _option} <- optional_string(conn.body_params, "option"),
+         {:ok, files} <- files(Map.get(conn.body_params, "attachments", [])),
+         {:ok, attached} <-
+           with_attachments(
+             conn.body_params |> Map.take(~w(option body parts)),
+             files,
+             project_id,
+             principal,
+             conversation_id
+           ),
          {:ok, result} <-
            Project.command(
              project_id,
              "reply",
-             conn.body_params
-             |> Map.take(~w(option body parts))
-             |> Map.put("request_id", request_id),
+             Map.put(attached, "request_id", request_id),
              principal,
              conversation_id,
              command_id
@@ -644,7 +651,8 @@ defmodule Omunculus.Server.Router do
   # A message names the agent of depth 0 it is for, or the work it goes to.
   defp send_args(body) when is_map(body) do
     with {:ok, message} <- required_string(body, "message"),
-         [] <- Map.keys(body) -- ~w(message agent work_id attachments),
+         [] <- Map.keys(body) -- ~w(message subject agent work_id attachments),
+         {:ok, subject} <- subject(body),
          {:ok, files} <- files(Map.get(body, "attachments", [])) do
       case body do
         %{"work_id" => work_id}
@@ -653,11 +661,11 @@ defmodule Omunculus.Server.Router do
           {:error, :invalid}
 
         %{"work_id" => work_id} ->
-          {:ok, %{"message" => message, "work_id" => work_id}, files}
+          {:ok, Map.merge(subject, %{"message" => message, "work_id" => work_id}), files}
 
         _addressed ->
           with {:ok, agent} <- required_string(body, "agent"),
-               do: {:ok, %{"message" => message, "agent" => agent}, files}
+               do: {:ok, Map.merge(subject, %{"message" => message, "agent" => agent}), files}
       end
     else
       _ -> {:error, :invalid}
@@ -665,6 +673,16 @@ defmodule Omunculus.Server.Router do
   end
 
   defp send_args(_), do: {:error, :invalid}
+
+  # A message's optional subject: one line of text.
+  defp subject(%{"subject" => subject}) when is_binary(subject) do
+    if String.trim(subject) != "" and not String.contains?(subject, ["\n", "\r"]),
+      do: {:ok, %{"subject" => String.trim(subject)}},
+      else: {:error, :invalid}
+  end
+
+  defp subject(%{"subject" => _other}), do: {:error, :invalid}
+  defp subject(_body), do: {:ok, %{}}
 
   # A message's files, each `{name, media_type, data}` with its content in base64.
   defp files(list) when is_list(list) do

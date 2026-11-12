@@ -536,6 +536,93 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
+  test "an answer carries files, which its conversation gives back" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+
+    data =
+      update_in(
+        Toml.decode_file!(project_path),
+        ["store"],
+        &Map.merge(&1, %{"attachments" => "files", "attachment_bytes" => 8})
+      )
+
+    File.write!(project_path, Config.Toml.encode(data))
+    {server, local} = serve_local(dir, project_path)
+    base = "/v1/projects/solo/conversations"
+    id = local.(:post, base, headers: [{"idempotency-key", "c1"}], json: %{}).body["id"]
+
+    local.(:post, "#{base}/#{id}/messages",
+      headers: [{"idempotency-key", "m1"}],
+      json: %{message: "hi", agent: "concierge"}
+    )
+
+    [run | _] =
+      eventually(fn ->
+        local.(:get, "#{base}/#{id}/runs", []).body["items"]
+        |> Enum.filter(&(&1["status"] == "done"))
+      end)
+
+    reader = Fixtures.open_project(dir)
+    request_id = Fixtures.insert(reader.conn, :requests, %{run_id: run["id"]})
+    url = "#{base}/#{id}/requests/#{request_id}/reply"
+    file = %{name: "notes.txt", media_type: "text/plain", data: Base.encode64("hello")}
+
+    assert local.(:post, url,
+             headers: [{"idempotency-key", "bad"}],
+             json: %{body: "see", attachments: [%{file | data: "not base64!"}]}
+           ).status == 400
+
+    assert local.(:post, url,
+             headers: [{"idempotency-key", "r1"}],
+             json: %{body: "see the notes", attachments: [file]}
+           ).status == 202
+
+    sha256 = :crypto.hash(:sha256, "hello") |> Base.encode16(case: :lower)
+    events = local.(:get, "#{base}/#{id}/events", []).body["events"]
+
+    assert %{"body" => %{"attachments" => [%{"sha256" => ^sha256}]}} =
+             Enum.find(events, &(&1["type"] == "reply"))
+
+    assert local.(:get, "#{base}/#{id}/attachments/#{sha256}", []).body == "hello"
+
+    :ok = Supervisor.stop(server)
+  end
+
+  test "a message keeps its subject apart, in the events and the snapshot" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    {server, local} = serve_local(dir, project_path)
+    base = "/v1/projects/solo/conversations"
+
+    id =
+      local.(:post, base, headers: [{"idempotency-key", "c1"}], json: %{}).body["id"]
+
+    send = fn key, json ->
+      local.(:post, "#{base}/#{id}/messages", headers: [{"idempotency-key", key}], json: json)
+    end
+
+    assert send.("two-lines", %{message: "hi", agent: "concierge", subject: "a\nb"}).status == 400
+    assert send.("not-text", %{message: "hi", agent: "concierge", subject: 3}).status == 400
+
+    assert send.("m1", %{message: "my words", agent: "concierge", subject: "A site"}).status ==
+             202
+
+    events = local.(:get, "#{base}/#{id}/events", []).body["events"]
+
+    assert %{"body" => %{"message" => "my words", "subject" => "A site"}} =
+             Enum.find(events, &(&1["type"] == "prompt"))
+
+    snapshot = local.(:get, "#{base}/#{id}/snapshot", []).body
+    assert [%{"body" => "my words", "subject" => "A site"}] = snapshot["prompts"]
+
+    :ok = Supervisor.stop(server)
+  end
+
   test "the operator lists a conversation's artifacts and reads a version of one" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
