@@ -10,7 +10,8 @@ import QtQuick
 //          into it (to the mark only when `last`, else on down); "through":
 //          the parent's line passes by a row that hangs under it; "none".
 //   stem   the row's own line leaves its mark down, to the rows under it.
-// `markY` is where the mark's centre is, from the row's top.
+// `markY` is where the mark's centre is, from the row's top. With `marked`,
+// the mark itself is drawn there: a dot in `markTone`, the agent's.
 Item {
   id: lines
 
@@ -23,6 +24,8 @@ Item {
   property real origin: 0
   property real markY: Theme.space.tight + Theme.size.stackedLine / 2
   property color tone: Theme.faint
+  property bool marked: false
+  property color markTone: Theme.dim
 
   readonly property real elbowX: origin + (depth - 1) * unit + unit / 2
   readonly property real markX: origin + depth * unit + unit / 2
@@ -63,5 +66,12 @@ Item {
     width: 1
     height: lines.height - y
     color: lines.tone
+  }
+  Dot {
+    visible: lines.marked
+    x: lines.markX - width / 2
+    y: lines.markY - height / 2
+    size: Theme.space.tight
+    tone: lines.markTone
   }
 }

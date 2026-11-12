@@ -56,6 +56,8 @@ Item {
     unit: row.unit
     origin: row.origin
     markY: row.markY
+    marked: true
+    markTone: row.tone
   }
 
   MouseArea {
@@ -64,14 +66,6 @@ Item {
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
     onClicked: row.chosen()
-  }
-
-  // The mark: the agent's dot, where the lifeline reaches the row.
-  Dot {
-    x: row.origin + row.depth * row.unit + row.unit / 2 - width / 2
-    y: row.markY - height / 2
-    size: Theme.space.tight
-    tone: row.tone
   }
 
   ColumnLayout {

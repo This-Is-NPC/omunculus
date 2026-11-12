@@ -355,13 +355,8 @@ Item {
           line: row.isLine && row.modelData.through ? "through" : "none"
           unit: row.unit
           markY: box.y + box.height / 2
-        }
-        Dot {
-          visible: row.isLine && row.modelData.col >= 0
-          x: row.isLine ? row.modelData.col * row.unit + row.unit / 2 - width / 2 : 0
-          y: box.y + box.height / 2 - height / 2
-          size: Theme.space.tight
-          tone: Omunculus.toneOf(row.line.who)
+          marked: true
+          markTone: Omunculus.toneOf(row.line.who)
         }
 
         // The day, then the run it begins.

@@ -174,12 +174,8 @@ FocusScope {
             unit: workList.unit
             origin: Theme.space.cell
             markY: work.height / 2
-          }
-          Dot {
-            x: Theme.space.cell + work.row.depth * workList.unit + workList.unit / 2 - width / 2
-            y: work.height / 2 - height / 2
-            size: Theme.space.tight
-            tone: work.tone
+            marked: true
+            markTone: work.tone
           }
 
           // Wide: one line of columns.
