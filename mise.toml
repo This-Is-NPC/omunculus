@@ -175,6 +175,16 @@ run = "scripts/eval-import-swe-bench"
 description = "Equivalent Exchange: prove every task's check against its solution"
 run = "scripts/eval-selftest"
 
+[tasks."eval:suite"]
+description = "Equivalent Exchange: run the long-horizon cases clean (mise run eval:suite -- <case> --model <model> --overlay <file>)"
+run = "scripts/eval-suite"
+usage = '''
+arg "[case]" help="A case of eval/tasks/longhorizon; all of them when left out"
+flag "--model <model>" help="Model every agent runs on" required=#true
+flag "--overlay <file>" help="TOML configuration overlay laid over the agency and the preset, such as a model table"
+flag "--label <name>" help="Name of the result folder"
+'''
+
 [tasks.pre-commit]
 description = "Check the boundaries, formatting and documentation before a commit"
 run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]

@@ -4,7 +4,8 @@ defmodule EquivalentExchange.Selftest do
   starting workspace with its `solution/` applied — files written, paths
   deleted, `solution/solve` run, the outcome it gives — under every configuration it runs in, and
   fail on the starting workspace untouched with a `done` that claims
-  success. Each execution of `eval/fixtures/scores` must score as its
+  success; a long-horizon case has no script, its checks are proved in
+  `test/omunculus/eval_suite_test.exs`. Each execution of `eval/fixtures/scores` must score as its
   hand-made expectation says.
   """
 
@@ -16,6 +17,7 @@ defmodule EquivalentExchange.Selftest do
   def run do
     checks =
       for task <- Task.all(),
+          is_nil(task.suite),
           configuration <- task.configurations,
           problem <- problems(task, configuration),
           do: "#{task.id} (#{configuration}): #{problem}"
@@ -82,8 +84,6 @@ defmodule EquivalentExchange.Selftest do
       files = Path.join([task.dir, "solution", "files"])
       if File.dir?(files), do: File.cp_r!(files, dir)
       Enum.each(solution["delete"] || [], &File.rm_rf!(Path.join(dir, &1)))
-    end
-  end
       solve(task, dir)
     end
   end
@@ -102,4 +102,6 @@ defmodule EquivalentExchange.Selftest do
         )
 
       if status != 0, do: raise("#{task.id}: solution/solve exited #{status}: #{said}")
+    end
+  end
 end

@@ -5,13 +5,15 @@ defmodule EquivalentExchange.Deploy do
   whose sockets and keys `environment/0` hands to the deploy tools through
   the variables the dream team's config reads. The tools name each project's
   apps apart; `published/1` finds, in an execution's events, the apps
-  it published, the one it promoted first, `mirror/2` copies what
-  production serves for an app, saving extensionless paths as directory indexes
-  for the check, and `destroy/1` removes it
-  from both.
+  it published, the one it promoted first, and `reached/1` where each instance
+  serves it. `status/3` asks an instance for a path, `look/4` loads pages in
+  headless Chromium by the app's host name, `mirror/3` copies what an instance
+  serves for an app, saving extensionless paths as directory indexes for the
+  check, and `destroy/1` removes it from both.
   """
 
   @deploy Path.expand("../../packs/dream-team/environment/.state", __DIR__)
+  @browser_check Path.expand("../../priv/tools/browser_check/run", __DIR__)
   @ssh ~w(-F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
   @doc """
@@ -48,46 +50,131 @@ defmodule EquivalentExchange.Deploy do
   """
   @spec published([map]) :: [String.t()]
   def published(events) do
-    apps =
-      for %{type: "tool", body: %{"name" => name, "ok" => true, "output" => output}} <- events,
-          name in ["deploy_preview", "promote"],
-          [_, app] <- [
-            Regex.run(
-              ~r"http://([a-z0-9-]+?)(?:-hml)?\.(?:homologation|production)\.localhost",
-              output
-            )
-          ],
-          do: {name, app}
-
+    apps = deployed(events)
     promoted = for {"promote", app} <- Enum.reverse(apps), do: app
     Enum.uniq(promoted ++ Enum.map(apps, &elem(&1, 1)))
   end
 
-  @doc "Copies the pages and files production serves for `app`, reached from its index, into `dir`."
-  @spec mirror(String.t(), String.t()) :: :ok
-  def mirror(app, dir), do: crawl(app, dir, ["/"], MapSet.new())
+  @doc """
+  Where an execution's site is served, from what its deploy tools answered:
+  the app in `:homologation` (the last one previewed) and in `:production`
+  (the last one promoted), nil for one never reached.
+  """
+  @spec reached([map]) :: %{homologation: String.t() | nil, production: String.t() | nil}
+  def reached(events) do
+    apps = deployed(events)
 
-  defp crawl(_app, _dir, [], _seen), do: :ok
+    %{
+      homologation:
+        Enum.find_value(Enum.reverse(apps), fn {tool, app} -> tool == "deploy_preview" && app end),
+      production:
+        Enum.find_value(Enum.reverse(apps), fn {tool, app} -> tool == "promote" && app end)
+    }
+  end
 
-  defp crawl(app, dir, [path | rest], seen) do
+  defp deployed(events) do
+    for %{type: "tool", body: %{"name" => name, "ok" => true, "output" => output}} <- events,
+        name in ["deploy_preview", "promote"],
+        [_, app] <- [
+          Regex.run(
+            ~r"http://([a-z0-9-]+?)(?:-hml)?\.(?:homologation|production)\.localhost",
+            output
+          )
+        ],
+        do: {name, app}
+  end
+
+  # The proxy port and host name each instance serves an app under.
+  defp target(app, :homologation), do: {8080, app <> "-hml.homologation.localhost"}
+  defp target(app, :production), do: {9080, app <> ".production.localhost"}
+
+  @doc "The status the instance answers for `path` of `app`, or nil when it does not answer."
+  @spec status(String.t(), :homologation | :production, String.t()) :: integer | nil
+  def status(app, instance, path) do
+    {port, host} = target(app, instance)
+
+    case Req.get("http://127.0.0.1:#{port}" <> path,
+           headers: [{"host", host}],
+           retry: false,
+           decode_body: false,
+           redirect: false
+         ) do
+      {:ok, %Req.Response{status: status}} -> status
+      {:error, _reason} -> nil
+    end
+  end
+
+  @doc """
+  What `browser_check` reports of `paths` of `app` at `viewport`, loaded in
+  headless Chromium by the host name the instance serves it under: its `ok`
+  and `output`, or `ok: false` with why it could not look.
+  """
+  @spec look(String.t(), :homologation | :production, [String.t()], String.t()) :: map
+  def look(app, instance, paths, viewport) do
+    {port, host} = target(app, instance)
+    root = Path.join(System.tmp_dir!(), "ee-look-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(root)
+    input = Path.join(root, "call.json")
+
+    File.write!(
+      input,
+      Jason.encode!(%{
+        args: %{port: port, host: host, paths: paths, viewports: [viewport]},
+        roots: [root]
+      })
+    )
+
+    try do
+      {out, _status} =
+        System.cmd(
+          "sh",
+          [
+            "-c",
+            ~s(deno run --no-config --no-lock --no-prompt --allow-all "$0" < "$1"),
+            @browser_check,
+            input
+          ],
+          stderr_to_stdout: true
+        )
+
+      case Jason.decode(out) do
+        {:ok, %{"ok" => ok, "output" => output}} -> %{"ok" => ok, "output" => output}
+        _unreadable -> %{"ok" => false, "output" => out}
+      end
+    after
+      File.rm_rf!(root)
+    end
+  end
+
+  @doc "Copies the pages and files `instance` serves for `app`, reached from its index, into `dir`."
+  @spec mirror(String.t(), String.t(), :homologation | :production) :: :ok
+  def mirror(app, dir, instance \\ :production),
+    do: crawl(target(app, instance), dir, ["/"], MapSet.new())
+
+  defp crawl(_target, _dir, [], _seen), do: :ok
+
+  defp crawl({port, host} = target, dir, [path | rest], seen) do
     if MapSet.member?(seen, path) or MapSet.size(seen) >= 100 do
-      crawl(app, dir, rest, seen)
+      crawl(target, dir, rest, seen)
     else
-      case Req.get("http://127.0.0.1:9080" <> path,
-             headers: [{"host", "#{app}.production.localhost"}],
+      case Req.get("http://127.0.0.1:#{port}" <> path,
+             headers: [{"host", host}],
              retry: false,
              decode_body: false
            ) do
         {:ok, %Req.Response{status: 200, body: body}} ->
           file =
-            Path.join(dir, if(Path.extname(path) == "", do: Path.join(path, "index.html"), else: path))
+            Path.join(
+              dir,
+              if(Path.extname(path) == "", do: Path.join(path, "index.html"), else: path)
+            )
 
           File.mkdir_p!(Path.dirname(file))
           File.write!(file, body)
-          crawl(app, dir, rest ++ links(path, body), MapSet.put(seen, path))
+          crawl(target, dir, rest ++ links(path, body), MapSet.put(seen, path))
 
         _missing ->
-          crawl(app, dir, rest, MapSet.put(seen, path))
+          crawl(target, dir, rest, MapSet.put(seen, path))
       end
     end
   end

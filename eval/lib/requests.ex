@@ -2,6 +2,8 @@ defmodule EquivalentExchange.Requests do
   @moduledoc "Answers eval requests through their linked named origins without changing permission targets."
   alias EquivalentExchange.Task
 
+  @eval Path.expand("..", __DIR__)
+
   def answer(task, groups, request, project, reply) do
     case choose(task, groups, request, project) do
       nil ->
@@ -100,10 +102,10 @@ defmodule EquivalentExchange.Requests do
       end)
 
     grant = Enum.find(["grant", "grant_agent"], &Map.has_key?(options, &1))
-    decision = task.human["decision"]
+    decision = decision(task, options)
 
     cond do
-      names == [] and Map.has_key?(options, decision) ->
+      names == [] and decision != nil ->
         {decision, "Decided: #{decision}."}
 
       names != [] and denied == [] and grant != nil ->
@@ -116,6 +118,28 @@ defmodule EquivalentExchange.Requests do
         {nil, nil}
     end
   end
+
+  @doc "The option a person who approves what is not broken picks among `options` (`[decide]` of `person.toml`), or nil."
+  @spec decide([String.t()]) :: String.t() | nil
+  def decide(options) do
+    %{"safe" => safe, "unsafe" => unsafe} =
+      Toml.decode_file!(Path.join(@eval, "person.toml"))["decide"]
+
+    lowered = Map.new(options, &{String.downcase(&1), &1})
+
+    Enum.find_value(safe, &lowered[&1]) ||
+      Enum.find(options, fn option ->
+        not String.starts_with?(String.downcase(option), unsafe)
+      end)
+  end
+
+  # The option the task's person picks of a request granting nothing: the one
+  # `[human] decision` names, or with `safe = true` the one a person who
+  # approves what is not broken picks.
+  defp decision(%{human: %{"safe" => true}}, options), do: decide(Map.keys(options))
+
+  defp decision(task, options),
+    do: if(Map.has_key?(options, task.human["decision"]), do: task.human["decision"])
 
   defp refusal([], _granted), do: "Not granted."
   defp refusal(denied, []), do: "Not granted: #{Enum.join(denied, ", ")}."

@@ -1,0 +1,44 @@
+scenario = "longhorizon"
+critical = false
+configurations = ["agency"]
+deploy = true
+needs = ["sandbox.write"]
+
+# The whole way from a request to a site in production, with a client who
+# answers only what is asked: the agency sells, designs, builds, publishes to
+# homologation and, once the client has seen it there, promotes it.
+[expect]
+outcome = ["done"]
+
+[human]
+"sandbox.write" = "grant"
+safe = true
+
+[person]
+facts = """
+Ana Souza, owner of Doce Ana, a small bakery in Campinas, Brazil. I want a simple website: home, menu with prices, about and contact. Orders by a WhatsApp button, +55 19 99876-5432; no online payment. Menu: brigadeiro R$ 4 each, box of 12 R$ 42; carrot cake R$ 38; cheese bread (pão de queijo) R$ 18 per 500 g; coffee R$ 6. About: I have baked since 2009 with family recipes. Open Tuesday to Saturday, 8h to 18h, at Rua das Flores 120, Cambuí, Campinas. Style: warm, cozy, handmade, cream and chocolate brown. No logo yet, a text logo is fine. No domain yet, a free address is fine. Budget modest. Anything else: I do not know yet, you choose. If you show me a preview or the built site and it is not broken: I approve it, go ahead. If the site is live: it works, thank you.
+"""
+
+# What the outcome must hold; EquivalentExchange.Suite checks it.
+[suite]
+cap_s = 5400
+cap_usd = 1.5
+promote = true
+viewport = "390x844"
+
+[suite.pages]
+home = ["/"]
+menu = ["menu", "cardapio"]
+about = ["about", "sobre"]
+contact = ["contact", "contato"]
+
+[suite.facts]
+name = 'Doce Ana'
+brigadeiro_price = 'R\$\s*4(?:,00)?(?![\d,])'
+box_price = 'R\$\s*42(?:,00)?(?![\d,])'
+carrot_cake_price = 'R\$\s*38(?:,00)?(?![\d,])'
+cheese_bread_price = 'R\$\s*18(?:,00)?(?![\d,])'
+coffee_price = 'R\$\s*6(?:,00)?(?![\d,])'
+whatsapp = '99876-?\s?5432'
+address = 'Rua das Flores,?\s*120'
+since = '2009'

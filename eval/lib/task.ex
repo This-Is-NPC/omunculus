@@ -15,7 +15,8 @@ defmodule EquivalentExchange.Task do
   conversation (`[person]`: the `facts` they answer the agent's questions
   with, and the `follow_ups` they send, in order, once the agent asks
   nothing more), and whether it publishes to the deploy environment
-  (`deploy`) — its
+  (`deploy`), and for a long-horizon case its `[suite]`: the caps and the
+  checks of `EquivalentExchange.Suite`, which stand for the `check` script — its
   starting `workspace/`, its `check` and its `solution/`.
   """
 
@@ -37,7 +38,8 @@ defmodule EquivalentExchange.Task do
     :judge,
     :uses,
     :person,
-    :deploy
+    :deploy,
+    :suite
   ]
   defstruct @enforce_keys
 
@@ -76,7 +78,8 @@ defmodule EquivalentExchange.Task do
       judge: Map.get(data, "judge", []),
       uses: Map.get(data, "uses", []),
       person: Map.get(data, "person"),
-      deploy: Map.get(data, "deploy", false)
+      deploy: Map.get(data, "deploy", false),
+      suite: Map.get(data, "suite")
     }
     |> validate!()
   end
@@ -129,7 +132,7 @@ defmodule EquivalentExchange.Task do
     unless Map.get(task.expect, "report") in [nil, "asks"],
       do: raise("#{task.id}: [expect] report is \"asks\" or left out")
 
-    unless Enum.all?(Map.delete(task.human, "decision"), fn {_name, answer} ->
+    unless Enum.all?(Map.drop(task.human, ~w(decision safe)), fn {_name, answer} ->
              answer in ["grant", "deny"]
            end),
            do:
@@ -144,6 +147,9 @@ defmodule EquivalentExchange.Task do
              (is_binary(task.person["facts"]) and
                 Map.keys(task.person) -- ~w(facts follow_ups) == []),
            do: raise("#{task.id}: [person] has facts and, optionally, follow_ups")
+
+    unless is_nil(task.suite) or (task.deploy and not is_nil(task.person)),
+      do: raise("#{task.id}: a [suite] needs deploy and [person]")
 
     task
   end

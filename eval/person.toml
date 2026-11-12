@@ -4,3 +4,11 @@
 url = "https://api.anthropic.com/v1/messages"
 model = "claude-haiku-5-5"
 key_env = "ANTHROPIC_API_KEY"
+
+# What a person who approves whatever is not broken picks of a request that
+# grants nothing (`[human] safe = true` in a task): the first of `safe` the
+# request offers, else the first option that does not begin with an `unsafe`
+# word; with none, the request is left waiting.
+[decide]
+safe = ["approve", "accept", "accepted", "works", "grant", "yes", "go", "continue", "keep", "publish", "ok"]
+unsafe = ["deny", "refuse", "cancel", "stop", "retire", "restart", "hold", "retry", "problem", "changes", "adjust", "other"]

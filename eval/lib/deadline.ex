@@ -11,6 +11,12 @@ defmodule EquivalentExchange.Deadline do
     end
   end
 
+  @doc "The shorter of a run's timeout and a case's own cap in seconds (nil: none)."
+  @spec cap(pos_integer | :infinity, pos_integer | nil) :: pos_integer | :infinity
+  def cap(seconds, nil), do: seconds
+  def cap(:infinity, cap), do: cap
+  def cap(seconds, cap), do: min(seconds, cap)
+
   # How often `over`, when given, is asked.
   @poll_ms 3000
 

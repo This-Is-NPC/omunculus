@@ -42,12 +42,16 @@ defmodule EquivalentExchange.Score do
     left the next run to read or run again (it measures
     `[policy] last_run_output_bytes`); nil for an execution recorded
     without call args;
+  - for a long-horizon case, `checks` (each check of its `[suite]`, passed or
+    not: nil when it could not be measured) and how many held; and the
+    recovery: `breaks`, the stops the agents reported, `reopened`, the works
+    sent back to run again, beside `retries`;
   - `retries`: runs opened because a model stopped without a report;
+  - `human_requests`: the requests opened with the person as arbiter;
   - the effort: runs, tool calls and failed ones, model calls, tokens, cost
     (USD) and time, and the prompt tokens the provider served from its cache —
     over every call, on the first call of each run, and by agent.
 
-  - `human_requests`: the requests opened with the person as arbiter;
   Each failure comes with `findings`, a probable cause — `prompt` (an
   agent's text), `tool` (a tool's description or result) or `harness`
   (omunculus itself) — and what points to it.
@@ -80,6 +84,8 @@ defmodule EquivalentExchange.Score do
     report_ok = report_ok(outcome, achieved, said, execution["expected_report"])
     recorded = Enum.map(changed, & &1["path"])
 
+    checks = Map.new(execution["check"]["checks"] || [], &{&1["id"], &1["passed"]})
+
     score = %{
       # With no decider to read the report, whether it passed is not known.
       passed:
@@ -110,9 +116,14 @@ defmodule EquivalentExchange.Score do
       delegated: delegated,
       repeated_after_handoff: repeated_after_handoff(runs, tools),
       retries: Enum.count(runs, &(&1["via"] == "retry")),
+      checks: checks,
+      checks_held: Enum.count(checks, fn {_id, held} -> held == true end),
+      breaks: execution["breaks"],
+      reopened: Enum.count(tools, &(&1["name"] == "reopen" and &1["ok"] == true)),
       runs: length(runs),
       tool_calls: length(tools),
       failed_tool_calls: Enum.count(tools, &(&1["ok"] == false)),
+      human_requests: Enum.count(execution["requests"], &human?/1),
       model_calls: execution["usage"]["calls"],
       tokens: execution["usage"]["input_tokens"] + execution["usage"]["output_tokens"],
       cost: execution["usage"]["cost"],
@@ -123,8 +134,11 @@ defmodule EquivalentExchange.Score do
     }
 
     Map.put(score, :findings, findings(execution, score))
-      human_requests: Enum.count(execution["requests"], &human?/1),
   end
+
+  # A request whose arbiter is the person.
+  defp human?(%{"arbiter" => %{"kind" => "human"}}), do: true
+  defp human?(_request), do: false
 
   # The calls a run made, other than the steps of a chain, that the run
   # of the same work before it already made with the same args.
@@ -136,10 +150,6 @@ defmodule EquivalentExchange.Score do
         |> Enum.group_by(& &1["run"], &{&1["name"], &1["args"]})
 
       runs
-  # A request whose arbiter is the person.
-  defp human?(%{"arbiter" => %{"kind" => "human"}}), do: true
-  defp human?(_request), do: false
-
       |> Enum.filter(& &1["work"])
       |> Enum.group_by(& &1["work"], & &1["id"])
       |> Map.values()

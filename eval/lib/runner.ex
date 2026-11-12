@@ -34,7 +34,10 @@ defmodule EquivalentExchange.Runner do
   a finite execution timeout bounds how long it goes on. A task with `deploy`
   publishes to the deploy environment (`EquivalentExchange.Deploy`); what
   production serves for the app it promoted is copied for the check, then
-  every app it published is removed.
+  every app it published is removed, whatever happens. A task with a
+  `[suite]` is a long-horizon case: its caps bound the execution, and its
+  checks (`EquivalentExchange.Suite`) read what the deployed site answered and
+  showed before it was removed.
   """
 
   alias EquivalentExchange.{
@@ -46,6 +49,7 @@ defmodule EquivalentExchange.Runner do
     Score,
     Task,
     Requests,
+    Suite,
     Usage,
     Deadline
   }
@@ -281,6 +285,9 @@ defmodule EquivalentExchange.Runner do
          resume?
        ) do
     dir = execution_dir(folder, task.id, configuration, n)
+    # A long-horizon case brings its own caps, the tighter of them and the run's.
+    timeout_s = Deadline.cap(timeout_s, task.suite && task.suite["cap_s"])
+    usd_cap = usd_cap || (task.suite && task.suite["cap_usd"])
 
     project = Path.join(dir, "project")
     File.mkdir_p!(project)
@@ -344,28 +351,25 @@ defmodule EquivalentExchange.Runner do
     duration = elapsed + System.monotonic_time(:millisecond) - started
     facts = facts(project)
 
-    if task.deploy do
-      case Deploy.published(facts.events) do
-        [] ->
-          :ok
-
-        [app | _others] = apps ->
-          Deploy.mirror(app, Path.join([dir, "prod", "site"]))
-          Enum.each(apps, &Deploy.destroy/1)
-      end
-    end
+    live = if task.deploy, do: leave_site(task, facts.events, dir)
+    usage = usage(facts, project)
+    requests = requests(facts, answers, project)
 
     outcome = outcome(facts, status)
     report = report(facts)
     {:ok, after_} = Omunculus.Changes.snapshot(truth, workspace, [])
     {:ok, changed} = Omunculus.Changes.files(truth, before, after_)
 
-    {passed, said, files} =
+    {passed, said, files, checks} =
       check(task, workspace, facts, %{
         outcome: outcome,
         configuration: configuration,
         conversation: conversation,
-        dir: dir
+        dir: dir,
+        live: live,
+        requests: requests,
+        duration_ms: duration,
+        usage: usage
       })
 
     File.write!(
@@ -386,9 +390,10 @@ defmodule EquivalentExchange.Runner do
       expected_report: task.expect["report"],
       report: report,
       conversation: conversation,
-      check: %{passed: passed, said: said, files: files},
+      check: %{passed: passed, said: said, files: files, checks: checks},
+      live: live,
       error: error(status),
-      requests: requests(facts, answers, project),
+      requests: requests,
       grants: grants(facts),
       runs:
         Enum.map(
@@ -407,7 +412,8 @@ defmodule EquivalentExchange.Runner do
       changed: Enum.map(changed, & &1["path"]),
       sent_back: sent_back(facts),
       works: works(facts),
-      usage: usage(facts, project),
+      usage: usage,
+      breaks: Enum.count(facts.events, &(&1.type == "break")),
       duration_ms: duration,
       needs: task.needs,
       forbidden: task.forbidden,
@@ -500,22 +506,27 @@ defmodule EquivalentExchange.Runner do
     facts = facts(project)
     execution = path |> File.read!() |> Jason.decode!()
     report = report(facts)
+    usage = usage(facts, project)
 
-    {passed, said, files} =
+    {passed, said, files, checks} =
       check(task, workspace, facts, %{
         outcome: execution["outcome"],
         configuration: execution["configuration"],
         conversation: execution["conversation"] || [],
-        dir: Path.dirname(path)
+        dir: Path.dirname(path),
+        live: execution["live"],
+        requests: execution["requests"],
+        duration_ms: execution["duration_ms"],
+        usage: usage
       })
 
     execution
     |> Map.merge(%{
       "report" => report,
       "expected_report" => task.expect["report"],
-      "check" => %{"passed" => passed, "said" => said, "files" => files},
+      "check" => %{"passed" => passed, "said" => said, "files" => files, "checks" => checks},
       "grants" => grants(facts),
-      "usage" => usage(facts, project)
+      "usage" => usage
     })
     |> assess(task, workspace)
   end
@@ -636,21 +647,79 @@ defmodule EquivalentExchange.Runner do
   defp send_arguments(message, agent), do: ["send", message, "--agent", agent]
 
   # The task's check on what the execution left: its workspace, its works,
-  # what was said and, for a task that publishes, the published copy.
-  defp check(task, workspace, facts, execution) do
+  # what was said and, for a task that publishes, the published copy. A
+  # long-horizon case has the checks of `Suite` over what the deployed site
+  # showed, in place of a script.
+  defp check(%{suite: nil} = task, workspace, facts, execution) do
     published = Path.expand(Path.join([execution.dir, "prod", "site"]))
 
-    Task.check(task, workspace, %{
-      outcome: execution.outcome,
-      report: report(facts),
-      configuration: execution.configuration,
-      works: roots(facts),
-      team: team(facts),
-      conversation: execution.conversation,
-      first_run_made_work: first_run_made_work(facts),
-      proposals: proposals(facts, Path.join(execution.dir, "project")),
-      published: if(task.deploy, do: published)
-    })
+    {passed, said, files} =
+      Task.check(task, workspace, %{
+        outcome: execution.outcome,
+        report: report(facts),
+        configuration: execution.configuration,
+        works: roots(facts),
+        team: team(facts),
+        conversation: execution.conversation,
+        first_run_made_work: first_run_made_work(facts),
+        proposals: proposals(facts, Path.join(execution.dir, "project")),
+        published: if(task.deploy, do: published)
+      })
+
+    {passed, said, files, nil}
+  end
+
+  defp check(task, _workspace, _facts, execution) do
+    evidence =
+      %{
+        "live" => execution.live,
+        "requests" => execution.requests,
+        "duration_ms" => execution.duration_ms,
+        "cost" => execution.usage |> Jason.encode!() |> Jason.decode!() |> Map.get("cost")
+      }
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    checks = Suite.checks(task.suite, evidence)
+    {passed, said} = Suite.verdict(checks)
+    {passed, said, passed, checks}
+  end
+
+  # What the site left behind, before its apps are destroyed, whatever
+  # happens: the production copy the scripts check, and for a case with a
+  # `[suite]` the copy of the deepest instance reached, what each answered
+  # and how `browser_check` saw it.
+  defp leave_site(task, events, dir) do
+    apps = Deploy.published(events)
+
+    try do
+      with [app | _others] <- apps,
+           do: Deploy.mirror(app, Path.join([dir, "prod", "site"]))
+
+      if task.suite, do: live(task.suite, Deploy.reached(events), dir)
+    after
+      Enum.each(apps, &Deploy.destroy/1)
+    end
+  end
+
+  defp live(suite, reached, dir) do
+    instance = if reached.production, do: :production, else: :homologation
+    app = reached[instance]
+    site = Path.join([dir, if(instance == :production, do: "prod", else: "hml"), "site"])
+    if app && instance == :homologation, do: Deploy.mirror(app, site, :homologation)
+
+    answers = fn instance, app ->
+      app && %{app: app, status: Deploy.status(app, instance, "/")}
+    end
+
+    %{
+      site: site,
+      homologation: answers.(:homologation, reached.homologation),
+      production: answers.(:production, reached.production),
+      visual:
+        app &&
+          Deploy.look(app, instance, Enum.sort(Suite.paths(site)), suite["viewport"])
+    }
   end
 
   # The proposals the sales desk's `proposal` tool wrote, the latest version of

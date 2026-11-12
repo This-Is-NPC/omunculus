@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Runs the long-horizon cases of eval/tasks/longhorizon on the agency, each
+# starting and ending clean: the deploy environment is started when it is
+# down and stopped again when this run started it, and the Dokku apps the
+# run left are destroyed, only those that were not there when it began.
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+# The providers' keys come from .env, as the dev server's do.
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
+[[ -n ${usage_model:-} ]] || { echo "--model names the preset's model" >&2; exit 2; }
+
+args=(--configuration agency --model "$usage_model" --k 1 --jobs 1 --timeout infinity)
+[[ -z ${usage_label:-} ]] || args+=(--label "$usage_label")
+[[ -z ${usage_overlay:-} ]] || args+=(--overlay "$usage_overlay")
+if [[ -n ${usage_case:-} ]]; then
+  [[ -d eval/tasks/longhorizon/$usage_case ]] || { echo "no case $usage_case" >&2; exit 2; }
+  args+=(--task "longhorizon/$usage_case")
+else
+  args+=(--task longhorizon/)
+fi
+
+instances=(homologation production)
+apps() { docker exec "omunculus-dokku-$1" dokku apps:list 2>/dev/null | tail -n +2 | grep -v "haven't" || true; }
+
+started=0
+(( $(docker ps -q --filter name=omunculus-dokku- | wc -l) >= 2 )) || started=1
+packs/dream-team/environment/up >/dev/null
+declare -A before
+for i in "${instances[@]}"; do before[$i]=" $(apps "$i" | tr '\n' ' ') "; done
+
+clean() {
+  for i in "${instances[@]}"; do
+    for app in $(apps "$i"); do
+      [[ ${before[$i]} == *" $app "* ]] || docker exec "omunculus-dokku-$i" dokku --force apps:destroy "$app" >/dev/null 2>&1 || true
+    done
+  done
+  (( started == 0 )) || packs/dream-team/environment/down
+}
+trap clean EXIT
+
+mix run eval/run.exs run "${args[@]}"

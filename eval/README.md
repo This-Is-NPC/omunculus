@@ -29,11 +29,11 @@ fixtures/scores/    hand-scored executions that prove the scoring
 fixtures/judge/     hand-written reports that measure the decider
 overlays/           experimental configuration overlays, such as the single agent of the hierarchy experiment
 judge.toml          the decider and its thresholds
-person.toml         the model that plays the person of a conversation task
+person.toml         the model that plays the person of a conversation task, and what a person who approves picks of a request
 prices.toml         USD per million tokens of the models whose replies carry no cost
 fixtures/terminal-bench/, fixtures/swe-bench/
                     the synthetic task and instance the importers are tested on
-lib/                the project builder, tasks, runner, person, deploy environment, scoring and report
+lib/                the project builder, tasks, runner, person, deploy environment, suite checks, scoring and report
 run.exs             mix run eval/run.exs <command>
 results/            one folder per run, ignored by git
 ```
@@ -121,6 +121,7 @@ outcome = ["done", "answer"]
 [human]                            # how the simulated person answers a request
 "bash" = "deny"                    # grant or deny, by name or group; unnamed is deny
 decision = "approve"               # the option picked of a request that grants nothing (ask)
+safe = true                        # or, in place of decision: the option a person who approves what is not broken picks
 
 [person]                           # a conversation: what the person answers the agent's questions with
 facts = "Your bakery is Doce Ana, in Campinas."
@@ -131,6 +132,13 @@ id = "faithful"
 question = "How well is README.pt-BR.md a faithful translation of README.md?"
 files = ["README.md", "README.pt-BR.md"]
 ```
+
+With `safe = true` the person picks, of a request that grants nothing, the
+first of `[decide] safe` in `person.toml` it offers (`approve`, `accept`,
+`works`, `go`, ...), else the first option that does not begin with one of
+`[decide] unsafe` (`deny`, `adjust`, `retry`, ...); with none, the request
+waits. A review of a held tool call and a price to accept are both answered
+this way, so a long conversation needs no option named in the task.
 
 A task with `[person]` goes on as a conversation: each time the runs settle,
 the model of `person.toml` reads what the agent last said — a depth-0 run's
@@ -431,6 +439,76 @@ How to read it honestly:
 - The cap makes cost comparable for the executions that stay under it. When
   executions hit it, compare the pass rates, not the costs.
 - The cost counts the agents' calls only, not the simulated person's or the decider's.
+
+## The long-horizon suite
+
+`tasks/longhorizon/<case>/` holds the cases that run the agency the whole
+way: a client asks it to sell, design, build and deploy a small website, and
+answers only what it asks. A case is a task (`instruction.md`, the opening
+message; `task.toml`, with `[person]` for the client and its facts, and
+`[human] safe = true`) with a `[suite]` in place of a `check` script:
+
+```toml
+[suite]
+cap_s = 5400          # seconds the case may take: the execution's timeout
+cap_usd = 1.5         # dollars the agents may spend: the run stops past it
+promote = true        # the site is expected in production
+viewport = "390x844"  # the phone the visual check loads
+
+[suite.pages]         # page name = words its path holds, "/" for the index
+menu = ["menu", "cardapio"]
+
+[suite.facts]         # fact name = regular expression the site must show
+whatsapp = '99876-?5432'
+```
+
+`ana-bakery` is the first case: Ana, of the bakery Doce Ana, wants home,
+menu, about and contact pages, orders by WhatsApp, and approves what she is
+shown if it is not broken. Another case is another folder.
+
+The checks (`lib/suite.ex`) read what the runner saw of the deployed site
+before it destroyed the apps; each passes or fails on its own:
+
+| Check | Holds when |
+|---|---|
+| `deployed_homologation` | the homologation address answers 200 on its index |
+| `deployed_production` | production answers 200; checked when the case expects `promote` or the site was promoted |
+| `pages` | each page of `[suite.pages]` is among the pages the deepest instance serves, copied by following links from its index |
+| `facts` | every `[suite.facts]` expression matches the text of those pages |
+| `answered` | no request is still pending when the conversation ends |
+| `visual` | `browser_check` on the deployed address, at the case's viewport, reports no console errors and no horizontal overflow |
+| `time_cap`, `cost_cap` | the execution took no more than `cap_s` and cost no more than `cap_usd`; the cost check is left unmeasured for a model with no price |
+
+The visual check calls the tool with its `host` argument, the name the
+deployed app is served under, so it loads the same address a person would.
+
+The score of a case is the execution's score, plus `checks` (each check, passed
+or not), the effort (time, model calls, tokens, USD), `human_requests`,
+`repeated after handoff` and the recovery: `breaks` (stops the agents
+reported), `reopened` (works sent back to run again) and `retries`.
+`report.md` lists each execution of a case with one column per check and
+these measures, under "Long-horizon cases".
+
+```sh
+mise run eval:suite -- --model <model>                          # every case
+mise run eval:suite -- ana-bakery --model <model> --overlay <file>   # one case, a TOML laid over the preset
+```
+
+`<file>` is a placeholder for a TOML overlay, such as one that changes a
+model table or an agent's model; `--overlay` is described under
+[Running](#running). The suite runs the `agency` configuration once per case,
+one at a time, with no `--timeout` of its own, so a case's `cap_s` bounds it.
+
+Every round starts and ends clean. `scripts/eval-suite` starts the deploy
+environment when it is down and stops it when it started it; the runner
+destroys the apps an execution published, from homologation and production,
+also after a failure; and when the run ends, however it ends, the script
+destroys any app that is in Dokku and was not there when it began. Apps are
+named per project, and nothing else in Docker is touched. The eval starts no
+omunculus server: each execution drives its own project through the library
+and the CLI. The checks are proved against recorded data, with no model
+call, by `test/omunculus/eval_suite_test.exs`; the selftest skips a case,
+which has no script.
 
 ## The decider
 

@@ -52,6 +52,7 @@ defmodule EquivalentExchange.Report do
       by_scenario: by(all, & &1["scenario"]),
       by_task: by(all, &"#{&1["task"]} · #{&1["configuration"]}"),
       cache_by_agent: by_agent(all),
+      cases: cases(all),
       teamwork:
         all
         |> Enum.group_by(& &1["configuration"])
@@ -186,9 +187,9 @@ defmodule EquivalentExchange.Report do
       delegated: rate.(Enum.map(scores, & &1["delegated"])),
       retries: Enum.sum(Enum.map(scores, & &1["retries"])),
       repeated: scores |> Enum.map(&(&1["repeated_after_handoff"] || 0)) |> Enum.sum(),
-      tokens: Enum.sum(Enum.map(scores, & &1["tokens"])),
       human_requests: scores |> Enum.map(&(&1["human_requests"] || 0)) |> Enum.sum(),
       model_calls: scores |> Enum.map(&(&1["model_calls"] || 0)) |> Enum.sum(),
+      tokens: Enum.sum(Enum.map(scores, & &1["tokens"])),
       cost: Float.round(Enum.sum(Enum.map(scores, &(&1["cost"] * 1.0))), 6),
       seconds: Float.round(Enum.sum(Enum.map(scores, & &1["duration_ms"])) / 1000, 1)
     }
@@ -307,7 +308,7 @@ defmodule EquivalentExchange.Report do
     #{table("By configuration", summary.by_configuration)}
     #{table("By scenario", summary.by_scenario)}
     #{table("By task", summary.by_task)}
-    ## Teamwork by configuration
+    #{cases_table(summary.cases)}## Teamwork by configuration
 
     #{teamwork_table(summary.teamwork)}
 
@@ -331,6 +332,54 @@ defmodule EquivalentExchange.Report do
 
     #{findings(summary.findings)}
     """
+  end
+
+  # Each execution of a long-horizon case: its checks, then the effort and the recovery.
+  defp cases(all) do
+    for execution <- all, execution["check"]["checks"] do
+      score = execution["score"]
+
+      %{
+        name: "#{execution["task"]} · #{execution["configuration"]} · #{execution["repetition"]}",
+        checks: Map.new(execution["check"]["checks"], &{&1["id"], &1["passed"]}),
+        seconds: round(score["duration_ms"] / 1000),
+        model_calls: score["model_calls"],
+        tokens: score["tokens"],
+        cost: score["cost"],
+        human_requests: score["human_requests"],
+        repeated: score["repeated_after_handoff"],
+        breaks: score["breaks"],
+        reopened: score["reopened"],
+        retries: score["retries"]
+      }
+    end
+  end
+
+  defp cases_table([]), do: ""
+
+  defp cases_table(cases) do
+    ids = cases |> Enum.flat_map(&Map.keys(&1.checks)) |> Enum.uniq() |> Enum.sort()
+
+    mark = fn
+      nil -> "–"
+      true -> "pass"
+      false -> "FAIL"
+    end
+
+    header =
+      "| | " <>
+        Enum.join(ids, " | ") <>
+        " | seconds | model calls | tokens | cost USD | human requests | repeated after handoff | breaks | reopened | retries |\n|---|" <>
+        String.duplicate("---|", length(ids) + 9) <> "\n"
+
+    rows =
+      Enum.map_join(cases, "\n", fn c ->
+        "| #{c.name} | " <>
+          Enum.map_join(ids, " | ", &mark.(c.checks[&1])) <>
+          " | #{c.seconds} | #{c.model_calls} | #{c.tokens} | #{c.cost} | #{c.human_requests} | #{c.repeated} | #{c.breaks} | #{c.reopened} | #{c.retries} |"
+      end)
+
+    "## Long-horizon cases\n\n" <> header <> rows <> "\n\n"
   end
 
   defp table(title, rows) do
