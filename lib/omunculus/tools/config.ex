@@ -20,7 +20,9 @@ defmodule Omunculus.Tools.Config do
   name alone. An agent or workflow item gives what the config runs, the
   pack it comes from and, as `file`, the table the file writes for it; a
   workspace whether it is the default; a provider whether its key is
-  literal, in the file. It loads the TOML in the harness's own process,
+  literal, in the file. The `tools` section is the catalog the project
+  has — every model tool, with its description, groups and tags — whether
+  or not any agent is granted it. It loads the TOML in the harness's own process,
   since the sandbox hides the file from external tools.
   """
 
@@ -28,7 +30,7 @@ defmodule Omunculus.Tools.Config do
   alias Omunculus.Tool.Catalog
   alias Omunculus.Tools.{Args, Out}
 
-  @named ~w(agents workflows models workspaces auth secrets packs)
+  @named ~w(agents workflows models workspaces auth secrets packs tools)
   @single ~w(policy access names)
 
   @spec run(map) :: map
@@ -52,19 +54,40 @@ defmodule Omunculus.Tools.Config do
   def show(path, args) do
     with {:ok, config} <- Config.load(path),
          {:ok, editable} <- Config.document(path) do
+      catalog = config.tools |> Catalog.discover() |> Catalog.with_trigger("model")
+
       whole =
         config
         |> describe()
         |> Map.merge(editable)
-        |> Map.put(:names, names(config))
+        |> Map.put(:names, names(catalog))
         |> Map.put(:packs, packs(path))
 
-      read(whole, args)
+      read(whole, catalog, args)
     end
   end
 
-  defp read(whole, args) do
-    sections = sections(whole)
+  @doc """
+  The item as the loaded `config` runs it, the pack's keys, the layers and
+  the file's overrides included, for an agent or a workflow; nil when
+  `config` has no such item. Any other item is `:file`: its table in the
+  file is what runs.
+  """
+  @spec effective(Config.t(), tuple) :: map | nil | :file
+  def effective(config, {"agents", name}) do
+    with agent when not is_nil(agent) <- config.agents[name],
+         do: {name, agent} |> agent() |> Map.drop([:name, :image])
+  end
+
+  def effective(config, {"workflows", name}) do
+    with steps when not is_nil(steps) <- config.workflows[name],
+         do: %{steps: workflow({name, steps}).steps}
+  end
+
+  def effective(_config, _item), do: :file
+
+  defp read(whole, catalog, args) do
+    sections = Map.put(sections(whole), "tools", tools(catalog))
     section = Args.present(args, "section")
     item = Args.present(args, "item")
 
@@ -214,10 +237,15 @@ defmodule Omunculus.Tools.Config do
     end
   end
 
-  defp names(config) do
-    tools = config.tools |> Catalog.discover() |> Catalog.with_trigger("model")
-    groups = tools |> Catalog.groups() |> Map.keys()
-    Enum.sort(Enum.uniq(Map.keys(tools) ++ groups ++ Config.known_resources()))
+  defp names(catalog) do
+    groups = catalog |> Catalog.groups() |> Map.keys()
+    Enum.sort(Enum.uniq(Map.keys(catalog) ++ groups ++ Config.known_resources()))
+  end
+
+  defp tools(catalog) do
+    Map.new(catalog, fn {name, tool} ->
+      {name, %{description: tool.description, groups: tool.groups, tags: tool.tags}}
+    end)
   end
 
   defp agent({name, agent}) do

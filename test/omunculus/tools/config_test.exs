@@ -137,6 +137,23 @@ defmodule Omunculus.Tools.ConfigTest do
     assert Enum.all?([concierge, policy, names], &(is_integer(&1) and &1 > 0))
   end
 
+  test "the tools section is the catalog the project has, granted to an agent or not" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+
+    assert %{"sections" => %{"tools" => %{"done" => _}}} = read(path, %{})
+
+    assert %{"items" => %{"done" => %{"description" => description, "groups" => groups}}} =
+             read(path, %{"section" => "tools"})
+
+    assert description != ""
+    assert is_list(groups)
+
+    assert %{"item" => "tools.done", "description" => ^description} =
+             read(path, %{"item" => "tools.done"})
+  end
+
   test "a section whole, or one item with what the config runs and what the file writes" do
     dir = Fixtures.tmp_dir()
     Fixtures.pack(dir)

@@ -117,7 +117,7 @@ Also called by a model and a chain.
 omunculus config [--item <item>] [--section <section>] [--whole true]
 ```
 
-Reads the project's setup, as JSON. Without arguments, an index: the file's revision and, for each section (agents, workflows, models, workspaces, auth, secrets, packs, policy, access, names), each item's size in bytes. Then read a section whole with section, or one item with item: an agent or workflow with what the config runs, its pack and, as file, the table configure writes.
+Reads the project's setup, as JSON. Without arguments, an index: the file's revision and, for each section (agents, workflows, models, workspaces, auth, secrets, packs, tools, policy, access, names), each item's size in bytes. Then read a section whole with section, or one item with item: an agent or workflow with what the config runs, its pack and, as file, the table configure writes; and in tools every tool of the catalog with its description, whether or not an agent is granted it.
 
 Also called by a model.
 
