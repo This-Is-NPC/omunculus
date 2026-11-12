@@ -8,13 +8,9 @@ import "kit/ui"
 // ThreadView reads one thread as a mail client does: its subject and label,
 // who it is with, and the ways to the thread before or after and out of it;
 // then its messages stacked oldest first, the latest open and the older ones
-// folded to a line each. A reply is written under them, once asked for by a
-// message's Reply (or Ctrl+R, for the latest): it quotes the message it
-// answers, so it is plain what it answers. A request of the agent that waits
-// for you is answered by replying to it, or, replying to any other message of
-// the thread, to the newest request waiting; with none waiting the reply is a
-// message to the agent. Sending or Esc closes the reply; Esc then closes the
-// thread.
+// folded to a line each. A message's Reply (or Ctrl+R, for the latest) opens a
+// composer docked over the mailbox, so the thread stays readable beside it; Esc
+// closes the thread.
 Item {
   id: view
 
@@ -23,21 +19,10 @@ Item {
   property bool back: false
   // Message key -> whether you opened (true) or folded (false) it.
   property var toggled: ({})
-  // The message being replied to, "" while no reply is being written.
-  property string replyKey: ""
-  // Whether the reply asked for goes to everyone on the thread.
-  property bool replyAll: false
-  // Whether Esc is the thread's: it closes the reply, or else the thread.
+  // Whether Esc is the thread's, to close it.
   property bool escapes: true
 
   readonly property var messages: thread.messages
-  readonly property bool replying: replyKey !== ""
-  readonly property var target: replying ? Mailbox.replyTarget(thread, replyKey) : null
-  // The message it answers, quoted as {head, lines}, or null.
-  readonly property var quote: target && target.quoted ? Mailbox.quoted(target.quoted, Mail.stamp(target.quoted.at)) : null
-  property bool quoteAll: false
-  // How many lines of the quote show folded: fewer where the window is narrow.
-  readonly property int quoteFolded: back ? 2 : 4
 
   function isOpen(message, index) {
     if (message.pending)
@@ -51,19 +36,9 @@ Item {
     toggled = Object.assign({}, toggled, { [message.key]: !isOpen(message, index) })
   }
 
-  // Opens the reply to `key`, the latest message when none is given, to
-  // its other party, or to everyone on the thread when `all`.
-  function reply(key, all) {
-    if (messages.length === 0)
-      return
-    replyKey = key || messages[messages.length - 1].key
-    replyAll = !!all
-    const message = messages.find(each => each.key === replyKey)
-    recipients.chosen = Mailbox.replyRecipients(thread, message, replyAll)
-    recipients.refusal = ""
-    quoteAll = false
-    Qt.callLater(() => { editor.focusEntry(); toEnd() })
-  }
+  // Opens the composer for a reply to `key`, the latest message when none is
+  // given, to its other party, or to everyone on the thread when `all`.
+  function reply(key, all) { Mail.openReply(thread, key, all) }
 
   // Scrolls to the latest message, and keeps there while the messages settle
   // to their height, until you scroll or a moment passes.
@@ -73,22 +48,6 @@ Item {
     scroll.scrollTo(scroll.contentHeight)
   }
   property bool landing: false
-
-  function send() {
-    if (editor.text.trim() === "")
-      return
-    if (recipients.chosen.length === 0)
-      return
-    const request = target.request
-    const text = editor.take()
-    const counterparts = Mailbox.counterparts(thread).map(item => item.address)
-    // The thread's own accounts are answered in it; any other is written to in a message of its own.
-    if (recipients.chosen.some(item => counterparts.includes(item.address)))
-      Mail.reply(thread.key, request, text, request === "" ? footer.take() : [])
-    for (const other of recipients.chosen.filter(item => !counterparts.includes(item.address)))
-      Mail.send(other.project, other.agent, Mailbox.re(thread.subject), text, [], "", true)
-    replyKey = ""
-  }
 
   // A thread that opens, or gets a message, is read from its latest.
   property int seenCount: messages.length
@@ -184,84 +143,10 @@ Item {
             project: view.thread.project
             expanded: view.isOpen(modelData, index)
             latest: index === view.messages.length - 1
-            replying: view.replying
             several: Mailbox.canReplyAll(view.thread)
             onToggled: view.toggle(modelData, index)
             onReplyTo: all => view.reply(modelData.key, all)
-            onForwardIt: Mail.compose(Mailbox.forward(view.thread, modelData))
-          }
-        }
-
-        SurfaceFrame {
-          Layout.fillWidth: true
-          visible: view.replying
-          Layout.preferredHeight: writing.implicitHeight + 28
-          variant: "outline"
-          active: true
-
-          ColumnLayout {
-            id: writing
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
-            spacing: 10
-
-            RowLayout {
-              Layout.fillWidth: true
-              spacing: 8
-              Label { text: "To"; color: Theme.dim; font.pixelSize: 12 }
-              RecipientField {
-                id: recipients
-                Layout.fillWidth: true
-                candidates: Mail.recipients
-                placeholder: "add another"
-              }
-            }
-            FieldError { Layout.fillWidth: true; text: recipients.refusal }
-            Label {
-              Layout.fillWidth: true
-              text: Mailbox.re(view.thread.subject)
-              color: Theme.dim
-              font.pixelSize: 11
-              elide: Text.ElideRight
-            }
-            Editor {
-              id: editor
-              Layout.fillWidth: true
-              placeholderText: "your reply"
-              onSubmitted: view.send()
-            }
-            // The quoted original, folded after a few lines.
-            ColumnLayout {
-              Layout.fillWidth: true
-              visible: view.quote !== null
-              spacing: 4
-              Label {
-                Layout.fillWidth: true
-                text: view.quote ? view.quote.head : ""
-                color: Theme.dim
-                font.pixelSize: 11
-                elide: Text.ElideRight
-              }
-              Label {
-                Layout.fillWidth: true
-                text: view.quote ? (view.quoteAll ? view.quote.lines : view.quote.lines.slice(0, view.quoteFolded)).join("\n") : ""
-                color: Theme.dim
-                font.pixelSize: 11
-                wrapMode: Text.Wrap
-              }
-              Chip {
-                visible: view.quote !== null && view.quote.lines.length > view.quoteFolded
-                icon: "more"
-                text: view.quoteAll ? "LESS" : "MORE"
-                onClicked: view.quoteAll = !view.quoteAll
-              }
-            }
-            MailFooter {
-              id: footer
-              attachable: view.target !== null && view.target.request === ""
-              sendable: editor.text.trim() !== "" && recipients.chosen.length > 0
-              onDiscarded: view.replyKey = ""
-              onSent: view.send()
-            }
+            onForwardIt: Mail.compose(Object.assign({ kind: "forward" }, Mailbox.forward(view.thread, modelData)))
           }
         }
       }
@@ -276,6 +161,6 @@ Item {
   Shortcut {
     sequence: "Escape"
     enabled: view.escapes
-    onActivated: view.replying ? view.replyKey = "" : Mail.close()
+    onActivated: Mail.close()
   }
 }

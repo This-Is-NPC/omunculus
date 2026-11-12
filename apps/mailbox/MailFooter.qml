@@ -11,6 +11,8 @@ RowLayout {
   // Whether the message can carry files, and whether it can be sent.
   property bool attachable: true
   property bool sendable: false
+  // How many files are picked.
+  readonly property int fileCount: files.paths.length
   // Takes the files picked, emptying the picker.
   function take() { return files.take() }
 

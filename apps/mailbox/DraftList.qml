@@ -5,7 +5,7 @@ import "kit/client/Mailbox.js" as Mailbox
 import "kit/ui"
 
 // DraftList is the Drafts folder: what was left unsent, newest first. A draft
-// opens in the compose window; its x discards it.
+// opens in a composer; its x discards it.
 Item {
   id: list
 

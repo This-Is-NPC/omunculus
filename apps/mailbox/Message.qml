@@ -8,8 +8,7 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 // line with who wrote, the start of the text and the time; open, its header
 // (from, to, date), its text, the files it carries, each a chip that saves
 // the file to the downloads directory and opens it, and Reply, Forward and,
-// only when the thread has several counterparts, Reply all. The latest message's Reply is the screen's solid action while no
-// reply is being written, unless that message is your own.
+// only when the thread has several counterparts, Reply all. The latest message's Reply is the screen's solid action unless that message is your own.
 SurfaceFrame {
   id: mail
 
@@ -17,16 +16,15 @@ SurfaceFrame {
   required property string thread
   required property string project
   property bool expanded: true
-  // Whether it is the thread's latest message, and a reply is being written.
+  // Whether it is the thread's latest message.
   property bool latest: false
-  property bool replying: false
   // Whether the thread has more than one counterpart, so Reply all differs from Reply.
   property bool several: false
 
   readonly property bool agent: !message.mine
   // The latest message is the one the screen's solid action answers, unless it
   // is your own.
-  readonly property bool answerable: latest && !replying && !message.mine
+  readonly property bool answerable: latest && !message.mine
 
   signal toggled()
   signal replyTo(bool all)

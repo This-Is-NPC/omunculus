@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
+import "kit/client/Composers.js" as Composers
 import "kit/client/Mailbox.js" as Mailbox
 import "kit/ui"
 
@@ -67,9 +68,8 @@ Singleton {
   // The key of the review open, "project/conversation/request".
   property string selectedReview: ""
   readonly property var review: reviews.find(item => item.key === selectedReview) || null
-  // Asks the window for a message to write, from `preset`: {to, subject, body,
-  // draft}, each optional.
-  signal composeRequested(var preset)
+  // The composers open, as Composers makes them; the dock draws them.
+  property var composers: Composers.empty()
   // Asks the thread on screen for a reply to the message `key`, or to its last.
   signal replyRequested(string key)
 
@@ -214,10 +214,23 @@ Singleton {
       close()
   }
 
-  // Asks the window for a new message, or for one started from `preset`.
+  // Opens a composer for a new message, or for one started from `preset`: {draft},
+  // or {kind: "forward", subject, body}.
   function compose(preset) {
-    composeRequested(preset || {})
+    composers = Composers.open(composers, preset || {})
   }
+
+  // Opens a composer for a reply to the message `key` of `thread`, to everyone on it when `all`.
+  function openReply(thread, key, all) {
+    const preset = Composers.replying(thread, key, all, stamp)
+    if (preset)
+      compose(preset)
+  }
+
+  function minimizeComposer(id) { composers = Composers.minimize(composers, id) }
+  function activateComposer(id) { composers = Composers.activate(composers, id) }
+  function expandComposer(id) { composers = Composers.expand(composers, id) }
+  function closeComposer(id) { composers = Composers.close(composers, id) }
 
   // Keeps what is written as a draft; one with an `id` replaces its own.
   function saveDraft(draft) {

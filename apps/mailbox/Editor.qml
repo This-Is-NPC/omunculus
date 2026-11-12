@@ -13,6 +13,8 @@ Item {
   property alias placeholderText: area.placeholderText
   // The least it shows, in lines.
   property int minimumLines: 6
+  // The least it is tall, in pixels: a window gives it all its height.
+  property real minimumHeight: 0
   // The height its words take, padding included.
   readonly property real wordsHeight: area.contentHeight + 2 * area.padding
 
@@ -28,7 +30,7 @@ Item {
     return value
   }
 
-  implicitHeight: Math.max(metrics.lineSpacing * minimumLines + 2 * area.padding, wordsHeight)
+  implicitHeight: Math.max(metrics.lineSpacing * minimumLines + 2 * area.padding, wordsHeight, minimumHeight)
 
   InputFrame {
     anchors.fill: parent

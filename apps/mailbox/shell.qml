@@ -12,8 +12,8 @@ ShellRoot {
   // that fade downwards, under a command bar whose actions follow where you
   // are. Each column is headed by its name and the arrow that folds it: the
   // folders to a rail, the list away, sliding to their width; a narrow window
-  // shows one pane at a time. A new message is written in a dialog; a thread
-  // is answered under its messages.
+  // shows one pane at a time. A message, a reply or a forward is written in a
+  // composer docked at the bottom right, over the mailbox.
   FloatingWindow {
     id: window
 
@@ -35,11 +35,6 @@ ShellRoot {
     function search() {
       listFolded = false
       Qt.callLater(() => searchBox.forceActiveFocus())
-    }
-
-    Connections {
-      target: Mail
-      function onComposeRequested(preset) { compose.start(preset) }
     }
 
     Rectangle {
@@ -211,7 +206,7 @@ ShellRoot {
                   anchors { fill: parent; leftMargin: window.narrow ? 0 : 20 }
                   thread: Mail.threads[page.modelData] || Mail.blank
                   back: window.narrow
-                  escapes: !searchBox.activeFocus && !compose.opened
+                  escapes: !searchBox.activeFocus && !dock.focused
                 }
               }
             }
@@ -229,7 +224,7 @@ ShellRoot {
                   anchors { fill: parent; leftMargin: window.narrow ? 0 : 20 }
                   review: Mail.reviews.find(item => item.key === reviewPage.modelData) || Mail.blankReview
                   back: window.narrow
-                  escapes: !searchBox.activeFocus && !compose.opened
+                  escapes: !searchBox.activeFocus && !dock.focused
                 }
               }
             }
@@ -258,10 +253,14 @@ ShellRoot {
         }
       }
 
-      ComposeDialog { id: compose }
-      // What the window tells, at its bottom right.
+      // The composers, over the mailbox at its bottom right.
+      ComposerDock {
+        id: dock
+        anchors.fill: parent
+      }
+      // What the window tells, at its bottom right, over the composers.
       ToastStack {
-        anchors { right: parent.right; bottom: parent.bottom; margins: window.short ? 12 : 20 }
+        anchors { right: parent.right; bottom: parent.bottom; margins: window.short ? 12 : 20; bottomMargin: (window.short ? 12 : 20) + dock.occupied }
         width: Math.min(340, window.width - 40)
         maxHeight: window.height / 2
         notices: Mail.notices.items

@@ -25,6 +25,9 @@ Item {
     import: "M8 2.5v8 M4.5 7l3.5 3.5 3.5-3.5 M3 13.5h10",
     edit: "M3 4h6 M3 7h5 M3 10h6 M12 3.5v9 M10.5 3.5h3 M10.5 12.5h3",
     close: "M4.5 4.5l7 7 M11.5 4.5l-7 7",
+    // A line low in the frame: a window folded to its bar; and corners drawn apart: a window made large.
+    minimize: "M4 11.5h8",
+    expand: "M3 7v-4h4 M13 9v4h-4 M3 3l4 4 M13 13l-4-4",
     trash: "M2.5 4.5h11 M6 4.5v-2h4v2 M4 4.5l0.7 9h6.6l0.7-9 M6.8 7v4 M9.2 7v4",
     copy: "M6 6h7v7h-7z M3.5 10.5v-7h7",
     "chevron-down": "M4.5 6.5l3.5 3.5 3.5-3.5",
