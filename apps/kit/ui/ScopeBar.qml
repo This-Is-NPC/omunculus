@@ -5,6 +5,7 @@ import QtQuick.Layouts
 // ScopeBar says which branch of the hierarchy a view is kept to: SCOPE, the
 // agents from the front desk down to the work's, each in its tone, and its
 // level; and the way back out, WHOLE CONVERSATION, which emits wholeWanted().
+// Narrow, the way out goes under the scope.
 // `trail` is [{agent, tone}] from the top; `level` the work's depth.
 SurfaceFrame {
   id: bar
@@ -13,15 +14,19 @@ SurfaceFrame {
   property int level: 0
   signal wholeWanted()
 
+  readonly property bool stacked: width < Theme.size.measureFrom
+
   implicitHeight: content.implicitHeight + Theme.space.gap * 2
   variant: "outline"
 
-  RowLayout {
+  GridLayout {
     id: content
     x: Theme.space.inset
     y: Theme.space.gap
     width: parent.width - Theme.space.inset * 2
-    spacing: Theme.space.gap
+    columns: bar.stacked ? 2 : 3
+    columnSpacing: Theme.space.gap
+    rowSpacing: Theme.space.gap
 
     Label {
       text: "SCOPE"
@@ -47,6 +52,7 @@ SurfaceFrame {
       }
     }
     TraceButton {
+      Layout.columnSpan: bar.stacked ? 2 : 1
       role: "action"
       dense: true
       text: "WHOLE CONVERSATION"
