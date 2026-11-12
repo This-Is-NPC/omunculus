@@ -14,6 +14,28 @@ function index(flat) {
   return byWork;
 }
 
+// The level of a work: 1 for a root, one more under each work above it;
+// L0 is you and the agent that talks with you. `parentOf(item)` is the work
+// an item hangs under, or null. One count for every view that says a level.
+function levelOf(item, parentOf) {
+  let level = 1;
+  for (let above = parentOf(item); above; above = parentOf(above)) level++;
+  return level;
+}
+
+// The level of a node of a Progress build.
+function level(node) {
+  return node.level + 1;
+}
+
+// What stands at L0 above the works, in order: you and, when the works are
+// other agents', the agent that talks with you. Nothing without works.
+function lead(progress) {
+  if (!progress || progress.roots.length === 0) return [];
+  const you = { key: "you", kind: "you" };
+  return progress.front ? [you, { key: "front", kind: "front", front: progress.front }] : [you];
+}
+
 // The works a node handed down, in the order they were made.
 function kids(node) {
   return Progress.kidsOf(node).slice().sort((a, b) => a.created - b.created);
@@ -69,8 +91,9 @@ function rows(progress, opened, keep) {
     });
   };
   const roots = progress.roots.slice().sort((a, b) => a.created - b.created);
-  if (progress.front) {
-    list.push({ kind: "front", key: "front", depth: 0, parent: "", last: true, rails: [], stem: roots.some(keeps), front: progress.front });
+  const front = lead(progress).find(item => item.kind === "front");
+  if (front) {
+    list.push(Object.assign({}, front, { depth: 0, parent: "", last: true, rails: [], stem: roots.some(keeps) }));
     under("front", roots, 1, []);
   } else {
     under("", roots, 0, []);
@@ -95,7 +118,7 @@ function chart(progress) {
   let next = 0;
   const place = node => {
     const below = kids(node);
-    const cell = { key: node.work, kind: "work", node: node, level: node.level + 1, col: 0 };
+    const cell = { key: node.work, kind: "work", node: node, level: level(node), col: 0 };
     cells.push(cell);
     if (below.length === 0) cell.col = next++;
     else {
@@ -111,13 +134,15 @@ function chart(progress) {
   };
   const roots = progress.roots.slice().sort((a, b) => a.created - b.created).map(place);
   const centre = (roots[0].col + roots[roots.length - 1].col) / 2;
-  const top = { key: progress.front ? "front" : "you", kind: progress.front ? "front" : "you", node: null, level: 0, col: centre };
+  const heads = lead(progress).map(item => Object.assign({ node: null, level: 0 }, item));
+  const top = heads[heads.length - 1];
+  top.col = centre;
   cells.push(top);
   links.push({ from: top.key, to: roots.map(root => root.key) });
   let side = null;
-  if (progress.front) {
-    top.front = progress.front;
-    cells.push({ key: "you", kind: "you", node: null, level: 0, col: centre - 1 });
+  if (heads.length > 1) {
+    heads[0].col = centre - 1;
+    cells.push(heads[0]);
     side = { from: "you", to: "front" };
   }
   const shift = Math.min(0, ...cells.map(cell => cell.col));
@@ -185,7 +210,9 @@ function summaryOf(nodes) {
 // an "entry" row has thread, index, role, who and `continued`.
 // input: {progress, scope (a work, or "" for the whole conversation), opened
 // (key -> true or false set by hand), requests, me, counts (work -> entries
-// of its thread), dialogue and details(work) ([{index, at, who, role}] of the
+// of its thread), lead (the whole conversation as the tree: the "you" and
+// "front" rows of L0 come first, with the works one level down, and the
+// dialogue is left out), dialogue and details(work) ([{index, at, who, role}] of the
 // main thread, and of a work's in a scope)}.
 function stream(input) {
   const flat = input.progress ? input.progress.flat : [];
@@ -268,6 +295,8 @@ function stream(input) {
 
   // The blocks of the top level, each with the time its work was made.
   const blocks = [];
+  const heads = scope === "" && input.lead ? lead(input.progress) : [];
+  const base = heads.length > 0 ? 1 : 0;
   if (scope !== "") {
     if (byWork[scope]) {
       emitWork(byWork[scope], 0, [], true, true);
@@ -276,13 +305,13 @@ function stream(input) {
   } else {
     const roots = input.progress ? input.progress.roots.slice().sort((a, b) => a.created - b.created) : [];
     plan(roots, false).forEach(item => {
-      if (item.type === "fold") emitFold(item, 0, [], true);
-      else item.nodes.forEach(node => emitWork(node, 0, [], true, false));
+      if (item.type === "fold") emitFold(item, base, [], true);
+      else item.nodes.forEach(node => emitWork(node, base, [], true, false));
       blocks.push({ at: item.nodes[0].created, rows: rows.splice(0) });
     });
   }
 
-  const merged = [];
+  const merged = heads.map(item => Object.assign({ depth: 0, rails: [], last: true, stem: item === heads[heads.length - 1] }, item));
   if (scope === "") {
     const words = (input.dialogue || []).slice();
     for (const block of blocks) {

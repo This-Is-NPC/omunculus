@@ -52,7 +52,7 @@ SurfaceFrame {
       spacing: Theme.space.gap
       AgentName { name: panel.node ? panel.node.agent : ""; tone: panel.node ? Omunculus.toneOf(panel.node.agent) : Theme.dim }
       Label {
-        text: panel.node ? "level " + (panel.node.level + 1) + (panel.parentNode ? ", under " + panel.parentNode.agent : "") : ""
+        text: panel.node ? "level " + Tree.level(panel.node) + (panel.parentNode ? ", under " + panel.parentNode.agent : "") : ""
         color: Theme.dim
         font.pixelSize: Theme.type.log.size
       }

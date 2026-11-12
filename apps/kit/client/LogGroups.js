@@ -7,8 +7,8 @@
 // row, so a work heads its lines in the geometry of the tree). `col` is the
 // column of a line's mark, -1 for none; `rails` and `through` are the
 // lifeline's, as in Tree.stream. `by`: "level", "work" or "time" (as given).
-// A level is the work's depth in the hierarchy, the agent that talks with the
-// person being level 0 when it has works of other agents'.
+// A level is the work's level in the hierarchy (Tree.level); L0 is you and the
+// agent that talks with you.
 
 function line(line, col, rails, through) {
   return { kind: "line", line: line, col: col, rails: rails, through: through };
@@ -18,11 +18,10 @@ function plural(count) { return count + (count === 1 ? " event" : " events"); }
 
 function byLevel(lines, progress) {
   const byWork = Tree.index(progress ? progress.flat : []);
-  const shift = progress && progress.front ? 1 : 0;
   const levels = {};
   for (const each of lines) {
     const node = byWork[each.work];
-    const level = node ? node.level + shift : 0;
+    const level = node ? Tree.level(node) : 0;
     (levels[level] = levels[level] || []).push(each);
   }
   const items = [];

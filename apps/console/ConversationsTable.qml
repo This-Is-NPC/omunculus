@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "kit/client/Projects.js" as Projects
 import "kit/client/Time.js" as Time
+import "kit/client/Tree.js" as Tree
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
@@ -71,7 +72,7 @@ DataTable {
     if (works.length === 0) return ""
     const byId = {}
     works.forEach(work => { byId[work.id] = work })
-    const depth = work => work.parent_id && byId[work.parent_id] ? 1 + depth(byId[work.parent_id]) : 1
+    const depth = work => Tree.levelOf(work, item => byId[item.parent_id] || null)
     const count = state => works.filter(work => work.state === state).length
     return [
       works.length + (works.length === 1 ? " work" : " works"),

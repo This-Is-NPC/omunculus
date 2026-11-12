@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Tree.js" as Tree
 import "kit/ui"
 
 // BoardView is the works of every project the window reaches, those of
@@ -45,17 +46,16 @@ Item {
   // A work that broke waits on its parent without waiting on anything named.
   function stateOf(work) { return work.state === "waiting" && !work.waiting ? "broken" : work.state }
 
-  // Its level: the works above it, within its project, and the front desk at 0.
-  function levelOf(work) {
-    let level = 1
-    for (let above = work; above && above.parent_id; level++)
-      above = Omunculus.board.find(item => item.project === work.project && item.id === above.parent_id)
-    return level
+  // The work above a work, within its project.
+  function above(work) {
+    return work.parent_id ? Omunculus.board.find(item => item.project === work.project && item.id === work.parent_id) || null : null
   }
+  // Its level: the works above it, and the front desk at 0.
+  function levelOf(work) { return Tree.levelOf(work, above) }
   // Where it hangs: its level and the work above it, "level 2, under Sale".
   function lineageOf(work) {
-    const above = work.parent_id ? Omunculus.board.find(item => item.project === work.project && item.id === work.parent_id) : null
-    return "level " + levelOf(work) + (above ? ", under " + above.title : "")
+    const parent = above(work)
+    return "level " + levelOf(work) + (parent ? ", under " + parent.title : "")
   }
   // What else the board says of a work: its project, its stage of how many.
   function metaOf(work) {
