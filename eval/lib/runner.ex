@@ -880,7 +880,11 @@ defmodule EquivalentExchange.Runner do
   # A short digest of a call's args, to tell a repeated call from a new one
   # without keeping what a write carried.
   defp args_digest(args),
-    do: :sha256 |> :crypto.hash(Jason.encode!(args || %{})) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+    do:
+      :sha256
+      |> :crypto.hash(Jason.encode!(args || %{}))
+      |> Base.encode16(case: :lower)
+      |> binary_part(0, 16)
 
   # How often a run sent work back down — work or reopen — after a deeper
   # run had called it done: a supervisor not taking a child's word for it.

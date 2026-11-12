@@ -272,7 +272,7 @@ defmodule Omunculus.CLITest do
     refute output =~ "## Message\nfirst message"
 
     assert output =~
-             "- read: Reads a file, or limit lines of it from line offset (from 1). [tags: fs]"
+             "- read: Reads a file, or limit lines of it from line offset (from 1). An image or a PDF is shown to you instead of read as text. [tags: fs]"
 
     assert output =~
              "- comment: Writes a comment on the work, request, or inbox. [tags: comment, work, store]"

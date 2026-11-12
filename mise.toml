@@ -44,12 +44,16 @@ flag "--output <folder>" help="Result folder"
 '''
 
 [tasks.check]
-description = "Check that docs/cli.md is current, the documentation's links resolve, the console and kit read their spacing from the theme and every app's QML loads"
-depends = ["check:cli", "check:links", "check:qml", "check:spacing"]
+description = "Check that the code is formatted, docs/cli.md is current, the documentation's links resolve, the console and kit read their spacing from the theme and every app's QML loads"
+depends = ["check:cli", "check:format", "check:links", "check:qml", "check:spacing"]
 
 [tasks."check:cli"]
 description = "Check that docs/cli.md is what docs:cli writes"
 run = "scripts/docs-cli --check"
+
+[tasks."check:format"]
+description = "Check that the Elixir code is formatted"
+run = "scripts/check-format"
 
 [tasks."check:links"]
 description = "Check that every relative link, image and anchor of the documentation resolves"

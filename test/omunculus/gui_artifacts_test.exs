@@ -52,7 +52,17 @@ defmodule Omunculus.GuiArtifactsTest do
 
     assert {"", 0} =
              Omunculus.GuiModules.run(
-               ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Pending", "Tree", "Artifacts"],
+               [
+                 "Requests",
+                 "Questions",
+                 "Phrases",
+                 "Usage",
+                 "Time",
+                 "Progress",
+                 "Pending",
+                 "Tree",
+                 "Artifacts"
+               ],
                script
              )
   end

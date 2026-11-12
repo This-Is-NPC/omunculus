@@ -185,7 +185,7 @@ defmodule Omunculus.Config do
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           access: map | nil,
           secrets: %{String.t() => %{String.t() => String.t()}},
-          s3: Omunculus.Artifacts.S3.settings | nil,
+          s3: Omunculus.Artifacts.S3.settings() | nil,
           data: map
         }
 
