@@ -86,6 +86,20 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
+  test "an empty To sends without an agent, and its hint names the default agent" do
+    run!("""
+    const front = Mailbox.person("front-desk", "agency");
+    const desk = Mailbox.hint(front);
+    if (desk !== "to Front desk if left empty") throw Error(desk);
+    if (Mailbox.hint(null) !== "name or address") throw Error("no default");
+    const empty = Mailbox.sendTarget(null, front);
+    if (empty.project !== "agency" || empty.agent !== "") throw Error("empty To: " + JSON.stringify(empty));
+    const named = Mailbox.sendTarget(Mailbox.person("steward", "agency"), front);
+    if (named.agent !== "steward") throw Error("a chosen account wins");
+    if (Mailbox.sendTarget(null, null) !== null) throw Error("nowhere to send");
+    """)
+  end
+
   test "the folded rail counts the e-mails and the unread ones" do
     run!("""
     const threads = [{key: "a", heard: "2026-01-01T10:00:00Z"}, {key: "b", heard: ""}, {key: "c", heard: "2026-01-02T10:00:00Z"}];

@@ -59,6 +59,20 @@ function suggest(list, query) {
   return list.filter(item => text === "" || item.name.toLowerCase().includes(text) || item.address.toLowerCase().includes(text));
 }
 
+// What the empty To field says: who a message goes to when it is left empty,
+// the project's default agent as a person, or null for none.
+function hint(fallback) {
+  return fallback ? "to " + fallback.name + " if left empty" : "name or address";
+}
+
+// Where a message goes: {project, agent} for the account chosen; for none,
+// the fallback's project and no agent, which the server routes to the
+// project's default agent; null when there is neither.
+function sendTarget(chosen, fallback) {
+  if (chosen) return { project: chosen.project, agent: chosen.agent };
+  return fallback ? { project: fallback.project, agent: "" } : null;
+}
+
 // The recipients to offer for `query`, none until something is typed: those
 // whose name or address holds it, case aside, but the addresses in `taken`.
 function complete(list, query, taken) {

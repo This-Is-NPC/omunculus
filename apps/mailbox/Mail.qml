@@ -233,17 +233,17 @@ Singleton {
   }
 
   // A new thread: a conversation in `project` and your first message to
-  // `agent` there, its subject its first line, with the files at the paths
+  // `agent` there, or, with none, to the project's default agent, its subject its first line, with the files at the paths
   // `files` lists. `draft` is the draft it was written from, gone once sent.
   // `stay` leaves what is on screen as it is, as a reply to several does.
   function send(project, agent, subject, body, files, draft, stay) {
     const place = projectOf(project)
     const text = [subject.trim(), body.trim()].filter(part => part !== "").join("\n\n")
-    if (text === "" || !place || agent === "")
+    if (text === "" || !place)
       return
     http.call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
       http.post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
-        { message: text, agent: agent }, files, () => {
+        agent === "" ? { message: text } : { message: text, agent: agent }, files, () => {
           if (draft)
             discardDraft(draft)
           // What you sent is in Sent, not next to an empty Inbox.
@@ -374,9 +374,8 @@ Singleton {
   // The agents a message can go to, those of the current project first.
   readonly property var recipients: Mailbox.recipients(projects, home)
 
-  // The recipient a new message starts with: the default agent of the project
-  // the window was opened on; none when its
-  // config declares none.
+  // The agent a message with no recipient goes to: the default agent of the
+  // project the window was opened on; none when its config declares none.
   function defaultRecipient() {
     const place = projectOf(home)
     return place && place.canWrite && place.defaultAgent !== "" ? Mailbox.person(place.defaultAgent, place.id) : null

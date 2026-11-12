@@ -8,8 +8,9 @@ import "kit/ui"
 // line each, To and Subject, then the message, which grows with its words;
 // past the window's height the dialog scrolls. To holds one agent as a chip
 // (RecipientField), found by typing or in the address book; a thread is with
-// one agent, so a second is refused, saying so. It starts with the project's
-// default agent in To when its config declares one. Closing it with
+// one agent, so a second is refused, saying so. To starts empty: left empty,
+// the message goes to the project's default agent, which the field's hint
+// names. Closing it with
 // something written keeps it in Drafts; DISCARD drops it.
 ModalDialog {
   id: dialog
@@ -33,7 +34,7 @@ ModalDialog {
   function start(preset) {
     const saved = preset.draft || null
     draft = saved ? saved.id : ""
-    const first = saved ? (saved.agent !== "" ? Mailbox.person(saved.agent, saved.project) : null) : Mail.defaultRecipient()
+    const first = saved && saved.agent !== "" ? Mailbox.person(saved.agent, saved.project) : null
     recipients.chosen = first ? [first] : []
     recipients.refusal = ""
     subject = saved ? saved.subject : preset.subject || ""
@@ -56,12 +57,13 @@ ModalDialog {
     recipients.chosen = []
   }
 
-  readonly property bool sendable: to !== null && (subject.trim() !== "" || body.text.trim() !== "") && Mail.connected
+  readonly property var target: Mailbox.sendTarget(to, Mail.defaultRecipient())
+  readonly property bool sendable: target !== null && (subject.trim() !== "" || body.text.trim() !== "") && Mail.connected
 
   function send() {
     if (!sendable)
       return
-    Mail.send(to.project, to.agent, subject, body.take(), foot.take(), draft)
+    Mail.send(target.project, target.agent, subject, body.take(), foot.take(), draft)
     discarding = true
     close()
   }
@@ -93,7 +95,7 @@ ModalDialog {
             Layout.fillWidth: true
             candidates: Mail.recipients
             single: true
-            placeholder: "name or address"
+            placeholder: Mailbox.hint(Mail.defaultRecipient())
           }
         }
         FieldError { Layout.fillWidth: true; Layout.leftMargin: dialog.labelWidth + 8; text: recipients.refusal }
