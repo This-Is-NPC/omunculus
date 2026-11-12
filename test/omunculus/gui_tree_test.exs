@@ -94,47 +94,6 @@ defmodule Omunculus.GuiTreeTest do
     """)
   end
 
-  test "filters keep the works that match and those above them, all open" do
-    run!("""
-    const needs = Tree.kept(live.flat, "needs-you", "");
-    check(Object.keys(needs).sort().join() === "order,w1,w5", "needs you", needs);
-    check(shape(tree(live, {w5: false}, needs)) === ["front", "  w1", "    w5", "      order"].join("\\n"), "open through a fold by hand", "");
-    const words = Tree.kept(live.flat, "all", "design LEAD");
-    check(shape(tree(live, {}, words)) === ["front", "  w1", "    w2"].join("\\n"), "by agent", Object.keys(words));
-    check(Object.keys(Tree.kept(live.flat, "all", "gallery")).sort().join() === "gallery,w1,w5", "by title", "");
-    check(Object.keys(Tree.kept(live.flat, "all", "publish")).sort().join() === "w1,w2,w3", "by stage", "");
-    check(Tree.kept(live.flat, "all", "  ") === null, "nothing filters", "");
-    """)
-  end
-
-  test "reveal opens the works above a work" do
-    run!("""
-    const opened = Tree.reveal(live, {}, "w3");
-    check(opened.w1 && opened.w2 && !opened.w3, "w3", opened);
-    check(tree(live, opened).some(row => row.key === "w3"), "w3 shows", shape(tree(live, opened)));
-    const shown = Tree.reveal(delivered, {}, "about");
-    check(tree(delivered, shown).some(row => row.key === "about"), "a closed branch", shown);
-    const none = {x: false};
-    check(Tree.reveal(live, none, "front") === none, "nothing above the front", "");
-    check(Tree.reveal(live, opened, "w3") === opened, "nothing more to open", "");
-    """)
-  end
-
-  test "step moves through the rows, folds and unfolds, and goes up" do
-    run!("""
-    const rows = tree(live);
-    const at = key => rows.findIndex(row => row.key === key);
-    check(JSON.stringify(Tree.step(rows, at("w1"), "up")) === "null", "past the front, nothing", "");
-    check(Tree.step(rows, at("w1"), "down").at === at("w2"), "down", "");
-    check(JSON.stringify(Tree.step(rows, at("w2"), "right")) === JSON.stringify({toggle: "w2", open: true}), "right unfolds", "");
-    check(Tree.step(rows, at("w5"), "right").at === at("w6"), "right goes to the first row under", "");
-    check(JSON.stringify(Tree.step(rows, at("w5"), "left")) === JSON.stringify({toggle: "w5", open: false}), "left folds", "");
-    check(Tree.step(rows, at("about"), "left").at === at("w5"), "left goes to the parent", "");
-    check(JSON.stringify(Tree.step(rows, at("w1"), "left")) === JSON.stringify({toggle: "w1", open: false}), "left folds a root", "");
-    check(JSON.stringify(Tree.step(rows, at("gallery"), "down")) === "null", "the end", "");
-    """)
-  end
-
   test "a work's state names whom it waits for, and its round" do
     run!("""
     const n = nodes(live);
@@ -153,14 +112,18 @@ defmodule Omunculus.GuiTreeTest do
     """)
   end
 
-  test "elapsed is the time it took once done, else since it was made" do
+  test "the chart puts each work in the band of its level, a parent over its works" do
     run!("""
-    const n = nodes(live);
-    check(Tree.elapsed(n.w2, 9999) === n.w2.finishedIn && n.w2.finishedIn !== null, "done", Tree.elapsed(n.w2, 9999));
-    check(Tree.elapsed(n.about, 2000) === 2000 - n.about.created, "open", Tree.elapsed(n.about, 2000));
-    check(Tree.elapsed(Object.assign({}, n.w1, {state: "cancelled", finishedIn: null}), 9999) === n.w1.branch.seconds, "cancelled", "");
-    check(Tree.frontElapsed(live, 2000) === 2000 && Tree.frontElapsed(null, 2000) === 0 && Tree.frontElapsed({roots: []}, 2000) === 0, "the conversation, while open", Tree.frontElapsed(live, 2000));
-    check(Tree.frontElapsed(delivered, 99999) === delivered.roots[0].branch.seconds, "the conversation, once done", Tree.frontElapsed(delivered, 99999));
+    const chart = Tree.chart(live);
+    const cell = key => chart.cells.find(each => each.key === key);
+    check(chart.levels === 4 && chart.cells.length === live.flat.length + 2, "four levels, every work, you and the front", chart.levels);
+    check(cell("front").level === 0 && cell("you").level === 0 && cell("w1").level === 1 && cell("w3").level === 3 && cell("order").level === 3, "levels", "");
+    check(chart.side.from === "you" && chart.side.to === "front" && cell("you").col < cell("front").col, "you beside the front", chart.side);
+    const kids = chart.links.find(link => link.from === "w5").to;
+    check(kids.length === 7 && cell("w5").col === (cell(kids[0]).col + cell(kids[kids.length - 1]).col) / 2, "a parent is centred over its works", kids);
+    check(chart.cells.every(each => each.col >= 0 && chart.cells.filter(other => other.level === each.level && other.col === each.col).length === 1), "no two nodes share a place", "");
+    check(Tree.chart(null).cells.length === 0, "nothing to draw", "");
+    check(Tree.chart(delivered).brackets.length === 0, "no parallel works once all is done", Tree.chart(delivered).brackets);
     """)
   end
 end

@@ -18,8 +18,8 @@ import "kit/ui"
 // readout. A conversation's, once one is open, in place of the project's,
 // under its head: its tabs.
 // The chat, the whole history of the conversation, the dialogue with the root
-// agent and the requests to you, answered in place; the tree, the works in the order they were made
-// and the work picked in full (TreePage); the log, every event a row; and
+// agent and the requests to you, answered in place; the tree, the agents by level, as a chart or an outline,
+// and the work picked (TreePage); the log, every event a row; and
 // what it cost. A work also opens as a scope: the chat kept to its branch,
 // under the agents down to it, with WHOLE CONVERSATION to leave it. The log, the tree and the cost are loaded when first on
 // screen. A conversation's pages have no bar: their rarer actions are the
@@ -346,8 +346,6 @@ Item {
   // unread.
   readonly property string node: pickedNode
   readonly property var asked: node === "" ? [] : Omunculus.asked(node).slice().sort((a, b) => Requests.forYou(b, Omunculus.me) - Requests.forYou(a, Omunculus.me))
-  readonly property var askedOfYou: asked.filter(request => Requests.forYou(request, Omunculus.me))
-  readonly property var notesHere: node === "" ? [] : Omunculus.unreadFrom(node)
 
   // What the tree asks to be answered: what waits on you nearest the work
   // picked, else what the work asked, instead of whoever decides; "" for
@@ -403,12 +401,6 @@ Item {
       return []
     const items = []
     const add = (id, icon, text, run) => items.push({ id: id, icon: icon, text: text, run: run })
-    if (page === "tree" && tree) {
-      if (node !== "") {
-        add("write", "edit", "WRITE TO ITS AGENT", () => view.tree.write(false))
-        add("comment", "plus", "LEAVE A NOTE", () => view.tree.write(true))
-      }
-    }
     if (page === "thread") {
       add("open-tree", "people", "OPEN IN TREE", () => view.openInTree(view.threadWork))
       add("log", "list", "ITS LOG", () => view.showLog(view.threadWork))
@@ -429,15 +421,6 @@ Item {
     const all = [chord("reply", () => view.answer())]
     if (page === "chat" && Omunculus.unread.length > 0)
       all.push(chord("mark-read", () => view.readNote()))
-    if (page === "tree" && tree) {
-      all.push(chord("tree-log", () => view.tree.showTab("log")), chord("tree-changes", () => view.tree.showTab("changes")))
-      more.filter(item => ["write", "comment"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
-      // The detail's menu has these too.
-      if (askedOfYou.length > 0)
-        all.push(chord("escalate", () => decision.show(view.askedOfYou[0].id, true)))
-      if (notesHere.length > 0)
-        all.push(chord("mark-read", () => view.notesHere.forEach(note => Omunculus.markRead(note.id))))
-    }
     if (page === "thread")
       all.push(chord("open-tree", () => view.openInTree(view.threadWork)))
     return all
@@ -744,7 +727,8 @@ Item {
         sourceComponent: TreePage {
           onLeave: view.back()
           onOpenLog: work => view.showLog(work)
-          onDecide: (id, escalating) => decision.show(id, escalating)
+          onOpenThread: work => view.openThread(work)
+          onOpenCost: { view.remember(); view.show("cost") }
         }
       }
       // The work picked is kept here, so it outlives the page.

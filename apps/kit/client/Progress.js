@@ -14,7 +14,6 @@ const words = {
 };
 // Which state wins, first highest: for the conversation and for the path down.
 const order = ["needs-you", "working", "waiting", "stopped", "failed", "up-next"];
-const glyphs = { done: "✓", current: "●", next: "○" };
 
 // The word a state shows: "Working", "Needs you", ...
 function word(state) { return words[state] || ""; }
@@ -481,14 +480,6 @@ function build(input) {
   return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };
 }
 
-// Where a work is in its workflow: {workflow, step, steps, stage}, the step
-// counted from 1 and the last once the work is done; null in none.
-function track(node) {
-  if (node.count === 0) return null;
-  const at = Math.min(Math.max(node.at, 0), node.count - 1);
-  return { workflow: node.workflow, step: node.state === "done" ? node.count : at + 1, steps: node.count, stage: node.steps[at].name };
-}
-
 // How many answers of yours a reply passes on: 0 when you answered none, else
 // the items of the numbered question answered, or one.
 function given(requests, answered, noted, me) {
@@ -601,50 +592,6 @@ function trail(flat, journeys, work, at) {
   const journey = journeys[root.work] || null;
   const finished = !!journey && journey.finishedAt !== null && at >= journey.finishedAt;
   return stagePath(names, stageAt(names, journey, names[root.at], at), finished);
-}
-
-function token(text, status) { return { text: text, status: status }; }
-
-function joined(tokens) { return tokens.map(each => each.text).join(""); }
-
-// The one-line forms of a sequence of steps ({name, status}), longest first;
-// the separators are tokens of their own.
-function forms(steps, round) {
-  const done = steps.filter(step => step.status === "done");
-  const current = steps.find(step => step.status === "current") || null;
-  const next = steps.filter(step => step.status === "next");
-  const sep = token(" › ", "separator");
-  const long = current ? current.name + (round > 0 ? " · round " + round : "") : "";
-  const short = current ? current.name + (round > 0 ? " r" + round : "") : "";
-  const chain = parts => parts.reduce((all, part, i) => i === 0 ? [part] : all.concat([sep, part]), []);
-  const named = step => token(glyphs[step.status] + " " + (step === current ? long : step.name), step.status);
-  const doneCounted = done.length >= 2 ? [token(glyphs.done + " " + done.length, "done")] : done.map(named);
-  const middle = (current ? [named(current)] : []);
-  const f1 = chain(steps.map(named));
-  const f2 = chain(doneCounted.concat(middle, next.map(named)));
-  const f3 = next.length > 1
-    ? chain(doneCounted.concat(middle, [named(next[0]), token("+" + (next.length - 1), "next")]))
-    : f2;
-  const f4 = chain((done.length > 0 ? [token(glyphs.done + done.length, "done")] : [])
-    .concat(current ? [token(glyphs.current + " " + short, "current")] : [], next.length > 0 ? [named(next[0])] : []))
-    .concat(next.length > 1 ? [token(" ", "separator"), token("+" + (next.length - 1), "next")] : []);
-  const dots = steps.reduce((all, step, i) => all.concat(i === 0 ? [] : [token(" ", "separator")], [token(glyphs[step.status], step.status)]), []);
-  const f5 = dots.concat(current ? [token("  ", "separator"), token(short, "current")] : []);
-  const position = current ? steps.indexOf(current) + 1 : done.length;
-  const f6 = [token(position + "/" + steps.length + (current ? " " + short : ""), current ? "current" : "done")];
-  return [["F1", f1], ["F2", f2], ["F3", f3], ["F4", f4], ["F5", f5], ["F6", f6]];
-}
-
-// The longest form of the sequence that fits `budget` characters, as
-// {form, tokens: [{text, status}]}; status is done, current, next or
-// separator. The last form elides to fit any budget.
-function stepper(steps, round, budget) {
-  if (steps.length === 0) return { form: "F1", tokens: [] };
-  const all = forms(steps, round);
-  for (const each of all)
-    if (joined(each[1]).length <= budget) return { form: each[0], tokens: each[1] };
-  const last = all[all.length - 1][1][0];
-  return { form: "F6", tokens: [token(elide(last.text, budget), last.status)] };
 }
 
 // One line of parts ({text, short?, elide?, keep?}) in at most `budget`

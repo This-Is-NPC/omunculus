@@ -469,88 +469,42 @@ reason through
 
 ## The tree
 
-The tree page (`TreePage`) lists the conversation's works in the order they
-were made, who handed work to whom, every level deep (`Tree.rows`, one
-`TreeNode` a row). When the agent that talks with you hands its works to
-others, it is the root ("front-desk  Conversation with you", "10 agents",
-with its state: WORKING while a run of its own is open, WAITING FOR
-PROJECT-MANAGER while a work of the team is open and no run is its own,
-WAITING FOR YOU while a question waits on you, IDLE once nothing is open; and
-a badge "⇡ surgeon asks you 1 question" while one does). A badge says whom a
-request is, with its icon, in the words of the cards: QUESTION, DECISION, PERMISSION or REVIEW,
-then its chain of requesters up to its arbiter ("QUESTION · seller › you").
-Each work sits under the
-work that handed it down, one level further right; an elbow line joins it to
-its parent, and a line goes on down a level's column while rows of it follow,
-as in a file tree. The lines are in the faint ink, never coloured.
+The tree page (`TreePage`) shows the conversation's agents by level. On top is
+the stage path of its first work (`StagePath`), as in the chat, and at the
+right a CHART | OUTLINE toggle. The outline is the default under 700 px, the
+chart above; a click on the other chip changes it. Under them is the work
+picked, and the page ends there: a conversation with no work says so.
 
-From 640 px of room beside its indent, a row is four columns:
+The chart (`TreeChart`, laid out by `Tree.chart`) has a band per level. L0
+holds you and, when the agent that talks with you hands its works to others,
+that agent, joined by a line; L1 holds the root works, and each work sits one
+band under the work that handed it down. A node (`TreeNode`) is the agent's
+dot and name in its tone and its state as icon and word (`StateMark`, with the
+words of `Tree.stateOf`: WORKING, WAITING FOR the agent it waits for, WAITING
+FOR YOU, DONE, FAILED, CANCELLED, STOPPED, UP NEXT). A node working or waiting
+for you is framed in its tone, the one picked in the accent. A parent is
+centred over its works and joined to them by elbow connectors in the faint
+ink. Works that ran at once (the same rule as the chat's lanes) have a bracket
+under them: "PARALLEL ×4 · 2 DONE · 2 WORKING". The chart scrolls when it is
+wider than the page. A click on a node picks its work.
 
-```
-WORK                                         STAGE            STATE                    ELAPSED
-● front-desk  Conversation with you                           ⧖ WAITING FOR PROJECT-MANAGER  47 min
-└─▾ project-manager  Website for Doce Ana    ●─●─●─◉─○        ⧖ WAITING FOR ADMINISTRATOR   47 min
-    │  44 steps · US$ 1.20  4/5 build
-    ├─ seller  Website for Doce Ana: sale    ●─●─●─●          ✓ DONE                         6 min
-    └─▾ administrator  Build website         …                ⧖ WAITING FOR DESIGN-REVIEWER  31 min
-        └─ design-reviewer  page: contact    ●─◉              ✦ WORKING                      29 min
-```
+The outline (`TreeOutline`) is the same tree as the rows of the chat's
+lineage stream (`Tree.stream`, drawn by `WorkLines`): depth lifelines, a
+chevron to fold what a work handed down, finished works gathered in one line,
+parallel works as lanes. A click on a row picks its work; its arrow opens the
+work's thread.
 
-Its WORK holds the mark — a chevron while it handed works down, else a dot
-in its agent's tone — the agent in that tone, the title, and under them its
-what it does now while it works, its own steps (tool calls) and its branch's
-cost once the provider priced it (tokens are the cost page's, not the
-tree's), and, while it is folded, what it handed down ("3 sub-works, 1 working, 2 done"); short of room these give way
-a part at a time. Its STAGE is a track (`StageTrack`) of its workflow's
-stages, one dot each: done filled in the success tone, the current one in the
-accent with a ring, those to come hollow, with "4/5 build", the step and the
-stage, under it; a work in no workflow has none. Its STATE is an icon and a
-word: WORKING (with "· ROUND 3" once it was sent back), WAITING FOR and the
-agents it waits for — a parent whose children are open says so, never
-"working" — WAITING FOR YOU, DONE, FAILED, CANCELLED, STOPPED or UP NEXT
-(`Tree.stateOf`). A parent whose child's question climbed to you says
-WAITING FOR YOU too, as the progress does. Its ELAPSED is how long it took
-once done, else since it was made. Under 640 px, the title goes under the
-agent and the stage track and the state go under the title; the time ends the
-agent's line. A badge per request between a work and others shows its climb
-(`⇡ surgeon › administrator › project-manager › front-desk › you`, in the
-warning tone when it is to you; `⇣ 1 review from designer`); it goes to the
-other end of the request, lights both rows and opens the request in the
-detail.
+The PICKED WORK panel (`NodeDetail`) names the work picked: its agent, its
+level and its parent, its title, its stage path, its state and, while it
+waits on a question, that question's first line. OPEN THREAD, filled, opens
+the work's thread; LOG opens the log kept to its events; COST opens the cost
+page. The panel shows no figure: the cost is in COST alone.
 
-A click on a work, or Enter, opens its runs inside it (the runs `WorkRuns`
-lists, newest first, one line each: the local time it started, the agent, how it
-ended and how long, DETAIL at the right), with DETAIL and LOG under them; the
-picked or opened row is washed, never framed, and the tree's rail of its mark
-ends at the mark; a second Enter, or DETAIL, opens the work in full.
-What shows opens itself by what is going on: a work with a work still open
-below it shows its works, and so does a root, the rest folded behind their
-chevron. A click on a chevron, or → and ←, unfold and fold; what you unfolded
-or folded stays so while the page is open. Picking a work from elsewhere — a
-badge, OPEN IN TREE, the detail's way down — opens the works above it.
+↑ and ↓ pick the work before or after it, Enter opens its thread and Esc goes
+back. The work picked outlives the page: it is kept while the conversation
+is open and picked again when the page comes back.
 
-Chips keep the works that need you or work, and `/` filters by title, agent
-or stage; a filter keeps the works above each it keeps and shows them all
-unfolded. The chips' counts are of works, folded ones included; ALL names its
-unit ("ALL 12 WORKS"). ↑ and ↓ move from row to row; → unfolds a folded work,
-else goes to the first row under it; ← folds an unfolded one, else goes to its
-parent; the keyboard's row has the focus ring.
-
-The work picked shows in full (`NodeDetail`), as a page over the tree, BACK
-or Esc returning to the same row. Its header strip names its
-agent, title, round and state, with its action at the right: ANSWER, in
-the warning tone, while it or a work below it waits on you, which opens the
-decision (`decide` for the page to open `RequestDialog`), else OPEN THREAD;
-then LOG, and behind "more" ESCALATE, while it asked
-you something, and MARK READ, while it left you notes. Under it are its way
-down (`Breadcrumb`), its stages and the tabs OVERVIEW (what it does now and
-did last, a send-back or a stop and why, whom it waits on and who asks it,
-its team with their portraits, each stage's time, its branch's totals, and
-the work itself: goal, workspace, where it came from, what it asked and the
-notes it left you), THREAD (what its agents said and did, with a composer
-to write to its agent or leave it a note), REQUESTS (what it asked and what
-it is asked, each with the way it climbed, to answer in place), CHANGES,
-RUNS and LOG; `[` and `]`, or ← and → on the tabs, move between them.
+On a work's page (`WorkView`):
 
 - RUNS, the work's runs as `runs` sums up the project's last closed ones,
   matched by id with the snapshot's, one line each — when it started, how it
@@ -848,7 +802,7 @@ on. The levels are three — projects, a project's conversations, a conversation
 of its pages it went through, so BACK from the list reaches the start. Only a
 move down into a conversation's page — a work's thread, a log kept to a work —
 is remembered inside it, and BACK returns from it to the page it was opened
-from; the tabs are not levels. On the tree page BACK first lets go of the detail page. A conversation that has no message yet is left for where it was opened
+from; the tabs are not levels. A conversation that has no message yet is left for where it was opened
 from; a page of a conversation is never shown without one. A new
 conversation is not a conversation until its first message makes it, so BACK
 from its screen returns to where it was opened from, making nothing.
@@ -878,15 +832,7 @@ logs each text drawn out of its box, the window or a clipping item as a
   item over the page).
 - On TREE, Alt+R answers the request waiting on you nearest the work picked
   (its own, above it, below it), else the newest, or, with none for you, what
-  the work asked, instead of whoever decides. The items of `⋯` answer to
-  their chords: WRITE TO ITS AGENT (Alt+W), the composer of its THREAD tab
-  writing to its agent, and LEAVE A NOTE (Alt+C), the same composer leaving a
-  note (Esc back to writing). Those of the detail's `⋯`
-  too: ESCALATE (Alt+E) while it asked you something, which opens the
-  decision with Enter escalating, and the notes marked read (Alt+M), all of
-  them. Alt+L and Alt+G open its LOG and
-  CHANGES tabs, `[` and `]` the previous and next tab, `/` the filter. The
-  in-place cards and the note's check still answer and mark one.
+  the work asked, instead of whoever decides.
 - On a work's thread, OPEN IN TREE (Alt+O) and ITS LOG in `⋯`.
 - On LOG, `/` filters, and its own `⋯` copies the event picked or else the
   rows shown.
@@ -924,5 +870,5 @@ of the board, on its page), `newConversation` and `back` move it too, and `send 
 sends a message to the conversation open, as the composer does.
 
 `?` or F1 opens a dialog of every key, by where it works
-(`ShortcutsDialog`). Esc first lets go of what the page holds — the tree's detail page, the log's filter and the event
+(`ShortcutsDialog`). Esc first lets go of what the page holds — the log's filter and the event
 picked, the board's filter — then goes back as BACK does.

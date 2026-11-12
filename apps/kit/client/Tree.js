@@ -14,22 +14,6 @@ function index(flat) {
   return byWork;
 }
 
-// The works the filters keep — those of the chip's state ("all", or a state)
-// whose title, agent or stage hold every word of `filter` — and every work
-// above one, as work id -> true; null while nothing filters.
-function kept(flat, chip, filter) {
-  const words = String(filter || "").toLowerCase().split(/\s+/).filter(word => word);
-  if (chip === "all" && words.length === 0) return null;
-  const byWork = index(flat);
-  const keep = {};
-  for (const node of flat) {
-    const text = [node.title, node.agent].concat(node.steps.map(step => step.name)).join(" ").toLowerCase();
-    if ((chip === "all" || node.state === chip) && words.every(word => text.includes(word)))
-      for (let at = node; at && !keep[at.work]; at = byWork[at.parent]) keep[at.work] = true;
-  }
-  return keep;
-}
-
 // The works a node handed down, in the order they were made.
 function kids(node) {
   return Progress.kidsOf(node).slice().sort((a, b) => a.created - b.created);
@@ -62,30 +46,13 @@ function frontState(front) {
   return { state: "idle", text: "IDLE" };
 }
 
-// How long a work has run, in seconds: the time it took once done, its
-// branch's once closed, else since it was made.
-function elapsed(node, now) {
-  if (node.finishedIn !== null) return node.finishedIn;
-  return Progress.closed(node.state) ? node.branch.seconds : Math.max(0, now - node.created);
-}
-
-// How long the conversation has run, in seconds: since its first work was
-// made, while any is open, else until the last one's branch ended.
-function frontElapsed(progress, now) {
-  const roots = progress ? progress.roots : [];
-  if (roots.length === 0) return 0;
-  const first = Math.min(...roots.map(root => root.created));
-  const end = roots.some(root => !Progress.closed(root.state)) ? now : Math.max(...roots.map(root => root.created + root.branch.seconds));
-  return Math.max(0, end - first);
-}
-
 // The rows of the tree, in order. Each is {kind: "front" or "work", key,
 // depth, parent (its parent row's key, "" for none), last (the last row
 // under its parent), rails (per column left of its elbow, whether a line
 // from above goes on down through it), stem (rows show under it)}; a work's
 // also has node, kids (the works it handed down that the filters keep) and
 // open; the front's front. `opened` maps a work's key to true or false set by
-// hand; `keep`, from kept(), shows only the works it keeps, every one open.
+// hand; `keep` (work -> true) shows only the works it holds, every one open.
 function rows(progress, opened, keep) {
   if (!progress) return [];
   const list = [];
@@ -111,43 +78,91 @@ function rows(progress, opened, keep) {
   return list;
 }
 
-// `opened` with what makes `work` show opened: the works above it; the same
-// object when nothing changes.
-function reveal(progress, opened, work) {
-  const byWork = index(progress ? progress.flat : []);
-  const shut = [];
-  for (let at = byWork[work]; at; at = byWork[at.parent])
-    if (at.parent && opened[at.parent] !== true) shut.push(at.parent);
-  if (shut.length === 0) return opened;
-  const next = Object.assign({}, opened);
-  shut.forEach(key => { next[key] = true; });
-  return next;
+// The works as a chart of level bands, for the TREE page. input: Progress
+// build. Returns {cells, links, brackets, columns, levels}. A cell is {key,
+// kind ("you", "front" or "work"), node, level (the band: 0 for you and the
+// front agent, a work's own depth + 1), col (its column, fractional: a
+// parent is centred over its works)}. A link is {from, to: [keys]}, drawn as
+// elbows; when the front agent exists, "you" sits beside it in `side`
+// ({from, to}). A bracket is {level, from, to (columns), summary} under works
+// that ran at once. `columns` and `levels` size the grid.
+function chart(progress) {
+  const empty = { cells: [], links: [], side: null, brackets: [], columns: 0, levels: 0 };
+  if (!progress || progress.roots.length === 0) return empty;
+  const cells = [];
+  const links = [];
+  const brackets = [];
+  let next = 0;
+  const place = node => {
+    const below = kids(node);
+    const cell = { key: node.work, kind: "work", node: node, level: node.level + 1, col: 0 };
+    cells.push(cell);
+    if (below.length === 0) cell.col = next++;
+    else {
+      const placed = below.map(place);
+      cell.col = (placed[0].col + placed[placed.length - 1].col) / 2;
+      links.push({ from: node.work, to: below.map(kid => kid.work) });
+      plan(below, true).filter(item => item.type === "fork").forEach(item => {
+        const ends = item.nodes.map(kid => placed[below.indexOf(kid)].col);
+        brackets.push({ level: cell.level + 1, from: ends[0], to: ends[ends.length - 1], summary: summaryOf(item.nodes) });
+      });
+    }
+    return cell;
+  };
+  const roots = progress.roots.slice().sort((a, b) => a.created - b.created).map(place);
+  const centre = (roots[0].col + roots[roots.length - 1].col) / 2;
+  const top = { key: progress.front ? "front" : "you", kind: progress.front ? "front" : "you", node: null, level: 0, col: centre };
+  cells.push(top);
+  links.push({ from: top.key, to: roots.map(root => root.key) });
+  let side = null;
+  if (progress.front) {
+    top.front = progress.front;
+    cells.push({ key: "you", kind: "you", node: null, level: 0, col: centre - 1 });
+    side = { from: "you", to: "front" };
+  }
+  const shift = Math.min(0, ...cells.map(cell => cell.col));
+  cells.forEach(cell => { cell.col -= shift; });
+  brackets.forEach(bracket => { bracket.from -= shift; bracket.to -= shift; });
+  return {
+    cells: cells, links: links, side: side, brackets: brackets,
+    columns: Math.max(...cells.map(cell => cell.col)) + 1,
+    levels: Math.max(...cells.map(cell => cell.level)) + 1
+  };
 }
 
-// What a key does on the row at `at`: {at} the row to move to, or {toggle,
-// open} a work to open or close. ↑/↓ move to the row before or after, past
-// the front; → opens a closed work, else goes to the first row under it; ←
-// closes an open one, else goes to its parent's row. null for nothing.
-function step(list, at, key) {
-  const row = list[at];
-  if (!row) return null;
-  const by = key === "up" ? -1 : key === "down" ? 1 : 0;
-  if (by !== 0) {
-    let to = at + by;
-    while (to >= 0 && to < list.length && list[to].kind === "front") to += by;
-    return to >= 0 && to < list.length ? { at: to } : null;
+const closedAll = node => Progress.closed(node.state) && Progress.kidsOf(node).every(closedAll);
+// When a work's run ended; an open one has not.
+const endOf = node => node.state === "up-next" ? -Infinity : node.finishedIn !== null ? node.created + node.finishedIn : Progress.closed(node.state) ? node.created + node.branch.seconds : Infinity;
+// The children of a level, as items {type: "work", "fold" or "fork", nodes}:
+// works that ran at once and are not all finished are a fork; the finished
+// ones that follow one another are one fold.
+function plan(nodes, forks) {
+  const groups = [];
+  for (const node of nodes) {
+    const last = groups[groups.length - 1];
+    if (forks && last && node.state !== "up-next" && node.created < last.end) {
+      last.nodes.push(node);
+      last.end = Math.max(last.end, endOf(node));
+    } else groups.push({ nodes: [node], end: endOf(node) });
   }
-  const shut = row.kind === "work" && row.kids > 0 && !row.open;
-  if (key === "right") {
-    if (shut) return { toggle: row.key, open: true };
-    return row.open && at + 1 < list.length ? { at: at + 1 } : null;
+  const items = [];
+  for (const group of groups) {
+    if (group.nodes.length > 1 && !group.nodes.every(closedAll)) items.push({ type: "fork", nodes: group.nodes });
+    else for (const node of group.nodes) {
+      const before = items[items.length - 1];
+      if (!closedAll(node)) items.push({ type: "work", nodes: [node] });
+      else if (before && before.type === "fold") before.nodes.push(node);
+      else items.push({ type: "fold", nodes: [node] });
+    }
   }
-  if (key === "left") {
-    if (row.open) return { toggle: row.key, open: false };
-    const parent = list.findIndex(each => each.key === row.parent);
-    return parent >= 0 && list[parent].kind !== "front" ? { at: parent } : null;
-  }
-  return null;
+  return items;
+}
+
+// A fork's summary: "PARALLEL ×4  ·  2 DONE  ·  2 WORKING".
+function summaryOf(nodes) {
+  const count = state => nodes.filter(node => node.state === state).length;
+  const other = nodes.length - count("done") - count("working");
+  return ["PARALLEL ×" + nodes.length, count("done") > 0 ? count("done") + " DONE" : "", count("working") > 0 ? count("working") + " WORKING" : "", other > 0 ? other + " OTHER" : ""].filter(part => part !== "").join("  ·  ");
 }
 
 // The conversation as a lineage stream, the rows of the chat: the person's
@@ -186,41 +201,13 @@ function stream(input) {
     if (place !== "none") (asks[request.work_id || ""] = asks[request.work_id || ""] || []).push({ request: request, place: place });
   });
 
-  const closedAll = node => Progress.closed(node.state) && Progress.kidsOf(node).every(closedAll);
   const entriesOf = node => (counts[node.work] || 0) + Progress.kidsOf(node).reduce((sum, kid) => sum + entriesOf(kid), 0);
-  // When a work's run ended; an open one has not.
-  const endOf = node => node.state === "up-next" ? -Infinity : node.finishedIn !== null ? node.created + node.finishedIn : Progress.closed(node.state) ? node.created + node.branch.seconds : Infinity;
   // The level a request is decided at: "L0" for you, else its arbiter's work.
   const levelOf = (request, node) => {
     if (Requests.forYou(request, input.me)) return "L0";
     const arbiter = Requests.label(request.arbiter);
     for (let at = node; at; at = byWork[at.parent]) if (at.agent === arbiter) return "L" + (at.level + 1);
     return "";
-  };
-
-  // The children of a level, as items {type: "work", "fold" or "fork", nodes}:
-  // works that ran at once and are not all finished are a fork; the finished
-  // ones that follow one another are one fold.
-  const plan = (nodes, forks) => {
-    const groups = [];
-    for (const node of nodes) {
-      const last = groups[groups.length - 1];
-      if (forks && last && node.state !== "up-next" && node.created < last.end) {
-        last.nodes.push(node);
-        last.end = Math.max(last.end, endOf(node));
-      } else groups.push({ nodes: [node], end: endOf(node) });
-    }
-    const items = [];
-    for (const group of groups) {
-      if (group.nodes.length > 1 && !group.nodes.every(closedAll)) items.push({ type: "fork", nodes: group.nodes });
-      else for (const node of group.nodes) {
-        const before = items[items.length - 1];
-        if (!closedAll(node)) items.push({ type: "work", nodes: [node] });
-        else if (before && before.type === "fold") before.nodes.push(node);
-        else items.push({ type: "fold", nodes: [node] });
-      }
-    }
-    return items;
   };
 
   const rows = [];
@@ -270,9 +257,7 @@ function stream(input) {
       if (item.type === "work") {
         emitWork(item.nodes[0], depth, rails, last, false);
       } else if (item.type === "fork") {
-        const count = state => item.nodes.filter(node => node.state === state).length;
-        const other = item.nodes.length - count("done") - count("working");
-        const summary = ["PARALLEL ×" + item.nodes.length, count("done") > 0 ? count("done") + " DONE" : "", count("working") > 0 ? count("working") + " WORKING" : "", other > 0 ? other + " OTHER" : ""].filter(part => part !== "").join("  ·  ");
+        const summary = summaryOf(item.nodes);
         rows.push({ kind: "fork", key: "fork:" + item.nodes[0].work, nodes: item.nodes, summary: summary, depth: depth, rails: rails, last: last });
         item.nodes.forEach(node => rows.push(...detailsOf(node, depth, rails, !last)));
       } else {

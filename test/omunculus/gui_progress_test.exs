@@ -288,37 +288,6 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
-  test "stepper picks the longest form that fits" do
-    run!("""
-    const steps = sale.steps.map((step, i) => ({name: step.name, status: i < 1 ? "done" : i === 1 ? "current" : "next"}));
-    const text = budget => { const out = Progress.stepper(steps, 2, budget); return out.form + " " + out.tokens.map(t => t.text).join(""); };
-    const expected = {
-      80: "F1 ✓ qualify › ● design · round 2 › ○ assess › ○ propose › ○ owner › ○ build",
-      46: "F3 ✓ qualify › ● design · round 2 › ○ assess › +3",
-      30: "F4 ✓1 › ● design r2 › ○ assess +3",
-      22: "F5 ✓ ● ○ ○ ○ ○  design r2",
-      13: "F6 2/6 design r2",
-      8: "F6 2/6 des…"
-    };
-    for (const budget of Object.keys(expected)) check(text(Number(budget)) === expected[budget], "budget " + budget, text(Number(budget)));
-    for (let budget = 0; budget <= 90; budget++) {
-      const out = Progress.stepper(steps, 2, budget);
-      check(out.tokens.map(t => t.text).join("").length <= budget, "fits", budget);
-    }
-    const tokens = Progress.stepper(steps, 2, 80).tokens;
-    check(tokens[0].status === "done" && tokens[1].status === "separator" && tokens[2].status === "current" && tokens[4].status === "next", "statuses", tokens);
-    const later = sale.steps.map((step, i) => ({name: step.name, status: i < 3 ? "done" : i === 3 ? "current" : "next"}));
-    const f2 = Progress.stepper(later, 0, 40);
-    check(f2.form === "F2" && f2.tokens.map(t => t.text).join("") === "✓ 3 › ● propose › ○ owner › ○ build", "F2", f2);
-    check(Progress.stepper(later, 0, 74).form === "F1", "F1 when it fits", "");
-    const all = sale.steps.map(step => ({name: step.name, status: "done"}));
-    check(Progress.stepper(all, 0, 11).tokens.map(t => t.text).join("") === "✓ 6", "all done counted", "");
-    check(Progress.stepper(all, 0, 2).tokens.map(t => t.text).join("") === "✓6", "all done short", "");
-    check(Progress.stepper(all, 0, 1).tokens.map(t => t.text).join("") === "…", "all done elided", "");
-    check(Progress.stepper([], 0, 10).tokens.length === 0, "no steps", "");
-    """)
-  end
-
   test "fit shortens, elides, drops and never exceeds the budget" do
     run!("""
     const parts = [
@@ -466,11 +435,10 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
-  test "a node names its workflow and its place in it" do
+  test "a node names its workflow" do
     run!("""
     const out = Progress.build(base);
     check(out.flat[0].workflow === "sale" && out.flat[1].workflow === "", "a node names its workflow", out.flat.map(node => node.workflow));
-    check(JSON.stringify(Progress.track(out.flat[0])) === JSON.stringify({workflow: "sale", step: 2, steps: 6, stage: "design"}) && Progress.track(out.flat[1]) === null, "track", "");
     """)
   end
 

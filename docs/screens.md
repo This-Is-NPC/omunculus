@@ -213,44 +213,24 @@ and your answer.
 
 ### 7. Tree
 
-The root work's stage path first, as in the chat, then the conversation's
-works in the order they were made, who handed work to
-whom, every level deep. The agent that talks with you is the root, with its
-own state and what it asks you; each work sits under the work that handed it
-down, lines joining it to its parent as in a file tree. A row is the work's
-mark (a chevron while it handed works down, else its agent's dot), its agent
-in its tone, its title, its stage track (a dot per stage, the step of how
-many under it), its state in words — WORKING, WAITING FOR the child or agent
-it waits for, WAITING FOR YOU, DONE, FAILED, CANCELLED — and how long it has
-run; under the title its steps and cost, and a badge for the climb of what it
-waits on (⇡ surgeon › administrator › project-manager › front-desk › you) and
-what it is asked (⇣). On a narrow window the stage track and the state go
-under the title. The paths at work or waiting are open; the rest fold behind
-their chevron. Chips keep the works that need you or work, with the works
-above them. A click on a work opens its runs inside it, one line each, and
-DETAIL opens it in full, as a page over the tree, under a header strip with
-ANSWER or OPEN THREAD, in the tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS
-and LOG.
+The stage path of the conversation's first work, as in the chat, and at its
+right a CHART | OUTLINE toggle; the outline is the default on a narrow
+window. The chart has a band per level, L0 for you and the agent that talks
+with you, then one per level of works, a node per agent with its name and its
+state in words, elbow connectors from each work to the works it handed down,
+and a bracket under works that ran at once ("PARALLEL ×4 · 2 DONE · 2
+WORKING"). The outline is the same tree as indented rows with depth
+lifelines, as in the chat. A click on a node or a row picks its work. The
+PICKED WORK panel under it says its agent, level, parent, title, state and,
+while it waits, what for; OPEN THREAD (filled), LOG and COST open those
+pages. The panel shows no cost figure.
 
 | Keys | What they do |
 | --- | --- |
-| ↑ · ↓ | move from row to row |
-| → · ← | unfold, or the first row under it; fold, or its parent |
-| Enter | show its runs inside it; again, open it in full |
-| / | filter the works |
+| ↑ · ↓ | pick the work before or after |
+| Enter | open its thread |
 | Alt+R | answer what waits on you nearest the work picked |
-| Alt+E | open the decision of what it asked you, to escalate (the detail's `⋯` ESCALATE) |
-| Alt+W | write to its agent (`⋯` WRITE TO ITS AGENT) |
-BY LEVEL, the first view, groups the rows under a header per level of the
-hierarchy ("LEVEL 2 · seller, design-lead · 6 events"), each row's dot in the
-column of its level; BY WORK puts them under the row of their work, on the
-lifelines of the tree; BY TIME lists them oldest first, a rule naming each day
-and each run.
-
-| Alt+C | leave it a note, without a run (`⋯` LEAVE A NOTE) |
-| Alt+M | mark its notes read (the detail's `⋯` MARK READ) |
-| Alt+L · Alt+G | its LOG and CHANGES tabs |
-| Esc | the detail, then the tree, then back |
+| Esc | back |
 
 ### 8. Log
 
@@ -261,12 +241,17 @@ Every event of the conversation, a row each, which opens whole.
 | / | filter the events |
 | Esc | empty the filter, then back to the rows |
 
+BY LEVEL, the first view, groups the rows under a header per level of the
+hierarchy ("LEVEL 2 · seller, design-lead · 6 events"), each row's dot in the
+column of its level; BY WORK puts them under the row of their work, on the
+lifelines of the tree; BY TIME lists them oldest first, a rule naming each day
+and each run.
+
 Each row is one line: when, its kind, what the event says, who; under 560 px
 two lines, the sentence under the rest. Chips, on one line that
 scrolls sideways (wrapped onto lines on a narrow window), each with its count, keep
 the events that need you or failed, a picker one agent's, and BEHIND THE
-SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
-names each day and each run. The count, on one line, says how many rows a
+SCENES brings back the plumbing (run starts and ends, hooks), dimmed. The count, on one line, says how many rows a
 filter keeps out, and "2 BEHIND THE SCENES HIDDEN" ("2 HIDDEN" on a narrow
 window) when that is why. A failed event has the
 warning icon in the error tone. Opened from a work of
