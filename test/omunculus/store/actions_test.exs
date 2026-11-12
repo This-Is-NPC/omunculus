@@ -660,6 +660,22 @@ defmodule Omunculus.Store.ActionsTest do
       assert v3["version"] == 3
     end
 
+    test "a run without a conversation keeps its artifacts too, as one set of the project",
+         %{conn: conn, ctx: ctx, store: store} do
+      run_id = Fixtures.insert(conn, :runs, %{conversation_id: nil})
+      ctx = %{ctx | run_id: run_id}
+
+      assert {:ok, [_tool_event, %{type: "artifact"}]} =
+               record_tool(conn, [artifact("brief", "brief", "first")], ctx)
+
+      assert {:ok, [_tool_event, %{type: "artifact"}]} =
+               record_tool(conn, [artifact("brief", "brief", "second")], ctx)
+
+      assert {:ok, [v1, v2]} = Store.artifacts(conn, nil)
+      assert [v1["version"], v2["version"]] == [1, 2]
+      assert {:ok, "second"} = Omunculus.Artifacts.read(store, v2)
+    end
+
     test "a name keeps its kind, and a refused put writes nothing",
          %{conn: conn, ctx: ctx, conversation_id: conversation_id} do
       assert {:ok, _events} = record_tool(conn, [artifact("brief", "brief", "a")], ctx)

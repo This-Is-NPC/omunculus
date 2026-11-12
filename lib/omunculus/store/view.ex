@@ -384,9 +384,10 @@ defmodule Omunculus.Store.View do
   @doc """
   The artifact versions of a conversation, oldest first: each as its
   `artifact` event describes it, with that event's `event_id`, its `at`,
-  `by` and the `work_id` of the work that made it.
+  `by` and the `work_id` of the work that made it. Runs without a
+  conversation, as the CLI starts them, share the set under `nil`.
   """
-  @spec artifacts(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  @spec artifacts(Omunculus.Store.Connection.t(), String.t() | nil) :: {:ok, [map]}
   def artifacts(conn, conversation_id),
     do:
       carried(conn, conversation_id, "'artifact'", fn body, event ->
@@ -399,7 +400,7 @@ defmodule Omunculus.Store.View do
              conn,
              """
              SELECT id, at, work_id, actor_kind, actor_id, body FROM events
-             WHERE conversation_id = ? AND type IN (#{types})
+             WHERE conversation_id IS ? AND type IN (#{types})
                AND (type = 'artifact' OR json_extract(body, '$.attachments') IS NOT NULL)
              ORDER BY sequence
              """,

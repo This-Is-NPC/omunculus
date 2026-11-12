@@ -331,9 +331,11 @@ documents, such as a pack's, emits the `artifact` action: `name`, `kind`,
 content, numbers the version and records an `artifact` event, unless the content
 equals the latest version's (same SHA-256 and media type), which then
 stands and records nothing; it refuses a
-kind that differs from the name's, a run with no conversation, and a
+kind that differs from the name's and a
 content past `[store] attachment_bytes`, and a `base` (an integer, 0 for
-none) that is not the number of the name's latest version. The event
+none) that is not the number of the name's latest version. Runs the CLI
+starts without `[access]` have no conversation and share one set of
+artifacts. The event
 records the `tool` that emitted it, which a pack's gate may check to
 accept only what its own tool wrote. A tool that needs a version's data
 declares `[views.artifacts]` with `include = ["data"]`, and a `prefix`

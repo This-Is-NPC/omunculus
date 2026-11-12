@@ -312,7 +312,7 @@ document as a record of the conversation: named, typed, versioned and
 immutable once written. The core knows the record and its tools; what a
 kind holds and what it must satisfy is a pack's.
 
-**The record.** An artifact belongs to one conversation. It has a `name`
+**The record.** An artifact belongs to one conversation (runs without one share a set). It has a `name`
 (a file name without a directory, such as `proposal` or `proposal.md`),
 a `kind` (a lowercase word the pack chooses; the core keeps no list) and
 versions numbered from 1. A version is `{name, kind, version, media_type,

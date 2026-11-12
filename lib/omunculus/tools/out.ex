@@ -305,7 +305,6 @@ defmodule Omunculus.Tools.Out do
     do: "#{name} is an artifact of kind #{kind}: a name keeps its kind"
 
   def failure({:artifact, {:invalid, :kind}}), do: "kind is a lowercase word"
-  def failure({:artifact, :no_conversation}), do: "this run has no conversation"
   def failure({:memory, {:unknown, id}}), do: "no memory #{id} is visible to this run"
   def failure({:memory, {:no_scope, scope}}), do: "this run has no #{scope} to remember in"
   def failure({:memory, {:invalid, field}}), do: "the #{field} is not valid"

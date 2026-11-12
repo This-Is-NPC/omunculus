@@ -235,7 +235,6 @@ defmodule Omunculus.Store.Actions do
          {:ok, content} <- Artifacts.content(body),
          {:ok, %{conversation_id: conversation_id}} <-
            Query.one(conn, "SELECT conversation_id FROM runs WHERE id = ?", [run_id]),
-         true <- not is_nil(conversation_id) || {:error, {:artifact, :no_conversation}},
          {:ok, versions} <- View.artifacts(conn, conversation_id),
          :ok <-
            Artifacts.check(
