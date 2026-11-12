@@ -154,6 +154,14 @@ Singleton {
   property var questionsOf: ({})
   // Who asked each request, by request id, as the log names them.
   property var askersOf: ({})
+  // Request id -> whether the person folded (true) or unfolded (false) its card
+  // in the chat; none until they do.
+  property var folded: ({})
+  function fold(id, value) {
+    const next = Object.assign({}, folded)
+    next[id] = value
+    folded = next
+  }
   // Work id -> the stages it went through, as Progress.journal keeps them.
   property var journeys: ({})
   // Work id -> its title, as the events that made it gave it, before the

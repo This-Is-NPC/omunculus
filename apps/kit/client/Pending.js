@@ -17,6 +17,14 @@ function queue(requests, me) {
     .map(each => each.request);
 }
 
+// Whether a card in the chat starts collapsed: every one but the newest
+// request waiting on you, `me`.
+function startsCollapsed(request, requests, me) {
+  const waiting = queue(requests, me);
+  const newest = waiting[waiting.length - 1];
+  return !newest || newest.id !== request.id;
+}
+
 // How a request shows in the chat, from the viewer `input.me` and the ids that
 // another request gathers, `input.contained`: "ask" for one addressed to the
 // viewer and still waiting, a card answered in place; "history" for one

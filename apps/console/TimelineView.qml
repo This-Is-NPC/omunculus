@@ -419,6 +419,7 @@ Item {
           width: entry.width
           key: entry.key
           stamp: entry.stamp
+          collapsible: true
         }
       }
 

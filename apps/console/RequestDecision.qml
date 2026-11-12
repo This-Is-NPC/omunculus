@@ -30,7 +30,11 @@ import "kit/ui"
 // bottom edge while the form's end is out of view, and the heading counts its
 // answers. A note, or the reason of a no, is behind ADD A NOTE. Sending shows
 // SENDING on the button chosen, which keeps its width; answered it collapses to the question and your
-// answer, and a failure reopens it with the words kept.
+// answer, and a failure reopens it with the words kept. In the chat
+// (`collapsible`) a button in the heading folds it to one line, its kind, its
+// title, its progress and its time; the words written stay, and the state is
+// kept per request while the app runs. The asker, the way down, the work and
+// what it unblocks are behind "details".
 SurfaceFrame {
   id: card
 
@@ -96,15 +100,26 @@ SurfaceFrame {
   readonly property var done: settled && request ? Pending.resolved(request, answer, {
     flat: Omunculus.progress ? Omunculus.progress.flat : [], text: Events.readable(question), folder: place.root || ""
   }) : null
-  // The lines under the title: who and where, as [{name, value, tone}].
+  // The lines under the title, as [{name, value, tone, detail}]; those that
+  // say who and where are `detail`, behind the toggle.
   readonly property var fields: !facts ? [] : [
-    { name: "ASKS", value: facts.asker, tone: Omunculus.toneOf(facts.asker) },
-    { name: "PATH", value: facts.path.join(" › ") },
-    { name: "WORK", value: facts.work },
-    { name: "UNBLOCKS", value: facts.unblocks },
+    { name: "ASKS", value: facts.asker, tone: Omunculus.toneOf(facts.asker), detail: true },
+    { name: "PATH", value: facts.path.join(" › "), detail: true },
+    { name: "WORK", value: facts.work, detail: true },
+    { name: "UNBLOCKS", value: facts.unblocks, detail: true },
     { name: "GRANTS", value: kind === "permission" ? facts.grants : "", tone: Theme.warning },
     { name: "STEP", value: request.interception && request.interception.of > 1 ? request.interception.step + " of " + request.interception.of : "" }
   ].filter(field => field.value !== "")
+
+  readonly property var shownFields: fields.filter(field => detailed || !field.detail)
+  // Whether those details show; each card starts without them.
+  property bool detailed: false
+
+  // Whether the card in the chat is folded to one line: as the person left it,
+  // else by Pending.startsCollapsed.
+  property bool collapsible: false
+  readonly property bool collapsed: collapsible && request !== null
+    && (Omunculus.folded[key] !== undefined ? Omunculus.folded[key] : Pending.startsCollapsed(request, Omunculus.requests, Omunculus.me))
 
   // The recommended button of the one decision it gathers, when it has no
   // options of its own.
@@ -258,7 +273,18 @@ SurfaceFrame {
         font.letterSpacing: Theme.type.kicker.tracking
         elide: Text.ElideRight
       }
-      Item { Layout.fillWidth: true }
+      // Collapsed, the title and the progress take the room the heading leaves.
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        Layout.alignment: Qt.AlignVCenter
+        visible: card.collapsed
+        text: (card.facts && card.facts.title !== "" ? card.facts.title : Events.readable(card.question).replace(/\s+/g, " ")) + (card.counted !== "" ? "  \u00b7  " + card.counted.toLowerCase() : "")
+        color: card.dim
+        font.pixelSize: Theme.type.body.size
+        elide: Text.ElideRight
+      }
+      Item { Layout.fillWidth: true; visible: !card.collapsed }
       Label {
         Layout.alignment: Qt.AlignVCenter
         text: card.stamp
@@ -267,13 +293,19 @@ SurfaceFrame {
         font.letterSpacing: Theme.type.stamp.tracking
       }
       IconButton {
-        visible: card.question !== ""
+        visible: card.collapsible
+        name: card.collapsed ? "chevron-down" : "chevron-up"
+        tip: card.collapsed ? "expand" : "collapse"
+        onClicked: Omunculus.fold(card.key, !card.collapsed)
+      }
+      IconButton {
+        visible: card.question !== "" && !card.collapsed
         name: "copy"
         tip: "copy the question"
         onClicked: Omunculus.copy(card.question)
       }
       ActionMenu {
-        visible: card.yours && card.kind !== "review"
+        visible: card.yours && card.kind !== "review" && !card.collapsed
         tip: "more"
         items: [card.escalating
           ? { id: "answer", icon: "enter", text: "ANSWER INSTEAD" }
@@ -291,347 +323,363 @@ SurfaceFrame {
       }
     }
 
-    // What it asks, in a sentence, wrapped inside the item.
-    Label {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      visible: card.open && !!card.facts && card.facts.title !== ""
-      text: card.facts ? card.facts.title : ""
-      color: Theme.foreground
-      font.pixelSize: Theme.type.cardBody.size
-      font.bold: true
-      lineHeight: Theme.type.cardBody.lineHeight
-      wrapMode: Text.Wrap
-    }
-    Counted {
-      visible: text !== ""
-      text: card.counted
-      color: card.dim
-    }
-    Prose {
-      Layout.fillWidth: true
-      Layout.maximumWidth: 620
-      visible: card.open && !!card.facts && card.facts.body !== ""
-      source: card.facts ? Omunculus.inline(card.facts.body) : ""
-      color: Theme.foreground
-      font.pixelSize: Theme.type.body.size
-      lineHeight: Theme.type.body.lineHeight
-      wrapMode: Text.Wrap
-    }
-    // A permission's own words: why it is asked.
-    Prose {
-      Layout.fillWidth: true
-      Layout.maximumWidth: 620
-      visible: card.open && card.kind === "permission" && card.question.trim() !== ""
-      source: Omunculus.inline(Events.readable(card.question))
-      color: card.dim
-      font.pixelSize: Theme.type.body.size
-      wrapMode: Text.Wrap
-    }
-
-    Label {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      visible: card.settled
-      text: Events.readable(card.question).replace(/\s+/g, " ")
-      color: card.dim
-      font.pixelSize: Theme.type.body.size
-      maximumLineCount: 2
-      elide: Text.ElideRight
-      wrapMode: Text.Wrap
-    }
-
-    // Who asks, the way down, the work and what it unblocks.
+    // Everything but the heading folds away while collapsed; what was typed stays.
     ColumnLayout {
+      id: body
       Layout.fillWidth: true
-      visible: card.open && card.fields.length > 0
-      spacing: Theme.space.line
-      Repeater {
-        model: card.open ? card.fields : []
-        delegate: RowLayout {
-          id: field
-          required property var modelData
-          Layout.fillWidth: true
-          spacing: Theme.space.gap
-          Caption { Layout.preferredWidth: 80; Layout.alignment: Qt.AlignTop; text: field.modelData.name }
-          Label {
+      visible: !card.collapsed
+      spacing: Theme.space.gap
+
+      // What it asks, in a sentence, wrapped inside the item.
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        visible: card.open && !!card.facts && card.facts.title !== ""
+        text: card.facts ? card.facts.title : ""
+        color: Theme.foreground
+        font.pixelSize: Theme.type.cardBody.size
+        font.bold: true
+        lineHeight: Theme.type.cardBody.lineHeight
+        wrapMode: Text.Wrap
+      }
+      Counted {
+        visible: text !== ""
+        text: card.counted
+        color: card.dim
+      }
+      Prose {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 620
+        visible: card.open && !!card.facts && card.facts.body !== ""
+        source: card.facts ? Omunculus.inline(card.facts.body) : ""
+        color: Theme.foreground
+        font.pixelSize: Theme.type.body.size
+        lineHeight: Theme.type.body.lineHeight
+        wrapMode: Text.Wrap
+      }
+      // A permission's own words: why it is asked.
+      Prose {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 620
+        visible: card.open && card.kind === "permission" && card.question.trim() !== ""
+        source: Omunculus.inline(Events.readable(card.question))
+        color: card.dim
+        font.pixelSize: Theme.type.body.size
+        wrapMode: Text.Wrap
+      }
+
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        visible: card.settled
+        text: Events.readable(card.question).replace(/\s+/g, " ")
+        color: card.dim
+        font.pixelSize: Theme.type.body.size
+        maximumLineCount: 2
+        elide: Text.ElideRight
+        wrapMode: Text.Wrap
+      }
+
+      // Who asks, the way down, the work and what it unblocks: behind the toggle.
+      Chip {
+        Layout.maximumWidth: body.width
+        visible: card.open && card.fields.some(field => field.detail)
+        text: "details"
+        icon: card.detailed ? "chevron-up" : "chevron-down"
+        tip: card.detailed ? "hide who asks, the path and the work" : "show who asks, the path and the work"
+        onClicked: card.detailed = !card.detailed
+      }
+      ColumnLayout {
+        Layout.fillWidth: true
+        visible: card.open && card.shownFields.length > 0
+        spacing: Theme.space.line
+        Repeater {
+          model: card.open ? card.shownFields : []
+          delegate: RowLayout {
+            id: field
+            required property var modelData
             Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            text: field.modelData.value
-            color: field.modelData.tone !== undefined ? field.modelData.tone : Theme.foreground
+            spacing: Theme.space.gap
+            Caption { Layout.preferredWidth: 80; Layout.alignment: Qt.AlignTop; text: field.modelData.name }
+            Label {
+              Layout.fillWidth: true
+              Layout.minimumWidth: 0
+              text: field.modelData.value
+              color: field.modelData.tone !== undefined ? field.modelData.tone : Theme.foreground
+              font.pixelSize: Theme.type.body.size
+              font.bold: field.modelData.name === "ASKS"
+              wrapMode: Text.Wrap
+            }
+          }
+        }
+      }
+
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        Layout.maximumWidth: 620
+        visible: card.earlierReply !== null
+        text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.option && card.earlierReply.body === card.earlierReply.option ? Requests.optionText(card.earlierReply.option) : card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
+        color: card.dim
+        font.pixelSize: Theme.type.meta.size
+        maximumLineCount: 1
+        elide: Text.ElideRight
+      }
+
+      Chip {
+        Layout.maximumWidth: content.width
+        visible: (card.passed.length > 0 || card.climb.length > 1) && !card.settled
+        text: "how each level worded it"
+        icon: card.wording ? "chevron-up" : "chevron-down"
+        tip: card.wording ? "hide how each level worded it" : "show how each level worded it"
+        onClicked: card.wording = !card.wording
+      }
+
+      // How each level above the asker worded it, then the harness's sentence.
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        Layout.maximumWidth: 620
+        visible: (card.passed.length > 0 || card.climb.length > 1) && card.wording && !card.settled
+        text: card.climb.slice(1).map(level => Requests.label(level.requester) + ": " + String(level.reason || "")).concat(card.request ? [String(card.request.reason || "")] : [])
+          .filter(line => line.trim() !== "").join("\n\n")
+        color: card.dim
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+      }
+
+      Flow {
+        id: decides
+        readonly property string decider: card.request ? Requests.label(card.request.arbiter) : ""
+        Layout.fillWidth: true
+        visible: card.open && !card.yours
+        Label {
+          text: decides.decider.toUpperCase()
+          color: Omunculus.toneOf(decides.decider)
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: Theme.type.meta.tracking
+        }
+        Label {
+          text: " DECIDES"
+          color: card.dim
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: Theme.type.meta.tracking
+        }
+      }
+
+      // Your answer, or what the agent above chose, as a bubble on the right with
+      // its text left aligned. While it goes, the button chosen says SENDING.
+      ColumnLayout {
+        Layout.fillWidth: true
+        visible: card.settled
+        spacing: Theme.space.line
+        Label {
+          Layout.alignment: Qt.AlignRight
+          text: card.answer ? (card.answer.who === "you" ? "YOU ANSWERED" : card.answer.who.toUpperCase() + " ANSWERED") : ""
+          color: Omunculus.toneOf(card.answer ? card.answer.who : "you")
+          font.pixelSize: Theme.type.name.size
+          font.letterSpacing: Theme.type.name.tracking
+        }
+        Rectangle {
+          Layout.alignment: Qt.AlignRight
+          Layout.maximumWidth: 620
+          implicitWidth: Math.min(620, said.implicitWidth + 2 * Theme.size.bubbleInset)
+          implicitHeight: said.implicitHeight + Theme.space.inset
+          color: Theme.highlight
+          Label {
+            id: said
+            anchors { fill: parent; leftMargin: Theme.size.bubbleInset; rightMargin: Theme.size.bubbleInset; topMargin: Theme.space.inset / 2; bottomMargin: Theme.space.inset / 2 }
+            text: !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
+            color: Theme.foreground
             font.pixelSize: Theme.type.body.size
-            font.bold: field.modelData.name === "ASKS"
+            lineHeight: Theme.type.body.lineHeight
+            horizontalAlignment: Text.AlignLeft
             wrapMode: Text.Wrap
           }
         }
       }
-    }
 
-    Label {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      Layout.maximumWidth: 620
-      visible: card.earlierReply !== null
-      text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.option && card.earlierReply.body === card.earlierReply.option ? Requests.optionText(card.earlierReply.option) : card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
-      color: card.dim
-      font.pixelSize: Theme.type.meta.size
-      maximumLineCount: 1
-      elide: Text.ElideRight
-    }
-
-    Chip {
-      Layout.maximumWidth: content.width
-      visible: (card.passed.length > 0 || card.climb.length > 1) && !card.settled
-      text: "how each level worded it"
-      icon: card.wording ? "chevron-up" : "chevron-down"
-      tip: card.wording ? "hide how each level worded it" : "show how each level worded it"
-      onClicked: card.wording = !card.wording
-    }
-
-    // How each level above the asker worded it, then the harness's sentence.
-    Label {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      Layout.maximumWidth: 620
-      visible: (card.passed.length > 0 || card.climb.length > 1) && card.wording && !card.settled
-      text: card.climb.slice(1).map(level => Requests.label(level.requester) + ": " + String(level.reason || "")).concat(card.request ? [String(card.request.reason || "")] : [])
-        .filter(line => line.trim() !== "").join("\n\n")
-      color: card.dim
-      font.pixelSize: 11
-      wrapMode: Text.Wrap
-    }
-
-    Flow {
-      id: decides
-      readonly property string decider: card.request ? Requests.label(card.request.arbiter) : ""
-      Layout.fillWidth: true
-      visible: card.open && !card.yours
-      Label {
-        text: decides.decider.toUpperCase()
-        color: Omunculus.toneOf(decides.decider)
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: Theme.type.meta.tracking
+      StatusMessage {
+        Layout.fillWidth: true
+        visible: card.delivery === "failed"
+        kind: "error"
+        message: "Could not send this. Try again."
       }
-      Label {
-        text: " DECIDES"
-        color: card.dim
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: Theme.type.meta.tracking
-      }
-    }
 
-    // Your answer, or what the agent above chose, as a bubble on the right with
-    // its text left aligned. While it goes, the button chosen says SENDING.
-    ColumnLayout {
-      Layout.fillWidth: true
-      visible: card.settled
-      spacing: Theme.space.line
-      Label {
-        Layout.alignment: Qt.AlignRight
-        text: card.answer ? (card.answer.who === "you" ? "YOU ANSWERED" : card.answer.who.toUpperCase() + " ANSWERED") : ""
-        color: Omunculus.toneOf(card.answer ? card.answer.who : "you")
-        font.pixelSize: Theme.type.name.size
-        font.letterSpacing: Theme.type.name.tracking
-      }
-      Rectangle {
-        Layout.alignment: Qt.AlignRight
-        Layout.maximumWidth: 620
-        implicitWidth: Math.min(620, said.implicitWidth + 2 * Theme.size.bubbleInset)
-        implicitHeight: said.implicitHeight + Theme.space.inset
-        color: Theme.highlight
-        Label {
-          id: said
-          anchors { fill: parent; leftMargin: Theme.size.bubbleInset; rightMargin: Theme.size.bubbleInset; topMargin: Theme.space.inset / 2; bottomMargin: Theme.space.inset / 2 }
-          text: !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
-          color: Theme.foreground
-          font.pixelSize: Theme.type.body.size
-          lineHeight: Theme.type.body.lineHeight
-          horizontalAlignment: Text.AlignLeft
-          wrapMode: Text.Wrap
+      // A numbered list of questions has a form, with its own actions.
+      Loader {
+        id: formLoader
+        Layout.fillWidth: true
+        active: card.yours && card.form !== null && !card.escalating
+        visible: active
+        sourceComponent: QuestionForm {
+          parsed: card.form
+          fill: card.fill
+          bleed: Theme.space.inset - card.border.width
+          draftKey: card.key
+          sending: card.busy
+          onSubmitted: text => card.answerInWords(text)
+          onDeclined: card.cannotAnswer()
         }
       }
-    }
 
-    StatusMessage {
-      Layout.fillWidth: true
-      visible: card.delivery === "failed"
-      kind: "error"
-      message: "Could not send this. Try again."
-    }
-
-    // A numbered list of questions has a form, with its own actions.
-    Loader {
-      id: formLoader
-      Layout.fillWidth: true
-      active: card.yours && card.form !== null && !card.escalating
-      visible: active
-      sourceComponent: QuestionForm {
-        parsed: card.form
-        fill: card.fill
-        bleed: Theme.space.inset - card.border.width
-        draftKey: card.key
-        sending: card.busy
-        onSubmitted: text => card.answerInWords(text)
-        onDeclined: card.cannotAnswer()
+      // A note to a decision or a permission is asked for.
+      Chip {
+        visible: card.yours && !formLoader.active && !card.escalating && !card.editing && card.kind !== "needs-you" && !card.noting
+        icon: "plus"
+        text: card.kind === "permission" ? "ADD A REASON OR A NOTE" : "ADD A NOTE"
+        onClicked: {
+          card.noting = true
+          Qt.callLater(card.focusWords)
+        }
       }
-    }
 
-    // A note to a decision or a permission is asked for.
-    Chip {
-      visible: card.yours && !formLoader.active && !card.escalating && !card.editing && card.kind !== "needs-you" && !card.noting
-      icon: "plus"
-      text: card.kind === "permission" ? "ADD A REASON OR A NOTE" : "ADD A NOTE"
-      onClicked: {
-        card.noting = true
-        Qt.callLater(card.focusWords)
-      }
-    }
-
-    // In words: an answer that chooses no option, the reason of a no, a note
-    // to a choice or, escalating, why it goes up.
-    ColumnLayout {
-      Layout.fillWidth: true
-      visible: card.wordsShown
-      spacing: Theme.space.tight
-      Caption {
+      // In words: an answer that chooses no option, the reason of a no, a note
+      // to a choice or, escalating, why it goes up.
+      ColumnLayout {
         Layout.fillWidth: true
-        text: card.escalating ? "WHY IT GOES UP" : card.editing ? "WHAT IT WILL DO INSTEAD" : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
-          : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
-      }
-      TextBlock {
-        id: words
-        Layout.fillWidth: true
-        // One line tall, growing with its text.
-        implicitHeight: contentHeight + topPadding + bottomPadding
-        readOnly: card.busy
-        opacity: readOnly ? 0.5 : 1
-        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.editing ? "the text to go ahead with" : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
-        Accessible.name: card.escalating ? "why it goes up" : "your words"
-        Keys.onPressed: Typing.mark()
-        submits: card.kind !== "decision" && card.kind !== "review"
-        onAccepted: card.submitWords()
-      }
-    }
-
-    // The decisions it gathers from below, each under its part and who asked
-    // it, as a group of its own.
-    Repeater {
-      model: card.yours && !card.escalating ? card.gathered : []
-      delegate: ColumnLayout {
-        id: choice
-        required property var modelData
-        readonly property var parts: Pending.actions(modelData.options, Requests.grants(modelData))
-        function decide(option) { card.decide(option, card.note, modelData.path) }
-        Layout.fillWidth: true
-        enabled: !card.busy
+        visible: card.wordsShown
         spacing: Theme.space.tight
-
         Caption {
           Layout.fillWidth: true
-          visible: card.gathered.length > 1
-          wrapMode: Text.Wrap
-          text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + Theme.type.meta.separator + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
+          text: card.escalating ? "WHY IT GOES UP" : card.editing ? "WHAT IT WILL DO INSTEAD" : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
+            : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
         }
-        ActionGroup {
-          label: "options of " + Requests.label(choice.modelData.request.requester)
-          Repeater {
-            model: choice.parts.once.concat(choice.parts.denies)
-            delegate: TraceButton {
-              id: gatheredOption
-              required property string modelData
-              // The one decision gathered is recommended like the card's own.
-              readonly property bool recommended: modelData === choice.parts.primary && card.gathered.length === 1
-              dense: true
-              role: Requests.guarded(modelData) ? "guarded" : "progress"
-              filled: recommended && card.yours
-              sending: card.busy && card.chosen === choice.modelData.path.join("/") + "|" + modelData
-              icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : "diamond"
-              text: card.labelOf(modelData, choice.modelData.request)
-              onClicked: choice.decide(modelData)
-              Component.onCompleted: if (recommended) card.recommendedButton = gatheredOption
+        TextBlock {
+          id: words
+          Layout.fillWidth: true
+          // One line tall, growing with its text.
+          implicitHeight: contentHeight + topPadding + bottomPadding
+          readOnly: card.busy
+          opacity: readOnly ? 0.5 : 1
+          placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.editing ? "the text to go ahead with" : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
+          Accessible.name: card.escalating ? "why it goes up" : "your words"
+          Keys.onPressed: Typing.mark()
+          submits: card.kind !== "decision" && card.kind !== "review"
+          onAccepted: card.submitWords()
+        }
+      }
+
+      // The decisions it gathers from below, each under its part and who asked
+      // it, as a group of its own.
+      Repeater {
+        model: card.yours && !card.escalating ? card.gathered : []
+        delegate: ColumnLayout {
+          id: choice
+          required property var modelData
+          readonly property var parts: Pending.actions(modelData.options, Requests.grants(modelData))
+          function decide(option) { card.decide(option, card.note, modelData.path) }
+          Layout.fillWidth: true
+          enabled: !card.busy
+          spacing: Theme.space.tight
+
+          Caption {
+            Layout.fillWidth: true
+            visible: card.gathered.length > 1
+            wrapMode: Text.Wrap
+            text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + Theme.type.meta.separator + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
+          }
+          ActionGroup {
+            label: "options of " + Requests.label(choice.modelData.request.requester)
+            Repeater {
+              model: choice.parts.once.concat(choice.parts.denies)
+              delegate: TraceButton {
+                id: gatheredOption
+                required property string modelData
+                // The one decision gathered is recommended like the card's own.
+                readonly property bool recommended: modelData === choice.parts.primary && card.gathered.length === 1
+                dense: true
+                role: Requests.guarded(modelData) ? "guarded" : "progress"
+                filled: recommended && card.yours
+                sending: card.busy && card.chosen === choice.modelData.path.join("/") + "|" + modelData
+                icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : "diamond"
+                text: card.labelOf(modelData, choice.modelData.request)
+                onClicked: choice.decide(modelData)
+                Component.onCompleted: if (recommended) card.recommendedButton = gatheredOption
+              }
+            }
+            AlwaysMenu {
+              options: choice.parts.always
+              labels: options.map(option => card.labelOf(option, choice.modelData.request))
+              onChosen: option => choice.decide(option)
             }
           }
-          AlwaysMenu {
-            options: choice.parts.always
-            labels: options.map(option => card.labelOf(option, choice.modelData.request))
-            onChosen: option => choice.decide(option)
+        }
+      }
+
+      // The card's own actions, as one group: its options, the answer in words,
+      // and the no last, then the wider scopes of a grant.
+      ActionGroup {
+        id: actions
+        readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || card.sends || card.cannotShown || card.denies || card.ownActions.always.length > 0
+        label: "actions"
+        visible: card.yours && actions.shown
+        enabled: !card.busy
+
+        Repeater {
+          id: ownOptions
+          model: card.yours && !card.escalating ? card.ownActions.once.filter(option => !(card.editing && option === "edit")) : []
+          delegate: TraceButton {
+            required property string modelData
+            dense: true
+            role: "progress"
+            filled: modelData === card.ownActions.primary && card.yours
+            sending: card.busy && card.chosen === "|" + modelData
+            icon: modelData === "grant" || modelData === "approve" ? "check" : modelData === "edit" ? "edit" : "diamond"
+            text: card.labelOf(modelData)
+            onClicked: modelData === "edit" ? card.startEdit() : card.decide(modelData, card.note, [])
           }
         }
-      }
-    }
-
-    // The card's own actions, as one group: its options, the answer in words,
-    // and the no last, then the wider scopes of a grant.
-    ActionGroup {
-      id: actions
-      readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || card.sends || card.cannotShown || card.denies || card.ownActions.always.length > 0
-      label: "actions"
-      visible: card.yours && actions.shown
-      enabled: !card.busy
-
-      Repeater {
-        id: ownOptions
-        model: card.yours && !card.escalating ? card.ownActions.once.filter(option => !(card.editing && option === "edit")) : []
-        delegate: TraceButton {
-          required property string modelData
+        TraceButton {
+          id: send
+          visible: card.sends
           dense: true
           role: "progress"
-          filled: modelData === card.ownActions.primary && card.yours
-          sending: card.busy && card.chosen === "|" + modelData
-          icon: modelData === "grant" || modelData === "approve" ? "check" : modelData === "edit" ? "edit" : "diamond"
-          text: card.labelOf(modelData)
-          onClicked: modelData === "edit" ? card.startEdit() : card.decide(modelData, card.note, [])
+          filled: card.hasWords
+          icon: card.escalating ? "chevron-up" : "enter"
+          text: card.escalating ? "ESCALATE" : card.editing ? "SEND EDIT" : "ANSWER"
+          tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : card.editing ? "let it go ahead with your words in place of its text" : "answer in your words, choosing no option"
+          sending: card.busy && (card.chosen === "words" || card.editing)
+          reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : card.editing ? "write the text it goes ahead with first" : "type your answer first"
+          onClicked: card.submitWords()
         }
-      }
-      TraceButton {
-        id: send
-        visible: card.sends
-        dense: true
-        role: "progress"
-        filled: card.hasWords
-        icon: card.escalating ? "chevron-up" : "enter"
-        text: card.escalating ? "ESCALATE" : card.editing ? "SEND EDIT" : "ANSWER"
-        tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : card.editing ? "let it go ahead with your words in place of its text" : "answer in your words, choosing no option"
-        sending: card.busy && (card.chosen === "words" || card.editing)
-        reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : card.editing ? "write the text it goes ahead with first" : "type your answer first"
-        onClicked: card.submitWords()
-      }
-      TraceButton {
-        id: cannot
-        visible: card.cannotShown
-        dense: true
-        role: "progress"
-        text: "I CAN'T ANSWER THIS"
-        tip: "tell the team you can't answer, so they sort it out"
-        onClicked: card.cannotAnswer()
-      }
-      Repeater {
-        id: ownGuarded
-        model: card.yours && card.own && !card.escalating ? card.own.options.filter(option => option === "cancel") : []
-        delegate: TraceButton {
-          required property string modelData
+        TraceButton {
+          id: cannot
+          visible: card.cannotShown
+          dense: true
+          role: "progress"
+          text: "I CAN'T ANSWER THIS"
+          tip: "tell the team you can't answer, so they sort it out"
+          onClicked: card.cannotAnswer()
+        }
+        Repeater {
+          id: ownGuarded
+          model: card.yours && card.own && !card.escalating ? card.own.options.filter(option => option === "cancel") : []
+          delegate: TraceButton {
+            required property string modelData
+            dense: true
+            role: "guarded"
+            sending: card.busy && card.chosen === "|" + modelData
+            text: card.labelOf(modelData)
+            onClicked: card.decide(modelData, card.note, [])
+          }
+        }
+        TraceButton {
+          id: deny
+          visible: card.denies
           dense: true
           role: "guarded"
-          sending: card.busy && card.chosen === "|" + modelData
-          text: card.labelOf(modelData)
-          onClicked: card.decide(modelData, card.note, [])
+          icon: "close"
+          text: "DENY"
+          sending: card.busy && card.chosen === "|deny"
+          tip: "say no, with your words as the reason"
+          onClicked: card.decide("deny", card.note)
         }
-      }
-      TraceButton {
-        id: deny
-        visible: card.denies
-        dense: true
-        role: "guarded"
-        icon: "close"
-        text: "DENY"
-        sending: card.busy && card.chosen === "|deny"
-        tip: "say no, with your words as the reason"
-        onClicked: card.decide("deny", card.note)
-      }
-      AlwaysMenu {
-        options: card.ownActions.always
-        labels: options.map(option => card.labelOf(option))
-        onChosen: option => card.decide(option, card.note, [])
+        AlwaysMenu {
+          options: card.ownActions.always
+          labels: options.map(option => card.labelOf(option))
+          onChosen: option => card.decide(option, card.note, [])
+        }
       }
     }
   }

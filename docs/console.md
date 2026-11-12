@@ -363,6 +363,16 @@ oldest into view. Answering one leaves it where it is, settled (see
 keyboard, and a refresh that changes none of its words never rebuilds the
 boxes being written in.
 
+In the chat a card folds. A button at the end of its heading collapses it to
+one line, the kind's icon and word, the title ("Seller asks 3 questions"), the
+progress ("0 of 3 answered") and the time, and expands it again with what was
+typed kept. A card starts expanded only when it is the newest request waiting
+on you; the older ones waiting and every answered one start collapsed
+(`Pending.startsCollapsed`). What the person chose is kept per request in
+`Omunculus.folded` while the app runs. Cards elsewhere (the dialog, a work's
+page) do not fold. ASKS, PATH, WORK and UNBLOCKS sit behind a "details" chip,
+closed by default, GRANTS and STEP stay in view.
+
 A card has four kinds, each with its own icon and
 word: QUESTION (a circled question mark), DECISION (a diamond), PERMISSION
 (a shield) and REVIEW (a spark). The kind is the request's shape, whoever

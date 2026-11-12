@@ -183,9 +183,13 @@ OPEN IN TREE (Alt+O) shows it on the tree page.
 Everything whose arbiter you are, reviews included, is a card in the chat, at
 the time it was asked; there is no separate list. A card is one of four kinds, each with
 its icon and word: QUESTION, DECISION, PERMISSION or REVIEW. It says what it asks in a
-sentence, then who asks, the way down from the front desk, the work, what it
-unblocks and, for a permission, what it grants or, for a review with several
-reviewers, its step; every text wraps inside it. Its
+sentence; for a permission, what it grants or, for a review with several
+reviewers, its step; every text wraps inside it. Who asks, the way down from
+the front desk, the work and what it unblocks are behind a small "details"
+chip, closed. A button at the end of the heading collapses the card to one
+line (kind, title, "0 of 3 answered", time) and expands it with what you typed
+kept; only the newest card waiting on you starts expanded, the older ones and
+the answered ones start collapsed. Its
 actions are one group at its bottom: a box and ANSWER for a question; a button
 per option for a decision, the recommended one (APPROVE or ACCEPT) filled and
 the others outlined; GRANT · THIS WORK ONLY, filled, DENY and an ALWAYS… menu of

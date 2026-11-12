@@ -150,4 +150,17 @@ defmodule Omunculus.GuiPendingTest do
     check(shown === "q1:history,p1:ask,a1:team,d1:ask", "order", shown);
     """)
   end
+
+  test "a card in the chat starts collapsed unless it is the newest waiting on you" do
+    run!("""
+    const requests = [question, questions, permission, decision];
+    const collapsed = request => Pending.startsCollapsed(request, requests, human);
+    check(!collapsed(decision), "the newest waiting is expanded", "");
+    check(collapsed(permission) && collapsed(question) && collapsed(questions), "older waiting ones are collapsed", "");
+    const answered = requests.map(request => request.id === "d1" ? Object.assign({}, request, {status: "answered"}) : request);
+    check(Pending.startsCollapsed(decision, answered, human), "an answered one is collapsed", "");
+    check(!Pending.startsCollapsed(permission, answered, human), "the newest still waiting takes over", "");
+    check(Pending.startsCollapsed(asked("a1", {arbiter: agent("seller")}), requests, human), "one not for you is collapsed", "");
+    """)
+  end
 end
