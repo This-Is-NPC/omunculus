@@ -240,7 +240,7 @@ function answered(request, reply) {
 //   messages (oldest first), pending: the ids of the requests the person has
 //   to answer, oldest first, reviews: the reviews waiting on them, at: the last message's time, heard: the last
 //   message from the agent's, "" for none, received, sent, parties, snippet.
-// A message: {key, mine, from, to, text, at, files, request, pending, open}.
+// A message: {key, mine, from, to, text, subject (of yours, "" for none), at, files, request, pending, open}.
 function build(projectId, id, snapshot, events, me) {
   const agent = agentOf(snapshot, events);
   const you = { name: "me", address: "", me: true };
@@ -257,7 +257,7 @@ function build(projectId, id, snapshot, events, me) {
     const body = event.body || {};
     if (event.type === "prompt" && event.actor && event.actor.kind === "human") {
       if (body.agent && body.agent !== agent) continue;
-      messages.push({ key: event.cursor, mine: true, from: you, to: agentPerson, text: body.message || "", at: event.at, files: body.attachments || [], request: "", pending: false, open: false });
+      messages.push({ key: event.cursor, mine: true, from: you, to: agentPerson, text: body.message || "", subject: body.subject || "", at: event.at, files: body.attachments || [], request: "", pending: false, open: false });
     } else if (event.type === "reply" && event.request_id && Requests.isMe(event.actor, me)) {
       replies[event.request_id] = event;
     } else if (rootRuns[event.run_id] && event.type === "comment" && rootWorks[event.work_id] && String(body.body || "").trim() !== "") {
@@ -288,7 +288,7 @@ function build(projectId, id, snapshot, events, me) {
     const sender = requester(request, projectId);
     messages.push({ key: request.id, mine: false, from: sender, to: you, text: asking(request, notes[request.id]), at: request.created_at, files: [], request: request.id, pending: Requests.pending(request), open: false });
     const reply = replies[request.id];
-    if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: sender, text: String((reply.body || {}).body || ""), at: reply.at, files: [], request: request.id, pending: false, open: false });
+    if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: sender, text: String((reply.body || {}).body || ""), at: reply.at, files: (reply.body || {}).attachments || [], request: request.id, pending: false, open: false });
   }
   // An answer you gave to a review is mail you sent to its requester.
   for (const request of snapshot.requests.filter(each => Requests.review(each) && Requests.isMe(each.arbiter, me) && replies[each.id])) {
@@ -312,7 +312,8 @@ function build(projectId, id, snapshot, events, me) {
   waiting.sort((a, b) => asked.find(r => r.id === a).created_at.localeCompare(asked.find(r => r.id === b).created_at));
 
   const first = messages.find(message => message.mine && message.request === "");
-  const parts = first ? split(first.text) : { subject: "", body: "" };
+  // A subject sent apart is the thread's; one without, the first line of its words.
+  const parts = first ? (first.subject ? { subject: first.subject, body: first.text } : split(first.text)) : { subject: "", body: "" };
   if (first) first.text = parts.body;
   const theirs = messages.filter(message => !message.mine);
   const latest = messages.length > 0 ? messages[messages.length - 1] : null;

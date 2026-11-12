@@ -221,6 +221,21 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
+  test "a subject sent apart is the thread's, with the body whole; the files of an answer show on it" do
+    run!("""
+    const file = {name: "brief.pdf", media_type: "application/pdf", bytes: 4, sha256: "ab"};
+    const first = {type: "prompt", cursor: "1", at: "2026-01-01T10:00:00Z", actor: human, body: {message: "pra minha loja\\nmais uma linha", subject: "eu quero um site", agent: "sales"}};
+    const events = [first, {type: "reply", cursor: "2", at: "2026-01-01T10:03:00Z", request_id: "q1", actor: human, body: {body: "see it", attachments: [file]}}];
+    const t = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("q1", {status: "closed"})]}), events);
+    if (t.subject !== "eu quero um site") throw Error("subject " + t.subject);
+    const mine = t.messages.filter(m => m.mine);
+    if (mine[0].text !== "pra minha loja\\nmais uma linha") throw Error("the body stays whole: " + mine[0].text);
+    if (mine[1].files.length !== 1 || mine[1].files[0].name !== "brief.pdf") throw Error("answer files " + JSON.stringify(mine[1].files));
+    const plain = build(snap({runs: [run("r1", "sales", "closed")]}), [prompt("1", "2026-01-01T10:00:00Z", "Website\\n\\nI need a site.")]);
+    if (plain.subject !== "Website") throw Error("a message without a subject keeps its first line");
+    """)
+  end
+
   test "mail holds the requests whose arbiter is the person, never reviews" do
     run!("""
     const events = [prompt("1", "2026-01-01T10:00:00Z", "Hi")];

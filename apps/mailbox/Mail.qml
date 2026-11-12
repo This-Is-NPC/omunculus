@@ -246,17 +246,19 @@ Singleton {
   }
 
   // A new thread: a conversation in `project` and your first message to
-  // `agent` there, or, with none, to the project's default agent, its subject its first line, with the files at the paths
+  // `agent` there, or, with none, to the project's default agent, with its `subject` apart and the files at the paths
   // `files` lists. `draft` is the draft it was written from, gone once sent.
   // `stay` leaves what is on screen as it is, as a reply to several does.
   function send(project, agent, subject, body, files, draft, stay) {
     const place = projectOf(project)
-    const text = [subject.trim(), body.trim()].filter(part => part !== "").join("\n\n")
+    // A subject alone is the message.
+    const text = body.trim() !== "" ? body.trim() : subject.trim()
+    const apart = body.trim() !== "" && subject.trim() !== "" ? { subject: subject.trim() } : {}
     if (text === "" || !place)
       return
     http.call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
       http.post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
-        agent === "" ? { message: text } : { message: text, agent: agent }, files, () => {
+        Object.assign({ message: text }, apart, agent === "" ? {} : { agent: agent }), files, () => {
           if (draft)
             discardDraft(draft)
           // What you sent is in Sent, not next to an empty Inbox.
@@ -269,10 +271,10 @@ Singleton {
     })
   }
 
-  // Your reply in a thread: the answer to `request` when one is given, in
-  // words only, else your next message to the thread's agent, with the files
-  // at the paths `files` lists.
-  function reply(key, request, text, files) {
+  // Your reply in a thread: the answer to `request` when one is given, else
+  // your next message to the thread's agent, under `subject`, either with the
+  // files at the paths `files` lists.
+  function reply(key, request, subject, text, files) {
     const thread = threads[key]
     const value = text.trim()
     if (!thread || value === "")
@@ -283,9 +285,9 @@ Singleton {
       sweep()
     }
     if (request !== "")
-      http.call(socket, "POST", base + "/requests/" + request + "/reply", Mailbox.answer(value), true, sent)
+      http.post(socket, base + "/requests/" + request + "/reply", Mailbox.answer(value), files, sent)
     else
-      http.post(socket, base + "/messages", { message: value, agent: thread.agent }, files, sent)
+      http.post(socket, base + "/messages", Object.assign({ message: value, agent: thread.agent }, subject.trim() !== "" ? { subject: subject.trim() } : {}), files, sent)
   }
 
   // Decides a review: `option` is "approve", "edit" or "deny", `text` the

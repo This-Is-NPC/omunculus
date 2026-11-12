@@ -10,8 +10,8 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 // forward, the same window for all. Its bar holds the title, which is the
 // subject, and minimize, expand and close; under it To (RecipientField), the
 // Subject, a body that fills the window's height and scrolls past it, the
-// reply's quoted message behind MORE, and the footer with the files, DISCARD
-// and SEND, the one solid action. The ComposerDock places it and sets its
+// reply's quoted message behind MORE, and the footer with Attach, the files,
+// DISCARD and SEND, the one solid action, in one row. The ComposerDock places it and sets its
 // `shape`: "window" docked, "tab" only its bar, "full" expanded, "screen" a
 // phone's, under the tab strip, and "hidden". A composer that is not shown
 // keeps its words. Ctrl+Enter sends, Esc minimizes. Closing with something
@@ -58,12 +58,13 @@ FocusScope {
     if (reply) {
       const request = entry.request
       const text = editor.take()
+      const files = foot.take()
       const mine = Mailbox.counterparts(thread).map(item => item.address)
       // The thread's own accounts are answered in it; any other is written to in a message of its own.
       if (recipients.chosen.some(item => mine.includes(item.address)))
-        Mail.reply(thread.key, request, text, request === "" ? foot.take() : [])
+        Mail.reply(thread.key, request, subjectBox.text, text, files)
       for (const other of recipients.chosen.filter(item => !mine.includes(item.address)))
-        Mail.send(other.project, other.agent, Mailbox.re(thread.subject), text, [], "", true)
+        Mail.send(other.project, other.agent, subjectBox.text, text, files, "", true)
     } else {
       Mail.send(target.project, target.agent, subjectBox.text, editor.take(), foot.take(), entry.draft)
     }
@@ -153,31 +154,50 @@ FocusScope {
     anchors { fill: parent; topMargin: composer.bar + Theme.space.tight; margins: Theme.space.inset }
     spacing: Theme.space.tight
 
-    RowLayout {
+    // The fields share one label column; each is one row high.
+    GridLayout {
       Layout.fillWidth: true
-      spacing: Theme.space.gap
-      Label { Layout.preferredWidth: 48; text: "To"; color: Theme.dim; font.pixelSize: 12 }
-      RecipientField {
-        id: recipients
-        Layout.fillWidth: true
-        candidates: Mail.recipients
-        single: !composer.reply
-        placeholder: composer.reply ? "add another" : Mailbox.hint(Mail.defaultRecipient())
-        Component.onCompleted: chosen = composer.entry.to
-      }
-    }
-    FieldError { Layout.fillWidth: true; Layout.leftMargin: 58; text: recipients.refusal }
+      columns: 2
+      columnSpacing: Theme.space.gap
+      rowSpacing: Theme.space.tight
 
-    RowLayout {
-      Layout.fillWidth: true
-      spacing: Theme.space.gap
-      Label { Layout.preferredWidth: 48; text: "Subject"; color: Theme.dim; font.pixelSize: 12 }
-      // A reply keeps its thread's subject; any other message names its own.
-      Label { visible: composer.reply; Layout.fillWidth: true; text: subjectBox.text; color: Theme.dim; font.pixelSize: 12; elide: Text.ElideRight }
+      Label {
+        Layout.preferredWidth: 56
+        Layout.preferredHeight: Theme.size.controlDense
+        Layout.alignment: Qt.AlignTop
+        text: "To"
+        color: Theme.dim
+        font.pixelSize: 12
+        verticalAlignment: Text.AlignVCenter
+      }
+      ColumnLayout {
+        Layout.fillWidth: true
+        spacing: Theme.space.line
+        RecipientField {
+          id: recipients
+          Layout.fillWidth: true
+          candidates: Mail.recipients
+          single: !composer.reply
+          placeholder: composer.reply ? "add another" : Mailbox.hint(Mail.defaultRecipient())
+          Component.onCompleted: chosen = composer.entry.to
+        }
+        FieldError { Layout.fillWidth: true; text: recipients.refusal }
+      }
+
+      Label {
+        Layout.preferredWidth: 56
+        Layout.preferredHeight: Theme.size.controlDense
+        Layout.alignment: Qt.AlignTop
+        text: "Subject"
+        color: Theme.dim
+        font.pixelSize: 12
+        verticalAlignment: Text.AlignVCenter
+      }
+      // A reply starts with its thread's subject, "Re: ...", which can be changed like any other.
       TextBox {
         id: subjectBox
-        visible: !composer.reply
         Layout.fillWidth: true
+        Layout.preferredHeight: Theme.size.controlDense
         dense: true
         onAccepted: editor.focusEntry()
       }
@@ -236,7 +256,6 @@ FocusScope {
 
     MailFooter {
       id: foot
-      attachable: !composer.reply || composer.entry.request === ""
       sendable: composer.sendable
       onDiscarded: composer.close()
       onSent: composer.send()

@@ -36,7 +36,7 @@ function summary(data, ended, me) {
   }
   const newest = waiting[waiting.length - 1];
   return {
-    title: said ? String(said.body).replace(/\s+/g, " ") : "",
+    title: said ? String(said.subject || said.body).replace(/\s+/g, " ") : "",
     agent: first ? first.agent : "",
     started: data.prompts.length > 0,
     finished: data.works.length > 0 && data.works.every(work => work.state === "done" || work.state === "cancelled"),

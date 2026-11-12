@@ -131,6 +131,8 @@ defmodule Omunculus.GuiProjectsTest do
       ]
     }, "", human);
     check(summary.title === "Hi! I want a website" && summary.agent === "sales", "who " + JSON.stringify(summary));
+    const named = Projects.summary({prompts: [{kind: "message", body: "the words", subject: "A site"}], runs: [], works: [], requests: []}, "", human);
+    check(named.title === "A site", "the subject titles it " + named.title);
     check(summary.started && !summary.finished && summary.running === 2, "runs " + JSON.stringify(summary));
     check(summary.waiting === 4 && summary.since === "2026-11-03T10:10:00Z", "waiting " + JSON.stringify(summary));
     check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1, reviews: 0}), "asks " + JSON.stringify(summary.asks));

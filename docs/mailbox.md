@@ -62,9 +62,12 @@ request the harness opened that passes on no question). A request the harness
 opened that passes on a question shows that question, from the request's
 requester.
 
-A conversation has no title in the core: its subject is the first line of its
-first message of yours, cut at 90 characters. A composer's Subject is
-sent as that first line, followed by a blank line and the message.
+A conversation has no title in the core: its subject is the `subject` of its
+first message of yours. A composer's Subject is sent apart from the text
+(`POST .../messages` with `{"message": text, "subject": subject}`), so the
+text is never repeated with it; a message with no subject, from another client,
+is read as before, its first line the subject, cut at 90 characters. A subject
+written with no text is the message itself.
 
 An agent's address is `<agent>@<project>` and its display name the agent's name,
 capitalised: `Front-desk <front-desk@agency>`.
@@ -122,7 +125,8 @@ A reply is written in a composer ([Composing](#composing)) docked over the
 mailbox at the bottom right, so the thread stays readable beside it. Its To is
 chips (the same field as a new message, with its type-ahead and address book),
 prefilled with the sender, or with every counterpart for REPLY ALL, and its
-Subject is the thread's, "Re: ...". Taking a chip off or adding another is
+Subject is the thread's, "Re: ...", a field like any other, which you may edit.
+Taking a chip off or adding another is
 free; the thread's own accounts are answered in it, and any other recipient gets
 a message of its own with the same subject. Behind MORE the composer shows the
 e-mail it answers, quoted as mail does ("On <date>, Front-desk wrote:" and its
@@ -135,9 +139,14 @@ does:
 - replying to any other e-mail while requests wait for you answers the newest
   of them, and the quote shows which one;
 - with no request waiting, it is a message to the agent
-  (`POST .../messages`), and may carry files.
+  (`POST .../messages`, under the Subject).
 
-An answer to a question carries words only, never an option, and no files.
+Every composer has Attach and shows the files picked as chips, in the footer
+with DISCARD and SEND. Files go with the message, the answer to a request
+(`"attachments"` in the reply, kept as a message's are and shown on your answer
+in the thread) and the messages to other recipients. An answer to a question
+carries words and files, never an option; it has no subject, which only the
+messages to the agent and to other recipients carry.
 
 FORWARD opens a composer with `Fwd:` and the message below your words.
 
