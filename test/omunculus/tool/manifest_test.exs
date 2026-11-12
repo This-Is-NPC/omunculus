@@ -591,4 +591,40 @@ defmodule Omunculus.Tool.ManifestTest do
       assert Manifest.load(path) == {:error, {:invalid, :schemas}}
     end
   end
+
+  describe "coerce_args/2" do
+    @manifest %Manifest{
+      name: "proposal",
+      kind: "command",
+      dir: "/tmp",
+      parameters: %{
+        "properties" => %{
+          "fields" => %{"type" => "object"},
+          "pages" => %{"type" => "array"},
+          "note" => %{"type" => "string"}
+        }
+      }
+    }
+
+    test "decodes JSON text sent for an object or an array argument" do
+      args = %{
+        "fields" => ~s({"design":{"state":"approved"}}),
+        "pages" => ~s(["a"]),
+        "note" => "{}"
+      }
+
+      assert Manifest.coerce_args(@manifest, args) ==
+               %{
+                 "fields" => %{"design" => %{"state" => "approved"}},
+                 "pages" => ["a"],
+                 "note" => "{}"
+               }
+    end
+
+    test "keeps what is not JSON of the declared type" do
+      args = %{"fields" => "[1]", "pages" => "{}", "other" => ~s({"a":1})}
+      assert Manifest.coerce_args(@manifest, args) == args
+      assert Manifest.coerce_args(%{@manifest | parameters: %{}}, args) == args
+    end
+  end
 end

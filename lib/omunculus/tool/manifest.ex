@@ -85,6 +85,30 @@ defmodule Omunculus.Tool.Manifest do
     build(raw, dir)
   end
 
+  @doc """
+  `args` with each top-level argument the schema types `object` or `array`
+  and a model sent as JSON text decoded. A model that does not hold the
+  tool's schema in its `tools` array (one found by `tool_search`) often does.
+  """
+  @spec coerce_args(t, map) :: map
+  def coerce_args(%__MODULE__{parameters: %{"properties" => properties}}, args)
+      when is_map(properties) and is_map(args) do
+    Map.new(args, fn {key, value} -> {key, coerce_arg(value, properties[key])} end)
+  end
+
+  def coerce_args(_manifest, args), do: args
+
+  defp coerce_arg(value, %{"type" => type})
+       when is_binary(value) and type in ["object", "array"] do
+    case Jason.decode(value) do
+      {:ok, %{} = decoded} when type == "object" -> decoded
+      {:ok, decoded} when is_list(decoded) and type == "array" -> decoded
+      _other -> value
+    end
+  end
+
+  defp coerce_arg(value, _schema), do: value
+
   @spec card(t | map) :: String.t()
   def card(%{name: name, description: description, tags: tags}) do
     lines =

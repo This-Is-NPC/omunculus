@@ -626,6 +626,10 @@ a tool result only extends the end. The cost is that the model calls a tool
 its `tools` array does not list; the name and schema are in the result it
 just read.
 
+A model that finds a tool this way may send an object or array argument as
+JSON text, having no schema in its `tools` array; the harness decodes it when
+the tool's schema types the argument `object` or `array`.
+
 Limits: a `command` model and `code_mode` bind only the declared tools, so
 they cannot call one found later. With `send_catalog`, a run is sent the
 declared tools only. A search with no `q` returns every schema of the

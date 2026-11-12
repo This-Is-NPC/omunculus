@@ -151,6 +151,7 @@ defmodule Omunculus.Harness do
          workspace = workspace_context(config, work, conversation_id(run, work, ctx)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
+         args = Manifest.coerce_args(manifest, args),
          views =
            views(project, run, work, config, catalog, workspace, %{
              request_id: run && run.request_id,
