@@ -16,7 +16,7 @@ defmodule Omunculus.Tool.Invoke do
   alias Omunculus.Execution.{Command, Policy, Program}
   alias Omunculus.Mcp
   alias Omunculus.Path, as: FilesystemPath
-  alias Omunculus.Tool.Manifest
+  alias Omunculus.Tool.{Manifest, Resident}
 
   @type out :: %{
           ok: boolean,
@@ -60,8 +60,8 @@ defmodule Omunculus.Tool.Invoke do
   def call(%Manifest{command: command} = manifest, input, %Policy{} = execution, secrets)
       when is_list(command) do
     with {:ok, command} <- external_command(manifest, command, execution, secrets) do
-      case Execution.run(command, execution, Jason.encode!(input)) do
-        {:ok, %{stdout: stdout}} -> decode(stdout)
+      case run_command(manifest, command, input, execution) do
+        {:ok, stdout} -> decode(stdout)
         {:error, {:exit, status, _stdout, stderr}} -> {:error, {:exit, status, stderr}}
         {:error, _reason} = error -> error
       end
@@ -70,6 +70,23 @@ defmodule Omunculus.Tool.Invoke do
 
   def call(%Manifest{command: command}, _input, nil, _secrets) when is_list(command),
     do: {:error, :execution_context_required}
+
+  # A tool that keeps alive has its process of the run take the call as one
+  # line; outside a run, or without the option, a process serves one call.
+  defp run_command(
+         %Manifest{keep_alive_ms: ms} = manifest,
+         command,
+         %{run_id: run_id} = input,
+         execution
+       )
+       when is_integer(ms) and is_binary(run_id) do
+    Resident.call({run_id, manifest.name}, command, Jason.encode!(input), execution, ms)
+  end
+
+  defp run_command(_manifest, command, input, execution) do
+    with {:ok, %{stdout: stdout}} <- Execution.run(command, execution, Jason.encode!(input)),
+         do: {:ok, stdout}
+  end
 
   defp run_module(module, input, %Policy{} = execution) do
     if function_exported?(module, :run, 2),

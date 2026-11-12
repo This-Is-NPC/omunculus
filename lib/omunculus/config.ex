@@ -743,6 +743,7 @@ defmodule Omunculus.Config do
              "accounts",
              "interceptors",
              "secrets",
+             "settings",
              "skills",
              "s3"
            ] do
@@ -781,6 +782,7 @@ defmodule Omunculus.Config do
              {:ok, memory_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :memory_bytes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
+             :ok <- check_settings(Map.get(data, "settings", %{})),
              {:ok, s3} <- Omunculus.Artifacts.S3.parse(Map.get(data, "s3"), auth.providers),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
              {:ok, skills} <- parse_skills(Map.get(data, "skills"), config_dir) do
@@ -1317,6 +1319,18 @@ defmodule Omunculus.Config do
   defp parse_mcp_server(_data, _acc, _auth), do: {:error, {:mcp, {:invalid, :servers}}}
 
   defp name_of(data), do: Map.get(data, "name")
+
+  # `[settings.<tool>]`: what a tool's `settings` view reads, each tool's own table.
+  defp check_settings(data) when is_map(data),
+    do:
+      if(Enum.all?(data, fn {_tool, table} -> is_map(table) end),
+        do: :ok,
+        else: invalid_settings()
+      )
+
+  defp check_settings(_data), do: invalid_settings()
+
+  defp invalid_settings, do: {:error, {:settings, {:invalid, :table}}}
 
   # `[secrets.<tool>]`: each name a tool's process receives, bound to the
   # `[auth]` provider whose credential it is.

@@ -31,6 +31,8 @@ defmodule Omunculus.Tool.Views do
     `recent`, without an anchor, the project's last `limit` closed runs,
     newest first, each with its work's title, state, workflow and stage
     and its events.
+  - `settings`: the `[settings.<key>]` table of the config, `key` being the
+    view's own key; empty without one.
   - `events`: `relation` `run`, the events of the call's run so far,
     `cause`, the event that made the call's run due, or `attachments`, the
     files attached in the run's conversation, oldest first, each as its
@@ -79,7 +81,7 @@ defmodule Omunculus.Tool.Views do
           limit: pos_integer | nil
         }
 
-  @computed ~w(catalog workspaces agents paths grant_scopes skills artifacts)
+  @computed ~w(catalog workspaces agents paths grant_scopes skills artifacts settings)
   @work_states ~w(open waiting done cancelled)
   @work_includes %{"last_comment" => :last_comment, "comments" => :comments, "runs" => :runs}
   @comment_targets %{"work" => :work, "request" => :request, "inbox" => :inbox}

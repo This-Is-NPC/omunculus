@@ -461,6 +461,22 @@ defmodule Omunculus.Tool.ManifestTest do
     assert Manifest.load(path) == {:error, {:invalid, :config}}
   end
 
+  test "keep_alive_ms is a positive integer of a command tool", %{dir: dir} do
+    toml = fn extra -> write_toml(dir, "name = \"t\"\nkind = \"tool\"\n" <> extra) end
+
+    assert {:ok, %{keep_alive_ms: 5000}} =
+             Manifest.load(toml.("command = [\"./run\"]\nkeep_alive_ms = 5000\n"))
+
+    assert {:ok, %{keep_alive_ms: nil}} = Manifest.load(toml.("command = [\"./run\"]\n"))
+
+    for bad <- [
+          "command = [\"./run\"]\nkeep_alive_ms = 0\n",
+          "module = \"X\"\nkeep_alive_ms = 5\n"
+        ] do
+      assert Manifest.load(toml.(bad)) == {:error, {:invalid, :keep_alive_ms}}
+    end
+  end
+
   test "parse/2 builds a manifest from a map", %{dir: dir} do
     assert {:ok, manifest} =
              Manifest.parse(

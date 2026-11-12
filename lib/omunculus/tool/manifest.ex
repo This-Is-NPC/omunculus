@@ -11,11 +11,14 @@ defmodule Omunculus.Tool.Manifest do
   those its server's `secrets` binds. A skill's `uses` are the tools its
   `allowed-tools` names, for a client to show; the ceiling still decides.
   A tool found in a folder of `[tools] paths` has that folder as its
-  `root`, which its commands read with the folders beside its own.
+  `root`, which its commands read with the folders beside its own. A
+  `command` tool with `keep_alive_ms` keeps its process between the calls
+  of a run (`Omunculus.Tool.Resident`).
   """
 
   alias Omunculus.Execution.Command
   alias Omunculus.Tool.Views
+  alias Omunculus.Tools.Report
 
   @enforce_keys [:name, :kind, :dir]
   defstruct name: nil,
@@ -38,6 +41,7 @@ defmodule Omunculus.Tool.Manifest do
             dir: nil,
             root: nil,
             mcp: nil,
+            keep_alive_ms: nil,
             config: true
 
   @type t :: %__MODULE__{
@@ -61,10 +65,11 @@ defmodule Omunculus.Tool.Manifest do
           dir: String.t() | nil,
           root: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
+          keep_alive_ms: pos_integer | nil,
           config: boolean
         }
 
-  @known_keys ~w(name kind triggers description tags groups command module parameters schemas views events chains then secrets agent config)
+  @known_keys ~w(name kind triggers description tags groups command module parameters schemas views events chains then secrets agent keep_alive_ms config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -111,12 +116,15 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
          {:ok, schemas} <- schemas(raw),
+         parameters = with_report(parameters),
+         schemas = Map.new(schemas, fn {variant, schema} -> {variant, with_report(schema)} end),
          {:ok, views} <- Views.parse(Map.get(raw, "views", %{})),
          {:ok, chains} <- optional_string_list(raw, "chains", []),
          {:ok, then} <- optional_string_list(raw, "then", []),
          :ok <- validate_then(then, chains),
          {:ok, secrets} <- secrets(raw, command),
          {:ok, {triggers, events, agent}} <- kind_fields(raw, kind),
+         {:ok, keep_alive_ms} <- keep_alive(raw, kind, command),
          {:ok, config} <- optional_bool(raw, "config", true),
          :ok <- check_config_flag(kind, triggers, config) do
       {:ok,
@@ -138,8 +146,24 @@ defmodule Omunculus.Tool.Manifest do
          secrets: secrets,
          agent: agent,
          dir: dir,
+         keep_alive_ms: keep_alive_ms,
          config: config
        }}
+    end
+  end
+
+  # A `report` property of `{"$ref" = "report"}` takes the one report schema.
+  defp with_report(%{"properties" => %{"report" => %{"$ref" => "report"}} = properties} = schema),
+    do: %{schema | "properties" => %{properties | "report" => Report.schema()}}
+
+  defp with_report(schema), do: schema
+
+  # Only an external command of a tool can stay alive between calls.
+  defp keep_alive(raw, kind, command) do
+    case Map.fetch(raw, "keep_alive_ms") do
+      :error -> {:ok, nil}
+      {:ok, ms} when is_integer(ms) and ms > 0 and kind == "tool" and command != nil -> {:ok, ms}
+      _ -> {:error, {:invalid, :keep_alive_ms}}
     end
   end
 
