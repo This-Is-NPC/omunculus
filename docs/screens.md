@@ -347,10 +347,13 @@ A composer's bar holds its title (the subject, or "New message") and three
 buttons: minimize (Esc), which folds it to a tab that keeps what is written and
 which a click restores; expand, which shows it large and centred over a dim
 backdrop; and close, which asks to save a draft or discard only when something
-is written. Under the bar: To (one agent, as a chip, with autocomplete and the
-address book; a reply may hold several), Subject, the body, which fills the
-window, MORE for the message a reply answers, then the files, DISCARD and SEND,
-the filled action. Ctrl+Enter sends.
+is written. Under the bar, a label column and one row per field: To (one agent,
+as a chip, with autocomplete and the address book; a reply may hold several; it
+is one row high and grows only when its chips wrap) and Subject (a single-line
+field, empty on a new message and "Re: ..." on a reply, editable on both). Then
+the body, which fills the window, MORE for the message a reply answers, and one
+footer row: Attach, the files as chips, DISCARD and SEND, the filled action. The
+three kinds have Attach. Ctrl+Enter sends.
 
 Under 700 px the composers are the tabs of one strip, each with its title and
 an x; the active one fills the screen, and the button at the strip's end

@@ -63,7 +63,9 @@ RowLayout {
   Item {
     id: frame
     Layout.fillWidth: true
-    implicitHeight: Math.max(Theme.size.controlDense, flow.implicitHeight + 2 * Theme.space.tight)
+    Layout.alignment: Qt.AlignTop
+    // One row high; it grows only when the chips wrap.
+    implicitHeight: Math.max(Theme.size.controlDense, flow.implicitHeight + 2)
 
     InputFrame { anchors.fill: parent; focused: entry.activeFocus }
     MouseArea { anchors.fill: parent; onClicked: entry.forceActiveFocus() }
@@ -118,9 +120,10 @@ RowLayout {
         }
       }
 
+      // The words being typed: all the row while no one is chosen, else a little after the last chip.
       TextBox {
         id: entry
-        width: Theme.size.control * 4
+        width: field.chosen.length === 0 ? flow.width : Theme.size.control * 2
         dense: true
         background: null
         placeholderText: field.chosen.length === 0 ? (Mail.projects.length === 0 ? (Mail.connected ? "reading the agents" : "the server does not answer") : field.placeholder) : ""
@@ -155,6 +158,7 @@ RowLayout {
 
   IconButton {
     id: open
+    Layout.alignment: Qt.AlignTop
     name: "contacts"
     tip: "address book: every account you can write to"
     highlighted: book.opened
