@@ -5,13 +5,15 @@
 #              [--against <result folder>] [--code-mode] [--agent-model <agent>=<model>]...
 #              --resume <result folder> continues unfinished saved executions
 #              --overlay <file> applies an experimental TOML configuration overlay
+#              --usd-cap <usd> stops an execution once its cost passes it
 #   recovery   replay a frozen coordination checkpoint with control and supervision
 #   score      judge and score again every execution of a result folder, then its report
 #   report     write a result folder's summary, report and comparison; --against
 #              <result folder> sets what it is compared with
+#   arms       paired report of a hierarchy run against a single-agent run of the same tasks
 #   compare    compare two result folders, the earlier first
 for file <-
-      ~w(project task requests judge person deploy score resources report selftest usage deadline runner recovery),
+      ~w(project task requests judge person deploy suite score resources report selftest usage deadline runner recovery arms),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
 
 case System.argv() do
@@ -43,6 +45,7 @@ case System.argv() do
           model: :string,
           resume: :string,
           overlay: :string,
+          usd_cap: :float,
           agent_model: :keep,
           k: :integer,
           label: :string,
@@ -109,12 +112,19 @@ case System.argv() do
     EquivalentExchange.Report.write(folder)
     IO.puts(Path.join(folder, "report.md"))
 
+  ["arms", hierarchy, single | argv] ->
+    {options, _rest, _invalid} = OptionParser.parse(argv, strict: [out: :string])
+
+    report = EquivalentExchange.Arms.report(hierarchy, single)
+    if options[:out], do: File.write!(options[:out], report)
+    IO.puts(report)
+
   ["compare", before, now] ->
     IO.puts(EquivalentExchange.Report.compare_folders(before, now))
 
   _other ->
     IO.puts(
-      "usage: mix run eval/run.exs selftest | run [options] | recovery --source <folder> --overlay <file> [--k <count>] [--budget <responses>] | score <folder> | report <folder> [--against <folder>] | compare <before> <now>"
+      "usage: mix run eval/run.exs selftest | run [options] | arms <hierarchy folder> <single folder> [--out <file>] | recovery --source <folder> --overlay <file> [--k <count>] [--budget <responses>] | score <folder> | report <folder> [--against <folder>] | compare <before> <now>"
     )
 
     System.halt(1)

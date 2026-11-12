@@ -42,6 +42,60 @@ defmodule Omunculus.EvalProjectTest do
     refute get_in(base, ["eval", "entry_agent"])
   end
 
+  describe "the single-agent arm" do
+    @single Path.expand("../../eval/overlays/single-agent.toml", __DIR__)
+    @delegating ~w(work delegate continue break wait done cancel ask escalate forward reopen retire grant deliver start_sale start_design start_build next_stage wait_client sequence)
+
+    for configuration <- ~w(delegation workflow dream-team agency) do
+      test "#{configuration} collapses into one agent with the union of the tools" do
+        configuration = unquote(configuration)
+
+        build =
+          &EquivalentExchange.Project.build(
+            Fixtures.tmp_dir(),
+            configuration,
+            {"fake", false},
+            nil,
+            %{},
+            &1
+          )
+
+        assert {:ok, hierarchy} = build.(nil)
+        assert {:ok, single} = build.(@single)
+        assert {:ok, tree} = Config.load(hierarchy)
+        assert {:ok, lone} = Config.load(single)
+
+        [{name, agent}] = Map.to_list(lone.agents)
+        assert agent.depth == 0
+        assert lone.workflows == %{}
+        assert lone.default_agent == name
+        assert lone.session_max_bytes > (tree.session_max_bytes || 0)
+        assert lone.session_ttl_ms > (tree.session_ttl_ms || 0)
+
+        union =
+          expanded(hierarchy)["agents"]
+          |> Map.values()
+          |> Enum.flat_map(&(&1["tools"] || []))
+          |> Enum.reject(&(&1 in @delegating))
+          |> MapSet.new()
+
+        have = MapSet.new(read(single)["agents"][name]["tools"])
+        refute Enum.any?(@delegating, &(&1 in have))
+        # `sequence` stands for `end`, which a lone agent keeps.
+        assert MapSet.subset?(union, have)
+        assert Enum.sort(MapSet.to_list(MapSet.difference(have, union))) in [[], ["end"]]
+        assert map_size(tree.agents) > 1
+      end
+    end
+
+    defp read(path), do: Toml.decode_file!(path)
+
+    defp expanded(path) do
+      {:ok, data, _required} = path |> read() |> Config.Packs.expand(Path.dirname(path))
+      data
+    end
+  end
+
   test "steward recovery preserves permission origins and returns client presentation to the front desk",
        %{conn: conn} do
     overlay = Path.expand("../../eval/overlays/course-recovery.toml", __DIR__)

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+# The providers' keys come from .env, as the dev server's do.
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
+eval "tasks=(${usage_task:-})"
+common=(--model "$usage_model" --configuration "$usage_configuration" --k "$usage_k" --usd-cap "$usage_usd_cap" --jobs "$usage_jobs" --timeout "$usage_timeout")
+for each in "${tasks[@]}"; do
+  common+=(--task "$each")
+done
+
+# Arm A is the configuration as it is; arm B lays the single-agent overlay over it.
+folder() { mix run eval/run.exs run "${common[@]}" "$@" | tee /dev/stderr | tail -n 1; }
+a=$(folder --label "${usage_label}-hierarchy")
+b=$(folder --label "${usage_label}-single" --overlay eval/overlays/single-agent.toml)
+mix run eval/run.exs arms "$a" "$b" --out "$a/arms.md"
+echo "report: $a/arms.md" >&2

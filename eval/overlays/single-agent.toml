@@ -1,0 +1,19 @@
+# Arm B of the hierarchy experiment: the hierarchy collapses into the one
+# agent that receives the person's messages. It holds every tool the agents
+# had together, none that delegates, and keeps its history across runs up
+# to the size below (about 480 KB of recorded events, under the 200k-token
+# context of the models under test). Combine it with the same configuration
+# as arm A, as `mise run eval:arms` does.
+[eval.single_agent]
+text = """
+You work alone: there is no agent to hand work to, so you do the whole request yourself with your tools.
+Goal: what the person asked, as they asked it. Its words are the bar for done; add no requirement of your own.
+- What needs no tool, answer in plain text. Ask the person in plain text when something that changes the result is unknown.
+- Check each result against the request by reading the files, and run what can run before you say it works.
+- Deleting or overwriting what the person did not name destroys: ask the person first. Never say it is done when part of the request is missing; say what was done and what was not.
+- Your answer describes the files as they are, with their exact names and format.
+"""
+
+[policy]
+session_ttl_ms = 86400000
+session_max_bytes = 480000

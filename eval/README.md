@@ -27,6 +27,7 @@ skills/             the skills every project declares
 mcp/tickets/        the ticket system every project declares, an MCP server
 fixtures/scores/    hand-scored executions that prove the scoring
 fixtures/judge/     hand-written reports that measure the decider
+overlays/           experimental configuration overlays, such as the single agent of the hierarchy experiment
 judge.toml          the decider and its thresholds
 person.toml         the model that plays the person of a conversation task
 prices.toml         USD per million tokens of the models whose replies carry no cost
@@ -154,7 +155,7 @@ An outcome is how the conversation ended for the person: `answer` (Father
 answered without a work, or the root work waits for the person's next
 message), `done` (the root work closed), `break` (it stopped and said why,
 or was cancelled) or `waiting` (a request that grants something still waits
-on the person). The runner also records `stalled` (a request that grants
+on the person). The runner also records `budget` (the execution passed its `--usd-cap`), `stalled` (a request that grants
 nothing still waits on the person, or a root work waits on no one who will
 move it), `timeout` and `error`; no task expects them.
 
@@ -188,6 +189,7 @@ mise run eval:run -- --model <model> --task brief --configuration negotiated
 mise run eval:run -- --model <model> --k 3 --jobs 24 --against eval/results/<before>
 mise run eval:run -- --model <model> --task ticket-tally --code-mode --label code
 mise run eval:compare -- eval/results/<before> eval/results/<now>
+mise run eval:arms -- --model <model> --task <part> --k 3 --usd-cap <usd>   # hierarchy against one agent
 mix run eval/run.exs report eval/results/<run> --against eval/results/<before>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
 ```
@@ -232,6 +234,8 @@ appends project overrides relative to `eval/`; and `entry_agent` names the
 depth-zero recipient for each client send. The manifest records the overlay.
 The optional [steward recovery experiment](../docs/how-to-measure-course-recovery.md)
 uses these settings; it does not change the baseline agency.
+
+`--usd-cap <usd>` stops an execution once its cost, priced as the report prices it, passes that many US dollars; its outcome is `budget`.
 
 `--agent-model <agent>=<model>` overrides one agent after the packs are
 imported. Repeat it to mix models; agent names and model aliases must exist
@@ -373,6 +377,60 @@ pass. The gold `patch` is the solution the selftest applies.
 statement the importer is tested on. Instances of other languages need
 `--test-command` for their runner, and an environment on the machine in
 which it runs.
+
+## Hierarchy against a single agent
+
+The work tree with short runs (hierarchy, delegation, structured handoffs)
+is what omunculus claims is better than one agent that keeps a long history.
+This experiment tests the claim on the same tasks, model and budget:
+
+- arm A is a configuration as it is, such as `delegation` or `agency`;
+- arm B lays [`overlays/single-agent.toml`](overlays/single-agent.toml) over
+  the same configuration. `[eval.single_agent]` collapses the team into the
+  agent that receives the person's messages: it holds every tool the agents
+  had together, none that delegates (`work`, `delegate`, `continue`, `break`,
+  `wait`, `done`, `cancel`, `ask`, `escalate`, `forward`, `reopen`, `retire`,
+  `grant`, `deliver`, the sales desk's `start_*`, `next_stage` and
+  `wait_client`), no workflow and no interceptor that names one, and a
+  generic text of its own. The overlay's `[policy]` sets `session_ttl_ms` and
+  `session_max_bytes` so that agent keeps its history across the person's
+  messages; edit them to fit the context of the model you run
+  ([docs/config.md](../docs/config.md)).
+
+```sh
+mise run eval:arms -- --model <model> --task <part> --task <part> --k 3 --usd-cap <usd>
+```
+
+It runs arm A, arm B, then writes `arms.md` in arm A's result folder, which
+`mix run eval/run.exs arms <hierarchy folder> <single folder>` writes again.
+`--usd-cap` stops an execution whose cost passes it, in both arms; a call in
+flight when it is crossed still lands, so the total can pass it a little, and
+the execution counts as not passed. `eval:run` takes the same flag.
+
+`arms.md` gives, per task, A, B and B − A for the pass rate, USD, seconds,
+tokens, human requests, calls repeated after a handoff, recovery (stops
+reported plus works reopened) and, for a long-horizon case, the checks held.
+Then a sign test across tasks asks, for each metric, on how many tasks one
+arm did better than the other.
+
+How to read it honestly:
+
+- A task counts once, as the mean of its repetitions. Runs are stochastic: with one
+  or two repetitions a difference may be noise, and the report says so.
+- A sign test needs at least 6 tasks that differ to reach p < 0.05. Below that
+  the report says it cannot conclude, and the tables are a pilot.
+  Many metrics are tested at once, so one p just under 0.05 among them is
+  weak evidence.
+- Passing is only as good as the checks. A task both arms pass or both fail
+  says nothing; look at cost, time and tokens on the tasks both pass.
+- Arm B asks the person in plain text, not through a request, so its human
+  requests are not comparable with arm A's. Recovery is zero for a single
+  agent by construction: it has no works to reopen.
+- Arm B does not receive the specialists' texts, only its own. A pass-rate
+  gap may come from that text as much as from the structure.
+- The cap makes cost comparable for the executions that stay under it. When
+  executions hit it, compare the pass rates, not the costs.
+- The cost counts the agents' calls only, not the simulated person's or the decider's.
 
 ## The decider
 

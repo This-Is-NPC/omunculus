@@ -108,6 +108,20 @@ run = "scripts/dev-studio"
 description = "Write docs/cli.md from the binary's moduledoc and the cli tools' manifests"
 run = "scripts/docs-cli"
 
+[tasks."eval:arms"]
+description = "Equivalent Exchange: the same tasks as a work tree and as one agent with a long session, then the paired report (mise run eval:arms -- --model <model> --task fix-slugify --k 1)"
+run = "scripts/eval-arms"
+usage = '''
+flag "--model <model>" help="Model every agent runs on, in both arms" required=#true
+flag "--task <part>" var=#true help="Run only the tasks whose id holds this part" required=#true
+flag "--configuration <name>" help="The hierarchy of arm A; arm B collapses it" default="delegation"
+flag "--k <count>" help="Repetitions per task and arm" default="1"
+flag "--usd-cap <usd>" help="Stops an execution once its cost passes this, in both arms" required=#true
+flag "--jobs <count>" help="Executions run at once" default="1"
+flag "--timeout <seconds>" help="Seconds an execution may take, or infinity" default="900"
+flag "--label <name>" help="Prefix of the two result folders" default="arms"
+'''
+
 [tasks."eval:compare"]
 description = "Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
 run = "scripts/eval-compare"
@@ -145,6 +159,7 @@ flag "--jobs <count>" help="Executions run at once"
 flag "--against <folder>" help="Result folder the report compares with"
 flag "--code-mode" help="Turn on the model's code_mode"
 flag "--overlay <file>" help="Experimental TOML configuration overlay"
+flag "--usd-cap <usd>" help="Stop an execution once its cost passes this many US dollars"
 flag "--resume <folder>" help="Continue the unfinished executions of a result folder; takes no other flag"
 '''
 

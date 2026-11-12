@@ -81,6 +81,7 @@ defmodule EquivalentExchange.Runner do
 
     code_mode = Keyword.get(options, :code_mode, false)
     overlay = if options[:overlay], do: Path.expand(options[:overlay])
+    usd_cap = options[:usd_cap]
 
     agent_models =
       options
@@ -126,6 +127,7 @@ defmodule EquivalentExchange.Runner do
       agent_models: agent_models,
       code_mode: code_mode,
       overlay: overlay,
+      usd_cap: usd_cap,
       repetitions: k,
       configurations: plan |> Enum.map(&elem(&1, 1)) |> Enum.uniq(),
       tasks: Enum.map(tasks, & &1.id),
@@ -140,7 +142,7 @@ defmodule EquivalentExchange.Runner do
     # run at once; a line is printed as each one ends.
     jobs = Keyword.get(options, :jobs, 1)
     plan = Enum.map(plan, fn {task, configuration, n} -> {task, configuration, n, false} end)
-    run_plan(folder, plan, {model, code_mode, agent_models, overlay}, timeout, jobs)
+    run_plan(folder, plan, {model, code_mode, agent_models, overlay, usd_cap}, timeout, jobs)
   end
 
   defp resume(folder) do
@@ -196,7 +198,7 @@ defmodule EquivalentExchange.Runner do
       folder,
       plan,
       {manifest["model"], manifest["code_mode"], manifest["agent_models"] || %{},
-       manifest["overlay"]},
+       manifest["overlay"], manifest["usd_cap"]},
       Deadline.parse(to_string(manifest["timeout_s"])),
       manifest["jobs"]
     )
@@ -274,7 +276,7 @@ defmodule EquivalentExchange.Runner do
          task,
          configuration,
          n,
-         {model, code_mode, agent_models, overlay},
+         {model, code_mode, agent_models, overlay, usd_cap},
          timeout_s,
          resume?
        ) do
@@ -333,7 +335,8 @@ defmodule EquivalentExchange.Runner do
             )
           end
         end,
-        elapsed
+        elapsed,
+        fn -> over_cap?(usd_cap, project) end
       )
 
     answers = (played && played.answers) || []
@@ -747,6 +750,7 @@ defmodule EquivalentExchange.Runner do
 
   # How the conversation ended for the person.
   defp outcome(_facts, {:error, :timeout}), do: "timeout"
+  defp outcome(_facts, {:error, :budget}), do: "budget"
   defp outcome(_facts, {:error, _reason}), do: "error"
 
   defp outcome(facts, {:ok, _answers}) do
@@ -931,8 +935,19 @@ defmodule EquivalentExchange.Runner do
   end
 
   defp error({:error, :timeout}), do: "timeout"
+  defp error({:error, :budget}), do: "usd cap reached"
   defp error({:error, reason}), do: CLI.message(reason)
   defp error({:ok, _answers}), do: nil
+
+  # The execution's spend so far, as the report will count it; a call in
+  # flight when the cap is crossed still lands, so the total can pass it.
+  defp over_cap?(nil, _project), do: false
+
+  defp over_cap?(cap, project) do
+    project |> facts() |> usage(project) |> Map.fetch!(:cost) |> Kernel.>(cap)
+  rescue
+    _unreadable -> false
+  end
 
   defp with_store(project, fun) do
     {:ok, config} = Omunculus.Config.load(Path.join(project, "omunculus.toml"))

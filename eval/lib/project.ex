@@ -88,6 +88,7 @@ defmodule EquivalentExchange.Project do
       with :ok <- import_packs(packs, path, model),
            :ok <- compose(path, composition),
            :ok <- adapt_agents(path, eval),
+           :ok <- single_agent(path, Map.get(eval, "single_agent")),
            :ok <- assign_models(path, agent_models, code_mode) do
         if workspace && File.dir?(workspace),
           do: File.cp_r!(workspace, Path.join(dir, "workspace"))
@@ -134,6 +135,73 @@ defmodule EquivalentExchange.Project do
     data = update_in(data, ["tools", "paths"], &((&1 || []) ++ extra_paths))
     File.write!(path, ConfigToml.encode(data))
     :ok
+  end
+
+  # What a work tree is made of: handing work down, answering it up and
+  # asking along the way. A lone agent has no one to do either with.
+  @delegating ~w(work delegate continue break wait done cancel ask escalate forward reopen retire grant deliver start_sale start_design start_build next_stage wait_client)
+
+  @doc "The tools a lone agent stands in for the work tree with: no tool that delegates."
+  @spec single_tools([[String.t()]]) :: [String.t()]
+  def single_tools(lists) do
+    lists
+    |> List.flatten()
+    |> Enum.map(&if(&1 == "sequence", do: "end", else: &1))
+    |> Enum.reject(&(&1 in @delegating))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # `[eval.single_agent]` collapses the hierarchy into the agent that
+  # receives the person's messages: it holds every tool the agents had
+  # together, minus those that delegate, and the `text` the table gives;
+  # the workflows, depth layers and interceptors that named agents go. The
+  # packs are laid out first, so the team's agents are among those merged.
+  defp single_agent(_path, nil), do: :ok
+
+  defp single_agent(path, %{"text" => text}) do
+    {:ok, data, _required} =
+      path |> Toml.decode_file!() |> Omunculus.Config.Packs.expand(Path.dirname(path))
+
+    entry = entry_agent(data)
+
+    tools =
+      data["agents"] |> Map.values() |> Enum.map(&Map.get(&1, "tools", [])) |> single_tools()
+
+    agent =
+      data["agents"]
+      |> Map.fetch!(entry)
+      |> Map.drop(["negotiable"])
+      |> Map.merge(%{"tools" => tools, "text" => text})
+
+    data =
+      data
+      |> Map.put("agents", %{entry => agent})
+      |> Map.put("workflows", %{})
+      |> Map.update(
+        "interceptors",
+        [],
+        &Enum.reject(&1, fn each -> Map.has_key?(each, "workflow") end)
+      )
+      |> Map.update("policy", %{}, &Map.drop(&1, ["depth"]))
+      |> put_in(["policy", "default_agent"], entry)
+
+    File.write!(path, ConfigToml.encode(data))
+
+    case Omunculus.Config.load(path) do
+      {:ok, _config} -> :ok
+      {:error, reason} -> {:error, {:single_agent, reason}}
+    end
+  end
+
+  # The agent that receives each message of the person.
+  defp entry_agent(data) do
+    top = for {name, %{"depth" => 0}} <- data["agents"], do: name
+
+    case {get_in(data, ["policy", "default_agent"]), top} do
+      {name, _top} when is_binary(name) -> name
+      {nil, [name]} -> name
+    end
   end
 
   defp assign_models(path, agent_models, code_mode) do

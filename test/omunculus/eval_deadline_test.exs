@@ -65,4 +65,21 @@ defmodule Omunculus.EvalDeadlineTest do
       assert_raise ArgumentError, fn -> Deadline.parse(value) end
     end
   end
+
+  test "a spent budget stops the worker before the time does" do
+    parent = self()
+
+    assert Deadline.run(
+             :infinity,
+             fn ->
+               send(parent, {:running, self()})
+               Process.sleep(:infinity)
+             end,
+             0,
+             fn -> true end
+           ) == {{:error, :budget}, nil}
+
+    assert_received {:running, worker}
+    refute Process.alive?(worker)
+  end
 end

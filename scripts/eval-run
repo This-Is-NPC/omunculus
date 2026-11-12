@@ -11,8 +11,8 @@ fi
 
 # The task's flags, from the usage_* variables mise sets.
 args=()
-for flag in model k label timeout jobs against overlay resume; do
-  value=usage_$flag
+for flag in model k label timeout jobs against overlay resume usd-cap; do
+  value=usage_${flag//-/_}
   [[ -z ${!value:-} ]] || args+=("--$flag" "${!value}")
 done
 # A repeatable flag: mise joins its values, shell-quoted, in one variable.
