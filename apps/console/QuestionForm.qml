@@ -48,6 +48,7 @@ ColumnLayout {
 
   // The views around the form that scroll, nearest first.
   property var views: []
+  property var carriers: []
   // How far above their place the actions float, and how many items start
   // under them there.
   property real lift: 0
@@ -97,11 +98,16 @@ ColumnLayout {
 
   function collect() {
     const found = []
+    const path = []
     for (let at = form.parent; at; at = at.parent) {
+      path.push(at)
       if (typeof at.contentY === "number" && at.contentItem)
         found.push(at)
     }
     views = found
+    // Everything from the form up to the outermost view: its place in the
+    // view moves when any of them does.
+    carriers = found.length > 0 ? path.slice(0, path.indexOf(found[found.length - 1]) + 1) : []
     place()
   }
 
@@ -156,6 +162,15 @@ ColumnLayout {
   Component.onCompleted: Qt.callLater(collect)
   onHeightChanged: place()
 
+  Instantiator {
+    model: form.carriers
+    delegate: Connections {
+      required property var modelData
+      target: modelData
+      function onYChanged() { form.place() }
+      function onHeightChanged() { form.place() }
+    }
+  }
   Instantiator {
     model: form.views
     delegate: Connections {
