@@ -1,9 +1,11 @@
 import QtQuick
 import QtQuick.Layouts
-import "kit/client/Progress.js" as Progress
-import "kit/ui"
+import "../client/Progress.js" as Progress
 
-// A state as an icon and its word, the same in every progress view.
+// StateMark is a state as an icon and its word, the one status grammar of
+// every view: `state` is a Progress state (working, needs-you, waiting,
+// stopped, failed, done, cancelled, up-next, idle), `text` the words when not
+// the state's own ("WAITING FOR designer"), `clock` a time after them.
 RowLayout {
   id: mark
   property string state

@@ -6,9 +6,8 @@ import "kit/client/Tree.js" as Tree
 import "kit/ui"
 
 // TreeNode is one row of the TREE page (a row of Tree.rows): the agent that
-// talks with you at the root, or a work. The lines on its left draw the tree:
-// a rail for each level above that goes on down, an elbow from its parent to
-// its mark, and a stem from its mark to the rows under it. A work's mark is a
+// talks with you at the root, or a work. The lines on its left are the
+// hierarchy's lifeline (Lifeline), as in every view. A work's mark is a
 // chevron while it handed works down, else a dot in its agent's tone; then its
 // agent in that tone and its title, under them its steps, its cost and what
 // it handed down while folded, and a badge per request between it and others.
@@ -97,41 +96,15 @@ Item {
   Accessible.role: Accessible.TreeItem
   Accessible.name: said ? agent + ", " + said.text.toLowerCase() + (node && node.title ? ", " + node.title : "") : agent
 
-  // The lines of the tree, in the line's ink.
-  Repeater {
-    model: branch.row.rails
-    delegate: Rectangle {
-      required property bool modelData
-      required property int index
-      visible: modelData
-      x: index * branch.unit + branch.unit / 2
-      width: 1
-      height: branch.height
-      color: Theme.faint
-    }
-  }
-  Rectangle {
-    visible: branch.row.depth > 0
-    x: branch.elbowX
-    width: 1
-    height: branch.row.last ? branch.markY : branch.height
-    color: Theme.faint
-  }
-  Rectangle {
-    visible: branch.row.depth > 0
-    x: branch.elbowX
-    y: branch.markY
-    width: branch.markX - branch.elbowX - Theme.space.tight
-    height: 1
-    color: Theme.faint
-  }
-  Rectangle {
-    visible: branch.row.stem
-    x: branch.markX
-    y: branch.markY + Theme.space.tight
-    width: 1
-    height: branch.height - y
-    color: Theme.faint
+  // The lines of the tree.
+  Lifeline {
+    depth: branch.row.depth
+    rails: branch.row.rails
+    line: branch.row.depth > 0 ? "elbow" : "none"
+    last: branch.row.last
+    stem: branch.row.stem
+    unit: branch.unit
+    markY: branch.markY
   }
 
   // The picked row's wash, from its mark to the right edge; the keyboard's
