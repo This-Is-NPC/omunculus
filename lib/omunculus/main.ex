@@ -7,6 +7,8 @@ defmodule Omunculus.Main do
 
   @spec run([String.t()]) :: :ok
   def run(argv) do
+    # A release's eval loads the applications without starting them.
+    {:ok, _started} = Application.ensure_all_started(:omunculus)
     Application.put_env(:omunculus, :package_tools, Application.app_dir(:omunculus, "priv/tools"))
 
     case argv do
