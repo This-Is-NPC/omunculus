@@ -432,6 +432,12 @@ defmodule Omunculus.Store.InterceptionTest do
     assert Enum.map(events, & &1.type) == ~w(tool request)
     review = request(conn, review_of(events).request_id)
     assert review.interception.action == "attach"
+    assert review.interception.level == 0
+    assert review.interception.under == nil
+
+    assert Omunculus.Store.Interception.files(review.interception.emit) ==
+             [%{"name" => "plan.txt", "bytes" => 8}]
+
     assert review.reason =~ ~s(attach plan.txt: "Plan")
     assert rows(conn, "SELECT id FROM events WHERE type = 'attach'") == []
 
@@ -560,5 +566,24 @@ defmodule Omunculus.Store.InterceptionTest do
              )
 
     assert Enum.map(events, & &1.type) == ~w(tool comment)
+  end
+
+  test "the files of a held put_artifact and the others" do
+    files = &Omunculus.Store.Interception.files/1
+
+    tool = fn args ->
+      %{"type" => "tool", "body" => %{"name" => "put_artifact", "args" => args}}
+    end
+
+    assert files.(tool.(%{"name" => "plan", "content" => "abcd"})) == [
+             %{"name" => "plan", "bytes" => 4}
+           ]
+
+    assert files.(tool.(%{"name" => "plan", "data" => %{"a" => 1}})) == [
+             %{"name" => "plan", "bytes" => 7}
+           ]
+
+    assert files.(tool.(%{"name" => "plan"})) == []
+    assert files.(%{"type" => "comment", "body" => %{"body" => "x"}}) == []
   end
 end

@@ -29,7 +29,7 @@ defmodule Omunculus.Server.Contract do
     |> Omunculus.Artifacts.group()
     |> Enum.map(fn artifact ->
       Map.update!(artifact, "versions", fn versions ->
-        Enum.map(versions, &Map.take(&1, ~w(version media_type bytes sha256 note at by)))
+        Enum.map(versions, &Map.take(&1, ~w(version media_type bytes sha256 note at by work_id)))
       end)
     end)
   end
@@ -114,6 +114,9 @@ defmodule Omunculus.Server.Contract do
       summary: review.summary,
       target: Omunculus.Store.Interception.target_label(review.target),
       args: Omunculus.Store.Interception.lines(review.emit),
+      files: Omunculus.Store.Interception.files(review.emit),
+      level: review.level,
+      under: review.under,
       step: review.step + 1,
       of: length(review.reviewers)
     }
@@ -121,35 +124,81 @@ defmodule Omunculus.Server.Contract do
   def member(row), do: Map.take(row, ~w(issuer subject role updated_at)a)
 
   @doc """
-  Usage per agent, each with the model it is configured with and, when that
-  model has a `price`, its `usd`; and their sum, with the `usd` of the
-  agents priced and the models of the others in `unpriced`. `models` maps an
-  agent to its model, `prices` a model to its price or nil.
+  Usage per agent and per work, from the model `calls` of `Access.usage/3`.
+  Each call is priced by the model it used, or by its agent's configured
+  model in `models` when the reply names none; `prices` maps a model to its
+  price or nil. An entry holds the totals, its `usd` (nil when no call has a
+  price), the `models` used and those `unpriced`. A work has `own`, its
+  calls, with each call's model and `usd` in `calls`, and `branch`, with the
+  works below it, `parents` mapping a work to its parent. Work "" is the
+  calls made outside any work.
   """
-  def usage(per_agent, models, prices) do
-    agents =
-      for {agent, totals} <- per_agent do
-        model = models[agent]
+  def usage(calls, parents, models, prices) do
+    calls =
+      for call <- calls do
+        model = call.model || models[call.agent]
         price = prices[model]
-
-        Map.merge(
-          %{agent: agent, model: model, usd: price && Omunculus.Usage.spend(totals, price)},
-          totals
-        )
+        Map.merge(call, %{model: model, usd: price && Omunculus.Usage.spend(call.totals, price)})
       end
 
-    priced = Enum.filter(agents, & &1.usd)
+    agents =
+      calls
+      |> Enum.group_by(& &1.agent)
+      |> Enum.sort()
+      |> Enum.map(fn {agent, own} -> Map.put(entry(own), :agent, agent) end)
 
-    total =
-      agents
-      |> Enum.map(&Map.drop(&1, [:agent, :model, :usd]))
-      |> Omunculus.Usage.total()
-      |> Map.merge(%{
-        usd: Enum.reduce(priced, 0.0, &(&1.usd + &2)),
-        unpriced: agents |> Enum.reject(& &1.usd) |> Enum.map(& &1.model) |> Enum.uniq()
-      })
+    own = Enum.group_by(calls, & &1.work)
 
-    %{agents: agents, total: total}
+    branch =
+      Enum.reduce(calls, %{}, fn call, acc ->
+        call.work
+        |> lineage(parents)
+        |> Enum.reduce(acc, fn id, acc -> Map.update(acc, id, [call], &[call | &1]) end)
+      end)
+
+    works =
+      for {id, below} <- Enum.sort(branch) do
+        mine = Map.get(own, id, [])
+
+        %{
+          work: id,
+          own: entry(mine),
+          branch: entry(Enum.reverse(below)),
+          calls:
+            for call <- mine do
+              call.totals
+              |> Map.take([:fresh, :cache_write, :cached, :output])
+              |> Map.merge(%{model: call.model, usd: call.usd})
+            end
+        }
+      end
+
+    total = entry(calls)
+    %{agents: agents, works: works, total: %{total | usd: total.usd || 0.0}}
+  end
+
+  # A work and its ancestors; "" has none.
+  defp lineage("", _parents), do: [""]
+
+  defp lineage(id, parents),
+    do: [id | if(parents[id], do: lineage(parents[id], parents), else: [])]
+
+  defp entry(calls) do
+    priced = Enum.filter(calls, & &1.usd)
+
+    calls
+    |> Enum.map(& &1.totals)
+    |> Omunculus.Usage.total()
+    |> Map.merge(%{
+      usd: if(priced == [], do: nil, else: Enum.reduce(priced, 0.0, &(&1.usd + &2))),
+      models: calls |> Enum.map(& &1.model) |> Enum.reject(&is_nil/1) |> Enum.uniq(),
+      unpriced:
+        calls
+        |> Enum.reject(& &1.usd)
+        |> Enum.map(& &1.model)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+    })
   end
 
   def conversation(row),

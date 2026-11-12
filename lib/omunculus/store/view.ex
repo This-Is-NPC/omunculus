@@ -376,26 +376,29 @@ defmodule Omunculus.Store.View do
   """
   @spec attachments(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def attachments(conn, conversation_id) do
-    carried(conn, conversation_id, "'prompt', 'reply', 'attach'", fn body ->
+    carried(conn, conversation_id, "'prompt', 'reply', 'attach'", fn body, _event ->
       Map.fetch!(body, "attachments")
     end)
   end
 
   @doc """
   The artifact versions of a conversation, oldest first: each as its
-  `artifact` event describes it, with that event's `event_id`, its `at` and
-  `by`.
+  `artifact` event describes it, with that event's `event_id`, its `at`,
+  `by` and the `work_id` of the work that made it.
   """
   @spec artifacts(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def artifacts(conn, conversation_id),
-    do: carried(conn, conversation_id, "'artifact'", fn body -> [body] end)
+    do:
+      carried(conn, conversation_id, "'artifact'", fn body, event ->
+        [Map.put(body, "work_id", event.work_id)]
+      end)
 
   defp carried(conn, conversation_id, types, files) do
     with {:ok, events} <-
            Query.all(
              conn,
              """
-             SELECT id, at, actor_kind, actor_id, body FROM events
+             SELECT id, at, work_id, actor_kind, actor_id, body FROM events
              WHERE conversation_id = ? AND type IN (#{types})
                AND (type = 'artifact' OR json_extract(body, '$.attachments') IS NOT NULL)
              ORDER BY sequence
@@ -408,7 +411,7 @@ defmodule Omunculus.Store.View do
 
          event.body
          |> Jason.decode!()
-         |> files.()
+         |> files.(event)
          |> Enum.map(&Map.merge(&1, %{"event_id" => event.id, "at" => event.at, "by" => by}))
        end)}
     end
@@ -462,9 +465,29 @@ defmodule Omunculus.Store.View do
   defp with_interception(conn, request) do
     with {:ok, review} <-
            Query.one(conn, "SELECT * FROM interceptions WHERE request_id = ?", [request.id]) do
-      {:ok, Map.put(request, :interception, review && decode_interception(review))}
+      with {:ok, review} <- place(conn, review && decode_interception(review)),
+           do: {:ok, Map.put(request, :interception, review)}
     end
   end
+
+  # Where the actor stands: its work's depth, and the work above it.
+  defp place(_conn, nil), do: {:ok, nil}
+
+  defp place(conn, %{actor: %{work_id: work_id}} = review) when is_binary(work_id) do
+    with {:ok, work} <- Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id]),
+         {:ok, parent} <-
+           Query.one(conn, "SELECT assignee, title FROM works WHERE id = ?", [
+             work && work.parent_id
+           ]) do
+      {:ok,
+       Map.merge(review, %{
+         level: if(work, do: work_depth(conn, work), else: 0),
+         under: parent && %{agent: parent.assignee, title: parent.title}
+       })}
+    end
+  end
+
+  defp place(_conn, review), do: {:ok, Map.merge(review, %{level: 0, under: nil})}
 
   defp decode_interception(review) do
     %{

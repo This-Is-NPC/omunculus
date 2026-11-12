@@ -5,7 +5,7 @@ import QtQuick.Controls.Basic as C
 import "kit/ui"
 
 // ReviewView reads one review as a card, bordered in the warning tone: who
-// acted, what it wants to do and the text it holds, then APPROVE (the one
+// acted with its level (depth marks, "level 3, under project-manager"), what it wants to do and the text it holds, then APPROVE (the one
 // filled action), EDIT and DENY. DETAILS shows the arguments as lines and what
 // each answer does. While an answer is on its way the buttons are off and SENDING shows. EDIT and DENY open the reply box under it, as a reply is written: EDIT
 // holds the text to rewrite and sends `edit` with the new words; DENY takes an
@@ -116,12 +116,51 @@ Item {
               Label { text: Mail.stamp(view.review.at); color: Theme.dim; font.pixelSize: 10 }
             }
 
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: 6
+              Row {
+                spacing: 3
+                Repeater {
+                  model: view.review.level + 1
+                  delegate: Rectangle {
+                    required property int index
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: index === view.review.level ? Theme.primary : Theme.dim
+                  }
+                }
+              }
+              Label {
+                Layout.fillWidth: true
+                text: "level " + view.review.level + (view.review.under ? ", under " + view.review.under.agent : "")
+                color: Theme.dim
+                font.pixelSize: 10
+                elide: Text.ElideRight
+              }
+            }
+
             Label {
               Layout.fillWidth: true
               text: view.review.summary
               font.pixelSize: 15
               font.bold: true
               wrapMode: Text.Wrap
+            }
+
+            Flow {
+              Layout.fillWidth: true
+              visible: view.review.files.length > 0
+              spacing: 8
+              Repeater {
+                model: view.review.files
+                delegate: FileChip {
+                  required property var modelData
+                  file: modelData
+                  enabled: false
+                }
+              }
             }
 
             ColumnLayout {

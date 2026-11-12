@@ -214,6 +214,32 @@ defmodule Omunculus.Store.Interception do
   defp scalar(value) when is_map(value) or is_list(value), do: Jason.encode!(value)
   defp scalar(value), do: readable(value)
 
+  @doc """
+  The files a held action carries, as `%{"name", "bytes"}`: the attachments of
+  an attach, the artifact a `put_artifact` call writes. None for other actions.
+  """
+  @spec files(map) :: [%{String.t() => String.t() | non_neg_integer}]
+  def files(%{"type" => "attach", "body" => %{"attachments" => list}}),
+    do: for(%{"name" => name, "bytes" => bytes} <- list, do: %{"name" => name, "bytes" => bytes})
+
+  def files(%{
+        "type" => "tool",
+        "body" => %{"name" => "put_artifact", "args" => %{"name" => name} = args}
+      }) do
+    case args do
+      %{"content" => content} when is_binary(content) ->
+        [%{"name" => name, "bytes" => byte_size(content)}]
+
+      %{"data" => data} when is_map(data) ->
+        [%{"name" => name, "bytes" => data |> Jason.encode!() |> byte_size()}]
+
+      _none ->
+        []
+    end
+  end
+
+  def files(_emit), do: []
+
   @doc "The identity an action reaches, as a reader names it; nil when none."
   @spec target_label(map | nil) :: String.t() | nil
   def target_label(nil), do: nil

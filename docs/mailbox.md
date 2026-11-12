@@ -158,8 +158,11 @@ FORWARD opens a composer with `Fwd:` and the message below your words.
 
 A review opens in the right pane as a card, bordered in the warning tone and
 marked REVIEW and WAITING FOR YOU, from the agent that acted. Its title is the
-sentence of what it wants to do ("Seller wants to run promote"), then the text
-the action holds. DETAILS shows the action's arguments, one `name: value` line
+sentence of what it wants to do ("Seller wants to run promote"), under a line
+that gives the agent's level and the agent above it ("level 3, under
+project-manager"), with one dot per level and the last one lit. A chip for each
+file the action carries, with its name and size, comes next when there are
+any, then the text the action holds. DETAILS shows the action's arguments, one `name: value` line
 each, with the web addresses they hold as links, and a last line that says what
 each answer does ("If you approve: Seller goes ahead as written. Edit changes
 its text. Deny tells Seller no."). The step of a review among several

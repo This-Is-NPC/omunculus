@@ -120,7 +120,11 @@ A review request has an `interception` in the API: `action`, the `summary` sente
 of what would be done, its `target` (who the action reaches, or null), `args`
 (a list of `{name, value}` lines: a tool's arguments, strings as they are, a
 nested value flattened one level; empty for other actions, whose text is in
-the summary), `step` and `of` for its place among the reviewers. Its
+the summary), `files` (a list of `{name, bytes}`: the attachments of a held
+attach, or the artifact a held `put_artifact` writes; empty for other
+actions), `level` (the depth of the actor's work) and `under` (the `agent` and
+`title` of the work above it, or null at level 0), `step` and `of` for its
+place among the reviewers. Its
 `requester` is the actor and its `options` are the three above. The reply
 must name one:
 

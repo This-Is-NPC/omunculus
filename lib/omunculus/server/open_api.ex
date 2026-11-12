@@ -462,31 +462,59 @@ defmodule Omunculus.Server.OpenAPI do
           },
           ~w(replies input fresh cache_write cached output cost)
         ),
+      "UsageEntry" => %{
+        allOf: [
+          ref("UsageTotals"),
+          object(
+            %{
+              usd: %{type: ["number", "null"]},
+              models: array(string()),
+              unpriced: array(string())
+            },
+            ~w(usd models unpriced)
+          )
+        ]
+      },
       "Usage" =>
         object(
           %{
             agents:
               array(%{
-                allOf: [
-                  ref("UsageTotals"),
-                  object(
-                    %{
-                      agent: string(),
-                      model: nullable_string(),
-                      usd: %{type: ["number", "null"]}
-                    },
-                    ["agent"]
-                  )
-                ]
+                allOf: [ref("UsageEntry"), object(%{agent: string()}, ["agent"])]
               }),
+            works:
+              array(
+                object(
+                  %{
+                    work: string(),
+                    own: ref("UsageEntry"),
+                    branch: ref("UsageEntry"),
+                    calls:
+                      array(
+                        object(
+                          %{
+                            model: nullable_string(),
+                            usd: %{type: ["number", "null"]},
+                            fresh: %{type: "number"},
+                            cache_write: %{type: "number"},
+                            cached: %{type: "number"},
+                            output: %{type: "number"}
+                          },
+                          ~w(model usd fresh cache_write cached output)
+                        )
+                      )
+                  },
+                  ~w(work own branch calls)
+                )
+              ),
             total: %{
               allOf: [
-                ref("UsageTotals"),
-                object(%{usd: %{type: "number"}, unpriced: array(string())}, ~w(usd unpriced))
+                ref("UsageEntry"),
+                object(%{usd: %{type: "number"}}, ["usd"])
               ]
             }
           },
-          ~w(agents total)
+          ~w(agents works total)
         ),
       "ConfigView" =>
         object(%{revision: string()}, ["revision"]) |> Map.put(:additionalProperties, true),
@@ -626,10 +654,24 @@ defmodule Omunculus.Server.OpenAPI do
                       type: "array",
                       items: object(%{name: string(), value: string()}, ~w(name value))
                     },
+                    files: %{
+                      type: "array",
+                      items: object(%{name: string(), bytes: %{type: "integer"}}, ~w(name bytes))
+                    },
+                    level: %{type: "integer"},
+                    under: %{
+                      oneOf: [
+                        object(
+                          %{agent: nullable_string(), title: nullable_string()},
+                          ~w(agent title)
+                        ),
+                        %{type: "null"}
+                      ]
+                    },
                     step: %{type: "integer"},
                     of: %{type: "integer"}
                   },
-                  ~w(action summary target args step of)
+                  ~w(action summary target args files level under step of)
                 ),
                 %{type: "null"}
               ]
@@ -717,9 +759,10 @@ defmodule Omunculus.Server.OpenAPI do
             sha256: string(),
             note: string(),
             at: string(),
-            by: string()
+            by: string(),
+            work_id: nullable_string()
           },
-          ~w(version media_type bytes sha256 at by)
+          ~w(version media_type bytes sha256 at by work_id)
         )
     }
   end

@@ -205,7 +205,8 @@ function outcome(who, text) {
 // folder lists and mail never holds: {key, project, conversation, request,
 // from (the requester as a person), summary (a sentence, the subject), args
 // (the {name, value} lines of a tool's arguments), text (what the action
-// holds, "" for a tool or a grant), outcome, reason, at}.
+// holds, "" for a tool or a grant), files (the {name, bytes} the action carries), level (the requester's
+// depth) and under (the parent work's {agent, title}, or null), outcome, reason, at}.
 function reviews(projectId, id, snapshot, me) {
   return snapshot.requests.filter(request => Requests.review(request) && Requests.pending(request) && Requests.forYou(request, me))
     .map(request => {
@@ -214,6 +215,7 @@ function reviews(projectId, id, snapshot, me) {
       return {
         key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
         from: from, summary: sentence(request.interception.summary), args: request.interception.args || [],
+        files: request.interception.files || [], level: request.interception.level || 0, under: request.interception.under || null,
         text: text, outcome: outcome(from.name, text),
         reason: String(request.reason || ""), at: request.created_at
       };
