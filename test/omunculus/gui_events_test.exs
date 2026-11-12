@@ -19,6 +19,17 @@ defmodule Omunculus.GuiEventsTest do
              )
   end
 
+  test "an event that arrives twice, in the history and the stream, shows once" do
+    run!("""
+    const seen = {};
+    const prompt = {type: "prompt", cursor: "4", body: {message: "test"}};
+    check(Events.once(seen, prompt), "first sight", seen);
+    check(!Events.once(seen, {type: "prompt", cursor: "4", body: {message: "test"}}), "second sight", seen);
+    check(Events.once(seen, {type: "prompt", cursor: "5", body: {message: "test"}}), "another message of the same words", seen);
+    check(Events.once(seen, {type: "run.delta", text: "a"}) && Events.once(seen, {type: "run.delta", text: "a"}), "no cursor, no memory", seen);
+    """)
+  end
+
   test "a model event's calls are read from every message shape" do
     run!("""
     const names = body => JSON.stringify(Model.calls(body));

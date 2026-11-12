@@ -266,3 +266,13 @@ function kind(type, body) {
   default: return flat(type.replace(/[.\-_]/g, " "));
   }
 }
+
+// Whether `event` is the first of its cursor in `seen` (cursor -> true), which
+// it then holds: the history read and the stream may both carry an event, and
+// a message must be shown once however many times it arrives.
+function once(seen, event) {
+  if (!event.cursor) return true;
+  if (seen[event.cursor]) return false;
+  seen[event.cursor] = true;
+  return true;
+}

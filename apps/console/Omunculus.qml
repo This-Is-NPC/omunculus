@@ -500,6 +500,7 @@ Singleton {
     agent = ""
     loaded = false
     cursor = ""
+    shown = {}
     rows = {}
     parentOf = {}
     runThread = {}
@@ -534,11 +535,17 @@ Singleton {
     conversationStream.stop()
   }
 
+  // Counts the conversations opened: only the last one's history is read.
+  property int opened: 0
+  // Cursor -> true for each event shown, so none shows twice.
+  property var shown: ({})
+
   function open(id) {
     clear(id)
+    const mine = ++opened
     // The history comes in one read, before the stream resumes after it.
     connection.call("GET", base + "/conversations/" + id + "/events", null, false, data => {
-      if (id !== conversationId)
+      if (id !== conversationId || mine !== opened)
         return
       replaying = true
       data.events.forEach(handle)
@@ -965,6 +972,8 @@ Singleton {
         update(place, "partial", entryAt(place).partial + event.text)
       return
     }
+    if (!Events.once(shown, event))
+      return
     if (event.cursor)
       cursor = event.cursor
     record(event)
