@@ -273,6 +273,10 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{inspect(name)} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
 
+  @spec not_found(String.t()) :: String.t()
+  def not_found(name),
+    do: "refused: #{inspect(name)} has no schema in this run yet; find it with tool_search first"
+
   @doc "What a model reads of a call once its run's context passed `limit` tokens."
   @spec context_full(pos_integer, pos_integer) :: String.t()
   def context_full(tokens, limit),
@@ -294,10 +298,6 @@ defmodule Omunculus.Tools.Out do
   @spec failure(term) :: String.t()
   def failure(reason) when is_binary(reason), do: reason
 
-  @spec not_found(String.t()) :: String.t()
-  def not_found(name),
-    do: "refused: #{inspect(name)} has no schema in this run yet; find it with tool_search first"
-
   def failure({:artifact, {:conflict, name, base, current}}),
     do: "#{name} is at version #{current}, not #{base}: read it again and build on that"
 
@@ -306,14 +306,14 @@ defmodule Omunculus.Tools.Out do
 
   def failure({:artifact, {:invalid, :kind}}), do: "kind is a lowercase word"
   def failure({:artifact, :no_conversation}), do: "this run has no conversation"
-  def failure({:attachment, :not_configured}), do: "[store] attachments is not set"
-  def failure({:attachment, {:invalid, field}}), do: "the #{field} is not valid"
-
-  def failure({:attachment, {:too_large, size, limit}}),
   def failure({:memory, {:unknown, id}}), do: "no memory #{id} is visible to this run"
   def failure({:memory, {:no_scope, scope}}), do: "this run has no #{scope} to remember in"
   def failure({:memory, {:invalid, field}}), do: "the #{field} is not valid"
   def failure({:memory, :no_run}), do: "memory needs a run"
+  def failure({:attachment, :not_configured}), do: "[store] attachments is not set"
+  def failure({:attachment, {:invalid, field}}), do: "the #{field} is not valid"
+
+  def failure({:attachment, {:too_large, size, limit}}),
     do: "#{size} bytes is more than the #{limit} a file may hold"
 
   def failure({:attachment, :not_found}), do: "that file is not kept"

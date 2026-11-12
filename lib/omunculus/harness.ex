@@ -294,8 +294,8 @@ defmodule Omunculus.Harness do
       "agents" => fn spec -> agents_view(project, config, work, catalog, workspace, spec) end,
       "paths" => fn _spec -> path_permissions(project, run, workspace) end,
       "grant_scopes" => fn _spec -> Requests.scopes() end,
-      "skills" => fn _spec -> skills_view(project, run, catalog) end,
       "report_required" => fn _spec -> config.report_required end,
+      "skills" => fn _spec -> skills_view(project, run, catalog) end,
       "artifacts" => fn spec -> artifacts_view(project, run, config, spec) end,
       "settings" => fn spec -> get_in(config.data, ["settings", spec.key]) || %{} end
     })

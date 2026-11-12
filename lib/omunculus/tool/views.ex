@@ -222,12 +222,12 @@ defmodule Omunculus.Tool.Views do
          do: {:ok, %{spec | include: include || [], prefix: prefix}}
   end
 
-  defp source_spec(source, table, spec) when source in @computed do
-    with :ok <- only_keys(table, []), do: {:ok, spec}
   defp source_spec("memories", table, spec) do
     with :ok <- only_keys(table, []), do: {:ok, %{spec | from: ["run"]}}
   end
 
+  defp source_spec(source, table, spec) when source in @computed do
+    with :ok <- only_keys(table, []), do: {:ok, spec}
   end
 
   defp source_spec(source, _table, _spec), do: {:error, {:unknown_source, source}}
@@ -421,11 +421,11 @@ defmodule Omunculus.Tool.Views do
     end
   end
 
-  defp read_from(conn, %{source: "requests"}, _anchor, id, _scope),
-    do: Store.view(conn, "request", id)
   defp read_from(conn, %{source: "memories"}, _anchor, id, _scope),
     do: Store.memories(conn, id)
 
+  defp read_from(conn, %{source: "requests"}, _anchor, id, _scope),
+    do: Store.view(conn, "request", id)
 
   defp read_from(conn, %{source: "prompts"}, _anchor, id, _scope),
     do: Store.view(conn, "prompt", id)

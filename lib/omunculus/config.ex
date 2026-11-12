@@ -61,8 +61,8 @@ defmodule Omunculus.Config do
     :accounts,
     :interceptors,
     :default_agent,
-    :last_run_output_bytes,
     :report_required,
+    :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
     :memory_bytes,
@@ -159,9 +159,9 @@ defmodule Omunculus.Config do
           accounts: %{String.t() => map},
           interceptors: [Omunculus.Interceptors.rule()],
           default_agent: String.t() | nil,
+          report_required: [String.t()],
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
-          report_required: [String.t()],
           conversation_bytes: pos_integer | nil,
           memory_bytes: pos_integer | nil,
           media_bytes: pos_integer | nil,
@@ -784,11 +784,11 @@ defmodule Omunculus.Config do
                  workflows
                ),
              {:ok, default_agent} <- fetch_default_agent(data, agents),
+             {:ok, report_required} <- fetch_report_required(data),
              {:ok, memory_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :memory_bytes),
              {:ok, media_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :media_bytes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
-             {:ok, report_required} <- fetch_report_required(data),
              :ok <- check_settings(Map.get(data, "settings", %{})),
              {:ok, s3} <- Omunculus.Artifacts.S3.parse(Map.get(data, "s3"), auth.providers),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -814,11 +814,11 @@ defmodule Omunculus.Config do
               accounts: accounts,
               interceptors: interceptors,
               default_agent: default_agent,
+              report_required: report_required,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,
               memory_bytes: memory_bytes,
-              report_required: report_required,
               media_bytes: media_bytes,
               send_catalog: send_catalog,
               session_ttl_ms: session.ttl_ms,
@@ -1454,11 +1454,6 @@ defmodule Omunculus.Config do
     end
   end
 
-  # Absent, clients name the agent of every conversation themselves.
-  defp fetch_default_agent(data, agents) do
-    case get_in(data, ["policy", "default_agent"]) do
-      nil ->
-        {:ok, nil}
   @report_fields ~w(done decided pending files verify)
 
   @doc "The fields of a run's report, in the order they are written."
@@ -1481,6 +1476,11 @@ defmodule Omunculus.Config do
     end
   end
 
+  # Absent, clients name the agent of every conversation themselves.
+  defp fetch_default_agent(data, agents) do
+    case get_in(data, ["policy", "default_agent"]) do
+      nil ->
+        {:ok, nil}
 
       name when is_binary(name) ->
         case agents do
