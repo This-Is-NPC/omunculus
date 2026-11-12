@@ -86,6 +86,30 @@ tasks/          the tasks that show the team works, in the eval's format
 images/         a portrait of each agent, <agent>.webp, 512 px square, its `image`
 ```
 
+## Memory and code intelligence
+
+The surgeon, the toolsmith and the tester hold the `memory` group, to keep
+the repository's procedures and pitfalls across conversations; with `[policy] memory_bytes`
+in the project's file the newest entries are in each prompt
+([Memory](../../docs/tools.md#memory)).
+
+The surgeon and the tester hold `lsp`. It answers only for a language that
+has a server declared in the project: add one table per language to
+`omunculus.toml`, for example
+
+```toml
+[settings.lsp.typescript]
+command = ["typescript-language-server", "--stdio"]
+extensions = ["ts", "tsx", "js", "jsx"]
+```
+
+and make the server run in the sandbox ([Settings](../../docs/config.md#settings),
+[Code intelligence](../../docs/tools.md#code-intelligence)). The pack
+installs no server: without a table the tool says no server is declared.
+
+The surgeon opens the built site with `browser_check` at 1280 px and 375 px
+before it calls `done`, and its report names what it saw in `verify`.
+
 ## The deploy contract
 
 The deploy tools know no hosting provider. What the build hands them, and
