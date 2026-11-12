@@ -143,6 +143,7 @@ defmodule Omunculus.CLI do
     end
   end
 
+  # A boolean parameter is a bare `--key`, or `--key true|false`.
   defp build_args(rest, manifest) do
     positional_key =
       case Map.get(manifest.parameters, "required") do
@@ -150,20 +151,35 @@ defmodule Omunculus.CLI do
         _ -> nil
       end
 
-    parse_args(rest, %{}, positional_key, false)
+    flags =
+      for {key, %{"type" => "boolean"}} <- Map.get(manifest.parameters, "properties", %{}),
+          do: key
+
+    parse_args(rest, %{}, positional_key, flags, false)
   end
 
-  defp parse_args([], acc, _positional_key, _used), do: {:ok, acc}
+  defp parse_args([], acc, _positional_key, _flags, _used), do: {:ok, acc}
 
-  defp parse_args(["--" <> key, value | rest], acc, positional_key, used),
-    do: parse_args(rest, Map.put(acc, key, value), positional_key, used)
+  defp parse_args(["--" <> key | rest], acc, positional_key, flags, used) do
+    case {key in flags, rest} do
+      {true, [value | rest]} when value in ["true", "false"] ->
+        parse_args(rest, Map.put(acc, key, value), positional_key, flags, used)
 
-  defp parse_args(["--" <> key], _acc, _positional_key, _used),
-    do: {:error, {:missing_value, key}}
+      {true, rest} ->
+        parse_args(rest, Map.put(acc, key, "true"), positional_key, flags, used)
 
-  defp parse_args([value | rest], acc, positional_key, false) when not is_nil(positional_key),
-    do: parse_args(rest, Map.put(acc, positional_key, value), positional_key, true)
+      {false, [value | rest]} ->
+        parse_args(rest, Map.put(acc, key, value), positional_key, flags, used)
 
-  defp parse_args([value | _rest], _acc, _positional_key, _used),
+      {false, []} ->
+        {:error, {:missing_value, key}}
+    end
+  end
+
+  defp parse_args([value | rest], acc, positional_key, flags, false)
+       when not is_nil(positional_key),
+       do: parse_args(rest, Map.put(acc, positional_key, value), positional_key, flags, true)
+
+  defp parse_args([value | _rest], _acc, _positional_key, _flags, _used),
     do: {:error, {:positional, value}}
 end

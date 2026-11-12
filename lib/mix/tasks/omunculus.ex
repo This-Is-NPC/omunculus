@@ -24,7 +24,8 @@ defmodule Mix.Tasks.Omunculus do
   After the name come `--key value` pairs, or one bare value, which goes to
   the first required key of the tool's parameters: `omunculus send "count
   to 5"` gives `message`. A second bare value, or a `--key` without a value,
-  is a usage error. A key the parameters do not list is still passed on.
+  is a usage error, except for a key the tool declares boolean, which stands
+  alone (`omunculus update --check`) or takes `true` or `false`. A key the parameters do not list is still passed on.
   Every value arrives as text; a tool that takes JSON decodes it.
 
   ## Output
