@@ -143,6 +143,7 @@ defmodule Omunculus.Store.Schema do
     )
     """,
     "CREATE INDEX IF NOT EXISTS events_conversation_cursor ON events (conversation_id, sequence)",
+    "CREATE INDEX IF NOT EXISTS events_memory ON events (sequence) WHERE type = 'memory'",
     "CREATE INDEX IF NOT EXISTS works_conversation ON works (conversation_id)",
     "CREATE INDEX IF NOT EXISTS runs_cause ON runs (cause_id)",
     """

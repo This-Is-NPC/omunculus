@@ -19,7 +19,8 @@ defmodule Omunculus.Config do
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
   conversation_bytes` (how much of its conversation's works and exchanges
-  a run without a work is shown), the optional `[policy]
+  a run without a work is shown), the optional `[policy] memory_bytes`
+  (how much of the memory a run's prompt carries under `## Memory`), the optional `[policy]
   send_catalog` (send every run the catalog's model tools, not only its
   own, so all agents share the start of their requests), the optional
   `[policy] session_ttl_ms` and `session_max_bytes` (together, they let a
@@ -62,6 +63,7 @@ defmodule Omunculus.Config do
     :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
+    :memory_bytes,
     :send_catalog,
     :session_ttl_ms,
     :session_max_bytes,
@@ -157,6 +159,7 @@ defmodule Omunculus.Config do
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
           conversation_bytes: pos_integer | nil,
+          memory_bytes: pos_integer | nil,
           send_catalog: boolean,
           session_ttl_ms: pos_integer | nil,
           session_max_bytes: pos_integer | nil,
@@ -205,7 +208,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes default_agent)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes memory_bytes send_catalog session_ttl_ms session_max_bytes default_agent)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -775,6 +778,7 @@ defmodule Omunculus.Config do
                  workflows
                ),
              {:ok, default_agent} <- fetch_default_agent(data, agents),
+             {:ok, memory_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :memory_bytes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, s3} <- Omunculus.Artifacts.S3.parse(Map.get(data, "s3"), auth.providers),
@@ -804,6 +808,7 @@ defmodule Omunculus.Config do
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,
+              memory_bytes: memory_bytes,
               send_catalog: send_catalog,
               session_ttl_ms: session.ttl_ms,
               session_max_bytes: session.max_bytes,

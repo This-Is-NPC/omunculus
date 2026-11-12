@@ -1,0 +1,29 @@
+name = "recall"
+kind = "tool"
+triggers = ["model"]
+description = "Searches what was remembered in earlier conversations, in the scopes this run sees: the project's, its agent's and its workspace's. query matches words of the text, best match first; without it, the newest entries. scope and kind narrow the search."
+tags = ["memory"]
+groups = ["memory"]
+module = "Omunculus.Tools.Recall"
+
+[parameters]
+type = "object"
+required = []
+
+[parameters.properties.query]
+type = "string"
+
+[parameters.properties.scope]
+type = "string"
+enum = ["project", "agent", "workspace"]
+
+[parameters.properties.kind]
+type = "string"
+enum = ["fact", "preference", "procedure", "pitfall"]
+
+[parameters.properties.limit]
+type = "integer"
+minimum = 1
+
+[views.memories]
+source = "memories"

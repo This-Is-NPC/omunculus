@@ -49,6 +49,8 @@ defmodule Omunculus.Tool.Views do
     `tool`, the tool that wrote it; `prefix` keeps the names that begin with
     it; `include = ["data"]` adds `data`, the decoded content of the latest
     version of each name when it is of media type `application/json`.
+  - `memories`: from `run`, the memory entries the run sees, oldest first:
+    the project's, its agent's and its workspace's.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
     computed by the harness for the call, each only when a view asks for
     it, through a function of the view in `computed`. `agents` takes
@@ -219,6 +221,10 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec(source, table, spec) when source in @computed do
     with :ok <- only_keys(table, []), do: {:ok, spec}
+  defp source_spec("memories", table, spec) do
+    with :ok <- only_keys(table, []), do: {:ok, %{spec | from: ["run"]}}
+  end
+
   end
 
   defp source_spec(source, _table, _spec), do: {:error, {:unknown_source, source}}
@@ -259,7 +265,7 @@ defmodule Omunculus.Tool.Views do
   defp check_anchors(%{source: "inbox", from: from} = spec),
     do: anchors_within(spec, from, ["work"])
 
-  defp check_anchors(%{source: source} = spec) when source in ~w(runs events prompts),
+  defp check_anchors(%{source: source} = spec) when source in ~w(runs events prompts memories),
     do: {:ok, spec}
 
   defp check_anchors(%{from: []} = spec), do: {:ok, spec}
@@ -414,6 +420,9 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "requests"}, _anchor, id, _scope),
     do: Store.view(conn, "request", id)
+  defp read_from(conn, %{source: "memories"}, _anchor, id, _scope),
+    do: Store.memories(conn, id)
+
 
   defp read_from(conn, %{source: "prompts"}, _anchor, id, _scope),
     do: Store.view(conn, "prompt", id)

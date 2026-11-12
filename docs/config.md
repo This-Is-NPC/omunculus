@@ -126,6 +126,12 @@ of its conversation's works and exchanges a run without a work is shown
 under `## Works` and `## Conversation`, the newest that fit. Without it
 they are shown whole.
 
+`[policy] memory_bytes` is optional: a positive integer. With it, a run's
+prompt carries the newest memory entries that fit in that many bytes
+under `## Memory`, in the context after the instructions
+([Memory](tools.md#memory)). Without it the prompt carries none; an agent
+reads memory with `recall`. There is no default.
+
 `[policy] send_catalog` is optional: `true` sends every run the
 catalog's model tools, not only its own, so all agents' requests start
 alike and a provider's cache serves them; a call to a tool the run does
@@ -678,7 +684,7 @@ needs what is missing:
 | `omunculus.toml [accounts.<name>] is also the name of an agent: pick another name` | an account named like an agent |
 | `omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only` | `default_agent` names no such agent |
 | `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
-| `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
+| `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `memory_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
 | `omunculus.toml [policy] session_ttl_ms and session_max_bytes go together` | one of the two without the other |
 | `omunculus.toml [policy] send_catalog must be true or false` | `send_catalog` invalid |
 | `omunculus.toml is missing assemble` | no assemble tool named |

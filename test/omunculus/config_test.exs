@@ -111,6 +111,24 @@ defmodule Omunculus.ConfigTest do
   owner = { kind = "human", issuer = "local", subject = "1000" }
   """
 
+  test "[settings.<tool>] is read as written and must be a table of tables", %{dir: dir} do
+    Fixtures.write_config(
+      dir,
+      @interceptor_base <>
+        """
+        [settings.lsp.c]
+        command = ["clangd"]
+        extensions = ["c"]
+        """
+    )
+
+    assert {:ok, %Config{data: %{"settings" => %{"lsp" => %{"c" => %{"command" => ["clangd"]}}}}}} =
+             load(dir)
+
+    Fixtures.write_config(dir, @interceptor_base <> "[settings]\nlsp = 1\n")
+    assert {:error, {:settings, {:invalid, :table}}} = load(dir)
+  end
+
   test "[[interceptors]] is optional and reads each rule as written", %{dir: dir} do
     Fixtures.write_config(dir, @interceptor_base)
     assert {:ok, %Config{interceptors: []}} = load(dir)
@@ -315,6 +333,25 @@ defmodule Omunculus.ConfigTest do
 
     Fixtures.write_config(dir, agents <> "\n[policy]\nmax_reopens = 2\n")
     assert {:ok, %Config{max_reopens: 2}} = load(dir)
+  end
+
+  test "[policy] memory_bytes is an optional positive integer, with no default", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{memory_bytes: nil}} = load(dir)
+
+    for invalid <- ["0", "1.5", ~s("2")] do
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nmemory_bytes = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :memory_bytes}}} = load(dir)
+    end
+
+    Fixtures.write_config(dir, agents <> "\n[policy]\nmemory_bytes = 2000\n")
+    assert {:ok, %Config{memory_bytes: 2000}} = load(dir)
   end
 
   test "[policy] last_run_output_bytes and tool_output_bytes are optional positive integers",

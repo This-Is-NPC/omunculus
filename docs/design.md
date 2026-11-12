@@ -108,7 +108,7 @@ The store's recursive validation and authorization of request replies: lifecycle
 
 ### `Omunculus.Store` and `Omunculus.Store.*`
 
-The only code that touches SQL. `Connection` is the one process that owns the SQLite handle; every statement and transaction runs in it, so concurrent runs apply their transactions one after another, and it announces committed events to the processes subscribed to it. `Access` checks project and conversation memberships, scopes reads, and manages idempotent command receipts. `View` reads cuts of the tables, including recursively linked request origins and their questions; the inbox source with `relation = "received"` reads pending requests addressed to the current run's agent, in its conversation at depth 0 and, at any depth, those whose arbiter run opens on its work or below, grouped by conversation and hydrated through the canonical request view. Escalated origins appear only as provenance, and reading does not resolve requests. `Actions` applies emits (`comment`, `request`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`, `continue`, `break`, `wait`, `end`, `notify`, `prompt`, `attach`, `artifact`, `compact`, ...); it refuses `end` on a work's own run that would leave the work open with nothing to run it again — no request of it pending, no run of it due since the run began — or with a child that broke waiting on it; a request stores JSON `requester` and `arbiter` participant identities (agent name, or authenticated human issuer/subject), with `pending`, `escalated` and `closed` statuses; it carries named options of tool calls and its arbiter is resolved in the store: an option calling a tool only a human may give remains subject to that authorization boundary, while its receiver follows the first matching TOML route; `to` is an optional logical route name; a request's view gives the option its reply chose (`answer`), nil for a text-only answer; its closed status and reply comment distinguish that from an unanswered request. `escalate` merges received pending requests in the same conversation into one linked request and preserves child waits, and never routes an origin to an agent it was already escalated to (`request_escalations`) that answered with text alone, naming no part, without escalating it further; recursive named reply parts retain the actual answerer and original grant targets, while omitted parts return to pending. `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction; `Runs.unreported` decides a retry, break or request in one; `Runs.unanswered` uses the same linked action for a pending request left unanswered by its receiver and names, in the linked request's reason, the receiver and each question it held — who asked it, the title of their work and the question, shortened, never an id — and writes the same as an inbox note when the linked request reaches a human; requester and arbiter identities remain immutable. `Schema` creates thirteen tables, including append-only `request_escalations` and `interceptions` (the action a review holds, its actor and its reviewers left; `Store.Interception` opens a review from a matching `[[interceptors]]` rule and releases the action on approval, every event it writes carrying `events.released_by`; a released tool is run first in the actor's next run on the review, `Harness.run_released/4`, with that run's execution context), and refuses a store whose tables differ from them, or that lacks one, with `store_requires_recreation`.
+The only code that touches SQL. `Connection` is the one process that owns the SQLite handle; every statement and transaction runs in it, so concurrent runs apply their transactions one after another, and it announces committed events to the processes subscribed to it. `Access` checks project and conversation memberships, scopes reads, and manages idempotent command receipts. `View` reads cuts of the tables, including recursively linked request origins and their questions; the inbox source with `relation = "received"` reads pending requests addressed to the current run's agent, in its conversation at depth 0 and, at any depth, those whose arbiter run opens on its work or below, grouped by conversation and hydrated through the canonical request view. Escalated origins appear only as provenance, and reading does not resolve requests. `Actions` applies emits (`comment`, `request`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`, `continue`, `break`, `wait`, `end`, `notify`, `prompt`, `attach`, `artifact`, `memory`, `compact`, ...); it refuses `end` on a work's own run that would leave the work open with nothing to run it again — no request of it pending, no run of it due since the run began — or with a child that broke waiting on it; a request stores JSON `requester` and `arbiter` participant identities (agent name, or authenticated human issuer/subject), with `pending`, `escalated` and `closed` statuses; it carries named options of tool calls and its arbiter is resolved in the store: an option calling a tool only a human may give remains subject to that authorization boundary, while its receiver follows the first matching TOML route; `to` is an optional logical route name; a request's view gives the option its reply chose (`answer`), nil for a text-only answer; its closed status and reply comment distinguish that from an unanswered request. `escalate` merges received pending requests in the same conversation into one linked request and preserves child waits, and never routes an origin to an agent it was already escalated to (`request_escalations`) that answered with text alone, naming no part, without escalating it further; recursive named reply parts retain the actual answerer and original grant targets, while omitted parts return to pending. `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction; `Runs.unreported` decides a retry, break or request in one; `Runs.unanswered` uses the same linked action for a pending request left unanswered by its receiver and names, in the linked request's reason, the receiver and each question it held — who asked it, the title of their work and the question, shortened, never an id — and writes the same as an inbox note when the linked request reaches a human; requester and arbiter identities remain immutable. `Schema` creates thirteen tables, including append-only `request_escalations` and `interceptions` (the action a review holds, its actor and its reviewers left; `Store.Interception` opens a review from a matching `[[interceptors]]` rule and releases the action on approval, every event it writes carrying `events.released_by`; a released tool is run first in the actor's next run on the review, `Harness.run_released/4`, with that run's execution context), and refuses a store whose tables differ from them, or that lacks one, with `store_requires_recreation`.
 
 ### `Omunculus.ConversationRoot`
 
@@ -364,3 +364,38 @@ of its own. The sales desk's `proposal` does that, and `render_proposal` renders
 version holds, but to hand its JSON to a tool that declares it wants it
 ([tools](tools.md#artifacts)).
 
+## 11. Memory
+
+The work tree is the memory of one conversation. Memory is what should
+outlive it: the client prefers X, this repository's tests run with Y,
+deploys fail unless Z. It is learned, short and stated by an agent.
+Skills are authored procedures read on demand ([config](config.md#skills)),
+and memory does not replace them: a procedure someone wrote down is a
+skill, a procedure an agent found out is a `procedure` entry.
+
+**The record.** An entry has a `scope` (`project`, `agent` or
+`workspace`), a `kind` (`fact`, `preference`, `procedure` or `pitfall`)
+and a `text`. Its source is the event that holds it: the conversation,
+work, run, actor and time. The `agent` and `workspace` scopes are keyed by
+the run's agent and its work's workspace, which the store reads from the
+run, never from the call.
+
+**Where it lives.** In `memory` events, `remember` and `forget`, applied by
+`Store.Actions.Memory`. The entries are the events folded in order, a
+`forget` ending the entry whose id it names. No table: the log is already
+append only, ordered and per project, so history, provenance and removal
+need no schema change, and a store made before memory still opens. A
+partial index on `events (sequence) WHERE type = 'memory'` keeps the read
+from scanning the log. The `memories` view source reads what a run sees:
+the project's entries, its agent's and its workspace's.
+
+**Search.** `recall` matches the words of a query in an entry's text in the
+tool, ranking by the number of words matched, then by time. There is no
+FTS5 table or embedding: the entries are short and few, and a second
+index would be a second copy to keep true to the log.
+
+**In the prompt.** With `[policy] memory_bytes`, `assemble` renders the
+newest entries that fit under `## Memory` in the context, after the
+instructions that stay the same, so a change of memory never invalidates a
+provider's cache of them. Without it, the prompt carries none and an agent
+searches with `recall` ([tools](tools.md#memory)).

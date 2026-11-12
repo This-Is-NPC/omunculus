@@ -9,7 +9,8 @@ defmodule Omunculus.Tools.Assemble do
   name and description of each skill the run has. Its `output`, the
   context, is the rest: under `## Environment`, the workspace every
   command starts in, the person's home and the platform, which differ
-  from one workspace to another; the work's title, its id and, in a
+  from one workspace to another; under `## Memory`, with `memory_bytes`
+  in the args, the newest entries of the `memories` view that fit it; the work's title, its id and, in a
   workflow, the workflow and its stage, its goal, its last comment, and its last closed run (`last_run`), or,
   without a work, the run that opened the run's request (`opener`), as
   `Omunculus.Tools.Record` lines without this tool's calls, each call's
@@ -48,7 +49,7 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.{Out, Record, Session}
 
   # The sections that begin the context of an assembled prompt.
-  @context_start ~r/\n\n(?=## (Environment|Work|Works|Conversation|Last comment|Last run|Children|Results|Request|Inbox|Attachments|Message)\n)/
+  @context_start ~r/\n\n(?=## (Environment|Memory|Work|Works|Conversation|Last comment|Last run|Children|Results|Request|Inbox|Attachments|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view} = input) do
@@ -80,6 +81,7 @@ defmodule Omunculus.Tools.Assemble do
 
     context =
       environment_section(Map.get(input, :roots, [])) ++
+        memory_section(view["memories"], args["memory_bytes"]) ++
         work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
@@ -368,6 +370,20 @@ defmodule Omunculus.Tools.Assemble do
 " <> Enum.join([Out.skills_preamble() | lines], "
 ")]
   end
+
+  # What earlier conversations taught, the newest entries that fit
+  # `memory_bytes`; none without that key. In the context, after the
+  # instructions that stay the same.
+  defp memory_section(entries, limit) when is_list(entries) and is_integer(limit) do
+    lines = Enum.map(entries, &"- [#{&1["scope"]}, #{&1["kind"]}] #{&1["text"]}")
+
+    case newest(lines, limit) do
+      [] -> []
+      kept -> ["## Memory\n" <> Enum.join([Out.memory_preamble() | kept], "\n")]
+    end
+  end
+
+  defp memory_section(_entries, _limit), do: []
 
   defp agents_section([], _cards), do: []
 

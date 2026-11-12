@@ -206,6 +206,7 @@ argument of the call.
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
 | `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
 | `artifacts` | the artifact versions of the run's conversation, oldest first, each as its event describes it with `event_id`, `at`, `by` and `tool`, the tool that wrote it | `prefix` keeps the names that begin with it; `include = ["data"]` adds `data`, the decoded content of the latest version of each name when it is `application/json` |
+| `memories` | the memory entries the run sees, oldest first: the project's, its agent's and its workspace's ([memory](#memory)) | from `run` |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
 | `agents` | the agents and workflows a new work may name, one depth below the run (1 when the run has no work). The run's depth is the work's place in the tree, or its assignee's depth when that is deeper. Listed: the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
@@ -231,6 +232,34 @@ lists `skills` has the tool and all of them; one that lists
 `skill.<name>` has that skill alone, and needs `skill` to read it. The
 tool reads in the harness's process, since a skill's folder is outside
 the sandbox; the scripts a skill ships are not run.
+
+## Memory
+
+Memory keeps what an agent learned beyond the conversation: a lesson or a
+fact for later conversations ([the model](design.md#11-memory)). It is not
+a skill. A skill is a procedure someone wrote down, read as it is; memory
+is what agents found out, kept as short entries. The three tools are in the
+group `memory`, and none is in a default layer.
+
+An entry has a `scope`, a `kind`, a `text` and its source.
+
+| Field | Values |
+|---|---|
+| `scope` | `project`, for every run; `agent`, for runs of the agent that remembered it; `workspace`, for runs on works in the workspace it was made in |
+| `kind` | `fact`, `preference`, `procedure` or `pitfall` |
+| source | the conversation, work and run that taught it, who wrote it and when, recorded by the store |
+
+| Tool | Does |
+|---|---|
+| `remember` | Keeps `text` under a `scope` and `kind`. The same text in that scope and kind, compared without case, is not kept twice: the output names the entry that stands. A scope the run has no key for (`workspace` on a run without a work in a workspace) is refused. |
+| `recall` | Lists the entries the run sees, each with its id, scope, kind, text and source. `query` matches its words in the text: entries matching more words come first, the newer first among equals, and an entry matching none is left out. Without `query`, the newest. `scope` and `kind` narrow, `limit` caps the list (10 when omitted). |
+| `forget` | Ends the entry `id` that `recall` shows. The run must see it. To change an entry, forget it and remember the new text. |
+
+Entries are `memory` events, so they are kept with the store and cannot be
+edited. With [`[policy] memory_bytes`](config.md#required-tables), `assemble`
+puts the newest entries that fit under `## Memory` in the context, after
+the instructions, which stay the same from run to run; without it the
+prompt holds none and an agent calls `recall`.
 
 ## Attachments
 
@@ -324,7 +353,7 @@ nor the tools; the store keeps the record of what each call did.
 ## Actions
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
-`attach`, `artifact`, `inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
+`attach`, `artifact`, `memory`, `inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
 `continue`, `break`, `wait`, `reopen`, `retire`, `end`, `compact`, `comment.delete`, and `hold`, which the
 harness writes to open the review of a tool call an
 [interceptor](requests.md#interception) holds and a tool's own emit does not
@@ -576,6 +605,7 @@ fs.write  = write, edit, patch
 store     = comment, request_access, reply, grant, notify, read_work
 sequence  = work, delegate, continue, break, wait, end, done, cancel, ask, escalate, forward, reopen, retire
 catalog   = tool_search
+memory    = remember, recall, forget
 skills    = skill, and every skill.<name> of [skills] paths
 cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset
 setup     = config, overview, propose_config, propose_pack

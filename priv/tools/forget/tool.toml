@@ -1,0 +1,14 @@
+name = "forget"
+kind = "tool"
+triggers = ["model"]
+description = "Ends a memory that is wrong or no longer true, by the id recall shows. A change is a forget and a new remember."
+tags = ["memory"]
+groups = ["memory"]
+module = "Omunculus.Tools.Forget"
+
+[parameters]
+type = "object"
+required = ["id"]
+
+[parameters.properties.id]
+type = "string"

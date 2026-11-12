@@ -1,0 +1,26 @@
+name = "remember"
+kind = "tool"
+triggers = ["model"]
+description = "Keeps a lesson or a fact that should outlive this conversation, such as what the client prefers, how this repository's tests run or what makes a deploy fail. scope says who it is for: project (everyone), agent (you) or workspace (this workspace); kind is fact, preference, procedure or pitfall. The entry records the conversation and work that taught it. Remember what you learned, not what a skill or the work's files already say."
+tags = ["memory"]
+groups = ["memory"]
+module = "Omunculus.Tools.Remember"
+
+[parameters]
+type = "object"
+required = ["scope", "kind", "text"]
+
+[parameters.properties.scope]
+type = "string"
+enum = ["project", "agent", "workspace"]
+
+[parameters.properties.kind]
+type = "string"
+enum = ["fact", "preference", "procedure", "pitfall"]
+
+[parameters.properties.text]
+type = "string"
+description = "One self-contained statement."
+
+[views.memories]
+source = "memories"

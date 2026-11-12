@@ -30,6 +30,10 @@ minimum = 1
 type = "integer"
 minimum = 1
 
+[parameters.properties.memory_bytes]
+type = "integer"
+minimum = 1
+
 [parameters.properties.session_ttl_ms]
 type = "integer"
 minimum = 1
@@ -114,3 +118,6 @@ source = "catalog"
 
 [views.skills]
 source = "skills"
+
+[views.memories]
+source = "memories"

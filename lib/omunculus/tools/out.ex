@@ -23,6 +23,9 @@ defmodule Omunculus.Tools.Out do
   def skills_preamble, do: "Read a skill with the skill tool before you follow it."
 
   @spec more_tools(non_neg_integer()) :: String.t()
+  def memory_preamble,
+    do: "Learned in earlier conversations; search the rest with recall."
+
   def more_tools(count), do: "#{count} more tools: search with tool_search."
 
   @doc """
@@ -250,6 +253,10 @@ defmodule Omunculus.Tools.Out do
   def failure({:attachment, {:invalid, field}}), do: "the #{field} is not valid"
 
   def failure({:attachment, {:too_large, size, limit}}),
+  def failure({:memory, {:unknown, id}}), do: "no memory #{id} is visible to this run"
+  def failure({:memory, {:no_scope, scope}}), do: "this run has no #{scope} to remember in"
+  def failure({:memory, {:invalid, field}}), do: "the #{field} is not valid"
+  def failure({:memory, :no_run}), do: "memory needs a run"
     do: "#{size} bytes is more than the #{limit} a file may hold"
 
   def failure({:attachment, :not_found}), do: "that file is not kept"

@@ -43,7 +43,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Compaction | ◐ a session past `session_max_bytes` starts over with fresh context; `compact_comments` | **P** | **P** | **P** |
 | | Tool output cut | **P** whole output kept in the event | **P** | **P** | **P** |
 | | History search beyond the last run | ◐ through comments and reports; deeper search needs a new view (**K**) | **P** | **P** | **P** FTS5 |
-| | Long-term memory / skills | ◐ Agent Skills (`[skills] paths`, `skill`); no memory | ◐ | ◐ | **P** |
+| | Long-term memory / skills | **P** Agent Skills (`[skills] paths`, `skill`) for authored procedures; `remember`, `recall` and `forget` for what agents learn, by scope and kind, searched by words, optionally in the prompt (`[policy] memory_bytes`) | ◐ | ◐ | **P** |
 | **Coding: reading** | Read with offset/limit | **P** | **P** | **P** | **P** |
 | | Image / PDF | **T** | **P** | **P** | **P** |
 | | Grep / find | **P** `grep` and `find` leave out `.git` and what `.gitignore` ignores | **P** | **P** | **P** |

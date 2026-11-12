@@ -57,6 +57,7 @@ defmodule Omunculus.Store do
   defdelegate released_call(conn, request_id), to: Interception
   defdelegate attachments(conn, conversation_id), to: View
   defdelegate artifacts(conn, conversation_id), to: View
+  defdelegate memories(conn, run_id), to: Omunculus.Store.Actions.Memory, as: :entries
   defdelegate work_depth(conn, work), to: View
   defdelegate grants(conn, work), to: Helpers
   defdelegate begin_run(conn, params), to: Runs, as: :begin

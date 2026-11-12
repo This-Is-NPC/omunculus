@@ -502,6 +502,106 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
+  describe "memory" do
+    defp remember(scope, kind, text),
+      do: %{
+        "type" => "memory",
+        "body" => %{"op" => "remember", "scope" => scope, "kind" => kind, "text" => text}
+      }
+
+    defp forget(id), do: %{"type" => "memory", "body" => %{"op" => "forget", "id" => id}}
+
+    # A run of `agent` on a work in `workspace`, in a conversation of its own.
+    defp memory_run(conn, ctx, agent, workspace) do
+      conversation_id = Omunculus.Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation_id,
+          created_at: "2026-01-01T00:00:00Z",
+          created_issuer: "local",
+          created_subject: "1000"
+        })
+
+      work_id =
+        Fixtures.insert(conn, :works, %{conversation_id: conversation_id, workspace: workspace})
+
+      run_id =
+        Fixtures.insert(conn, :runs, %{
+          conversation_id: conversation_id,
+          work_id: work_id,
+          agent: agent
+        })
+
+      {%{ctx | run_id: run_id, work_id: work_id, agent: agent}, conversation_id}
+    end
+
+    test "entries outlive their conversation and are seen by scope", %{conn: conn} do
+      {one, conversation_one} = memory_run(conn, @ctx, "seller", "shop")
+      {two, _conversation} = memory_run(conn, @ctx, "seller", "shop")
+      {other, _conversation} = memory_run(conn, @ctx, "buyer", "yard")
+
+      assert {:ok, _events} =
+               record_tool(
+                 conn,
+                 [
+                   remember("project", "preference", "the client wants short answers"),
+                   remember("agent", "pitfall", "deploys fail unless the cache is cold"),
+                   remember("workspace", "procedure", "tests run with mix test")
+                 ],
+                 one
+               )
+
+      assert {:ok, entries} = Store.memories(conn, two.run_id)
+      assert Enum.map(entries, & &1["scope"]) == ["project", "agent", "workspace"]
+
+      assert %{"kind" => "preference", "by" => "seller", "conversation_id" => ^conversation_one} =
+               hd(entries)
+
+      assert {:ok, [%{"scope" => "project"}]} = Store.memories(conn, other.run_id)
+    end
+
+    test "forget ends an entry, and only one the run sees", %{conn: conn} do
+      {one, _conversation} = memory_run(conn, @ctx, "seller", "shop")
+      {other, _conversation} = memory_run(conn, @ctx, "buyer", "yard")
+
+      assert {:ok, _events} =
+               record_tool(
+                 conn,
+                 [remember("agent", "fact", "a"), remember("project", "fact", "b")],
+                 one
+               )
+
+      assert {:ok, [%{"id" => agent_id}, %{"id" => project_id}]} =
+               Store.memories(conn, one.run_id)
+
+      assert {:error, {:memory, {:unknown, ^agent_id}}} =
+               record_tool(conn, [forget(agent_id)], other)
+
+      assert {:ok, _events} = record_tool(conn, [forget(project_id)], other)
+      assert {:ok, [%{"id" => ^agent_id}]} = Store.memories(conn, one.run_id)
+
+      assert {:error, {:memory, {:unknown, ^project_id}}} =
+               record_tool(conn, [forget(project_id)], one)
+    end
+
+    test "a scope, kind or text the store does not know is refused", %{conn: conn} do
+      {one, _conversation} = memory_run(conn, @ctx, "seller", nil)
+
+      assert {:error, {:memory, {:no_scope, "workspace"}}} =
+               record_tool(conn, [remember("workspace", "fact", "x")], one)
+
+      assert {:error, {:memory, {:invalid, "kind"}}} =
+               record_tool(conn, [remember("project", "rumour", "x")], one)
+
+      assert {:error, {:memory, {:invalid, "text"}}} =
+               record_tool(conn, [remember("project", "fact", "  ")], one)
+
+      assert {:error, {:memory, :no_run}} =
+               record_tool(conn, [remember("project", "fact", "x")], @ctx)
+    end
+  end
+
   describe "artifacts" do
     setup %{conn: conn} do
       dir = Fixtures.tmp_dir()
