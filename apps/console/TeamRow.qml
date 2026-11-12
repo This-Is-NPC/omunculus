@@ -7,7 +7,7 @@ import "kit/ui"
 // TeamRow is an exchange between agents, where it was asked: a system row of
 // who asked whom and who decides, each agent named in its tone, the people
 // mark in the rows' mark column; under it, quoted in an outlined frame, the
-// question in its first three lines, and once answered who answered and what. It is open while it waits, and then DECIDE INSTEAD
+// question in its first three lines, and once answered who answered and what. It is open while it waits (in the chat it stays folded, as history), and then DECIDE INSTEAD
 // opens the request's card in place, so you can answer it yourself, and its
 // close folds it back; choosing its line folds and unfolds the rest of the
 // question and the answer.
@@ -31,7 +31,9 @@ Item {
     : [{ text: by, agent: by }, { text: " asked " }, { text: to, agent: to }]
       .concat(pending ? [{ text: "  ·  " }, { text: to, agent: to }, { text: " decides" }] : asked && asked.status === "escalated" ? [{ text: "  ·  passed up" }] : [])
   readonly property string summary: parts.map(part => part.text).join("")
-  property bool open: pending
+  // Whether it offers to be decided in your place.
+  property bool decidable: true
+  property bool open: pending && decidable
   property bool deciding: false
 
   implicitHeight: content.implicitHeight + Theme.space.row
@@ -145,7 +147,7 @@ Item {
         }
 
         TraceButton {
-          visible: row.open && row.pending && !row.deciding
+          visible: row.decidable && row.open && row.pending && !row.deciding
           dense: true
           role: "progress"
           text: "DECIDE INSTEAD"
@@ -158,7 +160,7 @@ Item {
     // The request's own card, to answer it in place of the agent that decides.
     Loader {
       Layout.fillWidth: true
-      active: row.open && row.pending && row.deciding
+      active: row.decidable && row.open && row.pending && row.deciding
       visible: active
       sourceComponent: RequestDecision {
         key: row.key

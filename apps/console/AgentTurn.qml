@@ -49,7 +49,7 @@ Item {
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
   // A run that has said and done nothing so far leaves no trace in the
-  // conversation; the progress strip says that the team works.
+  // conversation; the live line says that the team works.
   readonly property bool empty: said === "" && lines.every(line => line.hook && line.ok) && attached.length === 0
   // About 70 characters at most per line, the gutter kept for the menu.
   readonly property real widest: Math.min(620, turn.width < Theme.size.measureFrom ? turn.width - Theme.size.gutter : Math.min(turn.width * Theme.size.measure, turn.width - Theme.size.gutter))

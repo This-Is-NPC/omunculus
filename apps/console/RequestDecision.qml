@@ -91,6 +91,11 @@ SurfaceFrame {
   readonly property bool busy: delivery === "sending"
   // Answered by you or on your behalf, and no longer waiting.
   readonly property bool settled: !open && answer !== null
+  // What was done to it, as one sentence with its kind's icon and word
+  // (ANSWERED, CHOSE, GRANTED, DENIED); null while it waits.
+  readonly property var done: settled && request ? Pending.resolved(request, answer, {
+    flat: Omunculus.progress ? Omunculus.progress.flat : [], text: Events.readable(question), folder: place.root || ""
+  }) : null
   // The lines under the title: who and where, as [{name, value, tone}].
   readonly property var fields: !facts ? [] : [
     { name: "ASKS", value: facts.asker, tone: Omunculus.toneOf(facts.asker) },
@@ -243,11 +248,11 @@ SurfaceFrame {
     RowLayout {
       Layout.fillWidth: true
       spacing: Theme.space.gap
-      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open && card.facts ? card.facts.icon : "check"; size: 14; color: card.open ? Theme.warning : card.dim }
+      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open && card.facts ? card.facts.icon : card.done ? card.done.icon : "check"; size: 14; color: card.open ? Theme.warning : card.dim }
       Label {
         Layout.alignment: Qt.AlignVCenter
         Layout.minimumWidth: 0
-        text: card.open ? (card.facts ? card.facts.word : "") : card.answer ? "ANSWERED" : "CLOSED"
+        text: card.open ? (card.facts ? card.facts.word : "") : card.done ? card.done.word : "CLOSED"
         color: card.open && card.yours ? Theme.warning : card.dim
         font.pixelSize: Theme.type.kicker.size
         font.letterSpacing: Theme.type.kicker.tracking

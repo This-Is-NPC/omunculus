@@ -132,26 +132,23 @@ defmodule Omunculus.GuiPendingTest do
     """)
   end
 
-  test "a work card says its state in the tree's words and what it waits for" do
+  test "a request shows in the chat by whom it is for and whether it waits" do
     run!("""
-    const working = build([], [run("r1", "surgeon", "w2")]);
-    const card = Pending.workCard(working.flat.find(node => node.work === "w1"), 2000);
-    check(card.title === "Doce Ana: site" && card.state === "waiting" && card.word === "WAITING FOR SURGEON", "word", card);
-    check(card.waits === "seller is waiting for surgeon", "waits", card.waits);
-    check(card.elapsed === "16 min", "elapsed", card.elapsed);
-    const leaf = Pending.workCard(working.flat.find(node => node.work === "w2"), 2000);
-    check(leaf.word === "WORKING" && leaf.waits === "", "leaf", leaf);
-    const asking = build([question]);
-    check(Pending.workCard(asking.flat.find(node => node.work === "w2"), 2000).word === "WAITING FOR YOU", "needs you", "");
+    const contained = new Set();
+    const place = (request, over) => Pending.place(request, Object.assign({me: human, contained}, over));
+    check(place(question) === "ask" && place(permission) === "ask" && place(decision) === "ask", "waiting for you is answered in place", "");
+    const answered = Object.assign({}, question, {status: "answered"});
+    check(place(answered) === "history", "settled for you is history", "");
+    const agentAsks = asked("a1", {arbiter: agent("seller")});
+    check(place(agentAsks) === "team" && place(Object.assign({}, agentAsks, {status: "answered"})) === "team", "between agents is a compact line, waiting or not", "");
+    check(place(asked("t1", {arbiter: {kind: "human", issuer: "local", subject: "2000"}})) === "team", "another person's is not yours", "");
+    check(place(question, {contained: new Set(["q1"])}) === "none" && place(undefined) === "none", "gathered or unread shows nothing", "");
+    // In time order, each request keeps its place whatever its state.
+    const between = Object.assign({}, agentAsks, {created_at: iso(1550)});
+    const entries = [decision, between, answered, permission].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const shown = entries.map(request => request.id + ":" + place(request)).join();
+    check(shown === "q1:history,p1:ask,a1:team,d1:ask", "order", shown);
     """)
   end
 
-  test "a closed work card keeps the time it took" do
-    run!("""
-    const finished = works.map(work => work.id === "w2" ? Object.assign({}, work, {state: "done", updated_at: iso(1900)}) : work);
-    const done = Progress.build({works: finished, lanes, journeys: {}, runs: [], requests: [], now: 5000, rootAgent: "sales"});
-    const card = Pending.workCard(done.flat.find(node => node.work === "w2"), 5000);
-    check(card.word === "DONE" && card.elapsed === "10 min", "done", card);
-    """)
-  end
 end

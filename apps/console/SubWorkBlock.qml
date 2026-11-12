@@ -14,7 +14,7 @@ import "kit/ui"
 // thread at most 480 px tall with its own scroll, 02 CHANGES and 03 RUNS). A
 // block two levels down only opens. The open tool at its top right shows the
 // work as a transcript of its own. The conversation's own work leaves out its
-// title and stages, which the masthead and the strip show; until the work's
+// title, which the masthead shows; until the work's
 // data arrives, the block shows the title and "Handing down…".
 Item {
   id: block
@@ -55,10 +55,8 @@ Item {
     }
     return Array.from(new Set(progress.flat.filter(each => each.state === "working" && below(each)).map(each => each.agent)))
   }
-  // The conversation's own work is named by the masthead and its stages by
-  // the strip.
+  // The conversation's own work is named by the masthead.
   readonly property bool titled: title !== Omunculus.subject
-  readonly property bool staged: !(progress && progress.focus && progress.focus.work === work)
   readonly property color stateTone: workers.length > 0 ? Theme.primary : ({
     working: Theme.primary, "needs-you": Theme.warning, stopped: Theme.warning,
     failed: Theme.error, done: Theme.success
@@ -107,7 +105,7 @@ Item {
     const attempt = failed + " failed" + (tally.firstFailed ? ": " + Phrases.stepFailure(tally.firstFailed, tally.firstArgs) : "")
     return { text: attempt + (tally.firstError ? " (" + tally.firstError + ")" : ""), short: attempt, keep: true }
   }
-  readonly property var stepper: node && staged && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
+  readonly property var stepper: node && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
 
   readonly property bool showsTranscript: expanded && tab === "transcript"
   onShowsTranscriptChanged: {

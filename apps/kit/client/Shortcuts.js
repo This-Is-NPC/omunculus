@@ -24,7 +24,7 @@ const table = [
   { id: "projects", keys: ["Ctrl+P"], tier: 2, mutates: false, where: ["everywhere"], what: "the projects, also from a field being written" },
   { id: "new-conversation", keys: ["Ctrl+N"], tier: 2, mutates: false, where: ["conversations", "chat"], what: "new conversation" },
   { id: "reply", keys: ["Alt+R"], tier: 2, mutates: false, where: ["chat", "tree", "work"],
-    what: "answer what waits on you: open the pending queue, or on the tree the request nearest the work picked, or the work's" },
+    what: "answer what waits on you: go to the oldest card in the chat that waits, or on the tree the request nearest the work picked, or the work's" },
   { id: "mark-read", keys: ["Alt+M"], tier: 2, mutates: true, where: ["chat", "tree"], what: "show the oldest note to you and mark it read, or the work's notes" },
   { id: "open-tree", keys: ["Alt+O"], tier: 2, mutates: false, where: ["work", "thread"], what: "its conversation's tree, the work picked" },
   { id: "write", keys: ["Alt+W"], tier: 2, mutates: false, where: ["tree"], what: "write to the agent of the work picked" },

@@ -134,9 +134,6 @@ Singleton {
   // Request id -> true for each request the harness opened, passing on a
   // question someone left unanswered; the snapshot does not say.
   property var noted: ({})
-  // Request id -> the thread its request shows in; the line of its answer
-  // goes there.
-  property var requestThreads: ({})
   // Request id -> the request that gathers it (from the escalate events), and
   // inbox id -> the request a harness note is about, for each note whose
   // question the person already sees as a card.
@@ -507,7 +504,6 @@ Singleton {
     notes = {}
     replies = {}
     noted = {}
-    requestThreads = {}
     gatheredBy = {}
     cardNotes = {}
     drafts = {}
@@ -823,7 +819,7 @@ Singleton {
     const model = threads[key]
     model.append(Object.assign({
       kind: "speech", key: "", who: "", text: "", mine: false, note: false, stamp: "", at: 0, work: "",
-      streaming: false, partial: "", steps: "[]", files: "[]",
+      streaming: false, partial: "", steps: "[]", files: "[]", subject: "",
       fresh: !replaying, pending: false
     }, entry))
     return { thread: key, row: model.count - 1 }
@@ -831,6 +827,15 @@ Singleton {
 
   // The oldest row of these words of the person's not yet echoed by the
   // server, or -1: each message sent waits for its own copy.
+  // A line of the chat that says where the work went: a stage started, the
+  // work finished or sent back. A work nested below another names its title.
+  function mark(work, who, text, stamp, at) {
+    if (work === "")
+      return
+    const nested = threadOf(work) !== ""
+    append("", { kind: "mark", key: work, who: who, text: text + (nested ? " · " + titleOf(work) : ""), stamp: stamp, at: at, work: work })
+  }
+
   function pendingRow(text) {
     const model = threads[""]
     for (let at = 0; model && at < model.count; at++) {
@@ -1024,9 +1029,9 @@ Singleton {
       const waiting = key === "" ? pendingRow(body.message || "") : -1
       if (waiting >= 0) {
         // The server's copy takes the place of the words shown while sending.
-        threads[""].set(waiting, { stamp: stamp, at: at, files: JSON.stringify(body.attachments || []), pending: false })
+        threads[""].set(waiting, { subject: body.subject || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []), pending: false })
       } else {
-        append(key, { who: who, mine: who === "you", text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
+        append(key, { who: who, mine: who === "you", subject: body.subject || "", text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
       }
       break
     case "attach":
@@ -1088,12 +1093,14 @@ Singleton {
     }
     case "continue":
       step(event.run_id, work, { name: "continue", ok: true, text: body.to ? "moved on to " + body.to : "finished the work", output: "", outcome: true, at: at })
+      mark(work, who, body.to ? body.to + " started" : "finished", stamp, at)
       break
     case "grant":
       step(event.run_id, work, { name: "grant", ok: true, text: "granted " + body.name + (body.scope ? " for the " + body.scope : " for this work"), output: "", outcome: true, at: at })
       break
     case "reopen":
       step(event.run_id, work, { name: "reopen", ok: true, text: "sent \"" + titleOf(work) + "\" back to " + (body.stage || "its stage"), output: "", outcome: true, at: at })
+      mark(work, who, "sent back to " + (body.stage || "its stage"), stamp, at)
       break
     case "break":
       step(event.run_id, work, { name: "break", ok: true, text: "stopped: " + String(body.body || "").split("\n")[0].trim(), output: "", outcome: true, at: at })
@@ -1106,18 +1113,17 @@ Singleton {
     case "request":
       if (Requests.byHarness(event))
         keep("noted", event.request_id, true)
-      keep("requestThreads", event.request_id, !body.arbiter || Requests.isMe(body.arbiter, me) ? "" : key)
-      append(!body.arbiter || Requests.isMe(body.arbiter, me) ? "" : key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
+      // Every request is in the chat, at its time; one between other accounts
+      // is also in its work's thread.
+      if (key !== "" && body.arbiter && !Requests.isMe(body.arbiter, me))
+        append(key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
+      append("", { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "escalate":
       Object.values(body.origins || {}).forEach(origin => keep("gatheredBy", origin, event.request_id))
       break
     case "reply":
       keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "", stamp: stamp })
-      // Your answer is a line of its own where it was given, not up where the
-      // request was asked.
-      if (who === "you" && requestThreads[event.request_id] !== undefined)
-        append(requestThreads[event.request_id], { kind: "resolved", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       if (!replaying)
         Object.keys(cardNotes).filter(id => climbsTo(cardNotes[id], event.request_id)).filter(id => inbox.some(item => item.id === id && !item.read_at)).forEach(id => markRead(id))
       if (sending[event.request_id] !== undefined) {

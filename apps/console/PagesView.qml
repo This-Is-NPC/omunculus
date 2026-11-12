@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
@@ -17,19 +16,16 @@ import "kit/ui"
 // to the project's default agent unless TO says another, makes it. Each page
 // of these two levels gives the commands of its bar and the count of its
 // readout. A conversation's, once one is open, in place of the project's,
-// under its head: the header strip, with the conversation's meta, whose
-// counts open the tree and the cost, ANSWER while something waits on you,
-// and its tabs.
-// The chat, the dialogue with the root agent, where each work handed down is
-// one card and what you answered a sentence; the tree, the works in the order they were made
+// under its head: its tabs.
+// The chat, the whole history of the conversation, the dialogue with the root
+// agent and the requests to you, answered in place; the tree, the works in the order they were made
 // and the work picked in full (TreePage); the log, every event a row; and
 // what it cost. A work's thread also opens as a page of its own, under the
 // way down to it. The log, the tree and the cost are loaded when first on
 // screen. A conversation's pages have no bar: their rarer actions are the
 // items of the masthead's menu (`more`), and their keys are chords. What
-// waits on you is answered in the pending queue, opened from a counter under
-// the head over any page; on the tree and a work's page a request also has
-// its decision, opened over the page. Every move into another level, conversation or project is
+// waits on you is a card in the chat; on the tree and a work's page a request
+// also has its decision, opened over the page. Every move into another level, conversation or project is
 // remembered, so BACK, and Esc once the page has let go of what it holds,
 // return to exactly where it was: the page, its level, its project, its
 // conversation and the node picked; back from the first page entered is
@@ -92,18 +88,6 @@ Item {
   property string pickedNode: ""
   // The work whose thread is on the thread page.
   property string threadWork: ""
-  // What waits on you, oldest first, as [{id, at}], held by value so the
-  // queue's items are not rebuilt by a refresh that changes none of them, and
-  // whether the queue is open over the page.
-  readonly property string pendingJson: JSON.stringify(Pending.queue(Omunculus.requests, Omunculus.me).map(request => ({ id: request.id, at: request.created_at || "" })))
-  readonly property var pending: JSON.parse(pendingJson)
-  property bool queueOpen: false
-  onPendingChanged: {
-    if (pending.length === 0 && queueOpen) {
-      queueOpen = false
-      Qt.callLater(focusEntry)
-    }
-  }
 
   // Whether the conversation open has said nothing yet.
   readonly property bool fresh: open && Omunculus.thread("").count === 0
@@ -327,17 +311,9 @@ Item {
     return chain
   }
 
-  // Opens the pending queue over the page, when something waits on you. The
-  // queue closes by itself once nothing waits.
-  function openQueue() {
-    if (pending.length === 0)
-      return
-    queueOpen = true
-  }
-
   // Answers what waits on you: on the tree, nearest the work picked; on a
-  // work's page, what it asked; elsewhere in the conversation, in the pending
-  // queue.
+  // work's page, what it asked; elsewhere in the conversation, in the chat,
+  // on the oldest card that waits.
   function answer() {
     if (page === "tree") {
       if (replyTo !== "")
@@ -345,14 +321,10 @@ Item {
     } else if (page === "work") {
       if (workAsks.length > 0)
         decision.show(workAsks[0].id, false)
-    } else
-      openQueue()
-  }
-
-  // Takes the chat to the delivered result.
-  function showResult() {
-    go("chat")
-    Qt.callLater(timeline.showResult)
+    } else {
+      go("chat")
+      Qt.callLater(timeline.showAsk)
+    }
   }
 
   // Shows the oldest note to you on the chat and marks it read.
@@ -476,14 +448,11 @@ Item {
   readonly property real bottomRoom: page === "chat" ? mainComposer.height + gap
     : page === "thread" ? threadComposer.height + gap : 0
 
-  // Whether the decision of a request, the pending queue or a new project is
-  // open over the page.
-  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible || queueOpen
+  // Whether the decision of a request or a new project is open over the page.
+  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible
 
   function focusEntry() {
-    if (queueOpen)
-      queue.focusFirst()
-    else if (page === "projects")
+    if (page === "projects")
       projectsList.focusEntry()
     else if (page === "conversations")
       conversations.focusEntry()
@@ -515,15 +484,7 @@ Item {
     if (active)
       focusEntry()
   }
-  // Esc closes the pending queue.
-  Keys.onEscapePressed: {
-    if (queueOpen) {
-      queueOpen = false
-      focusEntry()
-      return
-    }
-    back()
-  }
+  Keys.onEscapePressed: back()
   onPageChanged: {
     if (page !== "log")
       logFilter = ""
@@ -552,7 +513,6 @@ Item {
         Qt.callLater(view.focusEntry)
     }
     function onConversationIdChanged() {
-      view.queueOpen = false
       // The conversation's pages go with it.
       if (!view.open && view.ofConversation.includes(view.page))
         view.show("conversations")
@@ -563,31 +523,19 @@ Item {
     }
   }
 
-  // A conversation's head: its header strip and lines, and its tabs, which
-  // wrap on a narrow window.
+  // A conversation's head: its tabs.
   ColumnLayout {
     id: head
     anchors { left: parent.left; right: parent.right; top: parent.top }
     visible: view.inside
     spacing: view.gap
 
-    ProgressStrip {
-      Layout.fillWidth: true
-      progress: Omunculus.progress
-      waiting: Omunculus.waiting.length
-      spent: Omunculus.spend.total.usd
-      onAnswer: view.answer()
-      onOpenResult: view.showResult()
-      onOpenCost: view.go("cost")
-    }
-
     // Before there is more than the chat, a lone tab gives no choice. On one
     // line: without their digits under 420 px, and scrolling sideways when
-    // they still do not fit. The pending counter, on every page of the
-    // conversation, is beside the tabs.
+    // they still do not fit.
     RowLayout {
       Layout.fillWidth: true
-      visible: view.pages.length > 1 || view.pending.length > 0
+      visible: view.pages.length > 1
       spacing: Theme.space.section
 
       Flickable {
@@ -625,18 +573,6 @@ Item {
             }
           }
         }
-      }
-
-      TraceButton {
-        Layout.alignment: Qt.AlignRight | Qt.AlignTop
-        visible: view.inside && view.pending.length > 0
-        dense: true
-        role: "progress"
-        tone: Theme.warning
-        icon: "warning"
-        text: view.pending.length + " PENDING"
-        tip: "everything that waits on you  " + Shortcuts.label("reply")
-        onClicked: view.openQueue()
       }
     }
   }
@@ -904,19 +840,6 @@ Item {
   }
 
   RequestDialog { id: decision }
-
-  // Everything that waits on you, over the page.
-  PendingQueue {
-    id: queue
-    anchors.fill: parent
-    z: 10
-    items: view.pending
-    shown: view.queueOpen
-    onClosed: {
-      view.queueOpen = false
-      view.focusEntry()
-    }
-  }
 
   // Once a project is registered, the projects are read again and its row
   // is picked.

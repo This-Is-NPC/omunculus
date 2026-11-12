@@ -17,6 +17,18 @@ function queue(requests, me) {
     .map(each => each.request);
 }
 
+// How a request shows in the chat, from the viewer `input.me` and the ids that
+// another request gathers, `input.contained`: "ask" for one addressed to the
+// viewer and still waiting, a card answered in place; "history" for one
+// addressed to the viewer that is settled, the card with the answer given;
+// "team" for one between other accounts, a compact line; "none" for one not
+// read yet or gathered by another.
+function place(request, input) {
+  if (!request || input.contained.has(request.id)) return "none";
+  if (!Requests.forYou(request, input.me)) return "team";
+  return Requests.pending(request) ? "ask" : "history";
+}
+
 // The first line of a text with words, on one line.
 function headline(text) {
   const line = String(text || "").split("\n").find(each => each.trim() !== "");
@@ -141,23 +153,4 @@ function resolved(request, reply, input) {
   const form = Questions.parse(input.text);
   const count = form ? form.items.length : 1;
   return { icon: "help", word: "ANSWERED", sentence: "You answered " + possessive(asker) + " " + (count === 1 ? "question" : count + " questions") + where };
-}
-
-// A work's state in the words of the tree: WORKING, WAITING FOR SURGEON,
-// WAITING FOR YOU, DONE, ...
-function stateWord(node) {
-  if (node.state === "needs-you") return "WAITING FOR YOU";
-  if (node.state === "waiting") return "WAITING" + (node.waitingOn ? " FOR " + node.waitingOn.toUpperCase() : "");
-  return Progress.word(node.state).toUpperCase();
-}
-
-// A work as its card in the chat reads: {work, title, state, word, waits,
-// elapsed}. `waits` is who it waits for, as a sentence, or ""; `at` is the
-// clock in seconds.
-function workCard(node, at) {
-  return {
-    work: node.work, title: node.title, state: node.state, word: stateWord(node),
-    waits: node.state === "waiting" && node.waitingOn ? node.agent + " is waiting for " + node.waitingOn : "",
-    elapsed: Progress.span(Progress.closed(node.state) ? node.own.seconds : Math.max(0, at - node.created))
-  };
 }

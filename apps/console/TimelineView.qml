@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
-import "kit/client/Events.js" as Events
 import "kit/client/Pending.js" as Pending
 import "kit/client/Requests.js" as Requests
 import "kit/client/Time.js" as Time
@@ -10,13 +9,14 @@ import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // TimelineView is one thread of the conversation. The main thread is the
-// dialogue: what you and the agent you write to said, each work handed down
-// once, as a WorkCard that opens the tree, and what you did to a request as
-// one sentence (ResolvedLine); requests waiting on you are the pending queue's,
-// and what each run did is the tree's. A work's own thread also holds what
-// the agents said among themselves (TeamRow), a work handed down as a
-// SubWorkBlock that unfolds into its own thread nested here, and the notes its
-// agents left (TeamNote).
+// dialogue and the whole history of the conversation, in time order: what you
+// and the agent you write to said, each work handed down and each stage
+// started as a line of the log, every request addressed to you as a card
+// (RequestDecision) answered in place and, once answered, kept with the answer
+// given, and what the agents asked one another as a compact line (TeamRow);
+// what each run did is the tree's. A work's own thread also holds a work
+// handed down as a SubWorkBlock that unfolds into its own thread nested here,
+// and the notes its agents left (TeamNote).
 // Like a chat, it sits on the bottom and grows upwards, and it follows new
 // entries unless you scrolled up to read; then a pill counts what arrived out
 // of view and leads back to it. A turn streaming taller than the view is held
@@ -100,34 +100,39 @@ Item {
     timeline.positionViewAtIndex(row, top || (entry && entry.height > timeline.height * 0.6) ? ListView.Beginning : ListView.Center)
   }
 
-  // Brings the delivered result, the newest note of a done conversation, into view.
-  function showResult() {
-    if (newestNote >= 0)
-      reveal(model.get(newestNote).key, true)
+  // Brings the oldest request waiting on you into view and puts the keyboard
+  // in it; false when none waits.
+  function showAsk() {
+    const first = Pending.queue(Omunculus.requests, Omunculus.me)[0]
+    const row = first ? rowOf(first.id) : -1
+    if (row < 0)
+      return false
+    reveal(first.id, true)
+    Qt.callLater(() => {
+      const entry = timeline.itemAtIndex(row)
+      if (entry && entry.content && entry.content.focusFirst)
+        entry.content.focusFirst()
+    })
+    return true
   }
 
   // How the entry at `row` shows: "turn", "note" and "speech" for what is
-  // said; "card" for a work handed down in the dialogue, "work" for one in a
-  // work's thread; "answer" for a request you answered and "team" for the
-  // agents' own; "none" for a request waiting on you, which the queue holds,
-  // or one another gathers.
+  // said; "mark" for a work handed down in the dialogue or a stage started,
+  // "work" for a work handed down in a work's thread; "ask" for a request
+  // addressed to you, waiting or answered, and "team" for the agents' own;
+  // "none" for one another gathers or not read yet.
   function roleAt(row) {
     const entry = model.get(row)
     if (!entry)
       return "none"
     if (entry.kind === "work")
-      return dialogue ? "card" : "work"
-    if (entry.kind !== "request" && entry.kind !== "resolved")
-      return ["turn", "note"].includes(entry.kind) ? entry.kind : "speech"
-    const request = Omunculus.requests.find(item => item.id === entry.key)
-    if (!requestsShown || !request || contained.has(entry.key) || (Requests.pending(request) && Requests.forYou(request, Omunculus.me)))
+      return dialogue ? "mark" : "work"
+    if (entry.kind !== "request")
+      return ["turn", "note", "mark"].includes(entry.kind) ? entry.kind : "speech"
+    if (!requestsShown)
       return "none"
-    const answer = Omunculus.replies[entry.key]
-    const yours = !!answer && answer.who === "you"
-    // Your answer shows on its own line, in time; its request row is then gone.
-    if (entry.kind === "resolved")
-      return yours ? "answer" : "none"
-    return yours ? "none" : dialogue ? "none" : "team"
+    const place = Pending.place(Omunculus.requests.find(item => item.id === entry.key), { me: Omunculus.me, contained: contained })
+    return place === "history" ? "ask" : place
   }
 
   // The row of the newest note a work's agent left, or -1.
@@ -219,7 +224,7 @@ Item {
       return false
     const previous = timeline.model.get(index - 1)
     const current = timeline.model.get(index)
-    const apart = ["request", "resolved", "work", "note"]
+    const apart = ["request", "mark", "work", "note"]
     return !apart.includes(previous.kind) && !apart.includes(current.kind)
       && previous.who === current.who && current.at - previous.at < root.pause
   }
@@ -330,6 +335,7 @@ Item {
       required property bool fresh
       required property bool pending
       required property string work
+      required property string subject
 
       // Entries are set apart by a margin above each one, so one that draws
       // nothing leaves no gap.
@@ -338,7 +344,7 @@ Item {
       readonly property alias content: slot.item
       readonly property bool drawn: slot.status === Loader.Ready && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
-      readonly property bool rises: kind === "request" || kind === "resolved" || kind === "work"
+      readonly property bool rises: kind === "request" || kind === "mark" || kind === "work"
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0
@@ -350,7 +356,7 @@ Item {
         id: slot
         y: entry.gap
         width: entry.width
-        sourceComponent: ({ card: workCard, answer: resolved, team: team, turn: turn, work: handed, note: teamNote, speech: speech })[entry.role] || null
+        sourceComponent: ({ mark: mark, ask: ask, team: team, turn: turn, work: handed, note: teamNote, speech: speech })[entry.role] || null
 
         FocusRing { shown: entry.selected; anchors.margins: 0 }
       }
@@ -384,36 +390,33 @@ Item {
           note: entry.note
           stamp: entry.stamp
           files: entry.files
+          subject: entry.subject
           continued: root.revision >= 0 && root.continues(entry.index)
         }
       }
 
+      // A stage started, a work handed down: a line of the log, in time.
       Component {
-        id: workCard
-        WorkCard {
+        id: mark
+        LogLine {
+          readonly property var record: entry.kind === "work" ? Omunculus.work(entry.key) : null
+          readonly property string assignee: record ? Omunculus.agentOf(record) : ""
           width: entry.width
-          work: entry.key
+          icon: entry.kind === "work" ? "branch" : "chevron-right"
+          names: [entry.who, assignee].filter(name => name !== "")
+          text: entry.kind === "work" ? "handed down \u201c" + Omunculus.titleOf(entry.key) + "\u201d" : entry.text
           stamp: entry.stamp
-          onOpened: work => root.openWork(work)
         }
       }
 
+      // A request addressed to you: the card that answers it while it waits,
+      // and with your answer once it is settled.
       Component {
-        id: resolved
-        ResolvedLine {
-          id: said
-          readonly property var asked: Omunculus.requests.find(item => item.id === entry.key) || null
-          readonly property var reply: Omunculus.replies[entry.key] || null
-          readonly property var job: asked ? Omunculus.work(asked.work_id || "") : null
-          readonly property var line: asked && reply ? Pending.resolved(asked, reply, {
-            flat: Omunculus.progress ? Omunculus.progress.flat : [], text: Events.readable(Requests.question(asked, Omunculus.noted[entry.key])),
-            folder: Omunculus.workspaceOf(job ? job.workspace || "" : "").root || ""
-          }) : null
+        id: ask
+        RequestDecision {
           width: entry.width
-          icon: line ? line.icon : ""
-          word: line ? line.word : ""
-          sentence: line ? line.sentence : ""
-          stamp: reply && reply.stamp ? reply.stamp : entry.stamp
+          key: entry.key
+          stamp: entry.stamp
         }
       }
 
@@ -423,6 +426,8 @@ Item {
           width: entry.width
           key: entry.key
           stamp: entry.stamp
+          // In the chat it is history; the work's thread may decide it.
+          decidable: !root.dialogue
         }
       }
 

@@ -137,28 +137,25 @@ opens it at its tree or its log.
 
 ### 5. Chat
 
-The chat is the dialogue between you and the root agent, read as a history
-from the top down. What you said is a filled bubble on the right; what an
-agent says is a bubble on the left tinted with its colour, under its name and
-time. A note an agent of the team left is an outlined card headed NOTE FROM
-SELLER. Each work handed down is one work card: WORK and its title, its state
-as an icon and a word (WORKING, WAITING FOR SURGEON, WAITING FOR YOU, DONE),
-how long, who it waits for and OPEN IN TREE, which opens the tree on that work;
-the card has no stages and no one at work, which the header strip says once.
-What you answered, chose or granted is one sentence with its icon and
-word (ANSWERED, CHOSE, GRANTED, DENIED) and the time. There are no run rows,
-tool calls or exchanges between agents here: they are in the tree and the
-log. While any agent of the team works, a live line at the end of the thread,
-at every width, says who, down from the agent you write to, what it does in a
-plain verb and for how long. The "N NEW" pill, when the thread runs past the
-view, sits above the composer and never over an entry. Over the tabs of every page of the
-conversation, a header block says in one sentence what is happening, with an
-icon ("Seller is waiting for your answer", "Designer is working on the design
-stage"), how long, the cost once priced, and ANSWER while something waits on
-you; under it, compact, the stages of the work in focus. Nothing draws while
-there is nothing to say. The tabs are on one line, without their digits on a
-narrow window; at their right, "⚠ 3 PENDING" opens
-the [pending queue](#6-the-pending-queue). The composer is a
+The chat is the whole history of the conversation, read from the top down,
+in time order. What you said is a filled bubble on the right; what an agent says
+is a bubble on the left tinted with its colour, under its name and time, with
+the message's subject, when it has one, as the bubble's bold first line. A note
+an agent of the team left is an outlined card headed NOTE FROM SELLER. The
+progression is lines of the log between them: each stage started ("design
+started"), each work handed down ("handed down Build: Doce Ana"), a work
+finished or sent back. A request addressed to you is a card at the time it was
+asked, which you answer in place (see [the cards](#6-the-request-cards)); once
+answered it stays there as history, with the word of what you did (ANSWERED,
+CHOSE, GRANTED, DENIED) and your answer. What the agents asked one another is
+one compact line, folded, that opens to the question and the answer. There are no run rows or tool
+calls here: they are in the tree and the log. While any agent of the team
+works, a live line at the end of the thread, at every width, says who, down from
+the agent you write to, what it does in a plain verb and for how long. The "N
+NEW" pill, when the thread runs past the view, sits above the composer and
+never over an entry. There is no status block over the tabs: what waits on you is
+the last card of the chat, open, with the composer below it. The tabs are on
+one line, without their digits on a narrow window. The composer is a
 line with a clip that attaches files and SEND; it has no options of a request
 above it. A conversation with no message yet, opened from the conversations,
 shows the TO control of
@@ -171,19 +168,16 @@ OPEN IN TREE (Alt+O) shows it on the tree page.
 
 | Keys | What they do |
 | --- | --- |
-| Alt+R | open the pending queue |
+| Alt+R | go to the oldest card that waits on you |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
 
-### 6. The pending queue
+### 6. The request cards
 
-Everything whose arbiter you are, reviews included, over any page of the conversation: a panel on
-the right, the whole page when narrow, headed "PENDING · 3" with a close
-button, the requests oldest first, from the top. It opens only while something
-waits and closes when you answer the last one. The keyboard starts in the first
-field, or on the recommended action. An item is one of four kinds, each with
+Everything whose arbiter you are, reviews included, is a card in the chat, at
+the time it was asked; there is no separate list. A card is one of four kinds, each with
 its icon and word: QUESTION, DECISION, PERMISSION or REVIEW. It says what it asks in a
 sentence, then who asks, the way down from the front desk, the work, what it
 unblocks and, for a permission, what it grants or, for a review with several
@@ -194,14 +188,13 @@ the others outlined; GRANT · THIS WORK ONLY, filled, DENY and an ALWAYS… menu
 the wider scopes (for the agent, the stage, the folder or the project, saved
 in the project settings) for a permission; APPROVE, filled, EDIT (which opens
 the action's text to rewrite and SEND EDIT) and DENY for a review. A note, or the reason of a no, is
-behind ADD A NOTE, and the item's "more" menu holds ESCALATE. Acting on an
-item removes it and leaves its sentence in the chat.
+behind ADD A NOTE, and the card's "more" menu holds ESCALATE. Acting on a
+card keeps it in place without buttons: the word of what you did, the question
+and your answer.
 
 | Keys | What they do |
 | --- | --- |
-| Alt+R | open it |
 | Enter | in an answer's words: send it, or escalate when escalating |
-| Esc | close |
 
 ### 7. Tree
 

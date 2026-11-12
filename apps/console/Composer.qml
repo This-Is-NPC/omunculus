@@ -8,7 +8,7 @@ import "kit/ui"
 // work, to that work's agent, or a note its agents read without a new run,
 // which Enter leaves while the box is noting. Over the box, the files the
 // message carries; the clip in the box picks more, and a note carries none.
-// It has no options of a request: those are answered in the pending queue.
+// It has no options of a request: those are answered on their cards in the chat.
 // In the main thread, the words not sent are kept for the conversation
 // they were written in, and come back when it is open again.
 // SEND keeps its caption over the trace while the agent you write to is

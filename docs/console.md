@@ -135,10 +135,14 @@ filled bubbles: each line (`SpeechTurn`) and each agent's turn that speaks
 (`AgentTurn`) is a bubble under a heading of its speaker's tone dot, name and
 time, as in eco: yours on the right, filled with the text's ink at a low
 alpha; an agent's on the left, filled with a tint of its colour
-(`Theme.bubble`); a line that continues the same speaker's turn drops the
+(`Theme.bubble`); a message that has a subject (the `subject` of its `prompt` event, when the
+API gives one) shows it as the bubble's bold title line, above its words and
+not as a second message; a line that continues the same speaker's turn drops the
 heading. Body text in every bubble and card reads at more than 10:1 on its
-fill. The main thread, the chat, holds only the dialogue, the work cards and what
-you answered (below). Everything else an agent did is the log, and shows in a
+fill. The main thread, the chat, is the whole history of the conversation, in time
+order: the dialogue, a line for each stage started and each work handed down,
+the requests to you and what the agents asked one another (below). Everything
+else an agent did is the log, and shows in a
 work's own thread: system rows (`LogLine`, `ToolCalls`, `SubWorkBlock`, the
 exchange's line), unframed, at the log's smaller size (`Theme.type.log`), dim,
 each with its icon in a mark column of their own (`Theme.size.mark`) and its
@@ -146,7 +150,7 @@ time at the right, so they read as secondary to what was said. The chat shows no
 stay in a work's detail. A turn's heading says how
 long the run has worked, in the short form used everywhere: "Working 12 s"
 while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
-it is named: the turns, the header strip, its lines and the cards. Tones go
+it is named: the turns, its lines and the cards. Tones go
 by the order agents first appear in the conversation on screen, from the
 agent you wrote to, and stay while it is open; no two are within 30° of
 hue, and none within 30° of the accent, success, warning or error. A theme
@@ -169,8 +173,7 @@ In the chat it shows whoever works, down the team, at every width, with the
 chain from the agent you write to; a run that ends leaves no line, so the chat
 does not tell the team's work run by run; the work's thread, the tree and the
 log do. A run of
-the agent you write to that fails shows in the header strip (FAILED) and the
-log. A conversation opens
+the agent you write to that fails shows in the log, whose tab is marked. A conversation opens
 at its end, and while earlier entries lie above the view an EARLIER pill at
 its top counts them and leads to the start, where the dialogue opens on a mark,
 "START OF THE CONVERSATION" with when it began. Once the thread outgrows the view
@@ -213,14 +216,16 @@ turn that has said and done nothing yet is not drawn. An entry that draws
 nothing takes no room, not even the gap between entries, and words with no
 text and no files are not added to the thread.
 
-A work handed down is one card in the chat (`WorkCard`), where it was: the
-kicker WORK, its title, its state as an icon and a word (WORKING, WAITING FOR
-SURGEON, WAITING FOR YOU, DONE, FAILED, CANCELLED, as the tree says it) and how
-long, a WAITS line when it waits on others ("seller is waiting for surgeon")
-and OPEN IN TREE, which opens the team page with that work picked. A card has
-no stages, no one at work, no runs and no steps: where the work stands is the
-progress strip's alone, what the agent at work does is the live line's, and
-the runs are in the tree. Its data is the progress node (`Pending.workCard`). In a
+A work handed down is one line of the log in the chat, where it was: the
+branch mark, the agent that handed it down and the one it went to, in their
+tones, "handed down \u201cBuild: Doce Ana\u201d", and the time. Each stage the
+work enters is a line too, the right-pointing mark and "design started"
+(from the `continue` events), "finished" when its last stage ends and "sent back
+to design" when it is reopened; a work nested below another adds its title
+after a dot. These lines are the progression: there is no header strip or
+card that says where the work stands, and what the agent at work does is the
+live line's. What waits now is the last of the chat, an open card with the
+composer under it. The runs are in the tree. In a
 work's own thread the same entry is a block (`SubWorkBlock`), where the run
 handed it down; so is a root work a run opened. A system row
 behind the branch mark, "sub-work" with its agent, title and time, it says on
@@ -238,14 +243,13 @@ outlined, headed by a quote mark, NOTE FROM and the agent in its tone, the
 time at its right, and the text at the body size in the full tone, at most as
 wide as a bubble, six lines and then unfolding by its heading; for the
 newest note once the conversation's work is done, its result: DELIVERED BY and
-the agent, in the success tone, whole and as wide as the thread. The strip's "✓ DONE" then takes the chat to it. Its addresses are links
+the agent, in the success tone, whole and as wide as the thread. Its addresses are links
 in the accent. It is the team's news, not a message to you. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
 waits on a branch says who works below it ("● designer working", in the
 working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
 as everywhere, in the line's frame, since only the card can be acted on; the
-conversation's own work leaves out its title and stages, which the masthead
-and the strip show. Choosing it unfolds it in place, in an outlined frame under its row, into the tabs
+conversation's own work leaves out its title, which the masthead shows. Choosing it unfolds it in place, in an outlined frame under its row, into the tabs
 01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
 scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
 The open glyph at its top right shows the work's thread as a page of its own
@@ -261,16 +265,16 @@ A message is yours, on the right and headed YOU, only when its sender is your
 account; another account's, an agent's (the front desk's internal message) or
 the harness's shows under its own name on the left.
 
-A request waiting on you is not in the thread: it is in the pending queue (see
-[Requests](#requests)). What you did to one is a sentence in the chat, in time
-where you answered it and not where it was asked
-(`ResolvedLine`), with its kind's icon and word and the time at the right: "?
-ANSWERED  You answered sales' 5 questions (Doce Ana: sale)", "◇ CHOSE  You
-chose approve on seller's decision (Doce Ana: sale)", "⛨ GRANTED  You granted
-surgeon permission to use the network (Build: Doce Ana)", DENIED for a no
-(`Pending.resolved`); a saved scope adds it ("· for surgeon"), and adjust
-reads "You asked seller to adjust". Under 520 px the word is over the
-sentence, which ends with the time. Sending an answer, like sending a
+Every request addressed to you is in the chat at the time it was asked, as a
+card (`RequestDecision`, see [Requests](#requests)) answered in place: a
+question's boxes, a decision's options, a review's APPROVE, EDIT and DENY, a
+permission's GRANT, with the sending state on the button. Once answered it
+stays where it was as history, without buttons: its kind's icon and word of
+what you did (`Pending.resolved`: ANSWERED, CHOSE, GRANTED, DENIED, APPROVED,
+EDITED), the question, and under it your answer, or the one another account
+gave for you. Which way a request shows is `Pending.place`: "ask" while it
+waits for you, "history" once settled, "team" between other accounts and
+"none" for one another gathers. Sending an answer, like sending a
 message, takes the view to the end, so it never counts as news; a reply says
 nothing in the bar when it succeeds. The view follows the end until you scroll
 up: the live row's growing never ends it, and only your own scrolling, to more
@@ -278,41 +282,25 @@ than a row from the end, does. The NEW pill counts the entries below the view
 that draw something, so it is gone when the end is in view; it sits in a band
 of its own above the composer, so it never covers an entry.
 
-What an agent asks another is an exchange (`TeamRow`) in a work's thread, not
-in the chat: a system row behind the people mark, "seller asked design-lead ·
+What an agent asks another is an exchange (`TeamRow`), a compact line in the
+chat and in a work's thread, not a card to answer: a system row behind the people mark, "seller asked design-lead ·
 design-lead decides", each agent in its tone, and under it, in an outlined
 frame at the body size, the question in its first three lines and, once
-answered, who answered and what. It is open while it waits, and DECIDE INSTEAD opens the request's
-card in place, to answer it yourself. A request another gathers (`Requests.contained`), as the
+answered, who answered and what. It is folded in the chat, where choosing the line opens it; in a work's
+thread it is open while it waits, and DECIDE INSTEAD opens the request's card in
+place, to answer it yourself. A request another gathers (`Requests.contained`), as the
 lower ones of a question passed up, is not shown on its own.
 
 ## The progress
 
-A conversation's pages share its head (`ProgressStrip`), over the tabs: one
-framed block that says what is happening now, once. It is drawn only while it
-has something to say; before the first message, and when nothing runs and
-nothing waits, there is no frame.
-
-Its first line is an icon and a sentence in words, in the state's tone, then
-how long, the cost, and ANSWER. `Progress.status` makes the sentence from the
-progress: "Designer is working on the design stage" (a spinner, in the accent;
-or "Front desk is working: running a command" while no stage is current),
-"Seller is waiting for your answer" (a warning icon, in the warning tone; the
-deepest agent that asks you), "Seller is waiting for design-lead" (a clock, dim),
-"Starting" once you have written and no work exists, "Stopped", "Failed" in the
-error tone, and "Done" (a check, in the success tone, which leads to what was
-delivered). The time is "1:40" while anything runs, counted from the work's start
-without waiting for an event, and "took 3 minutes" once done. The cost,
-"US$ 0.04", appears once the conversation's models have a [price](config.md)
-and opens the cost page. ANSWER, in the warning tone and with the count when
-more than one waits, opens the pending queue.
-
-Under it, compact, the stages of the work in focus, the newest open root work
-(`Stepper`: "✓ qualify › ● design · round 2 › ○ assess …", shorter forms as the
-width shrinks, down to one dot per stage and the current name). The agents
-that ran, who handed work to whom, are the tree's to show; the chain is not
-repeated here. The work cards in the chat repeat neither the stages nor the
-sentence.
+The conversation has no header block that says what is happening: the
+chat is the progression, from the top down. Each stage started, each work handed
+down and each request to you is a line or a card where it happened (see
+[Threads](#threads)); the live line at the end says who works now. What waits
+for you is simply the last card of the chat, open, with the composer under it.
+The head of a conversation is its tabs alone. The cost is in COST only, and the
+stages of a work, with the agent of each, are in the tree and in a work's
+block.
 
 A work's state follows its questions up their climb. An escalated question
 is held by the pending request that gathers it, at any depth
@@ -325,9 +313,11 @@ NEEDS YOU chip of the tree counts these questions. A work waiting for an answer 
 "Waiting for an answer". The works above one that needs you keep their own
 state, and a done or coming one there is not folded.
 
-Alt+R, as ANSWER and the counter under the head, opens the pending queue, from
-any page of the conversation. Esc closes it. The composer has no options of a request above it: they are
-answered in the queue.
+Alt+R, from any page of the conversation, goes to the chat, to the oldest
+card waiting on you, and puts the keyboard in its first field, or on its
+recommended action; there is no button for it, as the card is in the chat. It
+does nothing while nothing waits. The composer has no options of a request above it: they are
+answered on their cards.
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that
 grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
@@ -355,34 +345,26 @@ arbiter, whether it was written by an agent or a person; another account's
 request shows, but only its arbiter answers it. A request reads as a
 QUESTION, DECISION, PERMISSION or REVIEW from its requester for its arbiter
 (`Requests.line`), with its step when it is a review with several reviewers.
-The four names and their icons (`Requests.marks`) are the same in the pending
-queue, the tree badges, the tree counts ("1 review from clerk") and the LOG. One that is for you reads "for you". No kind of account is
+The four names and their icons (`Requests.marks`) are the same in the chat,
+the tree badges, the tree counts ("1 review from clerk") and the LOG. One that is for you reads "for you". No kind of account is
 named differently from another.
 
-Everything that waits on you is one queue (`PendingQueue`), reachable from every
-page of the conversation: a counter under the head, "⚠ 3 PENDING" (on its own
-line above the tabs under 700 px, beside them otherwise), and ANSWER (Alt+R)
-open it as a panel over the right of the page, over all of it under 560 px. It
-is headed "PENDING · 3" with a close button, says "Oldest first, answer in any
-order. Each one names what it unblocks.", and lists the requests waiting on
-you, oldest first, one item each (`Pending.queue`; a request another gathers
-from below is not a second item). The counter is hidden while nothing waits.
-Acting on an item removes it and leaves its sentence in the chat; the panel
-stays open on the rest, and closes by itself when the last one is answered:
-it never opens, or stays, empty (ANSWER and the counter do nothing while
-nothing waits). Esc, the close button and a click outside close it. The
-keyboard starts in the first item's first field, or on its recommended
-action, and the item shows from its top. The items are held by value
-(`pendingJson` of `PagesView`), so a refresh that changes none of them never
-rebuilds the boxes being written in.
+Everything that waits on you is in the chat, as a card (`RequestDecision`) at
+the time it was asked, among the messages and the lines of the log; there is no
+other list and no counter. `Pending.queue` lists them, oldest first (a request
+another gathers from below is not a second one), for Alt+R, which brings the
+oldest into view. Answering one leaves it where it is, settled (see
+[Threads](#threads)). The card is shown whole from its top when it takes the
+keyboard, and a refresh that changes none of its words never rebuilds the
+boxes being written in.
 
-An item (`RequestDecision`) has four kinds, each with its own icon and
+A card has four kinds, each with its own icon and
 word: QUESTION (a circled question mark), DECISION (a diamond), PERMISSION
 (a shield) and REVIEW (a spark). The kind is the request's shape, whoever
 decides it: a review when it holds an action, a permission when one of its
 options grants, a decision when it offers options, else a question. Its heading is one line: the kind, the time and the item's tools
 (copy the question, the "more" menu that holds ESCALATE while it waits on
-you, and close where the item opened in place of another, DECIDE INSTEAD), so
+you, and close where the card opened in place of another, DECIDE INSTEAD), so
 nothing overlaps the title at any width. Under it, wrapped inside the item
 whatever the width: the request in a sentence (a permission "Surgeon asks to
 use the network"; a numbered list "Clerk asks 3 questions"; else the first
@@ -416,8 +398,8 @@ NOTE (or ADD A REASON OR A NOTE) and goes with the option chosen; DENY gives
 it as the reason. ESCALATE, from the menu, shows the box, captioned WHY IT GOES
 UP, and turns the action into ESCALATE; ANSWER INSTEAD turns it back. Sending
 turns the button you chose into a turning spinner and SENDING, at the width it
-had, so nothing moves; the other buttons go off; answered, the item shrinks to the
-question and your answer; a failure reopens it with your words kept and an
+had, so nothing moves; the other buttons go off; answered, the card shrinks to the
+question and your answer, under the word of what you did; a failure reopens it with your words kept and an
 error line. The words are written in the kit's `TextBlock`, one line tall and
 growing with its text, and Enter sends them on a question. Under a decision
 that gathers only one, the buttons carry no caption of their own.
@@ -426,7 +408,7 @@ The title of an item is its own sentence; the work it concerns is the
 origin's when the harness passed it up.
 
 `QuestionForm` puts "N OF M ANSWERED" under the item's title, and SEND (off with "answer at least one to send" beside it; solid once one is answered) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. The
-form grows in the queue. While
+form grows in the chat. While
 that end is below the view, the two float on the view's bottom edge over the
 card's fill and a hairline, with what passes under them fading out above, with "N MORE QUESTIONS BELOW" at the right
 (above them under 520 px) while items start under them; the chip brings the
@@ -857,8 +839,8 @@ logs each text drawn out of its box, the window or a clipping item as a
   is read again with the new row picked. It has no key. FILTER (`/`).
 - On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered on a
   project).
-- In a conversation, from any of its pages: the pending counter and ANSWER
-  (Alt+R) in the header strip, which open the pending queue; the strip's cost, which opens COST; the `1 NOTE` notice
+- In a conversation, from any of its pages: Alt+R, which goes to the oldest
+  card in the chat that waits on you; the `1 NOTE` notice
   (Alt+M on the chat); and NEW CONVERSATION (Ctrl+N) in `⋯`. On the tree and a
   work's page a request is also answered in its decision (`RequestDialog`, the
   item over the page).

@@ -21,6 +21,8 @@ Item {
   // The files attached with it, as JSON.
   required property string files
   property bool continued: false
+  // The subject of a message that has one, the bubble's title line.
+  property string subject: ""
 
   readonly property var attached: JSON.parse(files)
   readonly property color tone: turn.note ? Theme.dim : Omunculus.toneOf(who)
@@ -34,7 +36,7 @@ Item {
   Column {
     id: body
     y: turn.continued ? Theme.space.row : Theme.space.inset
-    width: Math.min(turn.widest, Math.max(heading.implicitWidth, line.implicitWidth + 2 * turn.inset))
+    width: Math.min(turn.widest, Math.max(heading.implicitWidth, Math.max(line.implicitWidth, titled.implicitWidth) + 2 * turn.inset))
     x: turn.mine ? turn.width - width : 0
     spacing: Theme.space.line
     opacity: turn.pending ? 0.55 : 1
@@ -57,21 +59,36 @@ Item {
 
     Rectangle {
       width: parent.width
-      height: line.implicitHeight + Theme.space.inset
+      height: inside.implicitHeight + Theme.space.inset
       color: turn.mine ? Theme.bubble() : Theme.bubble(turn.tone)
-      Prose {
-        id: line
+      Column {
+        id: inside
         anchors.verticalCenter: parent.verticalCenter
         x: turn.inset
         width: parent.width - 2 * turn.inset
-        // Yours sits on the right, its lines read from the left.
-        horizontalAlignment: Text.AlignLeft
-        plain: turn.mine
-        source: turn.mine ? turn.text : Omunculus.inline(turn.text)
-        color: Theme.foreground
-        font.pixelSize: Theme.type.body.size
-        lineHeight: Theme.type.body.lineHeight
-        wrapMode: Text.Wrap
+        spacing: Theme.space.line
+        Label {
+          id: titled
+          visible: turn.subject !== ""
+          width: parent.width
+          text: turn.subject
+          color: Theme.foreground
+          font.pixelSize: Theme.type.body.size
+          font.bold: true
+          wrapMode: Text.Wrap
+        }
+        Prose {
+          id: line
+          width: parent.width
+          // Yours sits on the right, its lines read from the left.
+          horizontalAlignment: Text.AlignLeft
+          plain: turn.mine
+          source: turn.mine ? turn.text : Omunculus.inline(turn.text)
+          color: Theme.foreground
+          font.pixelSize: Theme.type.body.size
+          lineHeight: Theme.type.body.lineHeight
+          wrapMode: Text.Wrap
+        }
       }
     }
   }

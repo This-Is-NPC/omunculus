@@ -451,48 +451,11 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
-  test "standing says the workflow, the step, and the chain down to who works" do
+  test "a node names its workflow and its place in it" do
     run!("""
     const out = Progress.build(base);
-    const here = Progress.standing(out, "sales");
-    check(JSON.stringify(here) === JSON.stringify({workflow: "sale", stage: "design", step: 2, steps: 6,
-      chain: ["sales", "seller", "design-lead", "designer"], agent: "designer", state: "working", waits: "", head: "seller", asker: ""}), "working", here);
     check(out.flat[0].workflow === "sale" && out.flat[1].workflow === "", "a node names its workflow", out.flat.map(node => node.workflow));
-    const idle = Progress.build(Object.assign({}, base, {runs: []}));
-    const waiting = Progress.standing(idle, "sales");
-    check(waiting.state === "waiting" && waiting.waits === idle.focus.waitingOn && waiting.waits !== "" && waiting.chain.join() === "sales,seller,design-lead,designer", "waiting", waiting);
-    const done = Progress.standing({state: "done", path: [], flat: [], focus: {workflow: "sale", count: 6, at: 5, state: "done", steps: sale.steps}}, "sales");
-    check(done.step === 6 && done.stage === "build" && done.chain.join() === "sales", "done is at the last step", done);
-    const asked = Progress.standing({state: "needs-you", path: [], flat: [], focus: {workflow: "", count: 0, at: -1, state: "needs-you", steps: []}}, "sales");
-    const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("designer"), work_id: "w3", reason: "Which logo?"};
-    const needed = Progress.standing(Progress.build(Object.assign({}, base, {runs: [], requests: [ask]})), "sales");
-    check(needed.waits === "you" && needed.asker === "designer", "the agent that asks you heads the wait", needed);
-    check(asked.waits === "you" && asked.step === 0 && asked.stage === "", "waiting for you, no workflow", asked);
     check(JSON.stringify(Progress.track(out.flat[0])) === JSON.stringify({workflow: "sale", step: 2, steps: 6, stage: "design"}) && Progress.track(out.flat[1]) === null, "track", "");
-    check(Progress.standing(null, "sales") === null && Progress.standing({focus: null}, "sales") === null, "none before a work", "");
-    """)
-  end
-
-  test "status says in one sentence what is happening, with an icon and the time" do
-    run!("""
-    const input = (progress, standing, over) => Object.assign({progress, standing, tick: 1100, said: true, ran: true, verb: ""}, over || {});
-    const focus = Object.assign({}, {state: "open", finishedIn: null, created: 1000, branch: {seconds: 100}});
-    const stand = over => Object.assign({workflow: "sale", stage: "design", step: 2, steps: 5, chain: ["seller"], agent: "designer", state: "working", waits: "", head: "seller", asker: ""}, over || {});
-    const working = Progress.status(input({state: "working", focus, now: {agent: "designer"}}, stand()));
-    check(working.text === "Designer is working on the design stage" && working.icon === "spinner" && working.tone === "working" && working.clock === "1:40", "working", working);
-    const verb = Progress.status(input({state: "working", focus, now: {agent: "front-desk"}}, stand({stage: "", agent: "front-desk"}), {verb: "Running a command"}));
-    check(verb.text === "Front desk is working: running a command", "a verb in place of a stage", verb);
-    const asks = Progress.status(input({state: "needs-you", focus}, stand({state: "needs-you", asker: "seller", waits: "you"})));
-    check(asks.text === "Seller is waiting for your answer" && asks.icon === "warning" && asks.tone === "warning", "needs you", asks);
-    const waits = Progress.status(input({state: "waiting", focus}, stand({state: "waiting", waits: "design-lead", head: "seller"})));
-    check(waits.text === "Seller is waiting for design-lead" && waits.icon === "clock", "waiting", waits);
-    const done = Progress.status(input({state: "done", focus: Object.assign({}, focus, {state: "done", finishedIn: 200})}, stand({state: "done"})));
-    check(done.text === "Done" && done.icon === "check" && done.tone === "success" && done.clock === "took 3 minutes", "done", done);
-    check(Progress.status(input({state: "failed", focus}, stand())).tone === "error", "failed", "");
-    check(Progress.status(input({state: "idle", focus: null}, null, {ran: false, said: true})).text === "Starting", "starting once written", "");
-    check(Progress.status(input({state: "idle", focus: null}, null, {ran: true})) === null, "nothing to say draws nothing", "");
-    check(Progress.status(input(null, null, {ran: false, said: false})) === null, "an empty conversation draws nothing", "");
-    check(Progress.person("front-desk") === "Front desk", "a name as a sentence has it", Progress.person("front-desk"));
     """)
   end
 

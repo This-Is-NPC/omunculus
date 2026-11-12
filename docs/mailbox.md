@@ -165,8 +165,8 @@ server has taken the answer, the review leaves Pending and a line confirms
 it ("Approved: ..." or "Edited: ...", "Denied: ..."); if it did not, a line
 says so and the buttons come back.
 
-A review that is not yours to decide is not listed. The console's pending
-queue holds the same reviews.
+A review that is not yours to decide is not listed. The console's chat
+holds the same reviews, as cards.
 
 ## Composing
 
