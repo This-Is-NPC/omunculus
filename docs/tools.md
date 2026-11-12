@@ -95,6 +95,19 @@ A layer of the TOML picks one with `overrides.<tool>.schema`
 the tool's `parameters`. The store rules on the arguments stay the same
 whichever schema the model saw.
 
+A `command` tool may set `keep_alive_ms`, a positive integer. The harness
+then keeps its process between the calls of one run, so the tool holds
+state the process needs, such as a language server. The contract changes
+only in its framing: each call is one line of JSON on stdin, the `in`, and
+the tool answers with one line of JSON on stdout, the `out`, until stdin
+closes. The process is started under the run's policy by the first call and
+ends after `keep_alive_ms` without a call, when a call fails or times out,
+or when it exits; the next call starts it again. One run never reaches the
+process of another. A call outside a run, or a tool without the key, gets
+a process per call, which reads the same line until stdin closes. The
+process holds one of the run's execution slots (`max_concurrent`) while it
+lives.
+
 A tool only the CLI triggers (`triggers = ["cli"]`) may set
 `config = false`; any other tool that sets it is refused. The command line
 looks such a tool up among the package's own tools, before any config is
@@ -211,12 +224,13 @@ argument of the call.
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
 | `agents` | the agents and workflows a new work may name, one depth below the run (1 when the run has no work). The run's depth is the work's place in the tree, or its assignee's depth when that is deeper. Listed: the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
 | `paths` | the path permissions of the run's ceiling | |
+| `settings` | the `[settings.<key>]` table of the config, `<key>` being the view's own key; empty without one ([Settings](config.md#settings)) | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`) | |
 | `skills` | the Agent Skills the run's ceiling has, each its `name`, `description` and `dir` | |
 
 Every read stays in the call's conversation and goes only through these
 relations, but for the project's unread inbox and its recent runs. The harness computes `catalog`, `workspaces`, `agents`,
-`paths`, `grant_scopes` and `skills` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
+`paths`, `settings`, `grant_scopes` and `skills` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
 the `work` card, each with the tools it has that the run has not, and
 `skills` under `## Skills`, a line `name: description` each.
 
@@ -596,6 +610,38 @@ written. Each path follows the sandbox and workspace rules, and `edit` and
 `patch` refuse a file that changed since the run last read it. The files
 each call changed are recorded for `changes` and `revert` like those of
 `write`.
+
+## Code intelligence
+
+`lsp` asks the language server declared for a file's extension
+([Settings](config.md#settings)). It is not in a group: name it in an
+agent's `tools`. `path` is relative to the workspace root; `line` and
+`column` count from 1.
+
+| `action` | Needs | Answers |
+| --- | --- | --- |
+| `diagnostics` | `path` | `path:line:col severity [source code] message`, one per line, or `no diagnostics` |
+| `definition` | `path`, `line`, `column` | `path:line:col  <source line>` of each definition |
+| `references` | `path`, `line`, `column` | the same, for each use and the declaration |
+| `hover` | `path`, `line`, `column` | the type or documentation the server gives, cut at 2000 characters |
+| `symbols` | `path` | `kind name line:col`, indented by nesting |
+
+A list is cut at 100 lines (`(+N more)`). The tool sends the file as it is
+on disk before each call, so an edit is seen by the next one; after an
+edit, `diagnostics` shows what broke. It waits up to 15 seconds for the
+server to publish diagnostics of a file it has just been told about, and
+a request unanswered for 30 seconds fails the call.
+
+The tool is a `command` tool with `keep_alive_ms = 120000`: the language
+server starts inside the run's sandbox, in the workspace root, on the
+first call, is initialised once, and lives with the tool's process
+([On disk](#on-disk)), until two minutes pass without a call. A server
+takes seconds to start and index, and a run uses it in bursts; two minutes
+keeps it through the model's thinking between edits and frees its
+execution slot soon after. The server sees what the run's policy lets any
+tool see: a server that needs a writable cache or the network needs the
+run's `sandbox.write` or `sandbox.network` grant, and its executable must
+be in a runtime of the policy.
 
 ## Groups the default package uses
 

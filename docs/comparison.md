@@ -47,7 +47,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | **Coding: reading** | Read with offset/limit | **P** | **P** | **P** | **P** |
 | | Image / PDF | **T** | **P** | **P** | **P** |
 | | Grep / find | **P** `grep` and `find` leave out `.git` and what `.gitignore` ignores | **P** | **P** | **P** |
-| | LSP | **T** | **P** | ✗ | ✗ |
+| | LSP | **P** `lsp`: diagnostics, definition, references, hover, symbols from servers the TOML declares, kept for the run | **P** | ✗ | ✗ |
 | **Coding: editing** | Exact, unique replacement | **P** | **P** | **P** | **P** |
 | | Multi-edit, patch, diff, read before edit | **P** `edit` applies several replacements atomically, `patch` several files; refuses a file that changed since it was read; per-call diff through `changes` | **P** | **P** | **P** |
 | | Formatter after edit | **T** hook | ? | **P** | ? |
@@ -75,7 +75,7 @@ Core changes (**K**):
 - a deeper history view, for search beyond the last run
 - execution outside Linux and Bubblewrap
 
-Tools and hooks (**T**), a `coding` package for the presets: reply on the CLI, worktree per run, formatter, LSP, image and PDF
+Tools and hooks (**T**), a `coding` package for the presets: reply on the CLI, worktree per run, formatter, image and PDF
 reading. For reach: a messaging channel and web search.
 
 ## Sources

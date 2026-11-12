@@ -1,0 +1,391 @@
+#!/usr/bin/env python3
+"""Code intelligence over LSP.
+
+Reads one JSON input per line on stdin and answers one JSON output per line,
+until stdin closes. The language servers it starts live as long as this
+process, so a server is initialised once per run, not once per call.
+"""
+
+import json
+import os
+import queue
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from urllib.parse import quote, unquote, urlparse
+
+REQUEST_S = 30
+FIRST_DIAGNOSTICS_S = 15
+QUIET_S = 0.4
+MAX_LINES = 100
+MAX_HOVER = 2000
+
+SEVERITY = {1: "error", 2: "warning", 3: "info", 4: "hint"}
+KIND = {
+    1: "file", 2: "module", 3: "namespace", 4: "package", 5: "class", 6: "method",
+    7: "property", 8: "field", 9: "constructor", 10: "enum", 11: "interface",
+    12: "function", 13: "variable", 14: "constant", 15: "string", 16: "number",
+    17: "boolean", 18: "array", 19: "object", 20: "key", 21: "null",
+    22: "enum member", 23: "struct", 24: "event", 25: "operator", 26: "type parameter",
+}
+
+
+class Failure(Exception):
+    pass
+
+
+def utf16_len(text):
+    return sum(2 if ord(ch) > 0xFFFF else 1 for ch in text)
+
+
+def to_utf16(text, column):
+    return utf16_len(text[: column - 1])
+
+
+def from_utf16(text, units):
+    seen = 0
+    for index, ch in enumerate(text):
+        if seen >= units:
+            return index + 1
+        seen += utf16_len(ch)
+    return len(text) + 1
+
+
+def uri_of(path):
+    return "file://" + quote(str(path))
+
+
+def path_of(uri):
+    return Path(unquote(urlparse(uri).path))
+
+
+class Server:
+    def __init__(self, name, command, root):
+        self.name = name
+        self.root = root
+        self.cond = threading.Condition()
+        self.waiting = {}
+        self.diagnostics = {}
+        self.published = 0
+        self.documents = {}
+        self.next_id = 0
+        try:
+            self.proc = subprocess.Popen(
+                command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, cwd=root,
+            )
+        except OSError as error:
+            raise Failure(f"cannot start the {name} language server {command[0]}: {error.strerror}")
+        threading.Thread(target=self.read_loop, daemon=True).start()
+        self.request("initialize", {
+            "processId": os.getpid(),
+            "rootUri": uri_of(root),
+            "workspaceFolders": [{"uri": uri_of(root), "name": root.name}],
+            "capabilities": {
+                "general": {"positionEncodings": ["utf-16"]},
+                "textDocument": {
+                    "synchronization": {},
+                    "publishDiagnostics": {},
+                    "hover": {"contentFormat": ["plaintext", "markdown"]},
+                    "definition": {},
+                    "references": {},
+                    "documentSymbol": {"hierarchicalDocumentSymbolSupport": True},
+                },
+            },
+        })
+        self.notify("initialized", {})
+
+    def alive(self):
+        return self.proc.poll() is None
+
+    def write(self, message):
+        body = json.dumps(message).encode()
+        try:
+            self.proc.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
+            self.proc.stdin.flush()
+        except OSError:
+            raise Failure(f"the {self.name} language server closed")
+
+    def notify(self, method, params):
+        self.write({"jsonrpc": "2.0", "method": method, "params": params})
+
+    def request(self, method, params):
+        self.next_id += 1
+        mailbox = queue.Queue()
+        self.waiting[self.next_id] = mailbox
+        self.write({"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params})
+        try:
+            reply = mailbox.get(timeout=REQUEST_S)
+        except queue.Empty:
+            raise Failure(f"the {self.name} language server did not answer {method} in {REQUEST_S}s")
+        finally:
+            self.waiting.pop(self.next_id, None)
+        if reply is None:
+            raise Failure(f"the {self.name} language server closed")
+        if "error" in reply:
+            raise Failure(f"{method}: {reply['error'].get('message', reply['error'])}")
+        return reply.get("result")
+
+    def frames(self):
+        out = self.proc.stdout
+        while True:
+            length = None
+            while True:
+                header = out.readline()
+                if not header:
+                    return
+                header = header.strip()
+                if not header:
+                    break
+                if header.lower().startswith(b"content-length:"):
+                    length = int(header.split(b":")[1])
+            if length is None:
+                continue
+            yield json.loads(out.read(length))
+
+    def read_loop(self):
+        try:
+            for message in self.frames():
+                self.dispatch(message)
+        except (OSError, ValueError):
+            pass
+        with self.cond:
+            for mailbox in list(self.waiting.values()):
+                mailbox.put(None)
+
+    def dispatch(self, message):
+        if "method" not in message:
+            mailbox = self.waiting.get(message.get("id"))
+            if mailbox:
+                mailbox.put(message)
+        elif message["method"] == "textDocument/publishDiagnostics":
+            params = message["params"]
+            with self.cond:
+                self.diagnostics[params["uri"]] = params["diagnostics"]
+                self.published += 1
+                self.cond.notify_all()
+        elif "id" in message:
+            # A request of the server: nothing here has an answer to give.
+            result = [None] * len(message["params"].get("items", [])) \
+                if message["method"] == "workspace/configuration" else None
+            try:
+                self.write({"jsonrpc": "2.0", "id": message["id"], "result": result})
+            except Failure:
+                pass
+
+    def sync(self, path, text):
+        """Opens or updates the document; true when the server was told something."""
+        uri = uri_of(path)
+        known = self.documents.get(uri)
+        if known and known[1] == text:
+            return False
+        if known:
+            version = known[0] + 1
+            self.notify("textDocument/didChange", {
+                "textDocument": {"uri": uri, "version": version},
+                "contentChanges": [{"text": text}],
+            })
+        else:
+            version = 1
+            self.notify("textDocument/didOpen", {"textDocument": {
+                "uri": uri, "languageId": self.name, "version": version, "text": text}})
+        self.documents[uri] = (version, text)
+        return True
+
+    def wait_diagnostics(self, uri, since):
+        """Waits for a publication after `since`, then until the server is quiet."""
+        deadline = time.monotonic() + FIRST_DIAGNOSTICS_S
+        with self.cond:
+            while self.published == since:
+                left = deadline - time.monotonic()
+                if left <= 0 or not self.alive():
+                    break
+                self.cond.wait(left)
+            while True:
+                seen = self.published
+                self.cond.wait(QUIET_S)
+                if self.published == seen:
+                    break
+            return self.diagnostics.get(uri)
+
+    def stop(self):
+        try:
+            self.request("shutdown", None)
+            self.notify("exit", None)
+        except Failure:
+            pass
+        try:
+            self.proc.terminate()
+        except OSError:
+            pass
+
+
+class Lsp:
+    def __init__(self):
+        self.servers = {}
+
+    def server_for(self, settings, path, root):
+        suffix = path.suffix.lstrip(".")
+        for name, table in sorted(settings.items()):
+            if suffix in [e.lstrip(".") for e in table.get("extensions", [])]:
+                server = self.servers.get(name)
+                if server is None or not server.alive():
+                    command = table.get("command")
+                    if not isinstance(command, list) or not command:
+                        raise Failure(f"[settings.lsp.{name}] needs a command")
+                    server = self.servers[name] = Server(name, command, root)
+                return server
+        declared = sorted({e for t in settings.values() for e in t.get("extensions", [])})
+        if not settings:
+            raise Failure("no language server is declared: add [settings.lsp.<language>] "
+                          "with command and extensions to the config")
+        raise Failure(f"no language server is declared for .{suffix}; declared: {', '.join(declared)}")
+
+    def call(self, data):
+        args = data["args"]
+        root = Path(data["roots"][0]).resolve()
+        settings = data["view"].get("lsp", {})
+        path = (root / args["path"]).resolve()
+        if root != path and root not in path.parents:
+            raise Failure(f"{args['path']} is outside the workspace")
+        try:
+            text = path.read_text()
+        except (OSError, UnicodeDecodeError) as error:
+            raise Failure(f"cannot read {args['path']}: {error}")
+        server = self.server_for(settings, path, root)
+        uri = uri_of(path)
+        since = server.published
+        changed = server.sync(path, text)
+        action = args["action"]
+        lines = text.split("\n")
+        if action == "diagnostics":
+            return self.diagnostics(server, root, path, uri, since, changed)
+        if action == "symbols":
+            result = server.request("textDocument/documentSymbol", {"textDocument": {"uri": uri}})
+            return self.symbols(result or [], lines)
+        position = self.position(args, lines)
+        params = {"textDocument": {"uri": uri}, "position": position}
+        if action == "hover":
+            return self.hover(server.request("textDocument/hover", params))
+        if action == "definition":
+            result = server.request("textDocument/definition", params)
+            return self.locations(root, result, "no definition found")
+        params["context"] = {"includeDeclaration": True}
+        result = server.request("textDocument/references", params)
+        return self.locations(root, result, "no references found")
+
+    def position(self, args, lines):
+        line, column = args.get("line"), args.get("column")
+        if not isinstance(line, int) or not isinstance(column, int):
+            raise Failure(f"{args['action']} needs line and column")
+        if not 1 <= line <= len(lines):
+            raise Failure(f"line {line} is outside the file ({len(lines)} lines)")
+        return {"line": line - 1, "character": to_utf16(lines[line - 1], column)}
+
+    def diagnostics(self, server, root, path, uri, since, changed):
+        found = server.diagnostics.get(uri)
+        if changed or found is None:
+            found = server.wait_diagnostics(uri, since)
+        if found is None:
+            return "the language server published no diagnostics for this file"
+        if not found:
+            return "no diagnostics"
+        rel = relative(root, path)
+        text = path.read_text().split("\n")
+        rows = []
+        for item in sorted(found, key=lambda d: (d["range"]["start"]["line"], d["range"]["start"]["character"])):
+            start = item["range"]["start"]
+            line = text[start["line"]] if start["line"] < len(text) else ""
+            code = f" {item['code']}" if "code" in item else ""
+            source = f"{item['source']}" if "source" in item else ""
+            tag = f" [{source}{code}]" if source or code else ""
+            rows.append(f"{rel}:{start['line'] + 1}:{from_utf16(line, start['character'])} "
+                        f"{SEVERITY.get(item.get('severity', 1), 'error')}{tag} {item['message']}")
+        return cut(rows)
+
+    def locations(self, root, result, empty):
+        if not result:
+            return empty
+        if isinstance(result, dict):
+            result = [result]
+        rows = []
+        for item in result:
+            uri = item.get("targetUri") or item["uri"]
+            where = item.get("targetSelectionRange") or item["range"]
+            path = path_of(uri)
+            try:
+                line = path.read_text().split("\n")[where["start"]["line"]]
+            except (OSError, UnicodeDecodeError, IndexError):
+                line = ""
+            column = from_utf16(line, where["start"]["character"])
+            rows.append(f"{relative(root, path)}:{where['start']['line'] + 1}:{column}  {line.strip()}".rstrip())
+        return cut(rows)
+
+    def hover(self, result):
+        if not result or not result.get("contents"):
+            return "no hover information"
+        text = marked(result["contents"]).strip()
+        if len(text) > MAX_HOVER:
+            text = text[:MAX_HOVER] + "\n(cut)"
+        return text or "no hover information"
+
+    def symbols(self, result, lines):
+        if not result:
+            return "no symbols"
+        rows = []
+
+        def walk(items, depth):
+            for item in items:
+                if "location" in item:
+                    where = item["location"]["range"]["start"]
+                else:
+                    where = item.get("selectionRange", item["range"])["start"]
+                line = lines[where["line"]] if where["line"] < len(lines) else ""
+                rows.append(f"{'  ' * depth}{KIND.get(item['kind'], 'symbol')} {item['name']} "
+                            f"{where['line'] + 1}:{from_utf16(line, where['character'])}")
+                walk(item.get("children", []), depth + 1)
+
+        walk(result, 0)
+        return cut(rows)
+
+
+def marked(contents):
+    if isinstance(contents, str):
+        return contents
+    if isinstance(contents, list):
+        return "\n\n".join(marked(part) for part in contents)
+    return contents.get("value", "")
+
+
+def relative(root, path):
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def cut(rows):
+    if len(rows) > MAX_LINES:
+        rows = rows[:MAX_LINES] + [f"(+{len(rows) - MAX_LINES} more)"]
+    return "\n".join(rows)
+
+
+def main():
+    lsp = Lsp()
+    try:
+        for line in sys.stdin:
+            if not line.strip():
+                continue
+            try:
+                out = {"ok": True, "output": lsp.call(json.loads(line))}
+            except Failure as failure:
+                out = {"ok": False, "output": str(failure)}
+            print(json.dumps(out), flush=True)
+    finally:
+        for server in lsp.servers.values():
+            server.stop()
+
+
+main()

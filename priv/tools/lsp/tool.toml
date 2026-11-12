@@ -1,0 +1,32 @@
+name = "lsp"
+kind = "tool"
+triggers = ["model"]
+description = "Code intelligence from the language server declared for the file's extension: diagnostics of a file, the definition or the references of the symbol at a position, its hover text or type, or the symbols of a file. Use it before editing, to find what a name is and who uses it, and after, to see what broke. line and column count from 1."
+tags = ["code"]
+command = ["./run"]
+keep_alive_ms = 120000
+
+[parameters]
+type = "object"
+required = ["action", "path"]
+
+[parameters.properties.action]
+type = "string"
+enum = ["diagnostics", "definition", "references", "hover", "symbols"]
+
+[parameters.properties.path]
+type = "string"
+description = "The file, relative to the workspace root."
+
+[parameters.properties.line]
+type = "integer"
+minimum = 1
+description = "The line of the symbol, from 1. Required by definition, references and hover."
+
+[parameters.properties.column]
+type = "integer"
+minimum = 1
+description = "The column of the symbol, from 1. Required by definition, references and hover."
+
+[views.lsp]
+source = "settings"

@@ -231,6 +231,32 @@ ends; it never enters the execution policy, the store or the events,
 and what the call returns has it masked as `***`. `[execution]
 environment` stays what every process of a run receives.
 
+## Settings
+
+`[settings.<key>]` holds what a tool needs to know that is not a secret.
+A tool reads it through a view of the same key and the source `settings`
+(`[views.lsp] source = "settings"`, [Views](tools.md#views)); a view whose
+key has no table reads an empty one. Each `[settings.<key>]` must be a
+table. The core does not look inside: the tool that reads it does.
+
+`lsp` reads one table per language, each with the `command` of the
+language server and the file `extensions` it serves. There is no default:
+without a table the tool says no server is declared.
+
+```toml
+[settings.lsp.rust]
+command = ["rust-analyzer"]
+extensions = ["rs"]
+
+[settings.lsp.typescript]
+command = ["typescript-language-server", "--stdio"]
+extensions = ["ts", "tsx", "js", "jsx"]
+```
+
+The first language, in name order, that lists a file's extension serves it.
+The command runs in the workspace root, inside the run's sandbox
+([Code intelligence](tools.md#code-intelligence)).
+
 ## Artifacts in a bucket
 
 `[s3]` is optional: the S3-compatible bucket the artifact tools
