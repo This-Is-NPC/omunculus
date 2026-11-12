@@ -26,7 +26,7 @@ RowLayout {
     tip: "files to send with the message"
     onClicked: files.pick()
   }
-  FilePicker { id: files; Layout.fillWidth: true; visible: footer.attachable && paths.length > 0 }
+  FilePicker { id: files; Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; visible: footer.attachable && paths.length > 0 }
   Item { Layout.fillWidth: true }
   TraceButton {
     dense: true
