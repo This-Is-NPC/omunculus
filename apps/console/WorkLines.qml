@@ -4,12 +4,12 @@ import "kit/client/Progress.js" as Progress
 import "kit/client/Tree.js" as Tree
 import "kit/ui"
 
-// WorkLines is a "work", "fold" or "fork" row of Tree.stream as the
-// hierarchy draws it: a LineageRow, or the lanes of a ForkBlock. Give it the
-// `row`, the `unit` and `origin` of the column geometry and the `scope` (the
-// work the view is kept to, "" for none). Signals: toggled(key, open) a work
-// or a fold to open or close, opened(work) the arrow of a work, chosen(work)
-// a work picked.
+// WorkLines is a "you", "front", "work", "fold" or "fork" row of Tree.stream
+// as the hierarchy draws it, in the chat and in the tree: a LineageRow, or the
+// lanes of a ForkBlock. Give it the `row`, the `unit` and `origin` of the
+// column geometry and the `scope` (the work the view is kept to, "" for
+// none). Signals: toggled(key, open) a work or a fold to open or close,
+// opened(work) the arrow of a work, chosen(work) a work or a lane picked.
 Loader {
   id: lines
   required property var row
@@ -23,7 +23,38 @@ Loader {
   signal chosen(string work)
 
   height: item ? item.implicitHeight : 0
-  sourceComponent: ({ work: work, fold: fold, fork: fork })[row.kind] || null
+  sourceComponent: ({ you: you, front: front, work: work, fold: fold, fork: fork })[row.kind] || null
+
+  // L0: the person, and the agent that talks with them.
+  Component {
+    id: you
+    LineageRow {
+      width: lines.width
+      stem: lines.row.stem
+      unit: lines.unit
+      origin: lines.origin
+      agent: "you"
+      tone: Theme.primary
+      linked: false
+    }
+  }
+
+  Component {
+    id: front
+    LineageRow {
+      readonly property var look: Tree.frontState(lines.row.front)
+      width: lines.width
+      stem: lines.row.stem
+      unit: lines.unit
+      origin: lines.origin
+      agent: lines.row.front.agent
+      tone: Omunculus.toneOf(agent)
+      title: lines.row.front.doing
+      state: look.state
+      stateText: look.text
+      linked: false
+    }
+  }
 
   Component {
     id: work
@@ -73,9 +104,10 @@ Loader {
       state: look.state
       stateText: look.text
       folds: true
+      open: lines.row.unfolded
       linked: nodes.length === 1
-      onToggled: lines.toggled(lines.row.key, true)
-      onChosen: lines.toggled(lines.row.key, true)
+      onToggled: lines.toggled(lines.row.key, !lines.row.unfolded)
+      onChosen: lines.toggled(lines.row.key, !lines.row.unfolded)
       onOpened: lines.opened(last.work)
     }
   }

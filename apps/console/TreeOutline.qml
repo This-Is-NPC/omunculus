@@ -5,23 +5,24 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // TreeOutline is the works as indented lineage rows (WorkLines), the chart's
-// tree in the grammar of the chat: depth lifelines, a chevron to fold what a
-// work handed down, parallel works as lanes. A row chosen emits chosen(work).
+// tree in the grammar of the chat: you and the agent that talks with you at
+// L0, depth lifelines, a chevron to fold what a work handed down, parallel
+// works as lanes. A row chosen emits chosen(work).
 ListView {
   id: outline
 
   // The work picked.
   property string picked: ""
   // Works and folds opened (true) or closed (false) by hand.
-  property var opened: ({})
+  property var folds: ({})
   signal chosen(string work)
   signal opened(string work)
 
   readonly property real unit: Breakpoints.tight(width) ? Theme.size.mark : Theme.size.gutter
   clip: true
   boundsBehavior: Flickable.StopAtBounds
-  model: Tree.stream({ progress: Omunculus.progress, opened: opened })
-    .filter(row => row.kind === "work" || row.kind === "fold" || row.kind === "fork")
+  model: Tree.stream({ progress: Omunculus.progress, opened: folds, lead: true })
+    .filter(row => ["you", "front", "work", "fold", "fork"].includes(row.kind))
   Accessible.role: Accessible.Tree
   Accessible.name: "the works"
 
@@ -33,9 +34,9 @@ ListView {
     origin: outline.unit
     picked: outline.picked
     onToggled: (key, open) => {
-      const next = Object.assign({}, outline.opened)
+      const next = Object.assign({}, outline.folds)
       next[key] = open
-      outline.opened = next
+      outline.folds = next
     }
     onChosen: work => outline.chosen(work)
     onOpened: work => outline.opened(work)

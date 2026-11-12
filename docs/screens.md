@@ -220,7 +220,8 @@ with you, then one per level of works, a node per agent with its name and its
 state in words, elbow connectors from each work to the works it handed down,
 and a bracket under works that ran at once ("PARALLEL ×4 · 2 DONE · 2
 WORKING"). The outline is the same tree as indented rows with depth
-lifelines, as in the chat. A click on a node or a row picks its work. The
+lifelines, as in the chat, headed by you and the agent that talks with you at
+L0. A click on a node or a row picks its work. The
 PICKED WORK panel under it says its agent, level, parent, title, state and,
 while it waits, what for; OPEN THREAD (filled), LOG and COST open those
 pages. The panel shows no cost figure.

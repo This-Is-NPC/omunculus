@@ -126,4 +126,16 @@ defmodule Omunculus.GuiTreeTest do
     check(Tree.chart(delivered).brackets.length === 0, "no parallel works once all is done", Tree.chart(delivered).brackets);
     """)
   end
+
+  test "the outline leads with you and the front agent, the works one level down" do
+    run!("""
+    const outline = Tree.stream({progress: live, lead: true});
+    const head = outline.slice(0, 3);
+    check(head[0].kind === "you" && head[1].kind === "front" && head[1].front.agent === "sales" && head[0].depth === 0 && head[1].depth === 0, "L0", head);
+    check(head[2].kind === "work" && head[2].key === "work:w1" && head[2].depth === 1, "the works start at level 1", head[2]);
+    check(Tree.lead(live).map(item => item.key).join() === "you,front" && Tree.lead({roots: live.roots, front: null}).length === 1 && Tree.lead(null).length === 0, "lead", "");
+    check(Tree.stream({progress: live}).every(row => row.kind !== "you" && row.kind !== "front"), "the chat has no heads", "");
+    check(Tree.levelOf(nodes(live).order, node => nodes(live)[node.parent] || null) === Tree.level(nodes(live).order), "one count of levels", "");
+    """)
+  end
 end

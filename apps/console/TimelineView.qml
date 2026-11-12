@@ -399,7 +399,7 @@ Item {
         y: entry.gap
         width: entry.width
         sourceComponent: !entry.row ? null : ({
-          work: work, fold: fold, fork: fork, stages: stages, ask: ask, team: ask, entry: entryRow
+          work: lines, fold: lines, fork: lines, stages: stages, ask: ask, team: ask, entry: entryRow
         })[entry.kind] || null
 
         FocusRing { shown: entry.selected; anchors.margins: 0 }
@@ -423,77 +423,24 @@ Item {
         }
       }
 
-      // A work: its level.
+      // A work, finished works gathered in one line, or works that ran at
+      // once: the lineage rows of the tree.
       Component {
-        id: work
-        LineageRow {
-          readonly property var node: entry.row.node
-          readonly property var look: Tree.stateOf(node)
+        id: lines
+        WorkLines {
+          row: entry.row
           width: entry.width
-          depth: entry.row.depth
-          rails: entry.row.rails
-          last: entry.row.last
-          stem: entry.row.stem
           unit: root.unit
           origin: root.origin
-          agent: node.agent
-          tone: Omunculus.toneOf(node.agent)
-          title: node.title
-          // Folded, what it handed down.
-          meta: entry.row.kids > 0 && !entry.row.open ? Progress.below(Progress.kidsOf(node)) : ""
-          state: look.state
-          stateText: look.text
-          folds: entry.row.kids > 0
-          open: entry.row.open
-          linked: node.work !== root.scope
-          onToggled: root.toggle(node.work, !entry.row.open)
-          onChosen: if (folds) root.toggle(node.work, !entry.row.open)
-          onOpened: root.openWork(node.work)
-        }
-      }
-
-      // Finished works gathered in one line.
-      Component {
-        id: fold
-        LineageRow {
-          readonly property var nodes: entry.row.nodes
-          readonly property var last: nodes[nodes.length - 1]
-          readonly property var look: Tree.stateOf(last)
-          width: entry.width
-          depth: entry.row.depth
-          rails: entry.row.rails
-          unit: root.unit
-          origin: root.origin
-          agent: Array.from(new Set(nodes.map(node => node.agent))).join(", ")
-          tone: Omunculus.toneOf(last.agent)
-          title: (nodes.length > 1 ? nodes.length + " folded" + Theme.type.meta.separator : "") + last.title
-          meta: entry.row.entries + (entry.row.entries === 1 ? " entry" : " entries")
-          state: look.state
-          stateText: look.text
-          folds: true
-          open: entry.row.unfolded
-          linked: nodes.length === 1
-          onToggled: root.toggle(entry.row.key, !entry.row.unfolded)
-          onChosen: root.toggle(entry.row.key, !entry.row.unfolded)
-          onOpened: root.openWork(last.work)
-        }
-      }
-
-      // Works that ran at once.
-      Component {
-        id: fork
-        ForkBlock {
-          width: entry.width
-          depth: entry.row.depth
-          rails: entry.row.rails
-          last: entry.row.last
-          unit: root.unit
-          origin: root.origin
-          summary: entry.row.summary
-          lanes: entry.row.nodes.map(node => ({
-            work: node.work, agent: node.agent, tone: Omunculus.toneOf(node.agent), title: node.title,
-            state: Tree.stateOf(node).state, stateText: Tree.stateOf(node).text
-          }))
+          scope: root.scope
+          onToggled: (key, open) => root.toggle(key, open)
+          // A work's row folds it; a lane opens its work.
+          onChosen: work => {
+            if (entry.row.kind === "fork")
+              root.openWork(work)
+            else if (entry.row.kind === "work" && entry.row.kids > 0)
+              root.toggle(work, !entry.row.open)
+          }
           onOpened: work => root.openWork(work)
         }
       }

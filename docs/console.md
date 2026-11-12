@@ -489,8 +489,9 @@ under them: "PARALLEL ×4 · 2 DONE · 2 WORKING". The chart scrolls when it is
 wider than the page. A click on a node picks its work.
 
 The outline (`TreeOutline`) is the same tree as the rows of the chat's
-lineage stream (`Tree.stream`, drawn by `WorkLines`): depth lifelines, a
-chevron to fold what a work handed down, finished works gathered in one line,
+lineage stream (`Tree.stream`, drawn by `WorkLines`, the same code as the
+chat): you and the agent that talks with you at L0 (`Tree.lead`, as in the
+chart), depth lifelines, a chevron to fold what a work handed down, finished works gathered in one line,
 parallel works as lanes. A click on a row picks its work; its arrow opens the
 work's thread.
 
