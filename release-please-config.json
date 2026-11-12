@@ -8,7 +8,8 @@
       "include-v-in-tag": true,
       "draft": false,
       "prerelease": false,
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "release-as": "0.1.0"
     }
   }
 }
