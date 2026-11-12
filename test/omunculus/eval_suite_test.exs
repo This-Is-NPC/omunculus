@@ -140,7 +140,7 @@ defmodule Omunculus.EvalSuiteTest do
 
   test "pages come from index files and named pages", %{site: site} do
     File.write!(Path.join(site, "about.html"), "x")
-    assert Enum.sort(Suite.paths(site)) == ["/", "/about.html", "/cardapio", "/contact"]
+    assert Enum.sort(Suite.paths(site)) == ["/", "/about.html", "/cardapio/", "/contact/"]
   end
 
   test "the case's score has a pass per check and the recovery counts" do

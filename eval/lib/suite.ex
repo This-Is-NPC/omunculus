@@ -34,7 +34,11 @@ defmodule EquivalentExchange.Suite do
   @spec promote?(map) :: boolean
   def promote?(suite), do: suite["promote"] == true
 
-  @doc "The page paths of a copied site, from its index.html files and named pages."
+  @doc """
+The page paths of a copied site, from its index.html files and named pages.
+A folder's path ends in a slash: the server redirects one without, and the
+redirect may drop the port the site is served on.
+"""
   @spec paths(String.t()) :: [String.t()]
   def paths(site) do
     for file <- Path.wildcard(Path.join(site, "**/*.html")),
@@ -47,7 +51,7 @@ defmodule EquivalentExchange.Suite do
 
   defp page_path(relative) do
     case Path.basename(relative) do
-      "index.html" -> "/" <> Path.dirname(relative)
+      "index.html" -> "/" <> Path.dirname(relative) <> "/"
       _named -> "/" <> relative
     end
   end
