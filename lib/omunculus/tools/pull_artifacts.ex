@@ -3,8 +3,9 @@ defmodule Omunculus.Tools.PullArtifacts do
   Builtin `pull_artifacts` tool: restores into the run's conversation the
   artifact versions the `[s3]` bucket holds for a conversation (this one,
   or `conversation`) that it lacks, as `artifact` actions
-  (`Omunculus.Artifacts.Sync`). Rerunning restores nothing more. A version
-  whose content is not text is left out and named.
+  (`Omunculus.Artifacts.Sync`), text and bytes alike. Rerunning restores
+  nothing more. A version that does not follow the ones held is left out
+  and named.
   """
 
   alias Omunculus.{Config, Tools.Args, Tools.Out}
@@ -30,7 +31,7 @@ defmodule Omunculus.Tools.PullArtifacts do
 
     case skipped do
       [] -> restored
-      _skipped -> restored <> "; left out, not text or out of order: " <> Enum.join(skipped, ", ")
+      _skipped -> restored <> "; left out, out of order: " <> Enum.join(skipped, ", ")
     end
   end
 

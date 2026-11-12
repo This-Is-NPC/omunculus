@@ -105,7 +105,7 @@ in [the TOML](config.md#artifacts-in-a-bucket) and the tools in
 | `the bucket answered 404` | `bucket` or `endpoint` is wrong, or the bucket does not exist |
 | `the bucket could not be reached` | `endpoint` does not answer |
 | `omunculus.toml [s3] credentials name <id>, which [auth] does not hold` | a name in `credentials` is not an `[auth]` provider |
-| `left out, not text or out of order: <name> v<n>` | `pull_artifacts` restores text only, and only in sequence |
+| `left out, out of order: <name> v<n>` | `pull_artifacts` restores versions only in sequence |
 
 ## Next
 

@@ -59,6 +59,27 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
       assert %{"content" => "# Brief", "media_type" => "text/markdown", "note" => "second"} = body
     end
 
+    test "emits bytes as base64, and refuses base64 that is not whole", ctx do
+      args = %{
+        "name" => "logo",
+        "kind" => "design",
+        "media_type" => "image/png",
+        "base64" => Base.encode64(<<137, 80, 78, 71, 228>>)
+      }
+
+      put = &PutArtifact.run(%{args: &1, view: %{}, config_path: ctx.config_path})
+
+      assert %{"ok" => true, "emit" => [%{"body" => body}]} = put.(args)
+      assert body["base64"] == args["base64"]
+      refute Map.has_key?(body, "content")
+
+      assert put.(%{args | "base64" => "!!"}) ==
+               Out.fail(Out.failure({:attachment, {:invalid, :base64}}))
+
+      assert %{"ok" => false} = put.(Map.delete(args, "media_type"))
+      assert %{"ok" => false} = put.(Map.put(args, "content", "x"))
+    end
+
     test "emits nothing for content equal to the latest version", ctx do
       content = "# Brief"
       sha256 = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
@@ -155,7 +176,8 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
         "artifacts" => [
           version(ctx, "brief", "brief", 1, "one"),
           version(ctx, "brief", "brief", 2, "two"),
-          version(ctx, "logo", "design", 1, <<137, 80, 78, 71, 228>>, "image/png")
+          version(ctx, "logo", "design", 1, <<137, 80, 78, 71, 228>>, "image/png"),
+          version(ctx, "shot", "design", 1, Fixtures.png(), "image/png")
         ]
       }
 
@@ -171,6 +193,9 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
                Out.fail("no such version of nothing in this conversation")
 
       assert get.(%{"name" => "logo"}) == Out.fail(Out.not_text("logo", 5))
+
+      assert %{"media" => [%{"media_type" => "image/png", "sha256" => _}]} =
+               get.(%{"name" => "shot"})
     end
 
     test "list groups the versions by artifact and filters by kind", ctx do
@@ -311,6 +336,77 @@ defmodule Omunculus.Tools.ArtifactsToolsTest do
     assert {:ok, [attached]} = Store.attachments(project.conn, conversation_id)
     assert attached["sha256"] == v1["sha256"]
     assert attached["note"] == nil
+
+    Project.close(project)
+  end
+
+  test "a binary artifact round-trips and is shown to the model", %{dir: dir} do
+    Fixtures.write_config(
+      dir,
+      """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["put_artifact", "get_artifact"]
+
+      [policy]
+      media_bytes = 256
+
+      [store]
+      path = "s.sqlite3"
+      attachments = "files"
+      attachment_bytes = 256
+      """
+    )
+
+    project = Fixtures.open_project(dir)
+    conversation_id = Omunculus.Id.new()
+
+    :ok =
+      Query.insert(project.conn, :conversations, %{
+        id: conversation_id,
+        created_at: "2026-01-01T00:00:00Z",
+        created_issuer: "local",
+        created_subject: Omunculus.Operations.local_principal().subject
+      })
+
+    message_id =
+      Fixtures.insert(project.conn, :prompts, %{
+        kind: "message",
+        body: "hi",
+        conversation_id: conversation_id
+      })
+
+    test_pid = self()
+    png = Fixtures.png()
+
+    model = fn _assembled, _tools, call ->
+      {:ok, put} =
+        call.("put_artifact", %{
+          "name" => "logo",
+          "kind" => "design",
+          "base64" => Base.encode64(png),
+          "media_type" => "image/png"
+        })
+
+      {:ok, get} = call.("get_artifact", %{"name" => "logo"})
+      send(test_pid, {:calls, put, get})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+    assert {:ok, _run} = Run.open(project, Fixtures.opening(message_id))
+
+    assert_receive {:calls, put, %{text: text, media: [shown]}}
+    assert put =~ "put logo version 1"
+    assert text == Out.media_shown("logo", "image/png", byte_size(png))
+    assert File.read!(shown["file"]) == png
+
+    assert {:ok, [version]} = Store.artifacts(project.conn, conversation_id)
+    assert %{"media_type" => "image/png", "bytes" => bytes} = version
+    assert bytes == byte_size(png)
+    {:ok, config} = Config.load(project.config_path)
+    assert {:ok, ^png} = Artifacts.read(config.store, version)
 
     Project.close(project)
   end

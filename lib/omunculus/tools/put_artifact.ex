@@ -2,14 +2,14 @@ defmodule Omunculus.Tools.PutArtifact do
   @moduledoc """
   Builtin `put_artifact` tool: writes the next version of an artifact of
   the run's conversation (`docs/design.md §10`). The content is `data`, a
-  JSON object kept as `application/json`, or `content` text of a
-  `media_type`. With `base`, the number of the version it builds on (0 for
+  JSON object kept as `application/json`, `content` text of a
+  `media_type`, or `base64` bytes of one (an image, a PDF). With `base`, the number of the version it builds on (0 for
   none), the write is refused when another version came since. The store
   keeps it and numbers the version, unless the content equals the latest
   version's, which then stands.
   """
 
-  alias Omunculus.{Artifacts, Config}
+  alias Omunculus.{Artifacts, Attachments, Config}
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
@@ -32,7 +32,7 @@ defmodule Omunculus.Tools.PutArtifact do
            ) do
       body =
         %{"name" => args["name"], "kind" => args["kind"], "media_type" => media_type}
-        |> Map.put("content", content)
+        |> Map.merge(Artifacts.payload(content))
         |> Args.put_present("note", args)
         |> then(&if base, do: Map.put(&1, "base", base), else: &1)
 
@@ -66,10 +66,27 @@ defmodule Omunculus.Tools.PutArtifact do
 
   defp content(%{"data" => _data}), do: {:error, "data must be an object"}
 
+  defp content(%{"base64" => data} = args) do
+    cond do
+      Map.has_key?(args, "content") or Map.has_key?(args, "data") ->
+        {:error, "give one of data, content or base64"}
+
+      message = Args.missing(args, ~w(media_type)) ->
+        {:error, "base64 needs its media_type (#{message})"}
+
+      true ->
+        with {:ok, bytes} <- Attachments.decode(data), do: {:ok, args["media_type"], bytes}
+    end
+  end
+
   defp content(args) do
     case Args.missing(args, ~w(content media_type)) do
-      nil -> {:ok, args["media_type"], args["content"]}
-      message -> {:error, "give data, or content with its media_type (#{message})"}
+      nil ->
+        {:ok, args["media_type"], args["content"]}
+
+      message ->
+        {:error,
+         "give data, or content with its media_type, or base64 with its media_type (#{message})"}
     end
   end
 end

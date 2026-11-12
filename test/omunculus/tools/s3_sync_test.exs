@@ -187,12 +187,23 @@ defmodule Omunculus.Tools.S3SyncTest do
              call(PullArtifacts, ctx, %{"conversation" => "c1"}, versions, "c2")
   end
 
-  test "pull names a version whose content is not text", ctx do
+  test "pull restores a version of bytes as the same bytes", ctx do
     {:ok, meta} = Artifacts.put(ctx.store, "blob", "brief", "image/png", <<255, 254>>)
     blob = Map.merge(meta, %{"kind" => "brief", "version" => 1, "by" => "seller", "at" => "now"})
     call(PushArtifacts, ctx, %{}, [blob])
 
-    assert %{"output" => "restored 0 versions; left out, not text or out of order: blob v1"} =
+    assert %{"output" => "restored 1 versions", "emit" => [%{"body" => body}]} =
+             call(PullArtifacts, ctx, %{}, [], "c1")
+
+    assert body["base64"] == Base.encode64(<<255, 254>>)
+    refute Map.has_key?(body, "content")
+    assert {:ok, <<255, 254>>} = Artifacts.content(body)
+  end
+
+  test "pull names a version that does not follow the held ones", ctx do
+    call(PushArtifacts, ctx, %{}, [version(ctx, 2, "second")])
+
+    assert %{"output" => "restored 0 versions; left out, out of order: brief v2"} =
              call(PullArtifacts, ctx, %{}, [], "c1")
   end
 

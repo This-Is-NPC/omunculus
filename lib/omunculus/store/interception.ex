@@ -230,6 +230,12 @@ defmodule Omunculus.Store.Interception do
       %{"content" => content} when is_binary(content) ->
         [%{"name" => name, "bytes" => byte_size(content)}]
 
+      %{"base64" => data} ->
+        case Omunculus.Attachments.decode(data) do
+          {:ok, bytes} -> [%{"name" => name, "bytes" => byte_size(bytes)}]
+          {:error, _invalid} -> []
+        end
+
       %{"data" => data} when is_map(data) ->
         [%{"name" => name, "bytes" => data |> Jason.encode!() |> byte_size()}]
 

@@ -1,7 +1,7 @@
 name = "pull_artifacts"
 kind = "tool"
 triggers = ["model"]
-description = "Restores into this conversation the artifact versions the project's S3-compatible bucket holds for a conversation (this one, or conversation) that it lacks. Repeating it restores nothing more. A version that is not text is left out and named."
+description = "Restores into this conversation the artifact versions the project's S3-compatible bucket holds for a conversation (this one, or conversation) that it lacks. Repeating it restores nothing more. A version that does not follow the ones held is left out and named."
 tags = ["files", "artifacts", "sync"]
 module = "Omunculus.Tools.PullArtifacts"
 

@@ -4,8 +4,9 @@ defmodule Omunculus.Artifacts do
   records of a conversation (`docs/design.md §10`). A version is described
   by `%{"name", "kind", "version", "media_type", "bytes", "sha256"}` and an
   optional `"note"`, which the `artifact` event that carries it holds. Its
-  content is kept by `Omunculus.Attachments`, the one backend: a backend
-  is what `put/5` and `read/2` use to keep content and give it back.
+  content, text or bytes (an image, a PDF), is kept by
+  `Omunculus.Attachments`, the one backend: a backend is what `put/5` and
+  `read/2` use to keep content and give it back.
   """
 
   alias Omunculus.Attachments
@@ -51,6 +52,32 @@ defmodule Omunculus.Artifacts do
       ^kind -> :ok
       other -> {:error, {:artifact, {:kind, name, other}}}
     end
+  end
+
+  @doc """
+  The content an `artifact` action's body carries: its `content` text, or
+  its `base64` bytes. Nothing, or an empty content, is `:no_content`.
+  """
+  @spec content(map) :: {:ok, binary} | {:error, {:artifact, :no_content} | {:attachment, term}}
+  def content(%{"base64" => data}) do
+    with {:ok, bytes} <- Attachments.decode(data), do: non_empty(bytes)
+  end
+
+  def content(%{"content" => text}) when is_binary(text), do: non_empty(text)
+  def content(_body), do: {:error, {:artifact, :no_content}}
+
+  defp non_empty(""), do: {:error, {:artifact, :no_content}}
+  defp non_empty(bytes), do: {:ok, bytes}
+
+  @doc """
+  The body field that carries `content`: as `content` when it is text,
+  else as `base64`. `content/1` reads either back to the same bytes.
+  """
+  @spec payload(binary) :: %{String.t() => String.t()}
+  def payload(content) do
+    if String.valid?(content),
+      do: %{"content" => content},
+      else: %{"base64" => Base.encode64(content)}
   end
 
   @doc "The content of `version`, as the backend keeps it."

@@ -63,8 +63,9 @@ defmodule Omunculus.Artifacts.Sync do
   @doc """
   The `artifact` actions that bring `conversation_id`'s versions in the
   bucket into a conversation that holds `held`: for each name, the
-  versions after the ones it has, in order. Content that is not text, or
-  a gap in the numbers, is left out and named in `skipped`.
+  versions after the ones it has, in order. Content that is text or bytes
+  comes back as the same bytes; a gap in the numbers is left out and named
+  in `skipped`.
   """
   @spec pull(Omunculus.Config.t(), String.t(), [Artifacts.version()]) ::
           {:ok, %{emit: [map], skipped: [String.t()]}} | {:error, term}
@@ -116,8 +117,7 @@ defmodule Omunculus.Artifacts.Sync do
       with true <- version["version"] == last + 1,
            {:ok, content} <- S3.get(settings, signer, object_key(settings, version)),
            true <-
-             sha256(content) == version["sha256"] or {:error, {:s3, {:digest, version["sha256"]}}},
-           true <- String.valid?(content) do
+             sha256(content) == version["sha256"] or {:error, {:s3, {:digest, version["sha256"]}}} do
         {:cont, {:ok, emit ++ [action(version, content, last)], skipped, last + 1}}
       else
         {:error, _reason} = error -> {:halt, error}
@@ -136,9 +136,9 @@ defmodule Omunculus.Artifacts.Sync do
         "name" => version["name"],
         "kind" => version["kind"],
         "media_type" => version["media_type"],
-        "content" => content,
         "base" => base
       }
+      |> Map.merge(Artifacts.payload(content))
       |> then(&if(is_binary(version["note"]), do: Map.put(&1, "note", version["note"]), else: &1))
 
     %{"type" => "artifact", "body" => body}

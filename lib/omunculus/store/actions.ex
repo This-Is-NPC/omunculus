@@ -232,7 +232,7 @@ defmodule Omunculus.Store.Actions do
     with :ok <- Helpers.ensure_text(:artifact, body, "name"),
          :ok <- Helpers.ensure_text(:artifact, body, "kind"),
          :ok <- Helpers.ensure_text(:artifact, body, "media_type"),
-         :ok <- Helpers.ensure_text(:artifact, body, "content"),
+         {:ok, content} <- Artifacts.content(body),
          {:ok, %{conversation_id: conversation_id}} <-
            Query.one(conn, "SELECT conversation_id FROM runs WHERE id = ?", [run_id]),
          true <- not is_nil(conversation_id) || {:error, {:artifact, :no_conversation}},
@@ -244,17 +244,17 @@ defmodule Omunculus.Store.Actions do
              body["name"],
              body["kind"],
              body["media_type"],
-             byte_size(body["content"]),
+             byte_size(content),
              body["base"]
            ),
-         nil <- Artifacts.unchanged(versions, body["name"], body["media_type"], body["content"]),
+         nil <- Artifacts.unchanged(versions, body["name"], body["media_type"], content),
          {:ok, meta} <-
            Artifacts.put(
              ctx.config.store,
              body["name"],
              body["kind"],
              body["media_type"],
-             body["content"]
+             content
            ) do
       record =
         meta

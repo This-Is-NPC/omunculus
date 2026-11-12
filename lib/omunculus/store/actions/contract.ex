@@ -7,7 +7,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "comment" => ~w(body work_id request_id inbox_id),
     "prompt" => ~w(message subject work_id agent attachments),
     "attach" => ~w(attachments note),
-    "artifact" => ~w(name kind media_type content note base),
+    "artifact" => ~w(name kind media_type content base64 note base),
     "memory" => ~w(op id scope kind text),
     "work" => ~w(report works),
     "request" => ~w(reason options to),
