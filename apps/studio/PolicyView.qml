@@ -6,7 +6,8 @@ import "kit/ui"
 // PolicyView is the project's [policy]: the tool that writes each run's
 // prompt, how often a stopped work runs again, how often in a row a broken
 // one is sent back, how much output a prompt keeps, the default workspace
-// and workflow, and the ceiling of every run.
+// and workflow, the fields every ending report must give, and the ceiling
+// of every run.
 ItemPage {
   id: page
 
@@ -33,6 +34,9 @@ ItemPage {
     ["max reopens", table.max_reopens === undefined ? "no limit" : String(table.max_reopens)],
     ["last run output bytes", table.last_run_output_bytes === undefined ? "" : String(table.last_run_output_bytes)],
     ["tool output bytes", table.tool_output_bytes === undefined ? "" : String(table.tool_output_bytes)],
+    ["memory bytes", table.memory_bytes === undefined ? "" : String(table.memory_bytes)],
+    ["media bytes", table.media_bytes === undefined ? "" : String(table.media_bytes)],
+    ["report required", (table.report_required || []).join(", ")],
     ["default workspace", table.workspace || "the project root"],
     ["default workflow", table.workflow || "none"],
     ["has", (table.granted || table.tools || []).join(", ")],
@@ -56,6 +60,23 @@ ItemPage {
     Item { Layout.fillWidth: true }
   }
   Note { value: "How often a work whose model stopped without a report runs again, how many times in a row a parent may send a broken work back before it asks along its route instead (unset, no limit), and how much of each output a prompt keeps." }
+  RowLayout {
+    Layout.fillWidth: true
+    spacing: 16
+    OptionalNumber { draft: item; path: ["memory_bytes"]; Layout.preferredWidth: 140; label: "memory bytes" }
+    OptionalNumber { draft: item; path: ["media_bytes"]; Layout.preferredWidth: 140; label: "media bytes" }
+    Item { Layout.fillWidth: true }
+  }
+  Note { value: "The memory entries a prompt carries, in bytes (unset, none), and the largest image or PDF a tool shows the model, in bytes (unset, none)." }
+  NameSet {
+    Layout.fillWidth: true
+    label: "report required"
+    items: page.table.report_required || []
+    choices: ["done", "decided", "pending", "files", "verify"]
+    closed: true
+    onChanged: items => item.put(["report_required"], items.length === 0 ? null : items)
+  }
+  Note { value: "The fields every ending report must give; left empty, a report needs one field." }
   RowLayout {
     Layout.fillWidth: true
     spacing: 16
