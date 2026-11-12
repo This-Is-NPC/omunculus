@@ -1,0 +1,50 @@
+# Every harness improvement switched on, laid over the agency configuration:
+# memory and report fields in the prompt, media the tools may show, resident
+# processes, longer shell calls and on-demand tool schemas. `[store]
+# attachments` is already in eval/configs/agency.toml. No language server
+# is declared: none the site needs (HTML, CSS, JS) is installed on the
+# machine that prepared this overlay.
+[policy]
+memory_bytes = 4000
+media_bytes = 5000000
+report_required = ["done", "decided", "pending", "files", "verify"]
+
+[execution]
+max_resident = 4
+
+[settings.bash]
+max_timeout_ms = 900000
+
+# On-demand schemas: each agent with many tools is granted the catalog's
+# tool_search, pins the tools it uses on every run and finds the rest with it.
+[eval.agent_overrides.surgeon]
+granted = ["catalog"]
+pinned = ["bash", "fs.read", "fs.write", "done", "comment", "continue", "end", "break", "delegate", "work", "ask", "reply", "escalate"]
+
+[eval.agent_overrides.project-manager]
+granted = ["catalog"]
+pinned = ["ask", "break", "comment", "continue", "delegate", "end", "escalate", "fs.read", "next_stage", "reply", "start_build", "start_design", "start_sale", "wait_client", "work"]
+
+[eval.agent_overrides.administrator]
+granted = ["catalog"]
+pinned = ["bash", "fs.read", "fs.write", "break", "continue", "delegate", "deliver", "end", "work", "ask", "reply", "escalate"]
+
+[eval.agent_overrides.clerk]
+granted = ["catalog"]
+pinned = ["bash", "fs.read", "break", "comment", "continue", "done", "end", "deploy_preview", "promote"]
+
+[eval.agent_overrides.design-lead]
+granted = ["catalog"]
+pinned = ["break", "comment", "continue", "delegate", "done", "end", "fs.read", "ask", "reply", "escalate", "work"]
+
+[eval.agent_overrides.designer]
+granted = ["catalog"]
+pinned = ["bash", "fs.read", "fs.write", "break", "comment", "continue", "done", "end", "ask", "browser_check"]
+
+[eval.agent_overrides.tester]
+granted = ["catalog"]
+pinned = ["bash", "fs.read", "fs.write", "break", "comment", "continue", "done", "end"]
+
+[eval.agent_overrides.toolsmith]
+granted = ["catalog"]
+pinned = ["bash", "fs.read", "fs.write", "break", "comment", "continue", "done", "end"]

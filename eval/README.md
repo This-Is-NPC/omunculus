@@ -27,7 +27,7 @@ skills/             the skills every project declares
 mcp/tickets/        the ticket system every project declares, an MCP server
 fixtures/scores/    hand-scored executions that prove the scoring
 fixtures/judge/     hand-written reports that measure the decider
-overlays/           experimental configuration overlays, such as the single agent of the hierarchy experiment
+overlays/           experimental configuration overlays, such as the single agent of the hierarchy experiment and `improvements.toml`, which turns on memory, report fields, media, resident processes, longer shell calls and on-demand tool schemas for the agency (no language server: none was installed)
 judge.toml          the decider and its thresholds
 person.toml         the model that plays the person of a conversation task, and what a person who approves picks of a request
 prices.toml         USD per million tokens of the models whose replies carry no cost
@@ -495,7 +495,7 @@ mise run eval:suite -- ana-bakery --model <model> --overlay <file>   # one case,
 ```
 
 `<file>` is a placeholder for a TOML overlay, such as one that changes a
-model table or an agent's model; `--overlay` is described under
+model table or an agent's model, or `overlays/improvements.toml`; `--overlay` is described under
 [Running](#running). The suite runs the `agency` configuration once per case,
 one at a time, with no `--timeout` of its own, so a case's `cap_s` bounds it.
 

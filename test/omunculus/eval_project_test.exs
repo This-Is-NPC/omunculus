@@ -42,6 +42,34 @@ defmodule Omunculus.EvalProjectTest do
     refute get_in(base, ["eval", "entry_agent"])
   end
 
+  test "the improvements overlay loads on the agency with every improvement on" do
+    overlay = Path.expand("../../eval/overlays/improvements.toml", __DIR__)
+
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(
+               Fixtures.tmp_dir(),
+               "agency",
+               {"fake", false},
+               nil,
+               %{},
+               overlay
+             )
+
+    assert {:ok, config} = Config.load(path)
+    assert config.memory_bytes == 4000
+    assert config.media_bytes == 5_000_000
+    assert config.report_required == ~w(done decided pending files verify)
+    assert config.execution.max_resident == 4
+    assert config.store.attachments
+    assert Toml.decode_file!(path)["settings"]["bash"]["max_timeout_ms"] == 900_000
+
+    for agent <- ~w(surgeon project-manager administrator clerk designer tester) do
+      ceiling = config.agents[agent].ceiling
+      assert "catalog" in ceiling.granted
+      assert ceiling.pinned != []
+    end
+  end
+
   describe "the single-agent arm" do
     @single Path.expand("../../eval/overlays/single-agent.toml", __DIR__)
     @delegating ~w(work delegate continue break wait done cancel ask escalate forward reopen retire grant deliver start_sale start_design start_build next_stage wait_client sequence)
