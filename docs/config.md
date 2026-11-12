@@ -23,7 +23,7 @@ to `max_queue` more wait for a slot, each for at most `queue_timeout_ms`,
 and a run that gets no slot fails with `:queue_full` or
 `:queue_timeout`.
 
-Five keys of `[execution]` are optional. `host = true` shows a command
+Six keys of `[execution]` are optional. `host = true` shows a command
 the machine read-only, as the person sees it, with their home overlaid so
 that what it writes there stays in the run's scratch; without it a
 command sees only the runtimes, the workspace and the folders of the
@@ -34,6 +34,12 @@ always read-only, so name none that holds credentials; one that is not
 there is left out. `variables` is a table of environment variables
 every command gets with the value written there, apart from `environment`,
 which passes the server's own.
+
+`max_resident` is a positive integer: how many resident processes may
+live at once, those a tool with `keep_alive_ms` and the `bash` shell keep
+for a run ([the contract](tools.md#contract)). They count in
+this pool, apart from `max_concurrent`, so a resident process never makes
+the run's own sandboxed calls queue; without the key they are not counted.
 
 `read` and `variables` let a command use tools that live outside its
 workspace, such as a read-only folder of tools the person keeps: a

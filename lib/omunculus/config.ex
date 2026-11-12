@@ -133,6 +133,7 @@ defmodule Omunculus.Config do
           max_concurrent: pos_integer,
           max_queue: pos_integer,
           queue_timeout_ms: pos_integer,
+          max_resident: pos_integer | nil,
           resources: [String.t()],
           host: boolean,
           deny_read: [String.t()],
@@ -205,7 +206,7 @@ defmodule Omunculus.Config do
     queue_timeout_ms
     resources
   )
-  @execution_optional_keys ~w(host deny_read read write variables)
+  @execution_optional_keys ~w(host deny_read read write variables max_resident)
   @known_execution_resources ~w(sandbox.write sandbox.network)
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version secrets)
@@ -1107,6 +1108,7 @@ defmodule Omunculus.Config do
              {:ok, max_concurrent} <- execution_positive_integer(rest, "max_concurrent"),
              {:ok, max_queue} <- execution_positive_integer(rest, "max_queue"),
              {:ok, queue_timeout_ms} <- execution_positive_integer(rest, "queue_timeout_ms"),
+             {:ok, max_resident} <- execution_max_resident(rest),
              {:ok, resources} <- execution_resources(rest),
              {:ok, host} <- execution_host(rest),
              {:ok, deny_read} <- execution_paths(rest, "deny_read"),
@@ -1124,6 +1126,7 @@ defmodule Omunculus.Config do
              max_concurrent: max_concurrent,
              max_queue: max_queue,
              queue_timeout_ms: queue_timeout_ms,
+             max_resident: max_resident,
              resources: resources,
              host: host,
              deny_read: deny_read,
@@ -1272,6 +1275,11 @@ defmodule Omunculus.Config do
 
   defp environment_name?(name) when is_binary(name), do: name =~ ~r/^[A-Za-z_][A-Za-z0-9_]*$/
   defp environment_name?(_name), do: false
+
+  defp execution_max_resident(%{"max_resident" => _} = data),
+    do: execution_positive_integer(data, "max_resident")
+
+  defp execution_max_resident(_data), do: {:ok, nil}
 
   defp execution_positive_integer(data, key) do
     case Map.fetch(data, key) do

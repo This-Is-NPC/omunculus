@@ -61,7 +61,7 @@ defmodule Omunculus.Tool.Resident do
 
   @impl true
   def init({_key, command, policy, keep_alive_ms, owner}) do
-    case Execution.start(command, policy) do
+    case Execution.start(command, policy, self(), make_ref(), :resident) do
       {:ok, handle} ->
         {:ok,
          idle(%{

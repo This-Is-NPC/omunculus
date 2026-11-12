@@ -109,8 +109,9 @@ called it (the run's) ends, when a call fails or times out, or when it
 exits; the next call starts it again. One run never reaches the
 process of another. A call outside a run, or a tool without the key, gets
 a process per call, which reads the same line until stdin closes. The
-process holds one of the run's execution slots (`max_concurrent`) while it
-lives. A call that runs past the policy's `timeout_ms` has what runs below
+process holds no `max_concurrent` slot, so it never starves the run's own
+calls; `[execution] max_resident` bounds the resident processes across the
+project when set, and without it they are not counted. A call that runs past the policy's `timeout_ms` has what runs below
 the process killed; a process that then answers within a second is kept
 and the call fails, one that does not is stopped.
 

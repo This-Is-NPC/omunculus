@@ -1,7 +1,12 @@
 defmodule Omunculus.Execution.Limiter do
-  @moduledoc false
+  @moduledoc """
+  Bounds what runs at once, one pool per class: `:tool` commands,
+  `:coordinator` sessions, `:run`s, and `:resident` processes kept for a run,
+  which count apart so they never starve the run's own calls. The resident
+  pool is `[execution] max_resident`; without it residents are not counted.
+  """
 
-  @type class :: :tool | :coordinator | :run
+  @type class :: :tool | :coordinator | :run | :resident
 
   @spec acquire(
           %{
@@ -12,7 +17,11 @@ defmodule Omunculus.Execution.Limiter do
           pid,
           class
         ) :: {:ok, reference} | {:error, :queue_full | :queue_timeout | term}
-  def acquire(limits, owner, class) when class in [:tool, :coordinator, :run] do
+  def acquire(limits, owner, class) when class in [:tool, :coordinator, :run, :resident] do
+    if unbounded?(limits, class), do: {:ok, make_ref()}, else: admit(limits, owner, class)
+  end
+
+  defp admit(limits, owner, class) do
     with {:ok, server} <- server(limits, class) do
       lease = make_ref()
 
@@ -28,10 +37,10 @@ defmodule Omunculus.Execution.Limiter do
 
   @spec release(%{max_concurrent: pos_integer, max_queue: non_neg_integer}, reference, class) ::
           :ok
-  def release(limits, lease, class) when class in [:tool, :coordinator, :run] do
-    case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
-      [{server, _}] -> GenServer.cast(server, {:release, lease})
-      [] -> :ok
+  def release(limits, lease, class) when class in [:tool, :coordinator, :run, :resident] do
+    with false <- unbounded?(limits, class),
+         [{server, _}] <- Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
+      GenServer.cast(server, {:release, lease})
     end
 
     :ok
@@ -44,12 +53,19 @@ defmodule Omunculus.Execution.Limiter do
           class
         ) ::
           :ok | {:error, :lease_missing}
-  def transfer(limits, lease, owner, class) when class in [:tool, :coordinator, :run] do
-    case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
-      [{server, _}] -> GenServer.call(server, {:transfer, lease, owner})
+  def transfer(limits, lease, owner, class)
+      when class in [:tool, :coordinator, :run, :resident] do
+    with false <- unbounded?(limits, class),
+         [{server, _}] <- Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
+      GenServer.call(server, {:transfer, lease, owner})
+    else
+      true -> :ok
       [] -> {:error, :lease_missing}
     end
   end
+
+  # A resident process is not counted without `max_resident`.
+  defp unbounded?(limits, class), do: class == :resident and is_nil(limits[:max_resident])
 
   defp server(limits, class) do
     case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
@@ -67,8 +83,14 @@ defmodule Omunculus.Execution.Limiter do
     end
   end
 
-  defp key(limits, class),
-    do: {Map.get(limits, :scope), class, limits.max_concurrent, limits.max_queue}
+  @doc false
+  def key(limits, class),
+    do: {Map.get(limits, :scope), class, capacity(limits, class), limits.max_queue}
+
+  @doc false
+  def capacity(limits, class) when class in [:tool, :run], do: limits.max_concurrent
+  def capacity(limits, :coordinator), do: min(limits.max_concurrent, 1)
+  def capacity(limits, :resident), do: limits.max_resident
 
   defmodule Server do
     @moduledoc false
@@ -79,8 +101,7 @@ defmodule Omunculus.Execution.Limiter do
       GenServer.start_link(__MODULE__, {limits, class},
         name:
           {:via, Registry,
-           {Omunculus.Execution.Registry,
-            {Map.get(limits, :scope), class, limits.max_concurrent, limits.max_queue}}}
+           {Omunculus.Execution.Registry, Omunculus.Execution.Limiter.key(limits, class)}}
       )
     end
 
@@ -88,7 +109,7 @@ defmodule Omunculus.Execution.Limiter do
     def init({limits, class}) do
       {:ok,
        %{
-         max_concurrent: capacity(limits, class),
+         max_concurrent: Omunculus.Execution.Limiter.capacity(limits, class),
          max_queue: limits.max_queue,
          running: %{},
          waiting: :queue.new()
@@ -146,9 +167,6 @@ defmodule Omunculus.Execution.Limiter do
 
       {:noreply, state}
     end
-
-    defp capacity(limits, class) when class in [:tool, :run], do: limits.max_concurrent
-    defp capacity(limits, :coordinator), do: min(limits.max_concurrent, 1)
 
     defp admit(state, owner, lease) do
       running = %{owner: owner, monitor: Process.monitor(owner)}

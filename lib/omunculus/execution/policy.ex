@@ -39,7 +39,8 @@ defmodule Omunculus.Execution.Policy do
             max_output_bytes: pos_integer,
             max_concurrent: pos_integer,
             max_queue: pos_integer,
-            queue_timeout_ms: pos_integer
+            queue_timeout_ms: pos_integer,
+            max_resident: pos_integer | nil
           },
           tools: [String.t()],
           scratch: String.t() | nil,
@@ -368,7 +369,8 @@ defmodule Omunculus.Execution.Policy do
       max_output_bytes: config.execution.max_output_bytes,
       max_concurrent: config.execution.max_concurrent,
       max_queue: config.execution.max_queue,
-      queue_timeout_ms: config.execution.queue_timeout_ms
+      queue_timeout_ms: config.execution.queue_timeout_ms,
+      max_resident: config.execution.max_resident
     }
   end
 

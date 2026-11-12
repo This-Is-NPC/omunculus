@@ -138,6 +138,31 @@ defmodule Omunculus.Execution.ProcessTest do
     assert :ok = Limiter.release(limits, second, :tool)
   end
 
+  test "counts a resident process apart from the tool slots" do
+    limits = %{max_concurrent: 1, max_queue: 1, queue_timeout_ms: 20, max_resident: 1}
+    assert {:ok, resident} = Limiter.acquire(limits, self(), :resident)
+    assert {:ok, tool} = Limiter.acquire(limits, self(), :tool)
+
+    assert {:error, :queue_timeout} = Limiter.acquire(limits, self(), :resident)
+    assert :ok = Limiter.release(limits, tool, :tool)
+    assert :ok = Limiter.release(limits, resident, :resident)
+  end
+
+  test "does not count resident processes without max_resident" do
+    limits = %{max_concurrent: 1, max_queue: 1, queue_timeout_ms: 20, max_resident: nil}
+
+    leases =
+      for _ <- 1..3 do
+        assert {:ok, lease} = Limiter.acquire(limits, self(), :resident)
+        assert :ok = Limiter.transfer(limits, lease, self(), :resident)
+        lease
+      end
+
+    assert {:ok, tool} = Limiter.acquire(limits, self(), :tool)
+    assert :ok = Limiter.release(limits, tool, :tool)
+    for lease <- leases, do: assert(:ok = Limiter.release(limits, lease, :resident))
+  end
+
   test "reserves a coordinator lane for a nested tool call" do
     limits = %{max_concurrent: 1, max_queue: 1, queue_timeout_ms: 100}
     assert {:ok, tool} = Limiter.acquire(limits, self(), :tool)
