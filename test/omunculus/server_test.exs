@@ -652,7 +652,9 @@ defmodule Omunculus.ServerTest do
         })
     end
 
-    put = fn id, name, kind, number, content ->
+    work = Fixtures.insert(project.conn, :works, %{conversation_id: conversation})
+
+    put = fn id, name, kind, number, content, work_id ->
       {:ok, meta} = Omunculus.Artifacts.put(config.store, name, kind, "text/plain", content)
       record = Map.merge(meta, %{"kind" => kind, "version" => number})
 
@@ -660,13 +662,14 @@ defmodule Omunculus.ServerTest do
         Omunculus.Store.Events.append(project.conn, %{
           type: "artifact",
           conversation_id: id,
+          work_id: work_id,
           body: Jason.encode!(record)
         })
     end
 
-    put.(conversation, "brief", "brief", 1, "first")
-    put.(conversation, "brief", "brief", 2, "second")
-    put.(other, "secret", "brief", 1, "elsewhere")
+    put.(conversation, "brief", "brief", 1, "first", nil)
+    put.(conversation, "brief", "brief", 2, "second", work)
+    put.(other, "secret", "brief", 1, "elsewhere", nil)
     Project.close(project)
     {server, local} = serve_local(dir, project_path)
     base = "/v1/projects/solo/conversations/#{conversation}/artifacts"
@@ -674,8 +677,10 @@ defmodule Omunculus.ServerTest do
     assert %{status: 200, body: %{"items" => [%{"name" => "brief", "kind" => "brief"} = brief]}} =
              local.(:get, base, [])
 
-    assert [%{"version" => 1, "bytes" => 5}, %{"version" => 2, "media_type" => "text/plain"}] =
-             brief["versions"]
+    assert [
+             %{"version" => 1, "bytes" => 5, "work_id" => nil},
+             %{"version" => 2, "media_type" => "text/plain", "work_id" => ^work}
+           ] = brief["versions"]
 
     got = local.(:get, base <> "/brief/versions/1", [])
     assert got.status == 200
@@ -839,15 +844,21 @@ defmodule Omunculus.ServerTest do
       "cost" => 0.5
     }
 
+    call = fn fresh, cached, output ->
+      %{"model" => "fake", "usd" => nil, "fresh" => fresh, "cache_write" => 0} |> Map.merge(%{"cached" => cached, "output" => output})
+    end
+
+    calls = [call.(10, 0, 4), call.(7, 3, 2)]
     usage = local.(:get, "/v1/projects/solo/usage", [])
     assert usage.status == 200
 
     # The model has no price: no dollars, and it is named as unpriced.
+    entry = Map.merge(%{"usd" => nil, "models" => ["fake"], "unpriced" => ["fake"]}, totals)
+
     assert usage.body == %{
-             "agents" => [
-               Map.merge(%{"agent" => "concierge", "model" => "fake", "usd" => nil}, totals)
-             ],
-             "total" => Map.merge(totals, %{"usd" => 0.0, "unpriced" => ["fake"]})
+             "agents" => [Map.put(entry, "agent", "concierge")],
+             "works" => [%{"work" => "", "own" => entry, "branch" => entry, "calls" => calls}],
+             "total" => %{entry | "usd" => 0.0}
            }
 
     # A conversation's usage holds only its own replies: this run is in none.
@@ -860,6 +871,7 @@ defmodule Omunculus.ServerTest do
     scoped = local.(:get, "/v1/projects/solo/usage?conversation=#{made}", [])
     assert scoped.status == 200
     assert scoped.body["agents"] == []
+    assert scoped.body["works"] == []
     assert scoped.body["total"]["replies"] == 0
     assert local.(:get, "/v1/projects/solo/usage?conversation=nope", []).status == 404
 

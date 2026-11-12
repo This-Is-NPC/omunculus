@@ -159,7 +159,7 @@ defmodule Omunculus.Server.OpenAPI do
     },
     get_usage: %{
       summary:
-        "Read the tokens and cost of the project's model replies, per agent; with conversation, of that conversation's",
+        "Read the tokens and cost of the project's model replies, per agent and per work; with conversation, of that conversation's",
       status: 200,
       response: "Usage",
       conversation: true

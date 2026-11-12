@@ -109,7 +109,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
 | `POST /conversations/{id}/messages` | Send `{"message":"text","agent":"name"}` to an agent of depth 0, or `{"message":"text","work_id":"id"}` to a work; one of the two, never both. Either may carry an optional `"subject":"one line"`, kept apart from the text: the `prompt` event's body, the snapshot's prompt and the message the agent's run reads (`Subject: …` before the text) hold it; a subject of several lines or blank is `400 invalid`. A message the store refuses (an agent not at depth 0) is `422 message_refused`. Either may carry `"attachments":[{"name":"notes.txt","media_type":"text/plain","data":"<base64>"}]` when the project's `[store] attachments` is set; the server keeps each file and the message's `prompt` event describes it as `{name, media_type, bytes, sha256}`. A file past `[store] attachment_bytes`, or attachments without that directory, is `422 attachment_refused`. |
 | `GET /conversations/{id}/attachments/{sha256}` | Read a file attached in the conversation, by a message or an agent's `attach`, with its media type and name. |
-| `GET /conversations/{id}/artifacts` | List the conversation's artifacts, `{"items":[{"name","kind","versions":[{"version","media_type","bytes","sha256","note","at","by"}]}]}`, oldest artifact first and versions oldest first. Needs `conversation.read`. See [Artifacts](#artifacts). |
+| `GET /conversations/{id}/artifacts` | List the conversation's artifacts, `{"items":[{"name","kind","versions":[{"version","media_type","bytes","sha256","note","at","by","work_id"}]}]}`, oldest artifact first and versions oldest first. Needs `conversation.read`. See [Artifacts](#artifacts). |
 | `GET /conversations/{id}/artifacts/{name}/versions/{version}` | Read the content of one version, with its media type and name; `404` for a version the conversation does not hold, `400` for a version that is not a positive integer. |
 | `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"body":"text"}`, optionally with `"option":"name"` to execute that option's calls, and recursive `"parts":{"name":{"body":"text","option":"choice"}}` for linked origins. It may carry `"attachments"` as a message does; the `reply` event describes the files and the conversation gives them back. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |
@@ -138,7 +138,8 @@ only read: no route writes one. They are the operator's view. A version
 reaches the person's conversation only when an agent attaches it, and then
 it is an attachment like any other, served by its `sha256` above. The two
 routes need `conversation.read`, the same as the conversation's events, and
-answer `404` for a conversation the caller cannot read. The `artifact`
+answer `404` for a conversation the caller cannot read. A version's `work_id` is the
+work whose agent wrote it, or null for one written outside any work. The `artifact`
 event also appears in the event stream, with the version's description as
 its `body`.
 
