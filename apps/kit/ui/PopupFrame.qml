@@ -5,10 +5,12 @@ import QtQuick.Controls.Basic as C
 // fades and settles in, kept this far inside the window near any edge. It takes
 // the keyboard while open — Esc closes it — and gives it back to its opener. It
 // closes once its button leaves — another page or view, or disabled — or the
-// window goes inactive, so it never picks where it is not seen.
+// window goes inactive, so it never picks where it is not seen. A press on
+// its button does not close it: the button's own click does, so it toggles.
 C.Popup {
   id: frame
   focus: true
+  closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutsideParent
   FocusKeeper { popup: frame }
   readonly property bool held: parent !== null && parent.visible && parent.enabled && parent.Window.active
   onHeldChanged: if (!held) close()
