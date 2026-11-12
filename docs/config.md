@@ -274,9 +274,11 @@ a call may ask for; without it a call may not ask for more than
 
 ## Artifacts in a bucket
 
-`[s3]` is optional: the S3-compatible bucket the artifact tools
-`push_artifacts` and `pull_artifacts` copy to and from ([tools](tools.md#artifacts-in-a-bucket),
-[how to sync artifacts to S3](how-to-sync-artifacts-to-s3.md)). Every key
+`[settings.s3]` is optional: the S3-compatible bucket the artifact tools
+`push_artifacts` and `pull_artifacts` copy to and from, one table for both
+([tools](tools.md#artifacts-in-a-bucket),
+[how to sync artifacts to S3](how-to-sync-artifacts-to-s3.md)). It is a
+`[settings.<tool>]` table like the others, read when a call runs. Every key
 is required once the table is there.
 
 ```toml
@@ -288,7 +290,7 @@ key = "!omapass get -- dev/bucket-id"
 kind = "api_key"
 key = "$BUCKET_SECRET"
 
-[s3]
+[settings.s3]
 bucket = "my-artifacts"
 endpoint = "https://s3.eu-west-1.amazonaws.com"
 region = "eu-west-1"
@@ -745,8 +747,6 @@ needs what is missing:
 | `overrides of <tool> leave a then outside its chains or with end not last` | an override breaks the `then` rule |
 | `overrides.<tool>.schema names <variant>, which the <tool> manifest does not declare` | an override names an unknown schema |
 | `pack <pack> requires tools the project lacks: …` | an imported pack names tools no `[tools] path` holds |
-| `omunculus.toml [s3] <key> is missing or not valid` | a key of `[s3]` absent or of the wrong type |
-| `omunculus.toml [s3] credentials name <id>, which [auth] does not hold` | a credential bound to a provider `[auth]` lacks |
 | `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
 | `store tables differ from this schema; recreate the store` | a store whose tables differ from the schema |
 | `project is in use by another Omunculus process` | another direct command holds the project |

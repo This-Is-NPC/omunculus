@@ -1,13 +1,13 @@
 defmodule Omunculus.Tools.PushArtifacts do
   @moduledoc """
   Builtin `push_artifacts` tool: uploads the artifact versions of the run's
-  conversation to the `[s3]` bucket (`Omunculus.Artifacts.Sync`). What the
+  conversation to the `[settings.s3]` bucket (`Omunculus.Artifacts.Sync`). What the
   bucket already holds is skipped, so a call may repeat. `name` keeps one
   artifact.
   """
 
   alias Omunculus.{Config, Tools.Args, Tools.Out}
-  alias Omunculus.Artifacts.Sync
+  alias Omunculus.Artifacts.{S3, Sync}
 
   @spec run(map) :: map
   def run(%{args: args, view: view, config_path: config_path}) do
@@ -15,11 +15,16 @@ defmodule Omunculus.Tools.PushArtifacts do
     name = Args.present(args, "name")
 
     with {:ok, config} <- Config.load(config_path),
-         %{} <- config.s3 || {:error, "no [s3] table in the config"},
+         {:ok, settings} <- S3.parse(view["s3"], config.auth.providers),
          id when is_binary(id) <-
            conversation_id(view) || {:error, "this run has no conversation"},
          {:ok, count} <-
-           Sync.push(config, id, Enum.filter(versions, &(is_nil(name) or &1["name"] == name))) do
+           Sync.push(
+             config,
+             settings,
+             id,
+             Enum.filter(versions, &(is_nil(name) or &1["name"] == name))
+           ) do
       Out.ok("pushed #{count.pushed} objects, #{count.present} already in the bucket")
     else
       {:error, message} when is_binary(message) -> Out.fail(message)

@@ -18,3 +18,6 @@ source = "artifacts"
 [views.run]
 source = "events"
 relation = "run"
+
+[views.s3]
+source = "settings"

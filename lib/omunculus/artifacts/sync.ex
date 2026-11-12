@@ -1,6 +1,6 @@
 defmodule Omunculus.Artifacts.Sync do
   @moduledoc """
-  Copies the artifact versions of a conversation to the `[s3]` bucket and
+  Copies the artifact versions of a conversation to the `[settings.s3]` bucket and
   back. The bucket holds each version's content once, under its SHA-256
   (`objects/<sha256>`), and one JSON record per version
   (`conversations/<conversation>/<name>/<version>.json`) that describes
@@ -14,11 +14,9 @@ defmodule Omunculus.Artifacts.Sync do
   @record_keys ~w(name kind version media_type bytes sha256 note by at event_id tool)
 
   @doc "Uploads the content and record of each of `versions` the bucket lacks."
-  @spec push(Omunculus.Config.t(), String.t(), [Artifacts.version()]) ::
+  @spec push(Omunculus.Config.t(), S3.settings(), String.t(), [Artifacts.version()]) ::
           {:ok, %{pushed: non_neg_integer, present: non_neg_integer}} | {:error, term}
-  def push(config, conversation_id, versions) do
-    settings = config.s3
-
+  def push(config, settings, conversation_id, versions) do
     with {:ok, signer} <- S3.signer(config, settings) do
       Enum.reduce_while(versions, {:ok, %{pushed: 0, present: 0}}, fn version, {:ok, count} ->
         with {:ok, object} <-
@@ -67,11 +65,9 @@ defmodule Omunculus.Artifacts.Sync do
   comes back as the same bytes; a gap in the numbers is left out and named
   in `skipped`.
   """
-  @spec pull(Omunculus.Config.t(), String.t(), [Artifacts.version()]) ::
+  @spec pull(Omunculus.Config.t(), S3.settings(), String.t(), [Artifacts.version()]) ::
           {:ok, %{emit: [map], skipped: [String.t()]}} | {:error, term}
-  def pull(config, conversation_id, held) do
-    settings = config.s3
-
+  def pull(config, settings, conversation_id, held) do
     with {:ok, signer} <- S3.signer(config, settings),
          {:ok, keys} <-
            S3.list(settings, signer, S3.key(settings, "conversations/#{conversation_id}/")),

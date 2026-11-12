@@ -36,10 +36,10 @@ in [the TOML](config.md#artifacts-in-a-bucket) and the tools in
    key = "$BUCKET_SECRET_ACCESS_KEY"
    ```
 
-2. Add the `[s3]` table. Every key is required.
+2. Add the `[settings.s3]` table. Every key is required.
 
    ```toml
-   [s3]
+   [settings.s3]
    bucket = "<bucket>"
    endpoint = "<endpoint>"
    region = "<region>"
@@ -100,11 +100,12 @@ in [the TOML](config.md#artifacts-in-a-bucket) and the tools in
 
 | You see | Because |
 | --- | --- |
-| `no [s3] table in the config` | step 2 is missing |
+| `no [settings.s3] table in the config` | step 2 is missing |
+| `[settings.s3] <key> is missing or not valid` | a key of the table is absent or of the wrong type |
 | `the bucket answered 403` | the key may not use the bucket, `region` is not the bucket's, or `path_style` is wrong for the service |
 | `the bucket answered 404` | `bucket` or `endpoint` is wrong, or the bucket does not exist |
 | `the bucket could not be reached` | `endpoint` does not answer |
-| `omunculus.toml [s3] credentials name <id>, which [auth] does not hold` | a name in `credentials` is not an `[auth]` provider |
+| `[settings.s3] credentials name <id>, which [auth] does not hold` | a name in `credentials` is not an `[auth]` provider |
 | `left out, out of order: <name> v<n>` | `pull_artifacts` restores versions only in sequence |
 
 ## Next

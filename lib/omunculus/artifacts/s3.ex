@@ -1,6 +1,6 @@
 defmodule Omunculus.Artifacts.S3 do
   @moduledoc """
-  The project's `[s3]` table and a small client for the bucket it names:
+  The `[settings.s3]` table and a small client for the bucket it names:
   any S3-compatible service (AWS S3, MinIO, Cloudflare R2, Backblaze B2).
   Requests are signed with SigV4 by `Req`. The table holds `bucket`,
   `endpoint`, `region`, `prefix`, `path_style` and `credentials`, which
@@ -8,7 +8,7 @@ defmodule Omunculus.Artifacts.S3 do
   `session_token`) to `[auth]` providers, so no secret is in the file.
   """
 
-  alias Omunculus.{Config, Secrets}
+  alias Omunculus.Secrets
 
   @keys ~w(bucket endpoint region prefix path_style credentials)
   @bindings ~w(access_key_id secret_access_key session_token)
@@ -22,11 +22,11 @@ defmodule Omunculus.Artifacts.S3 do
           credentials: %{String.t() => String.t()}
         }
 
-  @doc "Parses `[s3]`; nil when the project has none."
-  @spec parse(map | nil, %{String.t() => map}) :: {:ok, settings | nil} | {:error, term}
-  def parse(nil, _providers), do: {:ok, nil}
+  @doc "Parses the `[settings.s3]` table `data` against the project's `[auth]` providers."
+  @spec parse(map, %{String.t() => map}) :: {:ok, settings} | {:error, term}
+  def parse(data, _providers) when map_size(data) == 0, do: {:error, {:s3, :missing}}
 
-  def parse(data, providers) when is_map(data) do
+  def parse(data, providers) do
     with [] <- Map.keys(data) -- @keys,
          {:ok, bucket} <- text(data, "bucket"),
          {:ok, endpoint} <- endpoint(data),
@@ -48,8 +48,6 @@ defmodule Omunculus.Artifacts.S3 do
       {:error, _reason} = error -> error
     end
   end
-
-  def parse(_data, _providers), do: {:error, {:s3, {:invalid, :table}}}
 
   defp text(data, key) do
     case data do
@@ -95,7 +93,7 @@ defmodule Omunculus.Artifacts.S3 do
   defp credentials(_data, _providers), do: {:error, {:s3, {:invalid, :credentials}}}
 
   @doc "The request options that sign calls to the bucket: the credentials resolved now."
-  @spec signer(Config.t(), settings) :: {:ok, keyword} | {:error, term}
+  @spec signer(Omunculus.Config.t(), settings) :: {:ok, keyword} | {:error, term}
   def signer(config, settings) do
     with {:ok, values} <- Secrets.resolve(config, settings.credentials) do
       {:ok,

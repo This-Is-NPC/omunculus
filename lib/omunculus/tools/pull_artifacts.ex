@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.PullArtifacts do
   @moduledoc """
   Builtin `pull_artifacts` tool: restores into the run's conversation the
-  artifact versions the `[s3]` bucket holds for a conversation (this one,
+  artifact versions the `[settings.s3]` bucket holds for a conversation (this one,
   or `conversation`) that it lacks, as `artifact` actions
   (`Omunculus.Artifacts.Sync`), text and bytes alike. Rerunning restores
   nothing more. A version that does not follow the ones held is left out
@@ -9,16 +9,17 @@ defmodule Omunculus.Tools.PullArtifacts do
   """
 
   alias Omunculus.{Config, Tools.Args, Tools.Out}
-  alias Omunculus.Artifacts.Sync
+  alias Omunculus.Artifacts.{S3, Sync}
 
   @spec run(map) :: map
   def run(%{args: args, view: view, config_path: config_path}) do
     with {:ok, config} <- Config.load(config_path),
-         %{} <- config.s3 || {:error, "no [s3] table in the config"},
+         {:ok, settings} <- S3.parse(view["s3"], config.auth.providers),
          id when is_binary(id) <-
            Args.present(args, "conversation") || conversation_id(view) ||
              {:error, "this run has no conversation"},
-         {:ok, %{emit: emit, skipped: skipped}} <- Sync.pull(config, id, view["artifacts"] || []) do
+         {:ok, %{emit: emit, skipped: skipped}} <-
+           Sync.pull(config, settings, id, view["artifacts"] || []) do
       Out.ok(summary(emit, skipped), emit)
     else
       {:error, message} when is_binary(message) -> Out.fail(message)

@@ -317,6 +317,17 @@ defmodule Omunculus.Tools.Out do
     do: "#{size} bytes is more than the #{limit} a file may hold"
 
   def failure({:attachment, :not_found}), do: "that file is not kept"
+  def failure({:s3, {:unknown_key, key}}), do: "[settings.s3] has an unknown key #{key}"
+
+  def failure({:s3, {:unknown_provider, id}}),
+    do: "[settings.s3] credentials name #{id}, which [auth] does not hold"
+
+  def failure({:s3, {:invalid, :credentials}}),
+    do:
+      "[settings.s3] credentials must bind access_key_id and secret_access_key, and may bind session_token, each to an [auth] provider"
+
+  def failure({:s3, {:invalid, key}}), do: "[settings.s3] #{key} is missing or not valid"
+  def failure({:s3, :missing}), do: "no [settings.s3] table in the config"
   def failure({:s3, {:status, status}}), do: "the bucket answered #{status}"
   def failure({:s3, {:request, _reason}}), do: "the bucket could not be reached"
   def failure({:s3, {:record, key}}), do: "#{key} in the bucket is not a version record"

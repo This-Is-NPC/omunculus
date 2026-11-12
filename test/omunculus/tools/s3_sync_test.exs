@@ -4,6 +4,7 @@ defmodule Omunculus.Tools.S3SyncTest do
   import Plug.Conn
 
   alias Omunculus.{Artifacts, Config, Fixtures, Run}
+  alias Omunculus.Artifacts.S3
   alias Omunculus.Store.Query
   alias Omunculus.Tools.{PullArtifacts, PushArtifacts}
 
@@ -113,7 +114,7 @@ defmodule Omunculus.Tools.S3SyncTest do
         overrides
       )
 
-    "[s3]\n" <> Enum.map_join(keys, "\n", fn {key, value} -> "#{key} = #{value}" end)
+    "[settings.s3]\n" <> Enum.map_join(keys, "\n", fn {key, value} -> "#{key} = #{value}" end)
   end
 
   defp load(port, overrides) do
@@ -130,7 +131,15 @@ defmodule Omunculus.Tools.S3SyncTest do
 
     {:ok, {_ip, port}} = ThousandIsland.listener_info(server)
     {{:ok, config}, config_path} = load(port, [])
-    %{agent: agent, server: server, port: port, config_path: config_path, store: config.store}
+
+    %{
+      agent: agent,
+      server: server,
+      port: port,
+      config_path: config_path,
+      store: config.store,
+      settings: config.data["settings"]["s3"]
+    }
   end
 
   defp version(ctx, number, content) do
@@ -141,7 +150,11 @@ defmodule Omunculus.Tools.S3SyncTest do
   defp call(tool, ctx, args, versions, conversation \\ "c1") do
     tool.run(%{
       args: args,
-      view: %{"artifacts" => versions, "run" => [%{conversation_id: conversation}]},
+      view: %{
+        "artifacts" => versions,
+        "run" => [%{conversation_id: conversation}],
+        "s3" => ctx.settings
+      },
       config_path: ctx.config_path
     })
   end
@@ -277,26 +290,31 @@ defmodule Omunculus.Tools.S3SyncTest do
     Omunculus.Project.close(project)
   end
 
-  describe "the [s3] table" do
+  describe "the [settings.s3] table" do
+    defp parse(port, overrides) do
+      {{:ok, config}, _path} = load(port, overrides)
+      S3.parse(config.data["settings"]["s3"], config.auth.providers)
+    end
+
     test "names a provider [auth] has, and no secret", ctx do
       bad = ~s({ access_key_id = "s3_id", secret_access_key = "nope" })
-      assert {{:error, {:s3, {:unknown_provider, "nope"}}}, _} = load(ctx.port, credentials: bad)
+      assert {:error, {:s3, {:unknown_provider, "nope"}}} = parse(ctx.port, credentials: bad)
 
-      assert {{:error, {:s3, {:invalid, :credentials}}}, _} =
-               load(ctx.port, credentials: ~s({ access_key_id = "s3_id" }))
+      assert {:error, {:s3, {:invalid, :credentials}}} =
+               parse(ctx.port, credentials: ~s({ access_key_id = "s3_id" }))
 
-      assert {{:error, {:s3, {:invalid, :endpoint}}}, _} = load(ctx.port, endpoint: ~s("ftp://x"))
-      assert {{:error, {:s3, {:invalid, :path_style}}}, _} = load(ctx.port, path_style: ~s("yes"))
+      assert {:error, {:s3, {:invalid, :endpoint}}} = parse(ctx.port, endpoint: ~s("ftp://x"))
+      assert {:error, {:s3, {:invalid, :path_style}}} = parse(ctx.port, path_style: ~s("yes"))
     end
 
     test "refuses a call without the table" do
       dir = Fixtures.tmp_dir()
       Fixtures.write_config(dir, toml(""))
 
-      assert %{"ok" => false, "output" => "no [s3] table in the config"} =
+      assert %{"ok" => false, "output" => "no [settings.s3] table in the config"} =
                PushArtifacts.run(%{
                  args: %{},
-                 view: %{},
+                 view: %{"s3" => %{}},
                  config_path: Fixtures.config_path(dir)
                })
     end

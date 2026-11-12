@@ -41,20 +41,6 @@ defmodule Omunculus.Errors do
     "omunculus.toml is missing [store]"
   end
 
-  def format({:s3, {:unknown_key, key}}), do: "omunculus.toml [s3] has an unknown key #{key}"
-
-  def format({:s3, {:unknown_provider, id}}),
-    do: "omunculus.toml [s3] credentials name #{id}, which [auth] does not hold"
-
-  def format({:s3, {:invalid, :credentials}}),
-    do:
-      "omunculus.toml [s3] credentials must bind access_key_id and secret_access_key, and may bind session_token, each to an [auth] provider"
-
-  def format({:s3, {:invalid, :table}}), do: "omunculus.toml [s3] must be a table"
-
-  def format({:s3, {:invalid, key}}),
-    do: "omunculus.toml [s3] #{key} is missing or not valid"
-
   def format({:accounts, :invalid}),
     do:
       "omunculus.toml [accounts] must map names to {kind = \"agent\", agent = ...} or {kind = \"human\", issuer = ..., subject = ...}"

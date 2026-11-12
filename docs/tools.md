@@ -346,7 +346,7 @@ to attach that.
 
 ## Artifacts in a bucket
 
-Two tools copy artifacts to and from the S3-compatible bucket `[s3]` names
+Two tools copy artifacts to and from the S3-compatible bucket `[settings.s3]` names
 ([the TOML](config.md#artifacts-in-a-bucket)). They are in no group: the
 ceiling decides which agents have them.
 
@@ -355,7 +355,7 @@ ceiling decides which agents have them.
 | `push_artifacts` | Uploads every version of this conversation's artifacts (`name` keeps one artifact). Each content is the object `<prefix>/objects/<sha256>`, and each version a record `<prefix>/conversations/<conversation>/<name>/<version>.json`, the version as its event describes it. What the bucket already holds is skipped, so the call may be repeated. A `chain` step too. |
 | `pull_artifacts` | Restores the versions the bucket holds for a conversation (`conversation`, this one when omitted) that this conversation lacks, as `artifact` actions in order, each checked against its SHA-256. A name restores only the versions after the ones it has, so a repeat restores nothing more. Text and bytes come back as they were; a version that follows a gap in the numbers is left out and named. |
 
-Both fail, writing nothing, when there is no `[s3]` table, a credential does
+Both fail, writing nothing, when there is no `[settings.s3]` table or a key of it is not valid, a credential does
 not resolve or the bucket refuses. A sync that follows every write is a
 hook on `artifact` that chains `push_artifacts`:
 
