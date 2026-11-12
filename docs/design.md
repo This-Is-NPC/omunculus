@@ -257,6 +257,62 @@ mise run up                     # the dev server; the apps open with dev:console
 `mix compile --warnings-as-errors` is clean. The development server and
 its tasks are on [the development environment](development.md).
 
+### Hooks and the local-check gate
+
+`master` requires the commit status `local-check`. Nothing on GitHub runs the
+gate; your machine does, and posts the status.
+
+```sh
+mise run hooks:install   # sets core.hooksPath to .githooks (once per clone)
+mise run local-check     # gate HEAD and post the status
+```
+
+The gate is `mise run check` followed by `mise run validate:regular`, run on
+the clean tree of the commit.
+
+- `pre-commit` runs only `mise run check:format`.
+- `pre-push` runs `scripts/local-check --pre-push` on each pushed commit. A red
+  gate refuses the push. A green one posts `local-check` as `success` once
+  GitHub has the commit. Tag pushes and deletions pass.
+
+The full gate output goes to `_build/local-check.log`, overwritten by each run.
+A red gate also keeps it as `_build/local-check-failed-<UTC stamp>.log` and
+prints the path. The newest 10 such files stay; set
+`OMUNCULUS_LOCAL_CHECK_KEEP_FAILED=<n>` to change the count (`0` keeps none).
+
+The status is posted with `gh`, so it needs `gh auth login`. Without it the
+gate runs and the push goes through, but `master` refuses the merge. The gate
+vouches only for a clean checkout of the pushed commit.
+
+`--dry-run` prints the API calls instead of sending them. To skip on purpose
+set `OMUNCULUS_SKIP_LOCAL_CHECK=1`; no status is posted. `git commit
+--no-verify` and `git push --no-verify` skip the hooks.
+
+The branch protection of `master`:
+
+- it requires the status `local-check`, up to date with `master` (strict);
+- administrators can bypass the rule;
+- force pushes and deletions are refused;
+- only rebase merges are allowed.
+
+### Releases
+
+[release-please](https://github.com/googleapis/release-please) cuts releases
+from the Conventional Commits on `master` (`.github/workflows/release.yml`,
+`release-please-config.json`, `.release-please-manifest.json`). Each push to
+`master` updates a release pull request with the next version and its
+`CHANGELOG.md` entry. Merging it tags `vX.Y.Z` and publishes the GitHub
+release. Before 1.0, `feat` bumps the minor version and `fix` the patch. The
+version lives in `mix.exs`.
+
+A bot pushes the release pull request, so no hook ran for it. Check out its
+branch, run `mise run check` and `mise run validate:regular`, then post the
+status for the commit at its head:
+
+```sh
+scripts/local-check --post-only --state=success --sha=<commit of the PR head>
+```
+
 ## 9. What was measured
 
 - [Equivalent Exchange](../eval/README.md), the behaviour benchmark: real
