@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Omunculus Studio
+Comment=The settings of a project
+Exec=sh -c 'exec omunculus-studio --config "$HOME/.config/omunculus/server.toml"'
+Icon=omunculus
+Terminal=false
+Categories=Development;
+Keywords=omunculus;agents;ai;

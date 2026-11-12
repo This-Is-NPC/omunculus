@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Builds the Arch packages of the committed HEAD into target/arch/pkg:
+# omunculus and omunculus-apps. Needs makepkg; not as root. The release's
+# SHA256SUMS, which install.sh checks the packages against, is written by the
+# release workflow over every package it attaches.
+set -euo pipefail
+root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+out="$root/target/arch"
+rm -rf "$out"
+mkdir -p "$out"/{build,pkg,src,log}
+cd "$root/packaging/arch"
+# -d: the runtime dependencies are the target machine's, not the builder's.
+OMUNCULUS_TREE="$root" BUILDDIR="$out/build" PKGDEST="$out/pkg" SRCDEST="$out/src" LOGDEST="$out/log" \
+  makepkg -f -d --noconfirm
+packages=("$out"/pkg/omunculus{,-apps}-[0-9]*.pkg.tar.zst)
+[[ -e ${packages[0]} && -e ${packages[1]} ]] || { echo "package: makepkg wrote no package" >&2; exit 1; }
+printf '%s\n' "${packages[@]}"

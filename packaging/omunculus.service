@@ -1,0 +1,11 @@
+[Unit]
+Description=omunculus server
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/omunculus serve --config %h/.config/omunculus/server.toml
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

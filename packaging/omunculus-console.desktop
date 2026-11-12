@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Omunculus Console
+Comment=The console of an omunculus project
+Exec=sh -c 'exec omunculus-console --config "$HOME/.config/omunculus/server.toml"'
+Icon=omunculus
+Terminal=false
+Categories=Development;
+Keywords=omunculus;agents;ai;

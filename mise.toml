@@ -185,6 +185,10 @@ flag "--overlay <file>" help="TOML configuration overlay laid over the agency an
 flag "--label <name>" help="Name of the result folder"
 '''
 
+[tasks.package]
+description = "Build the Arch packages omunculus and omunculus-apps of the committed HEAD into target/arch/pkg"
+run = "scripts/package"
+
 [tasks.pre-commit]
 description = "Check the boundaries, formatting and documentation before a commit"
 run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Omunculus Mailbox
+Comment=A project's conversations, drawn as an e-mail client
+Exec=sh -c 'exec omunculus-mailbox --config "$HOME/.config/omunculus/server.toml"'
+Icon=omunculus
+Terminal=false
+Categories=Development;
+Keywords=omunculus;agents;ai;

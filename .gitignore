@@ -18,3 +18,4 @@ __pycache__/
 /dev/
 /eval/tasks/terminal-bench/
 /eval/tasks/swe-bench/
+/target/

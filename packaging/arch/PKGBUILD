@@ -1,0 +1,67 @@
+# omunculus, packaged for pacman from the committed tree of this repository.
+#
+# scripts/package builds it (`mise run package`), and the release workflow runs
+# that script on the tagged checkout and attaches both packages to the GitHub
+# release that install.sh downloads. The tree is taken with `git archive HEAD`,
+# so a build is of a commit, never of uncommitted changes. The domain packs,
+# eval, bench, dev and test never leave the repository.
+pkgbase=omunculus
+pkgname=('omunculus' 'omunculus-apps')
+# Moved by release-please, and by nothing else.
+pkgver=0.1.0 # x-release-please-version
+pkgrel=1
+pkgdesc='A hierarchy of AI agents that work a project, with its server and apps'
+arch=('x86_64')
+url='https://github.com/This-Is-NPC/omunculus'
+license=('MIT')
+makedepends=('elixir' 'erlang-nox' 'git')
+options=('!lto' '!debug')
+
+_tree="${OMUNCULUS_TREE:-$startdir/../..}"
+
+prepare() {
+  rm -rf "$srcdir/tree"
+  mkdir "$srcdir/tree"
+  git -C "$_tree" archive HEAD | tar -x -C "$srcdir/tree"
+  cd "$srcdir/tree"
+  mix local.hex --force --if-missing
+  mix local.rebar --force --if-missing
+  MIX_ENV=prod mix deps.get --only prod
+}
+
+build() {
+  cd "$srcdir/tree"
+  MIX_ENV=prod mix release omunculus --overwrite --path "$srcdir/release"
+}
+
+package_omunculus() {
+  pkgdesc='A hierarchy of AI agents that work a project: server, command line and tools'
+  depends=('glibc' 'gcc-libs' 'ncurses' 'openssl' 'zlib' 'bubblewrap' 'git' 'util-linux')
+  optdepends=('deno: code mode and browser_check'
+              'chromium: browser_check'
+              'python: lsp')
+  cd "$srcdir/tree"
+  install -d "$pkgdir/usr/lib"
+  cp -a "$srcdir/release" "$pkgdir/usr/lib/omunculus"
+  install -Dm755 bin/omunculus "$pkgdir/usr/bin/omunculus"
+  install -Dm644 packaging/omunculus.service "$pkgdir/usr/lib/systemd/user/omunculus.service"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/omunculus/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/omunculus/README.md"
+}
+
+package_omunculus-apps() {
+  pkgdesc='The console, mailbox and studio apps of omunculus'
+  arch=('any')
+  depends=('omunculus' 'quickshell' 'qt6-declarative' 'curl')
+  cd "$srcdir/tree"
+  install -d "$pkgdir/usr/share/omunculus"
+  cp -a apps "$pkgdir/usr/share/omunculus/apps"
+  install -d "$pkgdir/usr/bin"
+  local app
+  for app in console mailbox studio; do
+    ln -s ../share/omunculus/apps/kit/run "$pkgdir/usr/bin/omunculus-$app"
+    install -Dm644 "packaging/omunculus-$app.desktop" "$pkgdir/usr/share/applications/omunculus-$app.desktop"
+  done
+  install -Dm644 packaging/omunculus.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/omunculus.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/omunculus-apps/LICENSE"
+}
