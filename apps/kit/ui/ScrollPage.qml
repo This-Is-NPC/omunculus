@@ -17,9 +17,26 @@ Flickable {
   onFocusedChanged: keep()
   onContentHeightChanged: Qt.callLater(keep)
 
+  // A text that wraps over several lines keeps its caret in view, not the
+  // whole text, which may be taller than the page.
+  readonly property var typing: !!focused && focused !== page && focused["lineCount"] !== undefined ? focused : null
+  Connections {
+    target: page.typing
+    function onCursorRectangleChanged() { page.keep() }
+  }
+
   function keep() {
     if (!focused || focused === page || !Focus.within(focused, contentItem))
       return
+    if (typing) {
+      const caret = typing.cursorRectangle
+      const at = typing.mapToItem(contentItem, 0, caret.y).y
+      if (at < contentY)
+        scrollTo(at - 12)
+      else if (at + caret.height + 32 > contentY + height)
+        scrollTo(at + caret.height + 32 - height)
+      return
+    }
     // A control taller than a clipping item around it, as a text that scrolls
     // in its own frame, shows only through that item: the item is kept in view.
     let shown = focused
