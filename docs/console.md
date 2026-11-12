@@ -7,7 +7,7 @@ the store or the TOML.
 
 It needs Quickshell, `curl` with WebSocket support and a Wayland session.
 `apps/kit/run console` takes the server registry and, optionally, a project
-id. `mix omunculus.socket` resolves the project's socket, and the launcher
+id. `omunculus socket` resolves the project's socket, and the launcher
 passes both as `OMUNCULUS_SOCKET` and `OMUNCULUS_PROJECT`, as it does for
 every app. Without an id, a registry of one project opens on it; a registry
 of several opens on the registry itself, with an empty `OMUNCULUS_PROJECT`

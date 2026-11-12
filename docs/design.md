@@ -39,7 +39,7 @@ apps/kit/            what the apps share: ui/, the theme and controls, client/, 
                      requests to the server's sockets, the request helpers and the scripts
                      that send and open attached files, and run, the launcher of every app
 lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
-lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
+lib/mix/tasks/       the omunculus and omunculus.presets mix tasks
 priv/tools/          builtin tool and hook manifests
 priv/presets/        default, codex-like, pi-like
 priv/packs/system/   the system team: the steward, the auditor and the refiner, their portraits and their

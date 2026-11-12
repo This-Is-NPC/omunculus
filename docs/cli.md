@@ -18,7 +18,7 @@ replaces the command. A name the catalog does not hold is a refusal.
 `--config <path>` is the only flag of the binary itself, and it comes
 first. Without it the file is `./omunculus.toml` in the working directory;
 `bin/omunculus` passes that path unless the first argument is already
-`--config` or `serve`, and makes a relative `--config` absolute against
+`--config`, `serve` or `socket`, and makes a relative `--config` absolute against
 the caller's directory. The project root is the directory of that file,
 or its `[project] root` resolved against it; the store is its
 `[store] path`, resolved against it too. No environment variable
@@ -61,6 +61,12 @@ owner of the config file may, and only while the project has no member.
 
 `omunculus serve --config <server.toml>` starts the HTTP server on the
 projects its registry lists, until it is stopped.
+
+`omunculus socket <server.toml> [<id>] [--any]` prints a project of the
+registry and its local socket, separated by a tab; the app launchers use it.
+The id may be left out when the registry holds one project. With `--any` and
+no id, a registry of several prints an empty id and the socket of its first
+project by id.
 
 ## The commands
 

@@ -5,6 +5,8 @@
 # OMUNCULUS_SOCKET; GET /v1/projects there lists the registry's others.
 # Without --project, a registry of one opens on it; of several, the console
 # opens on the registry (an empty id, a socket of it), the other apps refuse.
+# The packaged launchers omunculus-<app> are links to this file: they take the
+# app from their own name, so `omunculus-console --config <server.toml>`.
 set -euo pipefail
 
 usage() {
@@ -12,13 +14,21 @@ usage() {
   exit 1
 }
 
-[[ $# -ge 1 ]] || usage
-name=$1
-shift
+case ${0##*/} in
+  omunculus-*) name=${0##*/omunculus-} ;;
+  *)
+    [[ $# -ge 1 ]] || usage
+    name=$1
+    shift
+    ;;
+esac
 apps=$(realpath "$(dirname "$(realpath "$0")")/..")
 app=$apps/$name
 [[ $name != kit && -f $app/shell.qml ]] || { printf 'run: no app %s in %s\n' "$name" "$apps" >&2; exit 1; }
 root=$(realpath "$apps/..")
+# A checkout runs its own launcher; an install finds omunculus on the PATH.
+omunculus=$root/bin/omunculus
+[[ -x $omunculus ]] || omunculus=omunculus
 
 config=""
 project=()
@@ -46,7 +56,7 @@ any=()
 [[ $name == console ]] && any=(--any)
 # The last line: a compile before the task prints its own lines first. It is
 # split by hand, as read would drop the leading tab of an empty id.
-IFS= read -r line < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" "${any[@]}" | tail -n 1) || true
+IFS= read -r line < <("$omunculus" socket "$config" "${project[@]}" "${any[@]}" | tail -n 1) || true
 [[ ${line:-} == *$'\t'* ]] || exit 1
 id=${line%%$'\t'*}
 socket=${line#*$'\t'}

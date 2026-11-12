@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Omunculus do
   `--config <path>` is the only flag of the binary itself, and it comes
   first. Without it the file is `./omunculus.toml` in the working directory;
   `bin/omunculus` passes that path unless the first argument is already
-  `--config` or `serve`, and makes a relative `--config` absolute against
+  `--config`, `serve` or `socket`, and makes a relative `--config` absolute against
   the caller's directory. The project root is the directory of that file,
   or its `[project] root` resolved against it; the store is its
   `[store] path`, resolved against it too. No environment variable
@@ -57,6 +57,12 @@ defmodule Mix.Tasks.Omunculus do
 
   `omunculus serve --config <server.toml>` starts the HTTP server on the
   projects its registry lists, until it is stopped.
+
+  `omunculus socket <server.toml> [<id>] [--any]` prints a project of the
+  registry and its local socket, separated by a tab; the app launchers use it.
+  The id may be left out when the registry holds one project. With `--any` and
+  no id, a registry of several prints an empty id and the socket of its first
+  project by id.
   """
 
   use Mix.Task
@@ -66,11 +72,6 @@ defmodule Mix.Tasks.Omunculus do
   @impl Mix.Task
   def run(argv) do
     Mix.Task.run("app.start")
-    Application.put_env(:omunculus, :package_tools, Application.app_dir(:omunculus, "priv/tools"))
-
-    case argv do
-      ["serve" | rest] -> Omunculus.Server.main(rest)
-      _ -> Omunculus.CLI.main(argv)
-    end
+    Omunculus.Main.run(argv)
   end
 end

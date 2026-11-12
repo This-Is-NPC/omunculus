@@ -18,6 +18,7 @@ case "$1" in
       set -- serve --config "$config" "$@"
     fi
     ;;
+  socket) ;;
   --config)
     if [ -n "$2" ]; then
       config="$(absolute "$2")"
@@ -29,6 +30,15 @@ case "$1" in
     set -- --config "$cwd/omunculus.toml" "$@"
     ;;
 esac
+
+# Installed, the release sits in lib/omunculus beside this launcher; in a
+# checkout there is none and mix runs the same entry.
+release="$root/lib/omunculus/bin/omunculus"
+if [ -x "$release" ]; then
+  # One node name per user would refuse a second command beside the server.
+  export RELEASE_DISTRIBUTION=none
+  exec "$release" eval 'Omunculus.Main.run(System.argv())' "$@"
+fi
 
 cd "$root" || exit 1
 exec mise exec -- mix omunculus "$@"

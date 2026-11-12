@@ -1,29 +1,25 @@
-defmodule Mix.Tasks.Omunculus.Socket do
+defmodule Omunculus.Server.Locate do
   @moduledoc """
-  Prints a project of a server registry and its local socket, separated by
-  a tab: `mix omunculus.socket <server.toml> [<id>] [--any]`. The id may be
-  left out when the registry holds one project. With `--any` and no id, a
-  registry of several prints an empty id and the socket of its first
-  project by id, which lists the whole registry.
+  `omunculus socket <server.toml> [<id>] [--any]` prints a project of a server
+  registry and its local socket, separated by a tab. The id may be left out
+  when the registry holds one project. With `--any` and no id, a registry of
+  several prints an empty id and the socket of its first project by id,
+  which lists the whole registry. The app launchers use it.
   """
-
-  use Mix.Task
 
   alias Omunculus.{Config, Server}
 
-  @shortdoc "Prints a registry project's local socket"
-
-  @impl Mix.Task
-  def run(argv) do
-    Mix.Task.run("app.start")
-
+  @spec main([String.t()]) :: :ok
+  def main(argv) do
     with {:ok, path, id, any} <- args(argv),
          {:ok, registry} <- Server.Config.load(path),
          {:ok, id, config_path} <- project(registry.projects, id, any),
          {:ok, config} <- Config.load(config_path) do
       IO.puts(id <> "\t" <> Server.Socket.path(config.store.path))
     else
-      {:error, reason} -> Mix.raise("omunculus.socket: #{inspect(reason)}")
+      {:error, reason} ->
+        IO.puts(:stderr, "socket: #{inspect(reason)}")
+        System.halt(1)
     end
   end
 
