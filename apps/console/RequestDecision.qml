@@ -249,6 +249,9 @@ SurfaceFrame {
   // How many of a numbered list are answered, for the heading.
   readonly property string counted: formLoader.active && formLoader.item ? (formLoader.item as QuestionForm).answered + " OF " + form.items.length + " ANSWERED" : ""
 
+  // Whether the card is too narrow to hold its heading's time beside the tools.
+  readonly property bool narrow: width < Theme.size.measureFrom
+
   implicitHeight: content.implicitHeight + Theme.space.insetTop + Theme.space.inset
   variant: yours ? "filled" : "outline"
   tone: Theme.warning
@@ -259,67 +262,81 @@ SurfaceFrame {
     anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
     spacing: Theme.space.gap
 
-    // The kind, the time and the tools, on one line.
-    RowLayout {
+    // The kind and the time on the left, the tools on the right; narrow, the
+    // tools take a line of their own, and the time leaves for the body.
+    GridLayout {
       Layout.fillWidth: true
-      spacing: Theme.space.gap
-      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open && card.facts ? card.facts.icon : card.done ? card.done.icon : "check"; size: 14; color: card.open ? Theme.warning : card.dim }
-      Label {
-        Layout.alignment: Qt.AlignVCenter
-        Layout.minimumWidth: 0
-        text: card.open ? (card.facts ? card.facts.word : "") : card.done ? card.done.word : "CLOSED"
-        color: card.open && card.yours ? Theme.warning : card.dim
-        font.pixelSize: Theme.type.kicker.size
-        font.letterSpacing: Theme.type.kicker.tracking
-        elide: Text.ElideRight
-      }
-      // Collapsed, the title and the progress take the room the heading leaves.
-      Label {
+      columns: card.narrow ? 1 : 2
+      columnSpacing: Theme.space.gap
+      rowSpacing: Theme.space.line
+
+      RowLayout {
         Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        Layout.alignment: Qt.AlignVCenter
-        visible: card.collapsed
-        text: (card.facts && card.facts.title !== "" ? card.facts.title : Events.readable(card.question).replace(/\s+/g, " ")) + (card.counted !== "" ? "  \u00b7  " + card.counted.toLowerCase() : "")
-        color: card.dim
-        font.pixelSize: Theme.type.body.size
-        elide: Text.ElideRight
-      }
-      Item { Layout.fillWidth: true; visible: !card.collapsed }
-      Label {
-        Layout.alignment: Qt.AlignVCenter
-        text: card.stamp
-        color: Theme.faint
-        font.pixelSize: Theme.type.stamp.size
-        font.letterSpacing: Theme.type.stamp.tracking
-      }
-      IconButton {
-        visible: card.collapsible
-        name: card.collapsed ? "chevron-down" : "chevron-up"
-        tip: card.collapsed ? "expand" : "collapse"
-        onClicked: Omunculus.fold(card.key, !card.collapsed)
-      }
-      IconButton {
-        visible: card.question !== "" && !card.collapsed
-        name: "copy"
-        tip: "copy the question"
-        onClicked: Omunculus.copy(card.question)
-      }
-      ActionMenu {
-        visible: card.yours && card.kind !== "review" && !card.collapsed
-        tip: "more"
-        items: [card.escalating
-          ? { id: "answer", icon: "enter", text: "ANSWER INSTEAD" }
-          : { id: "escalate", icon: "chevron-up", text: "ESCALATE" }]
-        onChosen: id => {
-          card.escalating = id === "escalate"
-          card.focusWords()
+        spacing: Theme.space.gap
+        Icon { Layout.alignment: Qt.AlignVCenter; name: card.open && card.facts ? card.facts.icon : card.done ? card.done.icon : "check"; size: 14; color: card.open ? Theme.warning : card.dim }
+        Label {
+          Layout.alignment: Qt.AlignVCenter
+          Layout.fillWidth: !card.collapsed
+          Layout.minimumWidth: 0
+          text: card.open ? (card.facts ? card.facts.word : "") : card.done ? card.done.word : "CLOSED"
+          color: card.open && card.yours ? Theme.warning : card.dim
+          font.pixelSize: Theme.type.kicker.size
+          font.letterSpacing: Theme.type.kicker.tracking
+          elide: Text.ElideRight
+        }
+        // Collapsed, the title and the progress take the room the heading leaves.
+        Label {
+          Layout.fillWidth: true
+          Layout.minimumWidth: 0
+          Layout.alignment: Qt.AlignVCenter
+          visible: card.collapsed
+          text: (card.facts && card.facts.title !== "" ? card.facts.title : Events.readable(card.question).replace(/\s+/g, " ")) + (card.counted !== "" ? "  \u00b7  " + card.counted.toLowerCase() : "")
+          color: card.dim
+          font.pixelSize: Theme.type.body.size
+          elide: Text.ElideRight
         }
       }
-      IconButton {
-        visible: card.closable
-        name: "close"
-        tip: "close"
-        onClicked: card.closed()
+
+      RowLayout {
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        spacing: Theme.space.gap
+        Label {
+          Layout.alignment: Qt.AlignVCenter
+          visible: !card.narrow
+          text: card.stamp
+          color: Theme.faint
+          font.pixelSize: Theme.type.stamp.size
+          font.letterSpacing: Theme.type.stamp.tracking
+        }
+        IconButton {
+          visible: card.collapsible
+          name: card.collapsed ? "chevron-down" : "chevron-up"
+          tip: card.collapsed ? "expand" : "collapse"
+          onClicked: Omunculus.fold(card.key, !card.collapsed)
+        }
+        IconButton {
+          visible: card.question !== "" && !card.collapsed
+          name: "copy"
+          tip: "copy the question"
+          onClicked: Omunculus.copy(card.question)
+        }
+        ActionMenu {
+          visible: card.yours && card.kind !== "review" && !card.collapsed
+          tip: "more"
+          items: [card.escalating
+            ? { id: "answer", icon: "enter", text: "ANSWER INSTEAD" }
+            : { id: "escalate", icon: "chevron-up", text: "ESCALATE" }]
+          onChosen: id => {
+            card.escalating = id === "escalate"
+            card.focusWords()
+          }
+        }
+        IconButton {
+          visible: card.closable
+          name: "close"
+          tip: "close"
+          onClicked: card.closed()
+        }
       }
     }
 
@@ -329,6 +346,15 @@ SurfaceFrame {
       Layout.fillWidth: true
       visible: !card.collapsed
       spacing: Theme.space.gap
+
+      // Narrow, the time leaves the heading for a line of its own.
+      Label {
+        visible: card.narrow && card.stamp !== ""
+        text: card.stamp
+        color: Theme.faint
+        font.pixelSize: Theme.type.stamp.size
+        font.letterSpacing: Theme.type.stamp.tracking
+      }
 
       // What it asks, in a sentence, wrapped inside the item.
       Label {
