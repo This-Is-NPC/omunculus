@@ -2,7 +2,8 @@
 """The administrator's done: a build is delivered only once the plan in
 docs/plan.md is covered — each of its items (a "## <item>" heading) by a
 done work of the workflow page whose title begins with the item, and the
-whole by a done work of the workflow release. An assessment is delivered
+whole by a done work of the workflow release. A "## Release" heading is the
+release itself, covered by that work and not by a page. An assessment is delivered
 as it is."""
 
 import json
@@ -36,7 +37,8 @@ def main():
 
         children = view.get("children") or []
         done = [c for c in children if c.get("state") == "done"]
-        missing = [item for item in items
+        pages = [item for item in items if item.lower() != "release"]
+        missing = [item for item in pages
                    if not any(c.get("workflow") == "page" and (c.get("title") or "").lower().startswith(item.lower()) for c in done)]
         if missing:
             answer(False, "not delivered: these items of docs/plan.md have no done work of the workflow page whose title begins with them: " + "; ".join(missing))
