@@ -6,6 +6,7 @@ const input = JSON.parse(await new Response(Deno.stdin.readable).text());
 const args = input.args ?? {};
 const root = (input.roots ?? [])[0] ?? Deno.cwd();
 const port = args.port;
+const host = args.host ?? "127.0.0.1";
 const paths = args.paths?.length ? args.paths : ["/"];
 const viewports = args.viewports?.length ? args.viewports : ["1440x900"];
 const steps = args.steps ?? [];
@@ -211,7 +212,7 @@ async function check(cdp, path, width, height) {
   });
   for (const m of ["Page.enable", "Runtime.enable", "Network.enable"]) await cdp.send(m, {}, s);
   await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 500 }, s);
-  await cdp.send("Page.navigate", { url: `http://127.0.0.1:${port}${path}` }, s);
+  await cdp.send("Page.navigate", { url: `http://${host}:${port}${path}` }, s);
   if (!(await loaded)) result.problems.push("the page did not finish loading in 15 s");
   await sleep(300);
   for (const step of steps) {

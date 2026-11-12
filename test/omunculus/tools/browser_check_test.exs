@@ -90,6 +90,18 @@ defmodule Omunculus.Tools.BrowserCheckTest do
     assert {:error, _} = :gen_tcp.connect(~c"127.0.0.1", 48_731, [], 200)
   end
 
+  test "loads the page by the host name it is given", %{root: root} do
+    out =
+      call(root, args(48_735, %{"host" => "fixture.localhost", "viewports" => ["800x600"]}),
+        read_only: [@tool],
+        read_write: [root]
+      )
+
+    assert out.ok, out.output
+    assert out.output =~ "title: Fixture"
+    assert out.output =~ "404 http://fixture.localhost:48735/missing.png"
+  end
+
   test "a step that fails fails the call and says which", %{root: root} do
     steps = [%{"action" => "expect_text", "text" => "not there"}]
 

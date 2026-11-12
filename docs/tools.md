@@ -769,6 +769,7 @@ name it in an agent's `tools`.
 | Argument | Meaning |
 | --- | --- |
 | `port` (required) | The port the server listens on, on `127.0.0.1` |
+| `host` | The host name the pages are loaded by, for a server that tells sites apart by it, such as `app.localhost`; `127.0.0.1` by default |
 | `command` | The dev server command, run through `sh`; left out, a server already listening on `port` is used |
 | `cwd` | Where the command runs, relative to the workspace root |
 | `paths` | URL paths to load; `["/"]` by default |

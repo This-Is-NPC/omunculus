@@ -14,6 +14,10 @@ type = "integer"
 minimum = 1
 description = "The port the dev server listens on, on 127.0.0.1."
 
+[parameters.properties.host]
+type = "string"
+description = "The host name the pages are loaded by, for a server that tells sites apart by it, such as app.localhost; 127.0.0.1 when left out. The port is still reached on 127.0.0.1."
+
 [parameters.properties.command]
 type = "string"
 description = "The dev server command, run through sh in cwd; left out when a server already listens on port."
