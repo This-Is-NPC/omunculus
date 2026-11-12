@@ -25,7 +25,9 @@ defmodule Omunculus.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp releases(:bench), do: [benchmark: [include_executables_for: [:unix]]]
-  defp releases(_), do: []
+
+  defp releases(_),
+    do: [omunculus: [include_erts: true, include_executables_for: [:unix], strip_beams: true]]
 
   defp deps do
     [
