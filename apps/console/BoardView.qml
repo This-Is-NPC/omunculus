@@ -45,22 +45,34 @@ Item {
   // A work that broke waits on its parent without waiting on anything named.
   function stateOf(work) { return work.state === "waiting" && !work.waiting ? "broken" : work.state }
 
-  // What the board says of a work: the agent it is with, its project, its
-  // stage of how many, and what it waits on; the conversation it is in and
-  // the work it came from; how long since it changed; whether it runs now.
+  // Its level: the works above it, within its project, and the front desk at 0.
+  function levelOf(work) {
+    let level = 1
+    for (let above = work; above && above.parent_id; level++)
+      above = Omunculus.board.find(item => item.project === work.project && item.id === above.parent_id)
+    return level
+  }
+  // Where it hangs: its level and the work above it, "level 2, under Sale".
+  function lineageOf(work) {
+    const above = work.parent_id ? Omunculus.board.find(item => item.project === work.project && item.id === work.parent_id) : null
+    return "level " + levelOf(work) + (above ? ", under " + above.title : "")
+  }
+  // What else the board says of a work: its project, its stage of how many.
   function metaOf(work) {
     const lane = Omunculus.laneOf(work)
     return [
-      Omunculus.agentOf(work),
       work.project,
-      lane ? "stage " + lane.steps[lane.at].name + " " + (lane.at + 1) + "/" + lane.steps.length : "",
-      work.state === "waiting" && work.waiting ? "on a " + work.waiting : ""
+      lane ? "stage " + lane.steps[lane.at].name + " " + (lane.at + 1) + "/" + lane.steps.length : ""
     ].filter(part => part !== "").join(Theme.type.meta.separator)
   }
-  function originOf(work) {
-    const above = work.parent_id ? Omunculus.board.find(item => item.project === work.project && item.id === work.parent_id) : null
-    return ["in " + Omunculus.conversationLabel(work.conversation_id), above ? "under " + above.title : ""]
-      .filter(part => part !== "").join(Theme.type.meta.separator)
+  function originOf(work) { return "in " + Omunculus.conversationLabel(work.conversation_id) }
+  // Its state as the one status grammar has it.
+  function markOf(work) {
+    const state = stateOf(work)
+    if (runs(work)) return { state: "working", text: "WORKING" }
+    if (state === "waiting") return { state: "waiting", text: "WAITING ON A " + String(work.waiting).toUpperCase() }
+    if (state === "broken") return { state: "stopped", text: "BROKEN" }
+    return { state: state === "open" ? "up-next" : state, text: "" }
   }
   function ageOf(work) { return Omunculus.ago(work.updated_at || work.created_at, now) }
   function runs(work) { return Omunculus.boardBusy.includes(work.project + "/" + work.id) }
@@ -225,7 +237,7 @@ Item {
         { title: "from", weight: 0.25 },
         { title: "changed", weight: 0.15 }
       ]
-      cells: work => [work.title, board.metaOf(work), board.originOf(work), board.runs(work) ? "RUNNING" : board.ageOf(work)]
+      cells: work => [work.title, [Omunculus.agentOf(work), board.lineageOf(work), board.metaOf(work)].filter(part => part !== "").join(Theme.type.meta.separator), board.originOf(work), board.runs(work) ? "RUNNING" : board.ageOf(work)]
       tone: (work, column) => column === 3 && !board.runs(work) ? Theme.dim : ""
       statusIcon: work => board.runs(work) ? "spark" : ""
       dimmed: work => work.state === "done" || work.state === "cancelled"
@@ -301,6 +313,8 @@ Item {
                       required property var modelData
                       work: modelData
                       meta: board.metaOf(modelData)
+                      lineage: board.lineageOf(modelData)
+                      mark: board.markOf(modelData)
                       origin: board.originOf(modelData)
                       age: board.ageOf(modelData)
                       running: board.runs(modelData)
