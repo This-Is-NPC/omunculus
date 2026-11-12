@@ -2,14 +2,17 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
+import "kit/client/Usage.js" as Usage
 
 // CostView is what the conversation open has used. A header strip sums it
 // up — the model replies, the tokens read by the model (with those from
-// cache) and written by it — with its cost at the right; then a row per
-// agent, the busiest first, its name in its colour and the same figures in
+// cache) and written by it — with its cost in dollars at the right; then a row
+// per agent, the busiest first, its name in its colour and the same figures in
 // columns, or, under 700 px, on lines of their own, never cut; its cost at the
-// top right, "-" for an agent none priced. When no provider reported a price
-// there is no cost anywhere, only one kicker, NO PRICE REPORTED. Esc leaves.
+// top right. The dollars are the server's: each agent's tokens at the price
+// its model has in the project config. An agent whose model has none shows
+// "-", and a line says "no price set for <model> in the project config" for
+// each such model. Esc leaves.
 FocusScope {
   id: view
 
@@ -20,7 +23,9 @@ FocusScope {
     const used = name => Omunculus.usage.agents[name].input + Omunculus.usage.agents[name].output
     return used(b) - used(a) || a.localeCompare(b)
   }).map(name => Object.assign({ name: name }, Omunculus.usage.agents[name]))
-  readonly property bool unpriced: all.calls > 0 && all.priced === 0
+  readonly property var total: Omunculus.spend.total
+  // Whether any model that ran has a price, so there are dollars to show.
+  readonly property bool priced: view.agents.some(entry => view.spent(entry) !== "-")
 
   // A tally's replies, tokens read and tokens written.
   function replies(tally) { return tally.calls + (tally.calls === 1 ? " reply" : " replies") }
@@ -28,11 +33,10 @@ FocusScope {
   function written(tally) { return Omunculus.tokens(tally.output) + " written" }
   // The three as one line.
   function used(tally) { return [replies(tally), read(tally), written(tally)].join(Theme.type.meta.separator) }
-  // A tally's cost, "-" when none of its replies was priced.
-  function spent(tally) {
-    if (tally.priced === 0)
-      return "-"
-    return Omunculus.money(tally.cost) + (tally.priced < tally.calls ? "  ·  " + tally.priced + " of " + tally.calls + " priced" : "")
+  // An agent's cost, "-" when its model has no price.
+  function spent(entry) {
+    const found = Omunculus.spend.agents[entry.name]
+    return found && found.usd !== null && found.usd !== undefined ? Usage.money(found.usd) : "-"
   }
 
   Keys.onEscapePressed: leave()
@@ -63,22 +67,24 @@ FocusScope {
           wrapMode: Text.Wrap
         }
         Label {
-          visible: !view.unpriced
-          text: view.spent(view.all)
+          visible: view.priced
+          text: Usage.money(view.total.usd)
           color: Theme.primary
           font.pixelSize: Theme.type.input.size
         }
       }
     }
 
-    Label {
-      Layout.fillWidth: true
-      visible: view.unpriced
-      text: "NO PRICE REPORTED"
-      color: Theme.dim
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: Theme.type.meta.tracking
-      wrapMode: Text.Wrap
+    Repeater {
+      model: Usage.unpriced(view.total)
+      delegate: Label {
+        required property string modelData
+        Layout.fillWidth: true
+        text: modelData
+        color: Theme.dim
+        font.pixelSize: Theme.type.meta.size
+        wrapMode: Text.Wrap
+      }
     }
 
     // By agent.
@@ -89,13 +95,11 @@ FocusScope {
       active: view.activeFocus
       rows: view.agents
       idOf: entry => entry.name
-      columns: view.unpriced
-        ? [{ title: "Agent", weight: 0.25 }, { title: "Replies", weight: 0.15 }, { title: "Read", weight: 0.4 }, { title: "Written", weight: 0.2 }]
-        : [{ title: "Agent", weight: 0.2 }, { title: "Replies", weight: 0.12 }, { title: "Read", weight: 0.33 }, { title: "Written", weight: 0.15 }, { title: "Cost", weight: 0.2 }]
-      cells: entry => [entry.name, view.replies(entry), view.read(entry), view.written(entry)].concat(view.unpriced ? [] : [view.spent(entry)])
-      tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 4 && entry.priced === 0 ? Theme.dim : ""
+      columns: [{ title: "Agent", weight: 0.2 }, { title: "Replies", weight: 0.12 }, { title: "Read", weight: 0.33 }, { title: "Written", weight: 0.15 }, { title: "Cost", weight: 0.2 }]
+      cells: entry => [entry.name, view.replies(entry), view.read(entry), view.written(entry), view.spent(entry)]
+      tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 4 && view.spent(entry) === "-" ? Theme.dim : ""
       stacked: [[0], [1, 2], [3]]
-      status: view.unpriced ? -1 : 4
+      status: 4
       emptyText: "Nothing used yet."
       onBackRequested: view.leave()
     }

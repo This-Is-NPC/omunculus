@@ -107,19 +107,15 @@ Singleton {
   // in, keyed by its id; a request for you, and every note to you, in the
   // main thread.
   property var threads: ({})
-  // Whether the conversation on screen is empty and several agents could take
-  // it, so the first message must say which. With one, the server names it.
-  readonly property bool whomAsked: loaded && agent === "" && talkable.length > 1 && thread("").count === 0
   // Whether the person may still choose whom the first message goes to: a
   // conversation not made yet, or an empty one that several agents could take.
   readonly property bool addressable: conversationId === "" || (loaded && talkable.length > 1 && thread("").count === 0)
-  // Whether the next message has no agent to go to, none being picked.
-  readonly property bool unaddressed: agent === "" && (conversationId === "" || whomAsked)
-  // Addresses the next message to the start agent when it has none.
-  function address() {
-    if (agent === "")
-      agent = startAgent
-  }
+  // Whether the next message has no agent to go to: none is picked, the
+  // server has no default to send it to, and several could take it. With a
+  // default, or with one agent, the server names it.
+  readonly property bool unaddressed: agent === "" && startAgent === "" && (conversationId === "" || (loaded && talkable.length > 1 && thread("").count === 0))
+  // What the empty recipient says: who the message goes to when none is picked.
+  readonly property string startHint: startAgent !== "" ? Mailbox.hint(Mailbox.person(startAgent, project)) : ""
   // Run id -> {thread, row}.
   property var rows: ({})
   // Work id -> the work it was handed down from, and run id -> its thread.
@@ -517,6 +513,7 @@ Singleton {
     drafts = {}
     tones = {}
     usage = { all: Usage.tally(), agents: {}, works: {} }
+    spend = Usage.spend(null)
     callsOf = {}
     questionsOf = {}
     askersOf = {}
@@ -556,6 +553,7 @@ Singleton {
       if (newest)
         lastEventAt = Date.parse(newest.at) / 1000
       refresh()
+      loadSpend()
       conversationStream.start()
     })
   }
@@ -610,7 +608,7 @@ Singleton {
       showPending(value)
     if (conversationId !== "")
       return deliver(value, work, files, done, refuse)
-    if (agent === "")
+    if (agent === "" && startAgent === "")
       return refuse("no conversation is open")
     const name = agent
     connection.call("POST", base + "/conversations", {}, true, data => {
@@ -889,14 +887,32 @@ Singleton {
   }
 
   // A sum of money as the provider reported it, in US dollars.
-  function money(spent) {
-    return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
-  }
+  function money(spent) { return Usage.money(spent) }
 
   // A count of tokens, in thousands from a thousand and millions from a
   // million: 950, 12k, 5.7M.
   function tokens(count) {
     return count >= 1e6 ? (count / 1e6).toFixed(1) + "M" : count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
+  }
+
+  // What the conversation cost at its models' prices, from the server:
+  // {agents: name -> entry, total: {usd, unpriced}}.
+  property var spend: Usage.spend(null)
+
+  function loadSpend() {
+    if (conversationId === "")
+      return
+    const id = conversationId
+    connection.call("GET", base + "/usage?conversation=" + id, null, false, data => {
+      if (id === conversationId)
+        spend = Usage.spend(data)
+    })
+  }
+  onUsageChanged: spendTimer.restart()
+  Timer {
+    id: spendTimer
+    interval: 1500
+    onTriggered: root.loadSpend()
   }
 
   // Adds one model call's reported usage to the conversation's, its agent's

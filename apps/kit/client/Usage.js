@@ -22,3 +22,23 @@ function add(into, usage) {
   }
   return into;
 }
+
+// A sum of money in US dollars: four decimals under a cent, else two.
+function money(spent) {
+  return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2));
+}
+
+// The server's GET /usage as the cost view reads it: {agents: name -> its
+// entry, total}; an agent's `usd` is null when its model has no price.
+function spend(data) {
+  const agents = {};
+  for (const item of (data && data.agents) || []) agents[item.agent] = item;
+  const total = (data && data.total) || {};
+  return { agents: agents, total: { usd: number(total.usd), unpriced: total.unpriced || [] } };
+}
+
+// What the cost view says about models without a price, one line each; none
+// when every model that ran has one.
+function unpriced(total) {
+  return (total.unpriced || []).map(model => "no price set for " + model + " in the project config");
+}

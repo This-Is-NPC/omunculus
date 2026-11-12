@@ -74,4 +74,26 @@ defmodule Omunculus.GuiUsageTest do
 
     assert {"", 0} = GuiModules.run(["Usage"], script)
   end
+
+  test "the cost view formats the server's dollars and names a model with no price" do
+    script = """
+    if (Usage.money(0.5) !== "US$ 0.50") throw Error(Usage.money(0.5));
+    if (Usage.money(0.00123) !== "US$ 0.0012") throw Error(Usage.money(0.00123));
+    if (Usage.money(12) !== "US$ 12.00") throw Error("whole");
+    const data = {
+      agents: [{agent: "seller", model: "haiku", usd: 0.0123}, {agent: "designer", model: "mystery", usd: null}],
+      total: {usd: 0.0123, unpriced: ["mystery"]}
+    };
+    const spend = Usage.spend(data);
+    if (spend.agents.seller.usd !== 0.0123 || spend.agents.designer.usd !== null) throw Error(JSON.stringify(spend));
+    if (spend.total.usd !== 0.0123) throw Error("total");
+    const lines = Usage.unpriced(spend.total);
+    if (lines.join() !== "no price set for mystery in the project config") throw Error(lines.join());
+    if (Usage.unpriced({usd: 1, unpriced: []}).length !== 0) throw Error("all priced says nothing");
+    const none = Usage.spend(null);
+    if (none.total.usd !== 0 || none.total.unpriced.length !== 0) throw Error("before the server answers");
+    """
+
+    assert {"", 0} = GuiModules.run(["Usage"], script)
+  end
 end
