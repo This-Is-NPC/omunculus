@@ -164,7 +164,7 @@ function step(list, at, key) {
 // child of its parent). A "work" row has node, kids (how many works it
 // handed down), open (they show) and stem (rows of its own hang under it); a
 // "fold" has nodes, entries (their count, with the works below) and
-// `opened` (a fold unfolded by hand shows each work); a "fork" has nodes,
+// `unfolded` (set by hand: each work follows the fold's line, to fold again); a "fork" has nodes,
 // summary ("PARALLEL ×4 · 2 DONE · 2 WORKING") and lanes; an "ask" and a
 // "team" row have id, place and level (the arbiter's level, "L0" for you);
 // an "entry" row has thread, index, role, who and `continued`.
@@ -254,10 +254,14 @@ function stream(input) {
     emitItems(items, depth + 1, kidRails);
   };
 
+  // A fold unfolded by hand stays as the line above its works, to fold again.
   const emitFold = (item, depth, rails, last) => {
+    const key = "fold:" + item.nodes[0].work;
+    const unfolded = !!opened[key];
     const kidRails = depth > 0 ? rails.concat([!last]) : [];
-    rows.push({ kind: "fold", key: "fold:" + item.nodes[0].work, nodes: item.nodes, entries: item.nodes.reduce((sum, node) => sum + entriesOf(node), 0), depth: depth, rails: rails, last: last });
-    item.nodes.forEach(node => rows.push(...asksOf(node, depth + 1, kidRails, false)));
+    rows.push({ kind: "fold", key: key, nodes: item.nodes, entries: item.nodes.reduce((sum, node) => sum + entriesOf(node), 0), depth: depth, rails: rails, last: last && !unfolded, unfolded: unfolded });
+    if (unfolded) item.nodes.forEach((node, nth) => emitWork(node, depth, rails, last && nth === item.nodes.length - 1, false));
+    else item.nodes.forEach(node => rows.push(...asksOf(node, depth + 1, kidRails, false)));
   };
 
   function emitItems(items, depth, rails) {
@@ -271,8 +275,6 @@ function stream(input) {
         const summary = ["PARALLEL ×" + item.nodes.length, count("done") > 0 ? count("done") + " DONE" : "", count("working") > 0 ? count("working") + " WORKING" : "", other > 0 ? other + " OTHER" : ""].filter(part => part !== "").join("  ·  ");
         rows.push({ kind: "fork", key: "fork:" + item.nodes[0].work, nodes: item.nodes, summary: summary, depth: depth, rails: rails, last: last });
         item.nodes.forEach(node => rows.push(...detailsOf(node, depth, rails, !last)));
-      } else if (opened["fold:" + item.nodes[0].work]) {
-        item.nodes.forEach((node, nth) => emitWork(node, depth, rails, last && nth === item.nodes.length - 1, false));
       } else {
         emitFold(item, depth, rails, last);
       }
@@ -289,7 +291,7 @@ function stream(input) {
   } else {
     const roots = input.progress ? input.progress.roots.slice().sort((a, b) => a.created - b.created) : [];
     plan(roots, false).forEach(item => {
-      if (item.type === "fold" && !opened["fold:" + item.nodes[0].work]) emitFold(item, 0, [], true);
+      if (item.type === "fold") emitFold(item, 0, [], true);
       else item.nodes.forEach(node => emitWork(node, 0, [], true, false));
       blocks.push({ at: item.nodes[0].created, rows: rows.splice(0) });
     });

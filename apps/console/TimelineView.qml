@@ -471,9 +471,10 @@ Item {
           state: look.state
           stateText: look.text
           folds: true
+          open: entry.row.unfolded
           linked: nodes.length === 1
-          onToggled: root.toggle(entry.row.key, true)
-          onChosen: root.toggle(entry.row.key, true)
+          onToggled: root.toggle(entry.row.key, !entry.row.unfolded)
+          onChosen: root.toggle(entry.row.key, !entry.row.unfolded)
           onOpened: root.openWork(last.work)
         }
       }
