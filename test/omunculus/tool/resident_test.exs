@@ -2,7 +2,7 @@ defmodule Omunculus.Tool.ResidentTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.ExecutionPolicyFixtures
-  alias Omunculus.Tool.{Invoke, Manifest}
+  alias Omunculus.Tool.{Invoke, Manifest, Resident}
 
   # Every answer carries how many lines this process has read.
   @script """
@@ -104,6 +104,43 @@ defmodule Omunculus.Tool.ResidentTest do
 
     File.write!(Path.join(dir, "run"), @script)
     assert call(manifest, policy, "run-a") == 1
+  end
+
+  test "a call past its timeout stops a process that does not answer", %{
+    dir: dir,
+    policy: policy
+  } do
+    {:ok, command} =
+      Omunculus.Execution.Command.new("/usr/bin/sh", ["-c", "read line; sleep 30"], cwd: dir)
+
+    key = {"run-a", "slow"}
+
+    assert {:error, :timeout} = Resident.call(key, command, "{}", policy, timeout_ms: 100)
+    assert wait_until(fn -> Registry.lookup(Resident.Registry, key) == [] end)
+  end
+
+  test "the process ends with the process that started it, without keep_alive_ms", %{
+    dir: dir,
+    policy: policy
+  } do
+    {:ok, command} =
+      Omunculus.Execution.Command.new("/usr/bin/sh", ["-c", "while read l; do echo ok; done"],
+        cwd: dir
+      )
+
+    key = {"run-a", "owned"}
+    parent = self()
+
+    owner =
+      spawn(fn ->
+        send(parent, Resident.call(key, command, "{}", policy, []))
+        Process.sleep(:infinity)
+      end)
+
+    assert_receive {:ok, _answer}, 5_000
+    assert [{_pid, _}] = Registry.lookup(Resident.Registry, key)
+    Process.exit(owner, :kill)
+    assert wait_until(fn -> Registry.lookup(Resident.Registry, key) == [] end)
   end
 
   defp wait_until(fun, tries \\ 100) do

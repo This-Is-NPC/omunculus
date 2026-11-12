@@ -42,6 +42,10 @@ defmodule Omunculus.Execution do
   @spec stop(Handle.t(), term) :: :ok | {:error, term}
   def stop(%Handle{pid: pid}, reason), do: Process.stop(pid, reason)
 
+  @doc "Ends what `handle`'s shell runs, leaving the shell."
+  @spec interrupt(Handle.t()) :: :ok
+  def interrupt(%Handle{pid: pid}), do: Process.interrupt(pid)
+
   @spec run(Command.t(), Policy.t(), iodata) :: {:ok, result} | {:error, term}
   def run(command, policy, input \\ "") do
     ref = make_ref()

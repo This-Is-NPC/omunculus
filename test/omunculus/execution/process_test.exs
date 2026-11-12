@@ -25,6 +25,9 @@ defmodule Omunculus.Execution.ProcessTest.FakeBackend do
   end
 
   @impl true
+  def interrupt(_handle), do: :ok
+
+  @impl true
   def cleanup(_handle), do: :ok
 
   @impl true

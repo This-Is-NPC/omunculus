@@ -198,6 +198,27 @@ defmodule Omunculus.Tools.Out do
   def read_only_workspace,
     do: "The workspace is read-only in this run: writing, moving or deleting needs sandbox.write."
 
+  @spec command_timed_out(pos_integer, boolean) :: String.t()
+  def command_timed_out(timeout_ms, false),
+    do:
+      "The command ran past its timeout of #{timeout_ms} ms and was killed. The shell is still open, in the directory and with the variables the command left."
+
+  def command_timed_out(timeout_ms, true),
+    do:
+      "The command ran past its timeout of #{timeout_ms} ms and was killed, and the shell with it: the next command starts a new shell, in the workspace and with no variables set."
+
+  @spec shell_ended(non_neg_integer) :: String.t()
+  def shell_ended(status),
+    do:
+      "The command ended the shell (exit #{status}): the next command starts a new shell, in the workspace and with no variables set."
+
+  @spec output_truncated(pos_integer) :: String.t()
+  def output_truncated(limit), do: "(the output went past #{limit} bytes and was cut there)"
+
+  @spec timeout_too_long(pos_integer) :: String.t()
+  def timeout_too_long(max_ms),
+    do: "timeout_ms is more than this project allows: at most #{max_ms}"
+
   @spec closed_network() :: String.t()
   def closed_network,
     do:

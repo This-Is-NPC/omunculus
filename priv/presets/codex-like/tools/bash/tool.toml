@@ -1,7 +1,7 @@
 name = "bash"
 kind = "tool"
 triggers = ["model"]
-description = "Runs a shell command in the workspace: the way to list, move or delete files and to run programs and tests. Every call starts afresh in workdir, or the workspace root without one, whatever an earlier call did with cd: set workdir instead of cd; ~ is the person's home, not the workspace, so look for the work's files from where the call starts, never across the machine."
+description = "Runs a shell command in the workspace: the way to list, move or delete files and to run programs and tests. The calls of a run share one shell: its directory, variables, functions and background jobs stay from one call to the next, and a call starts where the last one left off, in the workspace root at first; ~ is the person's home, not the workspace, so look for the work's files from where the call starts, never across the machine."
 tags = ["shell"]
 module = "Omunculus.Tools.Bash"
 
@@ -14,4 +14,11 @@ type = "string"
 
 [parameters.properties.workdir]
 type = "string"
-description = "The directory the command starts in, relative to the workspace root; the root when left out."
+description = "The directory to change to before the command, relative to the workspace root; the shell's current directory when left out."
+
+[parameters.properties.timeout_ms]
+type = "integer"
+description = "How long the command may run, in milliseconds; the project's own limit when left out. A longer one than the project allows is refused. A command that runs past it is killed and the shell stays open."
+
+[views.bash]
+source = "settings"

@@ -51,11 +51,11 @@ supports, not written yet · **K** needs a change in the harness core ·
 | **Coding: editing** | Exact, unique replacement | **P** | **P** | **P** | **P** |
 | | Multi-edit, patch, diff, read before edit | **P** `edit` applies several replacements atomically, `patch` several files; refuses a file that changed since it was read; per-call diff through `changes` | **P** | **P** | **P** |
 | | Formatter after edit | **T** hook | ? | **P** | ? |
-| **Coding: execution** | Shell | ◐ new `sh -c` per call (codex-like preset) | **P** persistent | **P** | **P** persistent |
+| **Coding: execution** | Shell | **P** one `sh` per run, kept by `Tool.Resident` (codex-like preset) | **P** persistent | **P** | **P** persistent |
 | | Background processes | **—** event-driven | **P** | **P** | **P** |
-| | Timeout | ◐ one `timeout_ms` for everything | **P** | **P** | **P** |
+| | Timeout | **P** `timeout_ms` per call, up to `[settings.bash] max_timeout_ms`; the command is killed and the shell stays open | **P** | **P** | **P** |
 | | Network for dependencies | **P** through a `sandbox.network` grant | ◐ | **P** uncontrolled | **P** |
-| | Per-call latency | ◐ Bubblewrap (+ Deno) per call | Persistent process | On the host | Persistent process |
+| | Per-call latency | **P** sandbox built once per run: about 1 ms median per `true` against 7 to 8 ms before (`mise run bench:shell`) | Persistent process | On the host | Persistent process |
 | | Backends / platform | ◐ Bubblewrap and Linux only (**K**) | **P** | **P** | **P** 7 backends |
 | **Coding: flow** | Plan → implement → review with distinct permissions | **P** workflow | ◐ | ◐ | ◐ |
 | | One model per stage and per workspace | **P** | ◐ | ◐ | ◐ |

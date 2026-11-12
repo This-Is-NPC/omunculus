@@ -80,7 +80,9 @@ defmodule Omunculus.Tool.Invoke do
          execution
        )
        when is_integer(ms) and is_binary(run_id) do
-    Resident.call({run_id, manifest.name}, command, Jason.encode!(input), execution, ms)
+    Resident.call({run_id, manifest.name}, command, Jason.encode!(input), execution,
+      keep_alive_ms: ms
+    )
   end
 
   defp run_command(_manifest, command, input, execution) do

@@ -1,0 +1,71 @@
+#!/usr/bin/env -S mix run
+# Per-call latency of the bash tool: 20 sequential `true` commands in one run,
+# with the sandbox mounts of a run that sees the host (`host`) and of one that
+# does not. Prints the first call, the median and the total of each.
+
+alias Omunculus.Execution.Policy
+alias Omunculus.Tools.Bash
+
+root = Path.join(System.tmp_dir!(), "omunculus-bench-" <> Omunculus.Id.new())
+File.mkdir_p!(root)
+
+policy = fn host? ->
+  scratch = Path.join(root, if(host?, do: "scratch-host", else: "scratch"))
+  File.mkdir_p!(scratch)
+
+  %Policy{
+    id: "bench-#{host?}",
+    workspace: %{name: nil, root: root},
+    read_only: [],
+    read_write: [root],
+    hidden: [],
+    runtimes: ["/usr"],
+    backend: "bubblewrap",
+    environment: %{"LANG" => "C"},
+    network: "none",
+    limits: %{
+      timeout_ms: 30_000,
+      max_output_bytes: 1_048_576,
+      max_concurrent: 4,
+      max_queue: 4,
+      queue_timeout_ms: 30_000
+    },
+    tools: ["bash"],
+    scratch: scratch,
+    host: host?,
+    sandbox: %{script: "", command: [], runner: ~S(input=$1; errors=$2; status=$3; shift 3; "$@" < "$input" 2> "$errors"; result=$?; printf %s "$result" > "$status"; exit "$result"), exec: ~S(exec "$@")}
+  }
+end
+
+input = %{
+  name: "bash", args: %{"command" => "true"}, view: %{}, run_id: nil, work_id: nil,
+  workspace: nil, roots: [root]
+}
+
+try do
+  for host? <- [false, true] do
+    policy = policy.(host?)
+
+    # The run's process: its shell ends with it.
+    times =
+      Task.async(fn ->
+        for _ <- 1..20 do
+          {us, %{"ok" => true}} = :timer.tc(fn -> Bash.run(input, policy) end)
+          us / 1000
+        end
+      end)
+      |> Task.await()
+
+    sorted = Enum.sort(times)
+    fmt = &:erlang.float_to_binary(&1, decimals: 1)
+
+    IO.puts(
+      "host=#{host?}: first #{fmt.(hd(times))} ms, median #{fmt.(Enum.at(sorted, 10))} ms, " <>
+        "total #{fmt.(Enum.sum(times))} ms for 20 calls"
+    )
+  end
+after
+  # Lets the shells of both runs end before their files go.
+  Process.sleep(500)
+  File.rm_rf(root)
+end

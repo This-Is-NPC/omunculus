@@ -257,6 +257,10 @@ The first language, in name order, that lists a file's extension serves it.
 The command runs in the workspace root, inside the run's sandbox
 ([Code intelligence](tools.md#code-intelligence)).
 
+`bash` reads `max_timeout_ms` of `[settings.bash]`, the longest `timeout_ms`
+a call may ask for; without it a call may not ask for more than
+`[execution] timeout_ms` ([Shell](tools.md#shell)).
+
 ## Artifacts in a bucket
 
 `[s3]` is optional: the S3-compatible bucket the artifact tools

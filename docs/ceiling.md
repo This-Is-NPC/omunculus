@@ -143,9 +143,10 @@ before it within its own timeout. Where the filesystem keeps an overlay
 busy a while after its last process has gone, as btrfs does, a command
 tries for up to ten seconds more before it fails.
 
-The `bash` tool hands its command to `sh` as a file in the command's private
-temporary directory, so the command's text is on no process's command line:
-`pkill -f` and `pgrep -f` match only what the command itself started. When
+The `bash` tool hands its command to the run's shell as a file in the run's
+scratch, so the command's text is on no process's command line: `pkill -f`
+and `pgrep -f` match only what the command itself started. The shell is
+the sandbox of the run's first call, with the same mounts for all. When
 the runner is killed before it reports, the call fails with
 `{:bubblewrap, {:killed, status}}` (128 plus the signal), and
 `{:bubblewrap, :setup_failed}` is left to Bubblewrap failing before the

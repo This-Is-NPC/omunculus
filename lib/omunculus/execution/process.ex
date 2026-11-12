@@ -32,6 +32,10 @@ defmodule Omunculus.Execution.Process do
   @spec close_input(pid) :: :ok | {:error, term}
   def close_input(pid), do: call_unless_ended(pid, :close_input)
 
+  # For a shell kept across commands: a timeout ends what runs below it.
+  @spec interrupt(pid) :: :ok
+  def interrupt(pid), do: GenServer.call(pid, :interrupt)
+
   # Stopping waits for the process, busy as it may be with output, however
   # long: its stop only kills and cleans up. One that already ended is
   # stopped.
@@ -88,6 +92,10 @@ defmodule Omunculus.Execution.Process do
   def handle_call(:close_input, _from, state) do
     reply = state.backend.close_input(state.handle)
     {:reply, reply, state}
+  end
+
+  def handle_call(:interrupt, _from, state) do
+    {:reply, state.backend.interrupt(state.handle), state}
   end
 
   def handle_call({:stop, reason}, _from, state) do

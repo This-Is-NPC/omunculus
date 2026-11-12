@@ -98,6 +98,34 @@ defmodule Omunculus.Execution.Bubblewrap do
     :ok
   end
 
+  # Ends everything below the shell of a command that kept one, as `sh` ran
+  # the command's script: the outermost process with that command line, the
+  # runner's own naming the script among more.
+  @impl true
+  def interrupt(%Handle{} = handle) do
+    with pid when is_integer(pid) <- os_pid(handle.port),
+         script = Path.join(handle.temp_dir, "script"),
+         shell when is_integer(shell) <- Enum.find([pid | descendants(pid)], &shell?(&1, script)) do
+      pids = descendants(shell)
+
+      _ =
+        System.cmd("kill", ["-KILL" | Enum.map(pids, &Integer.to_string/1)],
+          stderr_to_stdout: true
+        )
+
+      await_exit(pids)
+    else
+      _ -> :ok
+    end
+  end
+
+  defp shell?(pid, script) do
+    case File.read("/proc/#{pid}/cmdline") do
+      {:ok, cmdline} -> match?([_program, ^script, ""], String.split(cmdline, "\0"))
+      {:error, _gone} -> false
+    end
+  end
+
   @impl true
   def cleanup(%Handle{} = handle) do
     kill_input(handle)
@@ -132,7 +160,7 @@ defmodule Omunculus.Execution.Bubblewrap do
     ["--unshare-all", "--unshare-user"] ++
       network_args(policy.network) ++
       ["--die-with-parent", "--new-session", "--clearenv"] ++
-      filesystem_args(policy) ++
+      filesystem_args(policy, command.home) ++
       network_files(policy) ++
       mount_args(mounts) ++
       hidden_args(policy, mounts, temp_dir) ++
@@ -299,16 +327,16 @@ defmodule Omunculus.Execution.Bubblewrap do
        :exit_status,
        args:
          ["-c", @setup, "omunculus-bwrap", Path.join(temp_dir, "setup")] ++
-           home_lock(policy) ++ [bwrap] ++ arguments(command, policy, temp_dir)
+           home_lock(policy, command.home) ++ [bwrap] ++ arguments(command, policy, temp_dir)
      ])}
   rescue
     error in ArgumentError -> {:error, {:bubblewrap, Exception.message(error)}}
   end
 
-  defp home_lock(%Policy{host: true, scratch: scratch}) when is_binary(scratch),
-    do: ["/usr/bin/flock", Path.join(scratch, ".home-lock")]
+  defp home_lock(%Policy{host: true, scratch: scratch}, home) when is_binary(scratch),
+    do: ["/usr/bin/flock", Path.join(scratch, home <> "-lock")]
 
-  defp home_lock(_policy), do: []
+  defp home_lock(_policy, _home), do: []
 
   defp network_args("host"), do: ["--share-net"]
   defp network_args("none"), do: []
@@ -329,13 +357,13 @@ defmodule Omunculus.Execution.Bubblewrap do
   # writes only where its mounts let it: its home is the person's, its
   # writes kept in the run's scratch; /run, with the sockets of the
   # machine's services, is not there, but for the resolver.
-  defp filesystem_args(%Policy{host: true} = policy) do
+  defp filesystem_args(%Policy{host: true} = policy, home_name) do
     home = System.user_home!()
 
     overlay =
       if policy.scratch do
-        upper = Path.join(policy.scratch, ".home")
-        work = Path.join(policy.scratch, ".home-work")
+        upper = Path.join(policy.scratch, home_name)
+        work = Path.join(policy.scratch, home_name <> "-work")
         File.mkdir_p!(upper)
         File.mkdir_p!(work)
         ["--overlay-src", home, "--overlay", upper, work, home]
@@ -352,7 +380,8 @@ defmodule Omunculus.Execution.Bubblewrap do
       ["--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve"]
   end
 
-  defp filesystem_args(policy), do: ["--tmpfs", "/"] ++ base_filesystem_args(policy.scratch)
+  defp filesystem_args(policy, _home),
+    do: ["--tmpfs", "/"] ++ base_filesystem_args(policy.scratch)
 
   # A run's scratch is its /tmp, home included, kept from one command to
   # the next; a command outside a run gets an empty one.

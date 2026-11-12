@@ -9,6 +9,7 @@ defmodule Omunculus.Execution.Backend do
   @callback write(term, iodata) :: :ok | {:error, term}
   @callback close_input(term) :: :ok | {:error, term}
   @callback stop(term, term) :: :ok | {:error, term}
+  @callback interrupt(term) :: :ok
   @callback cleanup(term) :: :ok
   @callback exit_status(term, non_neg_integer) :: non_neg_integer | {:error, term}
 end

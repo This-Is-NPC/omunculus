@@ -169,6 +169,10 @@ run = "scripts/validate-boundaries"
 description = "Run the regular test suite"
 run = "scripts/validate-regular"
 
+[tasks."bench:shell"]
+description = "Measure the per-call latency of the bash tool: 20 sequential true commands"
+run = "scripts/bench-shell"
+
 [tasks."validate:sandbox"]
 description = "Run Bubblewrap integration tests on a supported Linux host"
 run = "scripts/validate-sandbox"

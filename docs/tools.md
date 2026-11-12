@@ -101,12 +101,15 @@ state the process needs, such as a language server. The contract changes
 only in its framing: each call is one line of JSON on stdin, the `in`, and
 the tool answers with one line of JSON on stdout, the `out`, until stdin
 closes. The process is started under the run's policy by the first call and
-ends after `keep_alive_ms` without a call, when a call fails or times out,
-or when it exits; the next call starts it again. One run never reaches the
+ends after `keep_alive_ms` without a call, when the process that first
+called it (the run's) ends, when a call fails or times out, or when it
+exits; the next call starts it again. One run never reaches the
 process of another. A call outside a run, or a tool without the key, gets
 a process per call, which reads the same line until stdin closes. The
 process holds one of the run's execution slots (`max_concurrent`) while it
-lives.
+lives. A call that runs past the policy's `timeout_ms` has what runs below
+the process killed; a process that then answers within a second is kept
+and the call fails, one that does not is stopped.
 
 A tool only the CLI triggers (`triggers = ["cli"]`) may set
 `config = false`; any other tool that sets it is refused. The command line
@@ -643,6 +646,30 @@ written. Each path follows the sandbox and workspace rules, and `edit` and
 `patch` refuse a file that changed since the run last read it. The files
 each call changed are recorded for `changes` and `revert` like those of
 `write`.
+
+## Shell
+
+`bash` (shipped by the `codex-like` preset) runs a command as an `sh`
+script in the run's shell: one `sh` in the run's sandbox, started by the
+first call and kept by the same mechanism as `keep_alive_ms`
+([Tools](#tools)), with no idle end: it lives until the run's process
+ends. The calls of a run share the shell's directory, variables, functions
+and background jobs, and the sandbox is built once. A call may name a
+`workdir`, relative to the workspace root, to change to first. Its stdin is
+closed. Stdout and stderr come back together, in the order written, up to
+`[execution] max_output_bytes`; the rest is cut and the output says so.
+
+A call takes `timeout_ms`, `[execution] timeout_ms` without one. A longer
+one than `max_timeout_ms` of `[settings.bash]` is refused with that limit;
+without the key the limit is `[execution] timeout_ms`. A command that runs
+past its timeout is killed with whatever it started, and the output says
+so; the shell stays open, in the directory and with the variables the
+command left. A shell that does not answer after the kill, such as one in
+a loop of builtins, is killed too, and the output says the next call
+starts a new shell with its state reset. `exit` in a command ends the
+shell the same way. With `[execution] host`, the shell keeps what it
+writes under the person's home apart from the run's other commands, which
+share theirs, so neither waits for the other's overlay.
 
 ## Code intelligence
 
