@@ -6,7 +6,7 @@ defmodule Omunculus.Tools.WaitTest do
 
   @input %{
     name: "wait",
-    args: %{"report" => "Take your time; write when you decide."},
+    args: %{"report" => %{"done" => "Take your time; write when you decide."}},
     view: %{},
     run_id: nil,
     work_id: "w1",
@@ -21,7 +21,7 @@ defmodule Omunculus.Tools.WaitTest do
              "emit" => [
                %{
                  "type" => "wait",
-                 "body" => %{"body" => "Take your time; write when you decide."}
+                 "body" => %{"body" => "**done:** Take your time; write when you decide."}
                }
              ]
            }
@@ -29,7 +29,9 @@ defmodule Omunculus.Tools.WaitTest do
 
   test "a run without a work is told to answer instead, and a blank report is refused" do
     assert Wait.run(%{@input | work_id: nil}) == Out.fail(Out.no_work())
-    assert Wait.run(%{@input | args: %{"report" => ""}}) == Out.fail("report required")
+
+    assert Wait.run(%{@input | args: %{"report" => %{"done" => ""}}}) ==
+             Out.fail("report needs at least one field")
   end
 
   test "the builtin manifest is model-facing and ends the run through then" do

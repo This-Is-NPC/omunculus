@@ -974,7 +974,7 @@ defmodule Omunculus.RunTest do
       send(test_pid, :reached_second_call)
 
       call.("request_access", %{
-        "report" => "x",
+        "report" => %{"done" => "x"},
         "access" => [%{"kind" => "tool", "name" => "other"}],
         "reason" => "x"
       })
@@ -1003,7 +1003,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "report" => "blocked",
+        "report" => %{"done" => "blocked"},
         "access" => [%{"kind" => "path", "name" => "./secret"}],
         "reason" => "need it"
       })
@@ -1038,7 +1038,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "report" => "blocked on write",
+        "report" => %{"done" => "blocked on write"},
         "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
         "reason" => "need to write"
       })
@@ -1075,7 +1075,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "report" => "blocked on write",
+        "report" => %{"done" => "blocked on write"},
         "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
         "reason" => "need to write"
       })
@@ -1088,7 +1088,7 @@ defmodule Omunculus.RunTest do
     assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
     assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
 
-    assert {:ok, [%{body: "blocked on write"}]} =
+    assert {:ok, [%{body: "**done:** blocked on write"}]} =
              Store.comments(project.conn, :work, work_id)
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
@@ -1174,7 +1174,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "report" => "blocked on write",
+        "report" => %{"done" => "blocked on write"},
         "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
         "reason" => "need to write"
       })
@@ -1398,7 +1398,7 @@ defmodule Omunculus.RunTest do
     end
 
     defp idle(text), do: fn _call -> {:ok, text} end
-    defp ending, do: fn call -> call.("done", %{"report" => "finished"}) end
+    defp ending, do: fn call -> call.("done", %{"report" => %{"done" => "finished"}}) end
     defp asking, do: fn call -> call.("ask", %{"question" => "Go on?"}) end
 
     defp ending_run do
@@ -1523,7 +1523,7 @@ defmodule Omunculus.RunTest do
 
       finishing = fn call, record ->
         :ok = record.(reply(100))
-        call.("done", %{"report" => "finished"})
+        call.("done", %{"report" => %{"done" => "finished"}})
         {:ok, "finished"}
       end
 
@@ -1562,7 +1562,7 @@ defmodule Omunculus.RunTest do
 
       finishing = fn call, record ->
         :ok = record.(reply(100))
-        call.("done", %{"report" => "finished"})
+        call.("done", %{"report" => %{"done" => "finished"}})
         {:ok, "finished"}
       end
 
@@ -1661,7 +1661,7 @@ defmodule Omunculus.RunTest do
       Fixtures.use_model(project, fn assembled, _tools, call ->
         if String.starts_with?(assembled, "worker"),
           do: {:ok, "idle"},
-          else: call.("break", %{"report" => "passed up"})
+          else: call.("break", %{"report" => %{"done" => "passed up"}})
       end)
 
       assert {:ok, _run} = Run.open(project, opening(nil, child_id))
@@ -1674,7 +1674,7 @@ defmodule Omunculus.RunTest do
 
       assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
       assert [_parent_run] = runs_of(project, parent_id)
-      assert breaks_of(project, parent_id) == ["passed up"]
+      assert breaks_of(project, parent_id) == ["**done:** passed up"]
 
       # The harness gave up, not the agent: the stop is its own, with no agent id.
       assert {:ok, [%{actor_kind: "harness", actor_id: nil}]} =
@@ -1774,7 +1774,7 @@ defmodule Omunculus.RunTest do
       Fixtures.use_model(project, fn assembled, _tools, call ->
         if String.starts_with?(assembled, "worker"),
           do: raise("boom"),
-          else: call.("break", %{"report" => "passed up"})
+          else: call.("break", %{"report" => %{"done" => "passed up"}})
       end)
 
       assert {:error, {:runs, [_, _]}} = Run.open(project, opening(nil, child_id))
@@ -1787,7 +1787,7 @@ defmodule Omunculus.RunTest do
              ]
 
       assert [_parent_run] = runs_of(project, parent_id)
-      assert breaks_of(project, parent_id) == ["passed up"]
+      assert breaks_of(project, parent_id) == ["**done:** passed up"]
 
       Project.close(project)
     end
@@ -1958,7 +1958,7 @@ defmodule Omunculus.RunTest do
       scripted(project, [
         fn call ->
           send(test_pid, {:end, call.("end", %{})})
-          call.("done", %{"report" => "finished"})
+          call.("done", %{"report" => %{"done" => "finished"}})
         end
       ])
 
@@ -1983,7 +1983,7 @@ defmodule Omunculus.RunTest do
       work_id = Fixtures.insert(project.conn, :works)
 
       scripted(project, [
-        fn call -> call.("wait", %{"report" => "Take your time."}) end,
+        fn call -> call.("wait", %{"report" => %{"done" => "Take your time."}}) end,
         ending()
       ])
 
@@ -2045,7 +2045,7 @@ defmodule Omunculus.RunTest do
       scripted(project, [
         fn call ->
           send(test_pid, {:end, call.("end", %{})})
-          call.("break", %{"report" => "passed up"})
+          call.("break", %{"report" => %{"done" => "passed up"}})
         end
       ])
 
@@ -2053,7 +2053,7 @@ defmodule Omunculus.RunTest do
 
       assert_received {:end, {:ok, refused}}
       assert refused == Out.refused({:end, {:broken_child, child_id}})
-      assert breaks_of(project, parent_id) == ["passed up"]
+      assert breaks_of(project, parent_id) == ["**done:** passed up"]
 
       Project.close(project)
     end
@@ -2075,8 +2075,8 @@ defmodule Omunculus.RunTest do
 
       scripted(project, [
         fn call ->
-          send(test_pid, {:done, call.("done", %{"report" => "finished"})})
-          call.("break", %{"report" => "passed up"})
+          send(test_pid, {:done, call.("done", %{"report" => %{"done" => "finished"}})})
+          call.("break", %{"report" => %{"done" => "passed up"}})
         end
       ])
 
@@ -2084,7 +2084,7 @@ defmodule Omunculus.RunTest do
 
       assert_received {:done, {:ok, refused}}
       assert refused == Out.refused({:continue, {:broken_child, child_id}})
-      assert breaks_of(project, parent_id) == ["passed up"]
+      assert breaks_of(project, parent_id) == ["**done:** passed up"]
       assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", parent_id)
       assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
 
@@ -2321,7 +2321,7 @@ defmodule Omunculus.RunTest do
       # A run on a work hands it on; one without a work, which done
       # refuses, ends.
       Fixtures.use_model(project, fn _assembled, _tools, call ->
-        call.("done", %{"report" => "finished"})
+        call.("done", %{"report" => %{"done" => "finished"}})
         call.("end", %{})
       end)
 
@@ -2386,7 +2386,9 @@ defmodule Omunculus.RunTest do
       project = due_config(dir)
       run = due_run(project, %{agent: "lead"})
       works = [%{"title" => "Site", "goal" => "Build it", "agent" => "lead"}]
-      events = lost_call(project, run, "work", %{"report" => "On it", "works" => works})
+
+      events =
+        lost_call(project, run, "work", %{"report" => %{"done" => "On it"}, "works" => works})
 
       assert [%{agent: "lead", via: "work"}] = recovered(project, events, "work")
 
@@ -2398,7 +2400,12 @@ defmodule Omunculus.RunTest do
       root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
       run = due_run(project, %{agent: "lead", work_id: root, own: true})
       works = [%{"title" => "Page", "goal" => "Write it", "agent" => "helper"}]
-      events = lost_call(project, run, "work", %{"report" => "Handing down", "works" => works})
+
+      events =
+        lost_call(project, run, "work", %{
+          "report" => %{"done" => "Handing down"},
+          "works" => works
+        })
 
       assert [%{agent: "helper", via: "delegate"}] = recovered(project, events, "delegate")
 
@@ -2422,7 +2429,7 @@ defmodule Omunculus.RunTest do
         })
 
       run = due_run(project, %{agent: "helper", depth: 1, work_id: child, own: true})
-      events = lost_call(project, run, "done", %{"report" => "Written"})
+      events = lost_call(project, run, "done", %{"report" => %{"done" => "Written"}})
 
       assert [%{agent: "lead", work_id: ^root}] = recovered(project, events, "continue")
 

@@ -12,7 +12,8 @@ defmodule Omunculus.Harness do
   outside a run checks no ceiling. Run lifecycle events use the same
   `react/2` path. The `request` view is the request named by the call's
   `request_id` argument, or else the run's; `grant_scopes` is the list of
-  scopes the store accepts on a permanent grant.
+  scopes the store accepts on a permanent grant; `report_required`, the
+  report fields `[policy] report_required` lists.
 
   Hooks use the same emit path as tools. Hooks of every event run during
   the model unroll except those of `end`, the only event that ends a run:
@@ -293,6 +294,7 @@ defmodule Omunculus.Harness do
       "paths" => fn _spec -> path_permissions(project, run, workspace) end,
       "grant_scopes" => fn _spec -> Requests.scopes() end,
       "skills" => fn _spec -> skills_view(project, run, catalog) end,
+      "report_required" => fn _spec -> config.report_required end,
       "artifacts" => fn spec -> artifacts_view(project, run, config, spec) end,
       "settings" => fn spec -> get_in(config.data, ["settings", spec.key]) || %{} end
     })

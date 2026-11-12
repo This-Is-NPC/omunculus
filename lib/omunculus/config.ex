@@ -61,6 +61,7 @@ defmodule Omunculus.Config do
     :interceptors,
     :default_agent,
     :last_run_output_bytes,
+    :report_required,
     :tool_output_bytes,
     :conversation_bytes,
     :memory_bytes,
@@ -158,6 +159,7 @@ defmodule Omunculus.Config do
           default_agent: String.t() | nil,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
+          report_required: [String.t()],
           conversation_bytes: pos_integer | nil,
           memory_bytes: pos_integer | nil,
           send_catalog: boolean,
@@ -208,7 +210,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes memory_bytes send_catalog session_ttl_ms session_max_bytes default_agent)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes memory_bytes media_bytes send_catalog session_ttl_ms session_max_bytes default_agent report_required)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -782,6 +784,7 @@ defmodule Omunculus.Config do
              {:ok, memory_bytes} <- fetch_positive(Map.get(data, "policy", %{}), :memory_bytes),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
+             {:ok, report_required} <- fetch_report_required(data),
              :ok <- check_settings(Map.get(data, "settings", %{})),
              {:ok, s3} <- Omunculus.Artifacts.S3.parse(Map.get(data, "s3"), auth.providers),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -811,6 +814,7 @@ defmodule Omunculus.Config do
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,
               memory_bytes: memory_bytes,
+              report_required: report_required,
               send_catalog: send_catalog,
               session_ttl_ms: session.ttl_ms,
               session_max_bytes: session.max_bytes,
@@ -1450,6 +1454,28 @@ defmodule Omunculus.Config do
     case get_in(data, ["policy", "default_agent"]) do
       nil ->
         {:ok, nil}
+  @report_fields ~w(done decided pending files verify)
+
+  @doc "The fields of a run's report, in the order they are written."
+  @spec report_fields() :: [String.t()]
+  def report_fields, do: @report_fields
+
+  # Absent, no field of a report is required but that it has one.
+  defp fetch_report_required(data) do
+    case get_in(data, ["policy", "report_required"]) do
+      nil ->
+        {:ok, []}
+
+      names when is_list(names) ->
+        if Enum.all?(names, &(&1 in @report_fields)),
+          do: {:ok, Enum.uniq(names)},
+          else: {:error, {:policy, {:invalid, :report_required}}}
+
+      _invalid ->
+        {:error, {:policy, {:invalid, :report_required}}}
+    end
+  end
+
 
       name when is_binary(name) ->
         case agents do

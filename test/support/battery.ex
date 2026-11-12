@@ -45,7 +45,7 @@ defmodule Omunculus.Test.Battery do
   defp decide(parsed, call), do: count(parsed, call)
 
   defp create_work(call, report) do
-    call.("work", %{"report" => report, "works" => [@count_work]})
+    call.("work", %{"report" => %{"done" => report}, "works" => [@count_work]})
     {:ok, report}
   end
 
@@ -57,7 +57,7 @@ defmodule Omunculus.Test.Battery do
         do: call.("comment", %{"body" => @counted})
 
       if MapSet.member?(cards, "notify"), do: call.("notify", %{"body" => "reached 5"})
-      if MapSet.member?(cards, "done"), do: call.("done", %{"report" => @counted})
+      if MapSet.member?(cards, "done"), do: call.("done", %{"report" => %{"done" => @counted}})
       {:ok, @counted}
     else
       review(parsed, call)
@@ -76,7 +76,7 @@ defmodule Omunculus.Test.Battery do
   defp review(%{last_comment: comment, cards: cards, results: results} = parsed, call) do
     cond do
       reviewable?(comment, cards) or (results and MapSet.member?(cards, "done")) ->
-        call.("done", %{"report" => "reviewed"})
+        call.("done", %{"report" => %{"done" => "reviewed"}})
         {:ok, "reviewed"}
 
       MapSet.member?(cards, "work") and not delegated?(comment) ->

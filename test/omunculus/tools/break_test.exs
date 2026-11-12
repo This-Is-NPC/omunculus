@@ -15,18 +15,18 @@ defmodule Omunculus.Tools.BreakTest do
   }
 
   test "a run without a work is told to answer instead" do
-    input = %{@input | work_id: nil, args: %{"report" => "stuck"}}
+    input = %{@input | work_id: nil, args: %{"report" => %{"done" => "stuck"}}}
     assert Break.run(input) == %{"ok" => false, "output" => Out.no_work(), "emit" => []}
   end
 
   test "emits break with the report as its comment body" do
-    input = %{@input | args: %{"report" => "waiting on design review"}}
+    input = %{@input | args: %{"report" => %{"done" => "waiting on design review"}}}
 
     assert Break.run(input) == %{
              "ok" => true,
              "output" => "",
              "emit" => [
-               %{"type" => "break", "body" => %{"body" => "waiting on design review"}}
+               %{"type" => "break", "body" => %{"body" => "**done:** waiting on design review"}}
              ]
            }
   end
@@ -34,14 +34,18 @@ defmodule Omunculus.Tools.BreakTest do
   test "does not forward stage or agent from args" do
     input = %{
       @input
-      | args: %{"report" => "waiting on design review", "stage" => "review", "agent" => "worker"}
+      | args: %{
+          "report" => %{"done" => "waiting on design review"},
+          "stage" => "review",
+          "agent" => "worker"
+        }
     }
 
     assert Break.run(input) == %{
              "ok" => true,
              "output" => "",
              "emit" => [
-               %{"type" => "break", "body" => %{"body" => "waiting on design review"}}
+               %{"type" => "break", "body" => %{"body" => "**done:** waiting on design review"}}
              ]
            }
   end
@@ -55,9 +59,9 @@ defmodule Omunculus.Tools.BreakTest do
   end
 
   test "refuses a blank report" do
-    assert Break.run(%{@input | args: %{"report" => ""}}) == %{
+    assert Break.run(%{@input | args: %{"report" => %{"done" => ""}}}) == %{
              "ok" => false,
-             "output" => "report required",
+             "output" => "report needs at least one field",
              "emit" => []
            }
   end
@@ -74,7 +78,7 @@ defmodule Omunculus.Tools.BreakTest do
   test "the manifest wiring yields the same emit as calling the module directly" do
     catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "break")
-    input = %{@input | args: %{"report" => "waiting on design review"}}
+    input = %{@input | args: %{"report" => %{"done" => "waiting on design review"}}}
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.emit == Break.run(input)["emit"]

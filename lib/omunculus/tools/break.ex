@@ -8,13 +8,13 @@ defmodule Omunculus.Tools.Break do
   break: it is told to answer instead.
   """
 
-  alias Omunculus.Tools.{Args, Out}
+  alias Omunculus.Tools.{Out, Report}
 
   @spec run(map) :: map
   def run(%{work_id: nil}), do: Out.fail(Out.no_work())
 
-  def run(%{args: args}) do
-    case Args.fetch(args, "report") do
+  def run(%{args: args, view: view}) do
+    case Report.fetch(args, view["report_required"] || []) do
       {:ok, report} -> Out.ok("", [%{"type" => "break", "body" => %{"body" => report}}])
       {:error, message} -> Out.fail(message)
     end

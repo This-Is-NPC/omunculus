@@ -13,7 +13,7 @@ type = "object"
 required = ["report", "works"]
 
 [parameters.properties.report]
-type = "string"
+"$ref" = "report"
 
 [parameters.properties.works]
 type = "array"
@@ -45,7 +45,7 @@ type = "object"
 required = ["report", "works"]
 
 [schemas.staged.properties.report]
-type = "string"
+"$ref" = "report"
 
 [schemas.staged.properties.works]
 type = "array"
@@ -64,3 +64,6 @@ type = "string"
 [schemas.staged.properties.works.items.properties.workspace]
 type = "string"
 description = "The name of another workspace the project configures; leave it out to work where you are."
+
+[views.report_required]
+source = "report_required"

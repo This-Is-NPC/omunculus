@@ -145,7 +145,7 @@ defmodule Omunculus.SpecRegressionTest do
         call.("end", %{})
       else
         call.("request_access", %{
-          "report" => "blocked",
+          "report" => %{"done" => "blocked"},
           "access" => [%{"kind" => "tool", "name" => "write"}],
           "reason" => "write report"
         })
@@ -323,7 +323,7 @@ defmodule Omunculus.SpecRegressionTest do
       refute Enum.any?(tools, &(&1.name == "missing_tool"))
 
       assert call.("request_access", %{
-               "report" => "blocked",
+               "report" => %{"done" => "blocked"},
                "access" => [%{"kind" => "tool", "name" => "missing_tool"}],
                "reason" => "test"
              }) == {:ok, Out.refused({:request, {:blocked, "missing_tool"}})}
@@ -529,7 +529,7 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn _, _, call ->
       case Agent.get_and_update(n, fn i -> {i, i + 1} end) do
         0 ->
-          call.("done", %{"report" => "first done"})
+          call.("done", %{"report" => %{"done" => "first done"}})
           flunk("done must end the run")
 
         _ ->
@@ -588,16 +588,16 @@ defmodule Omunculus.SpecRegressionTest do
       cond do
         not String.starts_with?(assembled, "concierge") ->
           send(test_pid, :child_started)
-          call.("done", %{"report" => "made"})
+          call.("done", %{"report" => %{"done" => "made"}})
 
         # The child back wakes the parent, whose next run closes it.
         Agent.get_and_update(parent_runs, &{&1, &1 + 1}) > 0 ->
-          call.("done", %{"report" => "shipped"})
+          call.("done", %{"report" => %{"done" => "shipped"}})
 
         true ->
           assert {:ok, _} =
                    call.("work", %{
-                     "report" => "delegated",
+                     "report" => %{"done" => "delegated"},
                      "works" => [%{"title" => "child", "goal" => "child goal"}]
                    })
 
@@ -655,7 +655,7 @@ defmodule Omunculus.SpecRegressionTest do
 
       Fixtures.use_model(p, fn assembled, _, call ->
         if String.starts_with?(assembled, "worker") do
-          call.(action, %{"report" => "stopping"})
+          call.(action, %{"report" => %{"done" => "stopping"}})
           flunk("#{action} must end the run")
         else
           {:ok, "parent"}
@@ -694,7 +694,7 @@ defmodule Omunculus.SpecRegressionTest do
         {:ok, "first stage"}
       else
         call.("work", %{
-          "report" => "handed off",
+          "report" => %{"done" => "handed off"},
           "works" => [%{"title" => "stage handoff", "goal" => "stage handoff"}]
         })
 
@@ -771,7 +771,7 @@ defmodule Omunculus.SpecRegressionTest do
       :ok = record.(%{content: "I need access", tool_calls: [%{name: "request_access"}]})
 
       call.("request_access", %{
-        "report" => "blocked",
+        "report" => %{"done" => "blocked"},
         "access" => [%{"kind" => "path", "name" => "./secret"}],
         "reason" => "read report"
       })

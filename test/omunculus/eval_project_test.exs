@@ -98,7 +98,7 @@ defmodule Omunculus.EvalProjectTest do
                project,
                "request_access",
                %{
-                 "report" => "Built",
+                 "report" => %{"done" => "Built"},
                  "reason" =>
                    "The build needs the network at http://site.homologation.localhost:8080",
                  "access" => [%{"kind" => "resource", "name" => "sandbox.network"}]
@@ -274,7 +274,7 @@ defmodule Omunculus.EvalProjectTest do
         RequestAccess.run(%{
           work_id: work_id,
           args: %{
-            "report" => "Blocked",
+            "report" => %{"done" => "Blocked"},
             "reason" => "Need network",
             "access" => [%{"kind" => "resource", "name" => "sandbox.network"}]
           },
@@ -457,7 +457,7 @@ defmodule Omunculus.EvalProjectTest do
                project,
                "request_access",
                %{
-                 "report" => "Need a dependency",
+                 "report" => %{"done" => "Need a dependency"},
                  "reason" => "Download dependency",
                  "access" => [%{"kind" => "resource", "name" => "sandbox.network"}]
                },
@@ -683,7 +683,10 @@ defmodule Omunculus.EvalProjectTest do
                Harness.dispatch(
                  project,
                  "work",
-                 %{"report" => "Opened.", "works" => [Map.put(item, "agent", "front-desk")]},
+                 %{
+                   "report" => %{"done" => "Opened."},
+                   "works" => [Map.put(item, "agent", "front-desk")]
+                 },
                  sales.()
                )
 
@@ -693,7 +696,7 @@ defmodule Omunculus.EvalProjectTest do
                Harness.dispatch(
                  project,
                  "work",
-                 %{"report" => "Opened.", "works" => [item]},
+                 %{"report" => %{"done" => "Opened."}, "works" => [item]},
                  sales.()
                )
 
@@ -854,7 +857,7 @@ defmodule Omunculus.EvalProjectTest do
              Harness.dispatch(
                project,
                "work",
-               %{"report" => "Handed down.", "works" => works},
+               %{"report" => %{"done" => "Handed down."}, "works" => works},
                manager
              )
 

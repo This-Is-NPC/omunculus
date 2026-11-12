@@ -112,20 +112,20 @@ defmodule Omunculus.PresetTest do
 
           assembled =~ "You are the worker." ->
             call.("request_access", %{
-              "report" => "blocked on writing",
+              "report" => %{"done" => "blocked on writing"},
               "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
               "reason" => "need to write the file"
             })
 
-          assembled =~ "## Last comment\nopened" ->
+          assembled =~ "## Last comment\n**done:** opened" ->
             call.("work", %{
-              "report" => "delegated",
+              "report" => %{"done" => "delegated"},
               "works" => [%{"title" => "Write", "goal" => "Write the file", "agent" => "worker"}]
             })
 
           true ->
             call.("work", %{
-              "report" => "opened",
+              "report" => %{"done" => "opened"},
               "works" => [%{"title" => "Root", "goal" => "Root"}]
             })
         end

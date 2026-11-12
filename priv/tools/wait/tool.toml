@@ -13,5 +13,8 @@ type = "object"
 required = ["report"]
 
 [parameters.properties.report]
-type = "string"
+"$ref" = "report"
 description = "What the person reads while the work waits on them: written to them, in their language."
+
+[views.report_required]
+source = "report_required"

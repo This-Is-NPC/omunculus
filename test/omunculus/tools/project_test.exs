@@ -86,10 +86,11 @@ defmodule Omunculus.Tools.ProjectTest do
     assert %{"ok" => true, "emit" => [%{"type" => "work", "body" => body}]} =
              Work.run(%{
                args: %{
-                 "report" => "opened",
+                 "report" => %{"done" => "opened"},
                  "works" => [%{"title" => "Bruno", "goal" => "a site", "workspace" => "bruno"}]
                },
-               work_id: nil
+               work_id: nil,
+               view: %{}
              })
 
     assert [%{"workspace" => "bruno"}] = body["works"]

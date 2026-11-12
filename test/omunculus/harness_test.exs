@@ -227,7 +227,7 @@ defmodule Omunculus.HarnessTest do
       unless assembled =~ "## Work\n",
         do:
           call.("work", %{
-            "report" => "opened",
+            "report" => %{"done" => "opened"},
             "works" => [%{"title" => "Fix the parser", "goal" => "Fix the parser"}]
           })
 

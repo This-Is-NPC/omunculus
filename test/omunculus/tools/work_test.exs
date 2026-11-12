@@ -25,13 +25,16 @@ defmodule Omunculus.Tools.WorkTest do
 
   describe "the module" do
     test "without a work, emits the work action with the report" do
-      input = without_work(%{"report" => "planned", "works" => [@item]})
+      input = without_work(%{"report" => %{"done" => "planned"}, "works" => [@item]})
 
       assert Work.run(input) == %{
                "ok" => true,
                "output" => "",
                "emit" => [
-                 %{"type" => "work", "body" => %{"report" => "planned", "works" => [@item]}}
+                 %{
+                   "type" => "work",
+                   "body" => %{"report" => "**done:** planned", "works" => [@item]}
+                 }
                ]
              }
     end
@@ -44,14 +47,14 @@ defmodule Omunculus.Tools.WorkTest do
         "workspace" => ""
       }
 
-      input = with_work(%{"report" => "split", "works" => [@item, second]})
+      input = with_work(%{"report" => %{"done" => "split"}, "works" => [@item, second]})
 
       assert Work.run(input) == %{
                "ok" => true,
                "output" => "",
                "emit" => [],
                "chain" => [
-                 %{"name" => "comment", "args" => %{"body" => "split"}},
+                 %{"name" => "comment", "args" => %{"body" => "**done:** split"}},
                  %{"name" => "delegate", "args" => @item},
                  %{
                    "name" => "delegate",
@@ -66,8 +69,10 @@ defmodule Omunculus.Tools.WorkTest do
     end
 
     test "refuses without works or with none" do
-      assert Work.run(with_work(%{"report" => "r"})) == Out.fail("works required")
-      assert Work.run(with_work(%{"report" => "r", "works" => []})) == Out.fail("works required")
+      assert Work.run(with_work(%{"report" => %{"done" => "r"}})) == Out.fail("works required")
+
+      assert Work.run(with_work(%{"report" => %{"done" => "r"}, "works" => []})) ==
+               Out.fail("works required")
     end
 
     test "refuses an item without a title, a goal, or that is not an object" do
@@ -76,7 +81,7 @@ defmodule Omunculus.Tools.WorkTest do
             {%{"title" => "t", "goal" => ""}, "works[1]: goal required"},
             {"t", "works[1]: object required"}
           ] do
-        assert Work.run(with_work(%{"report" => "r", "works" => [@item, item]})) ==
+        assert Work.run(with_work(%{"report" => %{"done" => "r"}, "works" => [@item, item]})) ==
                  Out.fail(message)
       end
     end
@@ -95,7 +100,7 @@ defmodule Omunculus.Tools.WorkTest do
 
     test "the manifest wiring yields the same emit as calling the module directly" do
       manifest = Map.fetch!(Catalog.unconfigured(), "work")
-      input = without_work(%{"report" => "planned", "works" => [@item]})
+      input = without_work(%{"report" => %{"done" => "planned"}, "works" => [@item]})
 
       assert {:ok, result} = Invoke.call(manifest, input)
       assert result.emit == Work.run(input)["emit"]
@@ -140,7 +145,8 @@ defmodule Omunculus.Tools.WorkTest do
       """
     end
 
-    defp create(call, report, works), do: call.("work", %{"report" => report, "works" => works})
+    defp create(call, report, works),
+      do: call.("work", %{"report" => %{"done" => report}, "works" => works})
 
     defp setup_project(dir, toml, model) do
       Fixtures.write_config(dir, toml)
@@ -176,7 +182,7 @@ defmodule Omunculus.Tools.WorkTest do
 
         # A run that did not end above hands its work on here, so no work
         # is retried.
-        call.("done", %{"report" => "idle"})
+        call.("done", %{"report" => %{"done" => "idle"}})
         {:ok, "idle"}
       end
     end
@@ -188,7 +194,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert [root] = all(project, "SELECT * FROM works")
       assert %{parent_id: nil, title: "Root", goal: "Ship", assignee: "lead", stage: nil} = root
 
-      assert [%{body: "planned"}, %{body: "idle"}] =
+      assert [%{body: "**done:** planned"}, %{body: "**done:** idle"}] =
                all(project, "SELECT * FROM comments WHERE work_id = ? ORDER BY created_at", [
                  root.id
                ])
@@ -214,10 +220,10 @@ defmodule Omunculus.Tools.WorkTest do
             ])
 
           {"lead", _comment} ->
-            call.("done", %{"report" => "both back"})
+            call.("done", %{"report" => %{"done" => "both back"}})
 
           {_child, _comment} ->
-            call.("done", %{"report" => "finished"})
+            call.("done", %{"report" => %{"done" => "finished"}})
         end
 
         {:ok, "idle"}
@@ -270,14 +276,14 @@ defmodule Omunculus.Tools.WorkTest do
          %{dir: dir} do
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             create(call, "split", [
               %{"title" => "A", "goal" => "Goal A", "agent" => "alpha"},
               %{"title" => "B", "goal" => "Goal B", "agent" => "alpha"}
             ])
 
           {"alpha", _comment}, call ->
-            call.("done", %{"report" => "finished"})
+            call.("done", %{"report" => %{"done" => "finished"}})
 
           _other, _call ->
             :ok
@@ -292,7 +298,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert Enum.all?(children, &(&1.assignee == "alpha" and &1.state == "done"))
       assert root.state == "done"
 
-      assert ["planned", "split", "idle"] =
+      assert ["**done:** planned", "**done:** split", "**done:** idle"] =
                project
                |> all("SELECT body FROM comments WHERE work_id = ? ORDER BY created_at, id", [
                  root.id
@@ -323,17 +329,17 @@ defmodule Omunculus.Tools.WorkTest do
          %{dir: dir} do
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             create(call, "split", [
               %{"title" => "A", "goal" => "Goal A", "agent" => "beta"},
               %{"title" => "B", "goal" => "Goal B", "agent" => "alpha"}
             ])
 
           {"beta", _comment}, call ->
-            call.("break", %{"report" => "stuck"})
+            call.("break", %{"report" => %{"done" => "stuck"}})
 
           {"alpha", _comment}, call ->
-            call.("done", %{"report" => "finished"})
+            call.("done", %{"report" => %{"done" => "finished"}})
 
           _other, _call ->
             :ok
@@ -366,12 +372,15 @@ defmodule Omunculus.Tools.WorkTest do
 
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             create(call, "split", [%{"title" => "A", "goal" => "Goal A", "agent" => "beta"}])
 
-          {"lead", "split"}, call ->
+          {"lead", "**done:** split"}, call ->
             # The parent woken by the break reads which work broke and sends it back.
-            case Regex.run(~r/beta broke its work (\w+): stuck/, Process.get(:assembled)) do
+            case Regex.run(
+                   ~r/beta broke its work (\w+): \*\*done:\*\* stuck/,
+                   Process.get(:assembled)
+                 ) do
               [_, work_id] ->
                 send(test_pid, :woken)
                 call.("reopen", %{"work_id" => work_id, "instructions" => "use the other file"})
@@ -381,10 +390,10 @@ defmodule Omunculus.Tools.WorkTest do
             end
 
           {"beta", "use the other file"}, call ->
-            call.("done", %{"report" => "finished"})
+            call.("done", %{"report" => %{"done" => "finished"}})
 
           {"beta", _first}, call ->
-            call.("break", %{"report" => "stuck"})
+            call.("break", %{"report" => %{"done" => "stuck"}})
 
           _other, _call ->
             :ok
@@ -401,7 +410,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert [child] = all(project, "SELECT * FROM works WHERE parent_id = ?", [root.id])
       assert child.state == "done"
 
-      assert ["stuck", "use the other file", "finished"] =
+      assert ["**done:** stuck", "use the other file", "**done:** finished"] =
                project
                |> all("SELECT body FROM comments WHERE work_id = ? ORDER BY created_at, id", [
                  child.id
@@ -414,7 +423,7 @@ defmodule Omunculus.Tools.WorkTest do
     test "a child with work creates grandchildren at depth 2 under its own work", %{dir: dir} do
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             create(call, "split", [%{"title" => "A", "goal" => "Goal A", "agent" => "alpha"}])
 
           {"alpha", nil}, call ->
@@ -423,11 +432,11 @@ defmodule Omunculus.Tools.WorkTest do
               %{"title" => "A2", "goal" => "Goal A2"}
             ])
 
-          {"alpha", "sub"}, call ->
-            call.("done", %{"report" => "merged"})
+          {"alpha", "**done:** sub"}, call ->
+            call.("done", %{"report" => %{"done" => "merged"}})
 
           {"gamma", _comment}, call ->
-            call.("done", %{"report" => "leaf"})
+            call.("done", %{"report" => %{"done" => "leaf"}})
 
           _other, _call ->
             :ok
@@ -446,7 +455,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert Enum.all?(grandchildren, &(&1.assignee == "gamma" and &1.state == "done"))
       assert Enum.all?(grandchildren, &(Store.work_depth(project.conn, &1) == 2))
 
-      assert ["sub", "merged"] =
+      assert ["**done:** sub", "**done:** merged"] =
                project
                |> all("SELECT body FROM comments WHERE work_id = ? ORDER BY created_at, id", [
                  child.id
@@ -462,7 +471,7 @@ defmodule Omunculus.Tools.WorkTest do
 
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             send(test_pid, {:work, create(call, "split", [%{"title" => "A", "goal" => "g"}])})
 
           _other, _call ->
@@ -475,7 +484,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert output == Out.chain_failed("delegate", :not_have)
       assert [_root] = all(project, "SELECT * FROM works")
 
-      assert [%{body: "planned"}] =
+      assert [%{body: "**done:** planned"}] =
                all(project, "SELECT * FROM comments WHERE author = 'agent'")
 
       Project.close(project)
@@ -503,7 +512,7 @@ defmodule Omunculus.Tools.WorkTest do
 
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             for agent <- ["gamma", "checker", "ghost"] do
               send(
                 test_pid,
@@ -525,7 +534,7 @@ defmodule Omunculus.Tools.WorkTest do
 
       assert [_root] = all(project, "SELECT * FROM works")
 
-      assert [%{body: "planned"}, %{body: "idle"}] =
+      assert [%{body: "**done:** planned"}, %{body: "**done:** idle"}] =
                all(project, "SELECT * FROM comments ORDER BY created_at")
 
       Project.close(project)
@@ -609,7 +618,7 @@ defmodule Omunculus.Tools.WorkTest do
 
       model =
         root_model(fn
-          {"lead", "planned"}, call ->
+          {"lead", "**done:** planned"}, call ->
             create(call, "split", [%{"title" => "A", "goal" => "g", "agent" => "beta"}])
 
           _other, _call ->
@@ -657,7 +666,7 @@ defmodule Omunculus.Tools.WorkTest do
             create(call, "planned", [%{"title" => "A", "goal" => "g"}])
 
           {"alpha", _comment} ->
-            call.("done", %{"report" => "built"})
+            call.("done", %{"report" => %{"done" => "built"}})
 
           _other ->
             call.("end", %{})

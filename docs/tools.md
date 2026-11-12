@@ -423,7 +423,7 @@ child that breaks reopens it at once.
 
 ## Creating works
 
-The model creates works with the `work` tool: a `report` and the `works`
+The model creates works with the `work` tool: a `report` (as every ending tool takes it) and the `works`
 to create, each with a `title`, a `goal`, and optionally an `agent` or a
 `workflow`, and a `workspace`.
 
@@ -475,8 +475,9 @@ work to it by naming it as the `workspace` of the work it opens with
 ## Handing control away
 
 Every model tool that hands the work to someone else carries a `report`
-and ends the run through its manifest's `then = ["end"]`, so the agent
-needs `end` as have too.
+(one shape, [the report](cycle.md#the-report)) and ends the run through
+its manifest's `then = ["end"]`, so the agent needs `end` as have too.
+`retire` takes its report as plain text.
 
 | Tool | Writes | Then |
 | --- | --- | --- |

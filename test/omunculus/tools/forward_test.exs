@@ -71,7 +71,7 @@ defmodule Omunculus.Tools.ForwardTest do
 
         {"front", nil} ->
           call.("work", %{
-            "report" => "opened",
+            "report" => %{"done" => "opened"},
             "works" => [%{"title" => "t", "goal" => "g", "workflow" => "desk"}]
           })
 

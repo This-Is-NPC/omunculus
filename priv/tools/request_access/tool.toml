@@ -13,7 +13,7 @@ type = "object"
 required = ["report", "access", "reason"]
 
 [parameters.properties.report]
-type = "string"
+"$ref" = "report"
 
 [parameters.properties.access]
 type = "array"
@@ -39,3 +39,6 @@ source = "grant_scopes"
 [parameters.properties.to]
 type = "string"
 minLength = 1
+
+[views.report_required]
+source = "report_required"

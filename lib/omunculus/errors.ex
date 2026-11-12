@@ -84,6 +84,10 @@ defmodule Omunculus.Errors do
     "omunculus.toml [policy] max_reopens must be a non-negative integer"
   end
 
+  def format({:policy, {:invalid, :report_required}}) do
+    "omunculus.toml [policy] report_required must list report fields: #{Enum.join(Omunculus.Config.report_fields(), ", ")}"
+  end
+
   def format({:policy, {:invalid, key}})
       when key in [:last_run_output_bytes, :tool_output_bytes, :conversation_bytes, :memory_bytes] do
     "omunculus.toml [policy] #{key} must be a positive integer"

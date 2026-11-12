@@ -32,7 +32,11 @@ defmodule Omunculus.Tools.RequestAccessTest do
            ])
 
   defp args(access),
-    do: %{"report" => "blocked on access", "access" => access, "reason" => "need to write"}
+    do: %{
+      "report" => %{"done" => "blocked on access"},
+      "access" => access,
+      "reason" => "need to write"
+    }
 
   @write [%{"kind" => "tool", "name" => "write"}]
 
@@ -53,7 +57,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
     assert RequestAccess.run(%{@input | work_id: "w1", args: args(@write)})["emit"] == [
              %{
                "type" => "comment",
-               "body" => %{"work_id" => "w1", "body" => "blocked on access"}
+               "body" => %{"work_id" => "w1", "body" => "**done:** blocked on access"}
              },
              %{
                "type" => "request",
@@ -118,7 +122,12 @@ defmodule Omunculus.Tools.RequestAccessTest do
 
     assert %{"request_access" => manifest} = catalog
     assert manifest.triggers == ["model"]
-    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"grant_scopes", "grant_scopes"}]
+
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [
+             {"grant_scopes", "grant_scopes"},
+             {"report_required", "report_required"}
+           ]
+
     assert manifest.chains == ["end"]
     assert manifest.then == ["end"]
   end

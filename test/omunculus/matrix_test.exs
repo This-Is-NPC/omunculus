@@ -177,7 +177,7 @@ defmodule Omunculus.MatrixTest do
 
   defp counted_work(conn) do
     assert {:ok, [comment]} =
-             Query.all(conn, "SELECT * FROM comments WHERE body = ?", ["counted to 5"])
+             Query.all(conn, "SELECT * FROM comments WHERE body = ?", ["**done:** counted to 5"])
 
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [comment.work_id])
     work

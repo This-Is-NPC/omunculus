@@ -13,14 +13,14 @@ defmodule Omunculus.Tools.Work do
   `then` appends `end`.
   """
 
-  alias Omunculus.Tools.{Args, Out}
+  alias Omunculus.Tools.{Args, Out, Report}
 
   @required ~w(title goal)
   @optional ~w(agent workflow workspace)
 
   @spec run(map) :: map
-  def run(%{args: args, work_id: work_id}) do
-    with {:ok, report} <- Args.fetch(args, "report"),
+  def run(%{args: args, view: view, work_id: work_id}) do
+    with {:ok, report} <- Report.fetch(args, view["report_required"] || []),
          {:ok, works} <- works(args["works"]) do
       create(work_id, report, works)
     else

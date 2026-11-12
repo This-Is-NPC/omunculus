@@ -48,13 +48,13 @@ defmodule Omunculus.CycleTest do
       case {role(assembled), last_comment(assembled)} do
         {"lead", nil} ->
           call.("work", %{
-            "report" => "planned",
+            "report" => %{"done" => "planned"},
             "works" => [%{"title" => "Root", "goal" => "Ship", "agent" => "lead"}]
           })
 
-        {"lead", "planned"} ->
+        {"lead", "**done:** planned"} ->
           call.("work", %{
-            "report" => "split",
+            "report" => %{"done" => "split"},
             "works" => [
               %{"title" => "A", "goal" => "Goal A"},
               %{"title" => "B", "goal" => "Goal B"}
@@ -62,9 +62,12 @@ defmodule Omunculus.CycleTest do
           })
 
         {"lead", _children_back} ->
-          case call.("done", %{"report" => "shipped"}) do
-            {:ok, "refused: " <> _broken} -> call.("break", %{"report" => "A failed"})
-            done -> done
+          case call.("done", %{"report" => %{"done" => "shipped"}}) do
+            {:ok, "refused: " <> _broken} ->
+              call.("break", %{"report" => %{"done" => "A failed"}})
+
+            done ->
+              done
           end
 
         {"alpha", _comment} ->
@@ -114,7 +117,7 @@ defmodule Omunculus.CycleTest do
       model(fn _assembled, call ->
         barrier(started, 2)
         barrier(finishing, 2)
-        call.("done", %{"report" => "finished"})
+        call.("done", %{"report" => %{"done" => "finished"}})
       end)
     )
 
@@ -152,7 +155,7 @@ defmodule Omunculus.CycleTest do
 
         Process.sleep(50)
         Agent.update(active, &%{&1 | now: &1.now - 1})
-        call.("done", %{"report" => "finished"})
+        call.("done", %{"report" => %{"done" => "finished"}})
       end)
     )
 
@@ -196,7 +199,7 @@ defmodule Omunculus.CycleTest do
 
           if String.contains?(assembled, "## Request") do
             send(owner, {:resumed, goal, assembled})
-            call.("done", %{"report" => "answered"})
+            call.("done", %{"report" => %{"done" => "answered"}})
           else
             send(owner, {:asked, goal, self()})
 
@@ -307,7 +310,7 @@ defmodule Omunculus.CycleTest do
       model(fn assembled, call ->
         if String.contains?(assembled, "Goal A"),
           do: {:error, :child_failed},
-          else: call.("done", %{"report" => "finished"})
+          else: call.("done", %{"report" => %{"done" => "finished"}})
       end)
     )
 
@@ -366,7 +369,7 @@ defmodule Omunculus.CycleTest do
         nil ->
           assert {:ok, _} =
                    call.("work", %{
-                     "report" => "planned",
+                     "report" => %{"done" => "planned"},
                      "works" => [%{"title" => "Root", "goal" => "Ship", "agent" => "lead"}]
                    })
 
@@ -374,7 +377,7 @@ defmodule Omunculus.CycleTest do
           Process.sleep(200)
           call.("end", %{})
 
-        "planned" ->
+        "**done:** planned" ->
           call.("end", %{})
       end
     end)

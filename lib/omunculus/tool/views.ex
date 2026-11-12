@@ -53,7 +53,8 @@ defmodule Omunculus.Tool.Views do
     version of each name when it is of media type `application/json`.
   - `memories`: from `run`, the memory entries the run sees, oldest first:
     the project's, its agent's and its workspace's.
-  - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
+  - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`,
+    `report_required`, `skills`:
     computed by the harness for the call, each only when a view asks for
     it, through a function of the view in `computed`. `agents` takes
     `include = ["tools"]`, which gives each agent with the model tools it
@@ -81,7 +82,7 @@ defmodule Omunculus.Tool.Views do
           limit: pos_integer | nil
         }
 
-  @computed ~w(catalog workspaces agents paths grant_scopes skills artifacts settings)
+  @computed ~w(catalog workspaces agents paths grant_scopes report_required skills artifacts settings)
   @work_states ~w(open waiting done cancelled)
   @work_includes %{"last_comment" => :last_comment, "comments" => :comments, "runs" => :runs}
   @comment_targets %{"work" => :work, "request" => :request, "inbox" => :inbox}

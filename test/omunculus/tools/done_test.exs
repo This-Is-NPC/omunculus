@@ -7,19 +7,19 @@ defmodule Omunculus.Tools.DoneTest do
   alias Omunculus.Tools.Done
 
   test "chains a comment with the report and continue" do
-    assert Done.run(%{args: %{"report" => "counted"}}) == %{
+    assert Done.run(%{args: %{"report" => %{"done" => "counted"}}, view: %{}}) == %{
              "ok" => true,
              "output" => "",
              "emit" => [],
              "chain" => [
-               %{"name" => "comment", "args" => %{"body" => "counted"}},
+               %{"name" => "comment", "args" => %{"body" => "**done:** counted"}},
                %{"name" => "continue", "args" => %{}}
              ]
            }
   end
 
   test "fails without a report" do
-    assert %{"ok" => false, "output" => "report required"} = Done.run(%{args: %{}})
+    assert %{"ok" => false, "output" => "report required"} = Done.run(%{args: %{}, view: %{}})
   end
 
   test "the builtin manifest chains comment, continue and end, with end as its then" do
@@ -43,7 +43,7 @@ defmodule Omunculus.Tools.DoneTest do
     test_pid = self()
 
     Fixtures.use_model(dir, fn _assembled, _tools, call ->
-      call.("done", %{"report" => "all counted"})
+      call.("done", %{"report" => %{"done" => "all counted"}})
       send(test_pid, :reached_after_done)
       {:ok, "unused"}
     end)
@@ -83,10 +83,46 @@ defmodule Omunculus.Tools.DoneTest do
              {"on-continue", nil}
            ]
 
-    assert {:ok, [%{body: "all counted"}]} = Store.comments(project.conn, :work, work_id)
+    assert {:ok, [%{body: "**done:** all counted"}]} =
+             Store.comments(project.conn, :work, work_id)
 
     assert {:ok, %{state: "done"}} =
              Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+
+    Project.close(project)
+  end
+
+  test "a report without a field [policy] report_required lists is refused in the run" do
+    dir = Fixtures.tmp_dir()
+
+    Fixtures.write_config(dir, """
+    [policy]
+    max_retries = 0
+    report_required = ["done", "pending"]
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["comment", "continue", "done", "end"]
+    """)
+
+    test_pid = self()
+
+    Fixtures.use_model(dir, fn _assembled, _tools, call ->
+      send(test_pid, {:first, call.("done", %{"report" => %{"done" => "counted"}})})
+      call.("done", %{"report" => %{"done" => "counted", "pending" => "nothing"}})
+      {:ok, "unused"}
+    end)
+
+    project = Fixtures.open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    message_id = Fixtures.insert(project.conn, :prompts)
+
+    assert {:ok, _run} = Run.open(project, Fixtures.opening(message_id, work_id))
+    assert_received {:first, {:ok, "report.pending required"}}
+
+    assert {:ok, [%{body: "**done:** counted\n**pending:** nothing"}]} =
+             Store.comments(project.conn, :work, work_id)
 
     Project.close(project)
   end

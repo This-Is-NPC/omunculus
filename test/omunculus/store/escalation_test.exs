@@ -872,10 +872,10 @@ defmodule Omunculus.Store.EscalationTest do
           call.("end", %{})
 
         {role, 3} when role in ["lead", "root"] ->
-          call.("done", %{"report" => "delivered"})
+          call.("done", %{"report" => %{"done" => "delivered"}})
 
         {"worker", _} ->
-          call.("done", %{"report" => "answered"})
+          call.("done", %{"report" => %{"done" => "answered"}})
 
         other ->
           flunk("unexpected resumed role: #{inspect(other)}")

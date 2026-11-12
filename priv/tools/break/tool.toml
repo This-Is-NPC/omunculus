@@ -13,4 +13,7 @@ type = "object"
 required = ["report"]
 
 [parameters.properties.report]
-type = "string"
+"$ref" = "report"
+
+[views.report_required]
+source = "report_required"

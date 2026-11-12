@@ -6,21 +6,22 @@ defmodule Omunculus.Tools.RequestAccess do
   resources`. Each option grants all of them: one `grant_<scope>` per
   scope of the `grant_scopes` view, permanent; `deny`, with no call; and,
   in a run with a work, `grant`, which grants on that work. In a run with
-  a work, a `comment` with the `report` on that work comes first. Its
+  a work, a `comment` with the report (`Omunculus.Tools.Report`) on that work comes first. Its
   manifest's `then` appends `end`. Optional `to` names an account or an agent.
   """
 
   alias Omunculus.Config
-  alias Omunculus.Tools.{Args, Out}
+  alias Omunculus.Tools.{Args, Out, Report}
 
-  @required ~w(report reason)
+  @required ~w(reason)
   @kinds ~w(tool resource path directory)
 
   @spec run(map) :: map
   def run(%{args: args} = input) do
-    with nil <- Args.missing(args, @required),
+    with {:ok, report} <- Report.fetch(args, input.view["report_required"] || []),
+         nil <- Args.missing(args, @required),
          {:ok, access} <- access(args["access"]) do
-      emit(input, access)
+      emit(input, report, access)
     else
       {:error, message} -> Out.fail(message)
       message -> Out.fail(message)
@@ -53,7 +54,7 @@ defmodule Omunculus.Tools.RequestAccess do
 
   defp item(_item), do: {:error, "each access needs a kind and a name"}
 
-  defp emit(%{args: %{"report" => report, "reason" => reason}} = input, access) do
+  defp emit(%{args: %{"reason" => reason}} = input, report, access) do
     work_id = input.work_id
 
     comment =

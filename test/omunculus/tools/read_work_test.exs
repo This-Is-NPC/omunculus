@@ -70,23 +70,23 @@ defmodule Omunculus.Tools.ReadWorkTest do
     model = fn assembled, _tools, call ->
       cond do
         assembled =~ "You are the worker." ->
-          call.("done", %{"report" => "said hello back"})
+          call.("done", %{"report" => %{"done" => "said hello back"}})
 
         assembled =~ "\n\n## Results\n" ->
           [_, child] = Regex.run(~r/work (\w+)\)/, assembled)
           send(test_pid, {:child, call.("read_work", %{"work_id" => child})})
           send(test_pid, {:own, call.("read_work", %{"work_id" => root_id(assembled)})})
-          call.("done", %{"report" => "checked"})
+          call.("done", %{"report" => %{"done" => "checked"}})
 
-        assembled =~ "## Last comment\nopened" ->
+        assembled =~ "## Last comment\n**done:** opened" ->
           call.("work", %{
-            "report" => "delegated",
+            "report" => %{"done" => "delegated"},
             "works" => [%{"title" => "Answer", "goal" => "answer the greeting"}]
           })
 
         true ->
           call.("work", %{
-            "report" => "opened",
+            "report" => %{"done" => "opened"},
             "works" => [%{"title" => "Root", "goal" => "r", "agent" => "concierge"}]
           })
       end
@@ -99,7 +99,7 @@ defmodule Omunculus.Tools.ReadWorkTest do
 
     assert_received {:child, {:ok, read}}
     assert read =~ "# Answer"
-    assert read =~ "- agent: said hello back"
+    assert read =~ "- agent: **done:** said hello back"
     assert read =~ "## Run 1 — worker, via delegate"
 
     assert_received {:own, {:error, _outside}}

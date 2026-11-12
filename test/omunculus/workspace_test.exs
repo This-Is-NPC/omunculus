@@ -386,7 +386,7 @@ defmodule Omunculus.WorkspaceTest do
       case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
         0 ->
           call.("work", %{
-            "report" => "delegated",
+            "report" => %{"done" => "delegated"},
             "works" => [%{"title" => "child", "goal" => "do this"}]
           })
 
@@ -476,7 +476,7 @@ defmodule Omunculus.WorkspaceTest do
 
     request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "report" => "blocked on delete",
+        "report" => %{"done" => "blocked on delete"},
         "access" => [%{"kind" => "tool", "name" => "delete"}],
         "reason" => "need to delete"
       })
@@ -563,7 +563,7 @@ defmodule Omunculus.WorkspaceTest do
 
     request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "report" => "blocked on delete",
+        "report" => %{"done" => "blocked on delete"},
         "access" => [%{"kind" => "tool", "name" => "delete"}],
         "reason" => "need to delete"
       })

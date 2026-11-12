@@ -335,6 +335,25 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{max_reopens: 2}} = load(dir)
   end
 
+  test "[policy] report_required is an optional list of report fields", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{report_required: []}} = load(dir)
+
+    for invalid <- [~s("done"), ~s(["done", "summary"]), "[1]"] do
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nreport_required = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :report_required}}} = load(dir)
+    end
+
+    Fixtures.write_config(dir, agents <> ~s(\n[policy]\nreport_required = ["done", "pending"]\n))
+    assert {:ok, %Config{report_required: ["done", "pending"]}} = load(dir)
+  end
+
   test "[policy] memory_bytes is an optional positive integer, with no default", %{dir: dir} do
     agents = """
     [agents.concierge]

@@ -114,6 +114,12 @@ assembled prompt keeps; the rest is cut and a line says how many bytes
 were cut. Without it the section keeps each output whole. A workspace
 sets it the same way as `max_retries`.
 
+`[policy] report_required` is optional: a list of the report fields
+(`done`, `decided`, `pending`, `files`, `verify`) every report that ends a
+run must give. Without it, no field is required but that a report gives at
+least one. The key is only in `omunculus.toml`; `done`, `work`, `break`,
+`wait` and `request_access` all read it. See [the report](cycle.md#the-report).
+
 `[policy] tool_output_bytes` is optional: a positive integer, how many
 bytes of each tool call's output the model gets back during the run,
 from a call it makes directly or through `tools.*`; the rest is cut the
@@ -721,6 +727,7 @@ needs what is missing:
 | `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
 | `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `memory_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
 | `omunculus.toml [policy] session_ttl_ms and session_max_bytes go together` | one of the two without the other |
+| `omunculus.toml [policy] report_required must list report fields: done, decided, pending, files, verify` | `report_required` is not a list of those names |
 | `omunculus.toml [policy] send_catalog must be true or false` | `send_catalog` invalid |
 | `omunculus.toml is missing assemble` | no assemble tool named |
 | `assemble returned an empty prompt` | assemble ran and produced nothing |

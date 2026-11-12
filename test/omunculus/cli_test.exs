@@ -25,19 +25,26 @@ defmodule Omunculus.CLITest do
   # A work naming nobody: the root itself when depth 0 has a workflow, else
   # handed down to depth 1.
   defp create_unnamed(call, title),
-    do: call.("work", %{"report" => "opened", "works" => [%{"title" => title, "goal" => title}]})
+    do:
+      call.("work", %{
+        "report" => %{"done" => "opened"},
+        "works" => [%{"title" => title, "goal" => title}]
+      })
 
   # The concierge opens a root for itself by naming itself.
   defp create_root(call, title),
     do:
       call.("work", %{
-        "report" => "opened",
+        "report" => %{"done" => "opened"},
         "works" => [%{"title" => title, "goal" => title, "agent" => "concierge"}]
       })
 
   defp delegate_one(call, title, goal),
     do:
-      call.("work", %{"report" => "delegated", "works" => [%{"title" => title, "goal" => goal}]})
+      call.("work", %{
+        "report" => %{"done" => "delegated"},
+        "works" => [%{"title" => title, "goal" => goal}]
+      })
 
   defp tool_event_names(events) do
     events
@@ -132,12 +139,13 @@ defmodule Omunculus.CLITest do
     model = fn assembled, _tools, call ->
       cond do
         assembled =~ "You are the worker." ->
-          call.("done", %{"report" => "answered"})
+          call.("done", %{"report" => %{"done" => "answered"}})
 
-        assembled =~ "## Last comment\nanswered" or assembled =~ "## Last comment\ndelegated" ->
-          call.("done", %{"report" => "closed"})
+        assembled =~ "## Last comment\n**done:** answered" or
+            assembled =~ "## Last comment\n**done:** delegated" ->
+          call.("done", %{"report" => %{"done" => "closed"}})
 
-        assembled =~ "## Last comment\nopened" ->
+        assembled =~ "## Last comment\n**done:** opened" ->
           delegate_one(call, "Answer", "answer it")
 
         true ->
@@ -174,13 +182,13 @@ defmodule Omunculus.CLITest do
     model = fn assembled, _tools, call ->
       cond do
         assembled =~ "You are the worker." ->
-          call.("done", %{"report" => "said hello back"})
+          call.("done", %{"report" => %{"done" => "said hello back"}})
 
         assembled =~ "\n\n## Results\n" ->
           send(test_pid, {:results, assembled})
-          call.("done", %{"report" => "the worker said hello back"})
+          call.("done", %{"report" => %{"done" => "the worker said hello back"}})
 
-        assembled =~ "## Last comment\nopened" ->
+        assembled =~ "## Last comment\n**done:** opened" ->
           delegate_one(call, "Answer", "answer the greeting")
 
         true ->
@@ -482,7 +490,7 @@ defmodule Omunculus.CLITest do
       # The root's run parks it until the person writes again.
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work\n",
-          do: call.("break", %{"report" => "parked"}),
+          do: call.("break", %{"report" => %{"done" => "parked"}}),
           else: create_root(call, "Count to five")
       end
 
@@ -518,7 +526,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:second_assembled, assembled})
-        call.("break", %{"report" => "first comment"})
+        call.("break", %{"report" => %{"done" => "first comment"}})
       end
 
       Fixtures.use_model(dir, model)
@@ -537,10 +545,10 @@ defmodule Omunculus.CLITest do
       assert {:ok, [report, parked, comment]} =
                Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
 
-      assert report.body == "opened"
-      assert parked.body == "parked"
+      assert report.body == "**done:** opened"
+      assert parked.body == "**done:** parked"
       assert comment.work_id == work.id
-      assert comment.body == "first comment"
+      assert comment.body == "**done:** first comment"
 
       Project.close(project)
 
@@ -578,7 +586,7 @@ defmodule Omunculus.CLITest do
     defp open_write_request(dir, work_id \\ nil) do
       model = fn _assembled, _tools, call ->
         call.("request_access", %{
-          "report" => "blocked on write",
+          "report" => %{"done" => "blocked on write"},
           "access" => [%{"kind" => "tool", "name" => "write"}],
           "reason" => "need to write"
         })
@@ -631,7 +639,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, [report]} =
                Query.all(project.conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
 
-      assert report.body == "blocked on write"
+      assert report.body == "**done:** blocked on write"
 
       assert {:ok, events} = Store.replay(project.conn, :project)
       types = events |> Enum.map(& &1.type) |> Enum.drop_while(&(&1 != "comment"))
@@ -657,7 +665,10 @@ defmodule Omunculus.CLITest do
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
+      model = fn _assembled, _tools, call ->
+        call.("done", %{"report" => %{"done" => "shipped"}})
+      end
+
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
@@ -770,7 +781,7 @@ defmodule Omunculus.CLITest do
           })
 
         call.("request_access", %{
-          "report" => "blocked on write",
+          "report" => %{"done" => "blocked on write"},
           "access" => [%{"kind" => "tool", "name" => "write"}],
           "reason" => "need to write"
         })
@@ -1081,7 +1092,10 @@ defmodule Omunculus.CLITest do
 
       request_id = open_write_request(dir, work_id)
 
-      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
+      model = fn _assembled, _tools, call ->
+        call.("done", %{"report" => %{"done" => "shipped"}})
+      end
+
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
@@ -1109,7 +1123,10 @@ defmodule Omunculus.CLITest do
       other_work_id = Fixtures.insert(project.conn, :works, %{title: "Another one"})
       Project.close(project)
 
-      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
+      model = fn _assembled, _tools, call ->
+        call.("done", %{"report" => %{"done" => "shipped"}})
+      end
+
       Fixtures.use_model(dir, model)
       assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir)
 
@@ -1139,7 +1156,7 @@ defmodule Omunculus.CLITest do
           test_pid,
           {:refused,
            call.("request_access", %{
-             "report" => "blocked on write",
+             "report" => %{"done" => "blocked on write"},
              "access" => [%{"kind" => "tool", "name" => "write"}],
              "reason" => "need it"
            })}
@@ -1173,7 +1190,7 @@ defmodule Omunculus.CLITest do
           test_pid,
           {:asked,
            call.("request_access", %{
-             "report" => "checking comment",
+             "report" => %{"done" => "checking comment"},
              "access" => [%{"kind" => "tool", "name" => "comment"}],
              "reason" => "just checking"
            })}
@@ -1248,7 +1265,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:assembled, assembled})
-        call.("done", %{"report" => "done without it"})
+        call.("done", %{"report" => %{"done" => "done without it"}})
       end
 
       Fixtures.use_model(dir, model)
@@ -1471,13 +1488,13 @@ defmodule Omunculus.CLITest do
         cond do
           assembled =~ "I am the concierge." ->
             if assembled =~ "## Work\n",
-              do: call.("done", %{"report" => "built"}),
+              do: call.("done", %{"report" => %{"done" => "built"}}),
               else: create_unnamed(call, "Ship it")
 
             {:ok, "unused"}
 
           assembled =~ "I am the reviewer." ->
-            call.("done", %{"report" => "reviewed"})
+            call.("done", %{"report" => %{"done" => "reviewed"}})
             {:ok, "unused"}
         end
       end
@@ -1532,7 +1549,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work\n",
-          do: call.("done", %{"report" => "closed"}),
+          do: call.("done", %{"report" => %{"done" => "closed"}}),
           else: create_root(call, "No sequence")
 
         {:ok, "unused"}
@@ -1637,7 +1654,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "- counter:" do
-          call.("done", %{"report" => "counted"})
+          call.("done", %{"report" => %{"done" => "counted"}})
           {:ok, "unused"}
         else
           {:ok, "done"}
@@ -1678,7 +1695,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work\n",
-          do: call.("break", %{"report" => "need to pause"}),
+          do: call.("break", %{"report" => %{"done" => "need to pause"}}),
           else: create_unnamed(call, "Needs help")
 
         {:ok, "unused"}
@@ -1697,14 +1714,17 @@ defmodule Omunculus.CLITest do
       assert {:ok, [report, comment]} =
                Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
 
-      assert report.body == "opened"
-      assert comment.body == "need to pause"
+      assert report.body == "**done:** opened"
+      assert comment.body == "**done:** need to pause"
 
       assert {:ok, previous_runs} = Query.all(project.conn, "SELECT * FROM runs")
       assert length(previous_runs) == 2
       Project.close(project)
 
-      model = fn _assembled, _tools, call -> call.("break", %{"report" => "still paused"}) end
+      model = fn _assembled, _tools, call ->
+        call.("break", %{"report" => %{"done" => "still paused"}})
+      end
+
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "come back"], dir)
@@ -1747,14 +1767,14 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "I am the worker." ->
-            call.("done", %{"report" => "finished"})
+            call.("done", %{"report" => %{"done" => "finished"}})
 
-          assembled =~ "## Last comment\nopened" ->
+          assembled =~ "## Last comment\n**done:** opened" ->
             delegate_one(call, "Sub task", "do this")
             {:ok, "unused"}
 
           assembled =~ "## Work\n" ->
-            call.("done", %{"report" => "delivered"})
+            call.("done", %{"report" => %{"done" => "delivered"}})
 
           true ->
             create_root(call, "Big task")
@@ -1805,12 +1825,12 @@ defmodule Omunculus.CLITest do
     end
 
     for {tool, args, tools, action, workflow?, child_state, parent_tool, parent_state} <- [
-          {"done", %{"report" => "finished"}, ~w(comment continue done end), "continue", false,
-           "done", "done", "done"},
-          {"break", %{"report" => "stuck"}, ~w(break end), "break", false, "waiting", "break",
-           "waiting"},
-          {"break", %{"report" => "stuck"}, ~w(break end), "break", true, "waiting", "break",
-           "waiting"}
+          {"done", %{"report" => %{"done" => "finished"}}, ~w(comment continue done end),
+           "continue", false, "done", "done", "done"},
+          {"break", %{"report" => %{"done" => "stuck"}}, ~w(break end), "break", false, "waiting",
+           "break", "waiting"},
+          {"break", %{"report" => %{"done" => "stuck"}}, ~w(break end), "break", true, "waiting",
+           "break", "waiting"}
         ] do
       test "#{tool} #{if workflow?, do: "with", else: "without"} a workflow hands the child back to its waiting parent and opens the parent's run",
            %{dir: dir} do
@@ -1848,7 +1868,7 @@ defmodule Omunculus.CLITest do
               {:ok, "unused"}
 
             assembled =~ "## Results" ->
-              call.(unquote(parent_tool), %{"report" => "handled"})
+              call.(unquote(parent_tool), %{"report" => %{"done" => "handled"}})
 
             true ->
               create_unnamed(call, "Big task")
@@ -1909,8 +1929,8 @@ defmodule Omunculus.CLITest do
 
       Fixtures.use_model(dir, fn assembled, _tools, call ->
         cond do
-          assembled =~ "I am the worker." -> call.("done", %{"report" => "finished"})
-          assembled =~ "## Results" -> call.("done", %{"report" => "all done"})
+          assembled =~ "I am the worker." -> call.("done", %{"report" => %{"done" => "finished"}})
+          assembled =~ "## Results" -> call.("done", %{"report" => %{"done" => "all done"}})
           true -> call.("end", %{})
         end
       end)
@@ -1973,15 +1993,15 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "I am the worker." ->
-            call.("done", %{"report" => "built"})
+            call.("done", %{"report" => %{"done" => "built"}})
             {:ok, "unused"}
 
-          assembled =~ "## Last comment\nbuilt" ->
-            call.("done", %{"report" => "reviewed"})
+          assembled =~ "## Last comment\n**done:** built" ->
+            call.("done", %{"report" => %{"done" => "reviewed"}})
             {:ok, "unused"}
 
           assembled =~ "## Results" ->
-            call.("done", %{"report" => "delivered"})
+            call.("done", %{"report" => %{"done" => "delivered"}})
 
           true ->
             assert assembled =~ "- workflow delivery: to_do (worker) → review (concierge)"
@@ -2038,7 +2058,7 @@ defmodule Omunculus.CLITest do
             case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
               0 ->
                 call.("request_access", %{
-                  "report" => "blocked on write",
+                  "report" => %{"done" => "blocked on write"},
                   "access" => [%{"kind" => "tool", "name" => "write"}],
                   "reason" => "need to write"
                 })
@@ -2046,7 +2066,7 @@ defmodule Omunculus.CLITest do
                 {:ok, "unused"}
 
               _already_granted ->
-                call.("done", %{"report" => "written"})
+                call.("done", %{"report" => %{"done" => "written"}})
             end
 
           assembled =~ "## Request" ->
@@ -2065,12 +2085,12 @@ defmodule Omunculus.CLITest do
 
             {:ok, "granted"}
 
-          assembled =~ "## Last comment\nopened" ->
+          assembled =~ "## Last comment\n**done:** opened" ->
             delegate_one(call, "Sub task3", "write this")
             {:ok, "unused"}
 
           assembled =~ "## Work\n" ->
-            call.("done", %{"report" => "written below"})
+            call.("done", %{"report" => %{"done" => "written below"}})
 
           true ->
             create_root(call, "Big task3")
@@ -2125,7 +2145,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         unless assembled =~ "## Work\n", do: create_root(call, "Help")
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
-        call.("done", %{"report" => "helped"})
+        call.("done", %{"report" => %{"done" => "helped"}})
       end
 
       Fixtures.use_model(dir, model)
@@ -2262,7 +2282,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work\n",
-          do: call.("done", %{"report" => "shipped"}),
+          do: call.("done", %{"report" => %{"done" => "shipped"}}),
           else: create_unnamed(call, "Ship it")
 
         {:ok, "unused"}
@@ -2310,7 +2330,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work\n",
-          do: call.("break", %{"report" => "need to pause"}),
+          do: call.("break", %{"report" => %{"done" => "need to pause"}}),
           else: create_unnamed(call, "Needs help")
 
         {:ok, "unused"}
@@ -2475,7 +2495,7 @@ defmodule Omunculus.CLITest do
       project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert {:ok, comments} = Store.comments(project.conn, :work, work.id)
-      assert Enum.map(comments, & &1.body) == ["opened", "one", "two", "three"]
+      assert Enum.map(comments, & &1.body) == ["**done:** opened", "one", "two", "three"]
       Project.close(project)
 
       test_pid = self()
@@ -2610,19 +2630,19 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "You are the reviewer." ->
-            call.("done", %{"report" => "reviewed"})
+            call.("done", %{"report" => %{"done" => "reviewed"}})
             {:ok, "unused"}
 
           assembled =~ "I am the worker." ->
-            call.("done", %{"report" => "done"})
+            call.("done", %{"report" => %{"done" => "done"}})
             {:ok, "unused"}
 
           assembled =~ "## Work\n" ->
-            call.("done", %{"report" => "shipped"})
+            call.("done", %{"report" => %{"done" => "shipped"}})
 
           true ->
             call.("work", %{
-              "report" => "opened",
+              "report" => %{"done" => "opened"},
               "works" => [%{"title" => "Ship it", "goal" => "Ship it"}]
             })
 
@@ -2653,7 +2673,7 @@ defmodule Omunculus.CLITest do
                  reviewer_run.prompt_id
                ])
 
-      assert assembled.body =~ "## Last comment\ndone"
+      assert assembled.body =~ "## Last comment\n**done:** done"
       refute assembled.body =~ "- write:"
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
@@ -2688,7 +2708,7 @@ defmodule Omunculus.CLITest do
           assembled =~ "I am the worker." ->
             {:ok, "done"}
 
-          assembled =~ "## Last comment\nopened" ->
+          assembled =~ "## Last comment\n**done:** opened" ->
             delegate_one(call, "Sub task", "do this")
             {:ok, "unused"}
 

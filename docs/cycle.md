@@ -27,7 +27,7 @@ event
 `continue`, `break`, `reply`, `grant`, `cancel` and `work` change the
 store and the run goes on; the runs they asked for open at once, or,
 when the same call ends the run, once it has closed. A tool can chain `end`:
-`done` comments its report on the run's work, continues it and ends the
+`done` comments its [report](#the-report) on the run's work, continues it and ends the
 run in one call; `work` comments its report on the run's work, delegates
 each new work below it and ends the run, or, in a run without a work,
 creates the root work and ends the run; `break` parks the work with its
@@ -152,6 +152,38 @@ writes — the last child closing wakes its parent, a request's arbiter, a
 reply to a request still open, the retry count of a work — is taken once,
 whatever the order the runs reach it. Permanent grants rewrite the TOML
 one at a time, replacing the file whole.
+
+## The report
+
+The tools that end a run — `done`, `work`, `break`, `wait` and
+`request_access` — take the same `report`: an object of fixed fields,
+each a non-empty string.
+
+| Field | What it says |
+|---|---|
+| `done` | what was achieved |
+| `decided` | choices made, and why |
+| `pending` | what is left |
+| `files` | files and artifacts touched |
+| `verify` | how to check the result |
+
+One schema (`Omunculus.Tools.Report.schema/0`, which a manifest takes with
+`report = {"$ref" = "report"}`) and one renderer (`Report.fetch/2`) serve
+all five. The renderer writes the fields given as one `**field:** text` line
+each, in the order of the table, and that text is the comment on the work:
+what the next run reads under `## Last comment`, and its parent under
+`## Children` and `## Results`.
+
+At least one field must be given. Which fields must all be given is
+`[policy] report_required` ([config](config.md)); without it, none must. A
+report that is not an object, names another field, gives an empty one or
+lacks a required one fails the call with a sentence naming what is wrong, as
+any refused call: the model corrects it in the same run, or, if the run
+stops without ending, the work's retry follows ([below](#a-run-without-a-report)).
+
+A run starts from the work's title, goal and last comment, then `## Last
+run`, `## Children` and `## Results` ([Assemble](#assemble)): the report is
+the part of that handoff the run writes for its successor.
 
 ## A run without a report
 
