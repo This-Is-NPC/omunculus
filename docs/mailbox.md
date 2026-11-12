@@ -113,12 +113,17 @@ an unread e-mail.
 
 Opening a thread stacks its messages, the latest open and the others folded to
 a line. Click a message to open or fold it. An open message offers REPLY,
-REPLY ALL and FORWARD. The latest message's REPLY is the screen's one filled action;
-REPLY ALL does the same as REPLY, since a thread has one agent. The command bar
+FORWARD, and REPLY ALL only when the thread has several counterparts (the agent
+and others who wrote in it, such as a requester); with one, there is only REPLY.
+The latest message's REPLY is the screen's one filled action. The command bar
 offers ARCHIVE (MOVE TO INBOX in the archive), MARK UNREAD and COMPOSE.
 
-A reply is written in a box under the messages, outside their scrolling, so
-SEND stays in view while you type. Under your text it shows the e-mail it
+A reply is written in a box under the messages, as wide as the pane and growing
+with its words; the pane scrolls, and keeps the caret in view. Its To is chips
+(the same field as compose, with its type-ahead and address book), prefilled
+with the sender, or with every counterpart for REPLY ALL. Taking a chip off or
+adding another is free; the thread's own accounts are answered in it, and any
+other recipient gets a message of its own with the same subject. Under your text it shows the e-mail it
 answers, quoted as mail does ("On <date>, Front-desk wrote:" and its lines behind
 "> ", folded after four lines, MORE shows the rest). Only your own words are
 sent, never the quote. What it does:
@@ -170,23 +175,30 @@ recipient and some text. A sent message gets no toast: it appears in the
 thread.
 
 - To holds one agent as a pill with its display name, its address in the tip
-  and an x on the right. A click on the pill selects it; only its x, or
-  Backspace once it is selected, removes it. The field beside it lists, under
-  it, the agents whose name or address holds what you type, case aside (all of
-  them while it is empty); Up and Down move, Enter or a click picks, Esc
-  closes the list. The agents are those of depth 0 that are not workflow-only,
+  and an x on the right (`RecipientField`). A click on the pill selects it; only
+  its x, or Backspace once it is selected (or in the empty field), removes it.
+  The field beside it lists nothing until you type; then, in a floating list
+  under it that never moves the form, the agents whose name or address holds
+  what you typed, case aside; Up and Down move, Enter or a click picks, Esc or a
+  click outside closes the list. The address-book button at the right end of the
+  field floats every agent you can write to, with a search box, and picks one.
+  The agents are those of depth 0 that are not workflow-only,
   as the config route gives them, of the projects where the capabilities route
   grants `conversation.create` and `conversation.send`. They are ordered: the
   project the window was opened on, its default agent first, then the rest of
-  that project, then the other projects. A second recipient is refused with a sentence saying a message
-  goes to one agent.
-- When the project's config declares a `default_agent` (the config route's
-  `default_agent`), To starts with it, for the project the window was opened on.
-  With none declared, To starts empty.
+  that project, then the other projects. A second recipient is refused with a
+  sentence saying a message goes to one agent.
+- To starts empty; no agent is chosen for you. When the project's config
+  declares a `default_agent`, the empty field says "to Front desk if left
+  empty" and a message with no recipient names no agent: the server sends it to
+  the default agent. With none declared, the field says "name or address" and
+  SEND waits for a recipient.
+- The message grows with its words; when the dialog would pass the window, it
+  scrolls instead of the message getting an inner scrollbar.
 - Closing the dialog with something written keeps it in Drafts; DISCARD drops
   it. A draft opens in the dialog again, and is gone once sent.
 - Files are attached with the attach button (the kit's `FilePicker`) and sent
-  through `Http.post` and `apps/kit/client/post-with-files`. A file an e-mail
+  through `Http.post` and `apps/kit/client/post-with-files`. A file waiting to be sent is a neutral chip as tall as the attach button (a file icon, its name and a small x). A file an e-mail
   carries shows as the kit's `FileChip`, which `Http.openAttachment` saves to
   the downloads directory and opens.
 
@@ -207,7 +219,7 @@ name; Esc clears it.
 | Ctrl+N | compose |
 | Ctrl+R | reply to the latest message |
 | / | search |
-| Ctrl+B · Ctrl+L | fold the folders, or the list to a rail of portraits |
+| Ctrl+B · Ctrl+L | fold the folders, or the list to a rail with its count |
 | Alt+Up · Alt+Down | the thread before or after |
 | Esc | close the reply, then the thread |
 

@@ -87,13 +87,15 @@ comes back when it opens again.
 ## A new conversation
 
 A new conversation opens, from CONVERSATIONS or the start, on a screen of its
-own: the composer addressed to the project's default agent, the one its
-`omunculus.toml` names in `[policy] default_agent`, read from the setup
-(`Omunculus.startAgent`, through the kit's `Mailbox.defaultAgent`, as the
-mailbox reads it). Over the box, "TO" and a folded control with the agent's
-tone and name. Without a default agent, and with several agents of depth 0
-not only in workflows, TO starts empty, its list is open and SEND says "choose
-who it goes to" until one is picked; with a single such agent, TO names it.
+own: the composer, and over it "TO" and a folded control. No agent is chosen
+for you. With the project's default agent (`omunculus.toml`'s `[policy]
+default_agent`, read from the setup as `Omunculus.startAgent`, through the
+kit's `Mailbox.defaultAgent`, as the mailbox reads it), the control says who an
+empty TO goes to, "TO FRONT DESK IF LEFT EMPTY" (`Mailbox.hint`), and the
+first message names no agent: the server sends it to the default agent. Without a
+default agent, and with several agents of depth 0 not only in workflows, TO
+starts empty, its list is open and SEND says "choose who it goes to" until one
+is picked; with a single such agent, the server names it.
 
 Opening the control (a click, or Enter, Space or Down on it) lists the other
 agents of depth 0 (`Recipient`), opt-in: the project's own first, a line each
@@ -111,13 +113,15 @@ agent its first message named, and every message names it again.
 
 The start card says the same, derived from the setup: "Say what you need; it
 goes to front-desk unless you choose another", with the default agent's name
-(or "Say what you need and choose who gets it" without one).
+(or "Say what you need and choose who gets it" without one). The agent a
+message went to is the one its prompt event names, which the conversation
+keeps.
 
 A conversation opened from CONVERSATIONS that has no message yet names no agent
 until its first message; its chat shows the same TO control over the composer
-while several agents of depth 0 may take it, addressed to the default agent
-when there is one, with the list open when there is none. With one agent, the
-server names it.
+while several agents of depth 0 may take it, saying who an empty TO goes to
+when there is a default agent, with the list open when there is none. With one
+agent, the server names it.
 
 ## Threads
 
@@ -284,60 +288,31 @@ lower ones of a question passed up, is not shown on its own.
 
 ## The progress
 
-A conversation's pages share its head (`ProgressStrip`), over the tabs, which
-says where the conversation stands at a glance. First a 40 px header strip
-with its meta: the state, the workflow of the work in focus, the step it is at
-of how many, how many are left, and how long it has run, in words: "WORKING ·
-ENGAGEMENT · STEP 4 OF 5 · 1 LEFT · 48 MINUTES SO FAR" (the clock runs from
-the work's start while anything runs, with no event needed; `Progress.standing`
-and `Progress.track` give the workflow and the step, and the step is the last
-once the work is done). The state is WORKING, WAITING, STOPPED, "✓ DONE" in the
-success tone, "✕ FAILED" in the error tone, or "NEEDS YOUR ANSWER" in the
-warning tone; once done, "TOOK 3 MINUTES" replaces the clock; while a question waits on you,
-also when the work asking is a sub-work, the clock goes on and the state says
-it, so the time is never replaced by a word; before any work, "STARTING" while the
-first run goes or the person has written, NOT STARTED before any. As the width
-shrinks the workflow and the count of what is left give way first, then the
-step to "4/5". From 700 px of its own width the counts follow: "· 2 AGENTS ·
-US$ 0.04", shown when more than one agent ran and once the provider priced a
-call; each opens what it counts, the tree and the cost, and the agents' tip
-names them. At its right the chevron, which opens the full view, and ANSWER,
-in the warning tone and with the count when more than one waits, while a
-question waits on you, which opens the pending queue. Under it, unframed, the stages of the work in focus, the newest open
-root work, at 14 px, the largest line of the head (`Stepper`: "✓ qualify › ● design · round 2 › ○ assess …", shorter
-forms as the width shrinks, down to one dot per stage and the current name), or
-its title when it has no stages and the masthead does not already say it; and,
-while the conversation works or waits, the line of who: what it is doing — AT
-WORK, "SELLER IS WAITING FOR YOU" (the deepest agent that asks you), or
-"FRONT-DESK IS WAITING FOR SELLER" (the work in focus, waiting for what its
-work card says it waits for) — and the chain
-of agents from the one you talk with down to the one at work or waited for,
-each in its tone and the last in bold, "front-desk › project-manager ›
-administrator › design-reviewer", then, while it works, a plain verb ("· running
-a command") and how long it has been on it. This head is the one place that says
-where the work stands: the work cards in the chat repeat neither the stages nor
-the chain. The hierarchy reads there before the tree is opened. Once you have written,
-the stages' line keeps its room, blank until there is something to say, so the
-tabs below hold their place from the first message. A finished conversation
-says "✓ DONE · … · TOOK 1 HOUR 20 MINUTES" in the success tone in the strip's
-top line, and the lines under it are hidden while no work exists and no agent
-runs.
+A conversation's pages share its head (`ProgressStrip`), over the tabs: one
+framed block that says what is happening now, once. It is drawn only while it
+has something to say; before the first message, and when nothing runs and
+nothing waits, there is no frame.
 
-The chevron and Alt+P open the full view, on the chat
-(`ProgressSheet`, holding a `ProgressTree`): what waits on you with ANSWER,
-then each root work, newest open first, with its title, start and length,
-its stages one per row with their agent and time, and under each stage the
-works handed down while it was current, nested by level (`ProgressNode`).
-An open work is a framed card: its agent and state, its title, its stages,
-what it calls, the round with who sent it back and why, the questions it
-asked and its tool calls; a done, cancelled or coming one is one line, what
-is below it folded. Siblings handed down in one stage are headed "N in
-parallel", and the done and cancelled works of each place fold into one
-row, "✓ 2 sub-works done · 18 min", with "· 9 in all" when works lie below
-them, unless a question waiting on you climbed from there. Picking a work shows its agent's last words, its questions in
-full, and OPEN (its thread as a page), LOG (the log kept to it) and TREE (the
-tree page, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
-or folds, Esc returns to the composer.
+Its first line is an icon and a sentence in words, in the state's tone, then
+how long, the cost, and ANSWER. `Progress.status` makes the sentence from the
+progress: "Designer is working on the design stage" (a spinner, in the accent;
+or "Front desk is working: running a command" while no stage is current),
+"Seller is waiting for your answer" (a warning icon, in the warning tone; the
+deepest agent that asks you), "Seller is waiting for design-lead" (a clock, dim),
+"Starting" once you have written and no work exists, "Stopped", "Failed" in the
+error tone, and "Done" (a check, in the success tone, which leads to what was
+delivered). The time is "1:40" while anything runs, counted from the work's start
+without waiting for an event, and "took 3 minutes" once done. The cost,
+"US$ 0.04", appears once the conversation's models have a [price](config.md)
+and opens the cost page. ANSWER, in the warning tone and with the count when
+more than one waits, opens the pending queue.
+
+Under it, compact, the stages of the work in focus, the newest open root work
+(`Stepper`: "✓ qualify › ● design · round 2 › ○ assess …", shorter forms as the
+width shrinks, down to one dot per stage and the current name). The agents
+that ran, who handed work to whom, are the tree's to show; the chain is not
+repeated here. The work cards in the chat repeat neither the stages nor the
+sentence.
 
 A work's state follows its questions up their climb. An escalated question
 is held by the pending request that gathers it, at any depth
@@ -350,17 +325,8 @@ NEEDS YOU chip of the tree counts these questions. A work waiting for an answer 
 "Waiting for an answer". The works above one that needs you keep their own
 state, and a done or coming one there is not folded.
 
-Where it opens depends on the window's width: from 1100 px it is docked
-beside the thread, 380 px wide and the page's height, and open from the
-start once the conversation has a work; from 700 px it is a card under the
-strip, pushing the thread down, at most 55 % of the chat's height and
-scrolling inside; under 700 px it is a sheet over the whole chat, headed
-‹ CHAT, PROGRESS and a close button, which Esc closes. Below 1100 px it starts
-closed.
-
 Alt+R, as ANSWER and the counter under the head, opens the pending queue, from
-any page of the conversation. Esc closes it, or, in the progress, returns to
-the composer. The composer has no options of a request above it: they are
+any page of the conversation. Esc closes it. The composer has no options of a request above it: they are
 answered in the queue.
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that
@@ -716,9 +682,10 @@ A conversation's level, in place of the project's once one is opened:
   written in all, and the cost at its right; then a row per agent, the
   busiest first, its replies, tokens read and tokens written in columns, or,
   under 700 px, on lines of their own so none is cut, and its cost at the top
-  right, "-" when its provider reported none. When the provider sends no
-  price, one kicker, NO PRICE REPORTED, says so and the cost column and figure
-  are left out;
+  right. The dollars are the server's (`GET /usage?conversation=`): each
+  agent's tokens at the `price` of its model in the project config. An agent
+  whose model has none shows "-", and a line says "no price set for haiku in the
+  project config" for each such model;
 - ARTIFACTS, the documents agents made in the conversation (`ArtifactsView`),
   read from `GET .../artifacts` each time the page opens: a rule per artifact
   headed by its title, the artifact's name without its id and extension, and
@@ -729,7 +696,7 @@ A conversation's level, in place of the project's once one is opened:
   route and opens it, as an attachment is. A conversation without one says so.
 
 A work's thread also opens as a page of the chat, from a sub-work block's
-OPEN or the progress: the way down to it (`Breadcrumb`, "Conversation ›
+OPEN: the way down to it (`Breadcrumb`, "Conversation ›
 Bakery website › Home page", each crumb going back up, the first to the
 chat), its transcript and a composer to its agent. The masthead's menu has
 OPEN IN TREE (Alt+O), the tree page with the work picked, and ITS LOG.
@@ -891,9 +858,7 @@ logs each text drawn out of its box, the window or a clipping item as a
 - On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered on a
   project).
 - In a conversation, from any of its pages: the pending counter and ANSWER
-  (Alt+R) in the header strip, which open the pending queue; the strip's chevron (Alt+P), which opens or closes
-  the progress on the chat and puts the keyboard in it; its counts, which
-  open TREE and COST; the `1 NOTE` notice
+  (Alt+R) in the header strip, which open the pending queue; the strip's cost, which opens COST; the `1 NOTE` notice
   (Alt+M on the chat); and NEW CONVERSATION (Ctrl+N) in `⋯`. On the tree and a
   work's page a request is also answered in its decision (`RequestDialog`, the
   item over the page).
@@ -945,6 +910,5 @@ of the board, on its page), `newConversation` and `back` move it too, and `send 
 sends a message to the conversation open, as the composer does.
 
 `?` or F1 opens a dialog of every key, by where it works
-(`ShortcutsDialog`). Esc first lets go of what the page holds — the progress
-sheet, the tree's detail page, the log's filter and the event
+(`ShortcutsDialog`). Esc first lets go of what the page holds — the tree's detail page, the log's filter and the event
 picked, the board's filter — then goes back as BACK does.

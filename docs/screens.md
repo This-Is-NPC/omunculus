@@ -100,8 +100,9 @@ picked out.
 
 ### 3. A new conversation
 
-The composer, addressed to the project's default agent: "TO", a folded control
-with its name, and the box. The start card's line says whom it goes to. Opening
+The composer: "TO", a folded control, and the box. No agent is chosen for you:
+with a default agent the control says "to Front desk if left empty" and the
+server sends an unaddressed first message there. The start card's line says whom it goes to. Opening
 TO lists the other agents of depth 0 (opt-in), each with its role, and under
 FOR THE PROJECT ITSELF the agents that change how the project works, each
 change only once you approve it; picking one replaces the recipient. Without
@@ -151,35 +152,30 @@ log. While any agent of the team works, a live line at the end of the thread,
 at every width, says who, down from the agent you write to, what it does in a
 plain verb and for how long. The "N NEW" pill, when the thread runs past the
 view, sits above the composer and never over an entry. Over the tabs of every page of the
-conversation, a header strip says whom it is with, the stage, or that the
-conversation is starting, the step of how many, how long, and how many agents and replies, each
-count opening the tree or the cost, with the chevron and ANSWER while
-something waits on you; under it the stages of the work in focus, in large type, and the chain
-of agents from the one you talk with down to the one at work, with a plain verb
-for what it does; the tabs are on one line, without their digits on a narrow window; at their right, "⚠ 3 PENDING" opens
-the [pending queue](#6-the-pending-queue). The chevron or Alt+P open the
-progress: the works nested by stage and level, beside the thread from 1100 px,
-a card over it from 700 px, a sheet over the chat below. The composer is a
+conversation, a header block says in one sentence what is happening, with an
+icon ("Seller is waiting for your answer", "Designer is working on the design
+stage"), how long, the cost once priced, and ANSWER while something waits on
+you; under it, compact, the stages of the work in focus. Nothing draws while
+there is nothing to say. The tabs are on one line, without their digits on a
+narrow window; at their right, "⚠ 3 PENDING" opens
+the [pending queue](#6-the-pending-queue). The composer is a
 line with a clip that attaches files and SEND; it has no options of a request
 above it. A conversation with no message yet, opened from the conversations,
 shows the TO control of
 [a new conversation](#3-a-new-conversation) over the composer when several
 agents of depth 0 may take it.
 
-A sub-work's open glyph (an arrow out of a box), or OPEN in the progress, shows that work's thread as a
+A sub-work's open glyph (an arrow out of a box) shows that work's thread as a
 page of its own, under the way down to it, with a composer to its agent;
 OPEN IN TREE (Alt+O) shows it on the tree page.
 
 | Keys | What they do |
 | --- | --- |
 | Alt+R | open the pending queue |
-| Alt+P | open or close the progress, the keyboard in it |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
-| ↑ · ↓ · → · ←, in the progress | move, unfold, fold |
-| Esc, in the progress | back to the composer; the sheet closes |
 
 ### 6. The pending queue
 
@@ -265,8 +261,9 @@ the tree, it is kept to that work.
 
 What the conversation used: model replies, tokens and cost in all in a
 header strip, then a row per agent, its figures in columns or, on a narrow
-window, on lines of their own; with no price from the provider, no cost
-column, only the kicker NO PRICE REPORTED. It has no keys of its own.
+window, on lines of their own. The cost is in dollars, at the price each model
+has in the project config; for a model with none a line says "no price set for
+haiku in the project config". It has no keys of its own.
 
 ### 10. Board
 
@@ -325,13 +322,14 @@ holds COMPOSE and MARK ALL READ.
 | / | search by subject, agent, project, message or file name |
 | Esc | clear the search |
 | Ctrl+B | fold the folders to a rail |
-| Ctrl+L | fold the list to a rail of the agents' portraits |
+| Ctrl+L | fold the list to a rail with its count of e-mails |
 
 ### 14. A thread
 
 One conversation with an agent of depth 0, stacked oldest first, the latest
 message open, with its label in the head. Each open message offers REPLY,
-REPLY ALL and FORWARD; a reply is written under the messages.
+FORWARD and, with several counterparts, REPLY ALL; a reply is written under
+the messages, in a box that grows with its words, with its To as editable chips.
 
 A review opened from Pending reads as a message in the same pane: its subject
 is what the agent wants to do; its body the arguments as lines, the text it

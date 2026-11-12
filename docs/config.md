@@ -99,10 +99,10 @@ a work as often as it likes. A workspace sets it the same way as
 `[policy] default_agent` is optional: the name of an agent of depth 0
 that is not `workflow_only`, the front desk that receives a new
 conversation when the person names no agent.
-Messages do not change: a client still names the agent in each `POST`
-message, and reads this key to know whom to address by default, as
-`default_agent` under `policy` in `GET /config/policy`. It is absent
-there when not set. Loading a config where it names an unknown agent, an
+A message that names no agent, and whose conversation has no agent yet, goes
+to it, so a client need not name the agent; a client also reads the key as
+`default_agent` under `policy` in `GET /config/policy`, to say whom an
+empty recipient goes to. It is absent there when not set. Loading a config where it names an unknown agent, an
 agent below depth 0 or a workflow-only agent refuses with
 `{:policy, {:invalid, :default_agent}}`. It belongs to the project: set
 it in `omunculus.toml` only. A pack's `policy` holds depth layers only,
