@@ -13,7 +13,8 @@ import "kit/ui"
 // it or its last run failed, saying what waits: questions, a decision, a permission; under it,
 // dim, whom it is with, "with front-desk › project-manager · sale 1/4" when another
 // agent holds its first work, at which stage of how many, and since when it
-// waits, else when it began; then what the newest request asks, or, under a work's title, what
+// waits, else when it began, and its tree in a few words ("14 works · 4 levels
+// · 2 open"); then what the newest request asks, or, under a work's title, what
 // was first said. Each row's menu opens it at its tree or its log. Its cells
 // decode into view.
 DataTable {
@@ -64,6 +65,22 @@ DataTable {
     return [names !== "" ? "with " + names : "", at].filter(text => text !== "").join(table.separator)
   }
 
+  // Its tree in a few words, "14 works · 4 levels · 2 open": how many works,
+  // how deep, and how many an agent has or that wait.
+  function treeOf(works) {
+    if (works.length === 0) return ""
+    const byId = {}
+    works.forEach(work => { byId[work.id] = work })
+    const depth = work => work.parent_id && byId[work.parent_id] ? 1 + depth(byId[work.parent_id]) : 1
+    const count = state => works.filter(work => work.state === state).length
+    return [
+      works.length + (works.length === 1 ? " work" : " works"),
+      works.some(work => work.parent_id) ? Math.max(...works.map(depth)) + " levels" : "",
+      count("open") > 0 ? count("open") + " open" : "",
+      count("waiting") > 0 ? count("waiting") + " waiting" : ""
+    ].filter(text => text !== "").join(table.separator)
+  }
+
   // Needing you first, the longest waiting first, under NEEDS YOU; the others
   // under their day, in the order given.
   rows: {
@@ -87,6 +104,7 @@ DataTable {
       titleOf(conversation),
       [
         whoOf(conversation, root),
+        treeOf(works),
         needing ? "waiting since " + Time.clock(known.since, now) : "began " + Time.began(conversation.created_at, now)
       ].filter(text => text !== "").join(table.separator),
       stateText(conversation),

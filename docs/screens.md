@@ -62,7 +62,8 @@ call omunculus <function>`): `start`, `page <name>`, `projects`,
 
 ### 1. The start
 
-On a project, its name, "What now?" and four ways in as cards, each with
+On a project, its name, "What now?" and four ways in as cards, two by two
+(one column on a narrow window), each with
 its number and one line of what is there, the first one filled: NEW
 CONVERSATION, CONVERSATIONS (how many, how many need you, how many work),
 BOARD and PROJECTS. On the registry alone, two: PROJECTS (how many it holds)
@@ -124,7 +125,7 @@ first, then the others under a rule of the day each began: its title and
 its state at the top right, what waits on you ("7 QUESTIONS", "A
 DECISION"); under it since when it waits, whom it is with and which agent
 holds its work at which stage ("front-desk · project-manager is at design (2/4)"), when
-it began and its works; then what the newest request asks. Under the
+it began and its tree in a few words ("14 works · 4 levels · 2 open"); then what the newest request asks. Under the
 search line, chips filter by state, ALL listing every one; a row's `⋯`
 opens it at its tree or its log.
 
@@ -146,7 +147,8 @@ a work down to the works it handed down: the agent's dot and name in its
 colour, its title, an open arrow and its state as an icon and a word. A work
 in a workflow shows its stages under its row, the ones done checked, the one
 reached filled, those to come empty. Finished works fold into one line ("2
-folded · homepage layout approved · 7 entries") that a chevron unfolds; works
+folded · homepage layout approved · 7 entries") that a chevron unfolds and, unfolded, folds again from the line that stays above
+its works; works
 that ran at once are a fork, "PARALLEL ×4 · 2 DONE · 2 WORKING", with a card
 for each. A request addressed to you is a card under the work that made it,
 joined by a dashed connector marked with its level ("L0"), which you answer in
@@ -165,7 +167,9 @@ line, without their digits on a narrow window. The composer is a line with a
 clip that attaches files and SEND; it has no options of a request above it. A
 conversation with no message yet, opened from the conversations, shows the TO
 control of [a new conversation](#3-a-new-conversation) over the composer when
-several agents of depth 0 may take it.
+several agents of depth 0 may take it; once it is under way, the same line
+says whom the message goes to, "TO" and the agent's dot and name, without a
+list. In a work's scope it names the work's agent.
 
 A work's open arrow shows the chat kept to that work's branch, a scope: a bar
 names the agents from the front desk down to it, with its level, and WHOLE
@@ -274,7 +278,9 @@ haiku in the project config". It has no keys of its own.
 
 The works of every project of the registry as a kanban, a column per state
 under a rule of each; opened from a project, kept to its works, every
-project's one chip away. Under 700 px it is one list, the works under a rule
+project's one chip away. A card has the agent (its dot and name), its level
+and the work it hangs under ("level 2, under Sale"), the project and the stage,
+its state as an icon and a word, how long since it changed and its conversation. Under 700 px it is one list, the works under a rule
 of their state.
 
 | Keys | What they do |
