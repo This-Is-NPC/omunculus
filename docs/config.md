@@ -225,6 +225,44 @@ ends; it never enters the execution policy, the store or the events,
 and what the call returns has it masked as `***`. `[execution]
 environment` stays what every process of a run receives.
 
+## Artifacts in a bucket
+
+`[s3]` is optional: the S3-compatible bucket the artifact tools
+`push_artifacts` and `pull_artifacts` copy to and from ([tools](tools.md#artifacts-in-a-bucket),
+[how to sync artifacts to S3](how-to-sync-artifacts-to-s3.md)). Every key
+is required once the table is there.
+
+```toml
+[auth.bucket_id]
+kind = "api_key"
+key = "!omapass get -- dev/bucket-id"
+
+[auth.bucket_secret]
+kind = "api_key"
+key = "$BUCKET_SECRET"
+
+[s3]
+bucket = "my-artifacts"
+endpoint = "https://s3.eu-west-1.amazonaws.com"
+region = "eu-west-1"
+prefix = "omunculus"
+path_style = false
+credentials = { access_key_id = "bucket_id", secret_access_key = "bucket_secret" }
+```
+
+| Key | Holds |
+| --- | --- |
+| `bucket` | the bucket's name |
+| `endpoint` | the service's URL, scheme and host (and port), no path: `https://s3.<region>.amazonaws.com`, `http://localhost:9000`, `https://<account>.r2.cloudflarestorage.com`, `https://s3.<region>.backblazeb2.com` |
+| `region` | the region SigV4 signs for (`auto` for R2) |
+| `prefix` | the folder of the bucket every key goes under; `""` for its root |
+| `path_style` | `true` sends `<endpoint>/<bucket>/<key>` (MinIO and most self-hosted services), `false` sends `<bucket>.<endpoint host>/<key>` |
+| `credentials` | binds `access_key_id` and `secret_access_key`, and optionally `session_token`, each to an `[auth]` provider |
+
+The credentials are never in the file: each name is an `[auth]` provider
+that resolves as a model's does (`$VAR`, `!cmd`, a literal or a stored
+login, [Models and auth](#models-and-auth)), when a tool call needs it.
+
 ## Models and auth
 
 ### Compatible providers
@@ -649,6 +687,8 @@ needs what is missing:
 | `overrides of <tool> leave a then outside its chains or with end not last` | an override breaks the `then` rule |
 | `overrides.<tool>.schema names <variant>, which the <tool> manifest does not declare` | an override names an unknown schema |
 | `pack <pack> requires tools the project lacks: …` | an imported pack names tools no `[tools] path` holds |
+| `omunculus.toml [s3] <key> is missing or not valid` | a key of `[s3]` absent or of the wrong type |
+| `omunculus.toml [s3] credentials name <id>, which [auth] does not hold` | a credential bound to a provider `[auth]` lacks |
 | `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
 | `store tables differ from this schema; recreate the store` | a store whose tables differ from the schema |
 | `project is in use by another Omunculus process` | another direct command holds the project |

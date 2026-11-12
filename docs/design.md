@@ -342,7 +342,9 @@ sha256}` within the size limit, and `path(sha256)` gives the content back.
 `Omunculus.Attachments` is the one backend. The record, the numbering, the
 tools and the routes depend on nothing else, so another backend — object
 storage, a design tool behind an MCP server — replaces those two
-functions without changing them. None is implemented.
+functions without changing them. None is implemented. A bucket is not
+such a backend: it is a copy that two tools keep, over the events
+([tools](tools.md#artifacts-in-a-bucket)), so the record, the numbering and the routes do not know it.
 
 **Visibility.** A version is not an attachment. The person's conversation
 reads only the `prompt` and `attach` events, so a client receives a

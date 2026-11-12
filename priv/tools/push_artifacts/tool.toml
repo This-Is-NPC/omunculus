@@ -1,0 +1,20 @@
+name = "push_artifacts"
+kind = "tool"
+triggers = ["model", "chain"]
+description = "Copies the artifact versions of this conversation to the project's S3-compatible bucket, each content once under its SHA-256. What the bucket already holds is skipped, so it may be repeated. name keeps one artifact."
+tags = ["files", "artifacts", "sync"]
+module = "Omunculus.Tools.PushArtifacts"
+
+[parameters]
+type = "object"
+required = []
+
+[parameters.properties.name]
+type = "string"
+
+[views.artifacts]
+source = "artifacts"
+
+[views.run]
+source = "events"
+relation = "run"

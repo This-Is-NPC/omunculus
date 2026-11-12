@@ -253,6 +253,13 @@ defmodule Omunculus.Tools.Out do
     do: "#{size} bytes is more than the #{limit} a file may hold"
 
   def failure({:attachment, :not_found}), do: "that file is not kept"
+  def failure({:s3, {:status, status}}), do: "the bucket answered #{status}"
+  def failure({:s3, {:request, _reason}}), do: "the bucket could not be reached"
+  def failure({:s3, {:record, key}}), do: "#{key} in the bucket is not a version record"
+
+  def failure({:s3, {:digest, sha256}}),
+    do: "the bucket's object #{sha256} is not what its name says"
+
   def failure(reason), do: inspect(reason)
 
   @doc """

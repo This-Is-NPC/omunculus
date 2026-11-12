@@ -77,6 +77,7 @@ defmodule Omunculus.Config do
     :auth,
     :access,
     :secrets,
+    :s3,
     :data
   ]
   defstruct @enforce_keys
@@ -176,6 +177,7 @@ defmodule Omunculus.Config do
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           access: map | nil,
           secrets: %{String.t() => %{String.t() => String.t()}},
+          s3: Omunculus.Artifacts.S3.settings | nil,
           data: map
         }
 
@@ -738,7 +740,8 @@ defmodule Omunculus.Config do
              "accounts",
              "interceptors",
              "secrets",
-             "skills"
+             "skills",
+             "s3"
            ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
@@ -774,6 +777,7 @@ defmodule Omunculus.Config do
              {:ok, default_agent} <- fetch_default_agent(data, agents),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
+             {:ok, s3} <- Omunculus.Artifacts.S3.parse(Map.get(data, "s3"), auth.providers),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
              {:ok, skills} <- parse_skills(Map.get(data, "skills"), config_dir) do
           tools = Map.put(tools, :skills, skills)
@@ -815,6 +819,7 @@ defmodule Omunculus.Config do
               auth: auth,
               access: access,
               secrets: secrets,
+              s3: s3,
               data: data
             }
 

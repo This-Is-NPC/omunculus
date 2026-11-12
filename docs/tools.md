@@ -293,6 +293,34 @@ pack's. A pack that keeps internal data in an artifact renders a document
 of its own for the person, as the sales desk does, and tells its agents
 to attach that.
 
+## Artifacts in a bucket
+
+Two tools copy artifacts to and from the S3-compatible bucket `[s3]` names
+([the TOML](config.md#artifacts-in-a-bucket)). They are in no group: the
+ceiling decides which agents have them.
+
+| Tool | Does |
+| --- | --- |
+| `push_artifacts` | Uploads every version of this conversation's artifacts (`name` keeps one artifact). Each content is the object `<prefix>/objects/<sha256>`, and each version a record `<prefix>/conversations/<conversation>/<name>/<version>.json`, the version as its event describes it. What the bucket already holds is skipped, so the call may be repeated. A `chain` step too. |
+| `pull_artifacts` | Restores the versions the bucket holds for a conversation (`conversation`, this one when omitted) that this conversation lacks, as `artifact` actions in order, each checked against its SHA-256. A name restores only the versions after the ones it has, so a repeat restores nothing more. A version that is not text, or that follows a gap in the numbers, is left out and named. |
+
+Both fail, writing nothing, when there is no `[s3]` table, a credential does
+not resolve or the bucket refuses. A sync that follows every write is a
+hook on `artifact` that chains `push_artifacts`:
+
+```toml
+name = "on-artifact"
+kind = "hook"
+events = ["artifact"]
+module = "Omunculus.Hooks.Noop"
+chains = ["push_artifacts"]
+then = ["push_artifacts"]
+```
+
+It runs in the harness, outside the sandbox, as `omapass` and a `!` key do:
+no secret reaches a process of the run. The core knows neither the bucket
+nor the tools; the store keeps the record of what each call did.
+
 ## Actions
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
