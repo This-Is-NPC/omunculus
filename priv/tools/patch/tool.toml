@@ -1,0 +1,21 @@
+name = "patch"
+kind = "tool"
+triggers = ["model"]
+description = "Applies a patch to one or more files; all apply or none. Format: *** Begin Patch, then sections, then *** End Patch. '*** Add File: path' with every line starting +; '*** Delete File: path'; '*** Update File: path' with hunks separated by @@ lines, each line a context line (a space), a removed line (-) or an added line (+). A hunk needs lines that appear once in the file as it is, apart from the other hunks. Read a file first; a patch of a file that changed since is refused. Needs sandbox.write."
+tags = ["fs"]
+groups = ["fs.write"]
+module = "Omunculus.Tools.Patch"
+
+[parameters]
+type = "object"
+required = ["patch"]
+
+[parameters.properties.patch]
+type = "string"
+
+[views.paths]
+source = "paths"
+
+[views.run]
+source = "events"
+relation = "run"

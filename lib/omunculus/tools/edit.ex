@@ -59,7 +59,9 @@ defmodule Omunculus.Tools.Edit do
 
   # The file changed since this run last saw it: by a command, another run
   # or a person.
-  defp fresh(absolute, path, [root | _], events) do
+  @doc "Refuses `path` when this run saw it before and it changed on disk since."
+  @spec fresh(String.t(), String.t(), [String.t()], [map]) :: :ok | {:error, String.t()}
+  def fresh(absolute, path, [root | _], events) do
     seen =
       for %{type: "tool", body: body, at: at} <- events,
           %{"name" => name, "ok" => true, "args" => %{"path" => seen}} <- [Jason.decode!(body)],
@@ -77,14 +79,20 @@ defmodule Omunculus.Tools.Edit do
     end
   end
 
-  defp apply_edits(content, edits) do
+  @doc """
+  Applies `{old, new}` pairs to `content` as `run/2` does; errors name
+  the pair as `label[n]`.
+  """
+  @spec apply_edits(String.t(), [{String.t(), String.t()}], String.t()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def apply_edits(content, edits, label \\ "edits") do
     {bom, body} = split_bom(content)
     crlf? = String.contains?(body, "\r\n")
     text = if crlf?, do: lf(body), else: body
     edits = if crlf?, do: Enum.map(edits, fn {old, new} -> {lf(old), lf(new)} end), else: edits
 
-    with {:ok, spans} <- spans(text, edits),
-         :ok <- apart(spans) do
+    with {:ok, spans} <- spans(text, edits, label),
+         :ok <- apart(spans, label) do
       edited = replace(text, spans)
       {:ok, bom <> if(crlf?, do: String.replace(edited, "\n", "\r\n"), else: edited)}
     end
@@ -96,27 +104,28 @@ defmodule Omunculus.Tools.Edit do
   defp lf(text), do: String.replace(text, "\r\n", "\n")
 
   # Where each old span lies in the file as it was: {start, length, new, index}.
-  defp spans(text, edits) do
+  defp spans(text, edits, label) do
     edits
     |> Enum.with_index(1)
     |> Enum.reduce_while({:ok, []}, fn {{old, new}, index}, {:ok, acc} ->
       case :binary.matches(text, old) do
         _matches when old == new ->
-          {:halt, {:error, "edits[#{index}]: new is the same as old"}}
+          {:halt, {:error, "#{label}[#{index}]: new is the same as old"}}
 
         [] ->
-          {:halt, {:error, "edits[#{index}]: old text not found"}}
+          {:halt, {:error, "#{label}[#{index}]: old text not found"}}
 
         [{start, length}] ->
           {:cont, {:ok, acc ++ [{start, length, new, index}]}}
 
         matches ->
-          {:halt, {:error, "edits[#{index}]: old text is ambiguous: #{length(matches)} matches"}}
+          {:halt,
+           {:error, "#{label}[#{index}]: old text is ambiguous: #{length(matches)} matches"}}
       end
     end)
   end
 
-  defp apart(spans) do
+  defp apart(spans, label) do
     spans
     |> Enum.sort()
     |> Enum.chunk_every(2, 1, :discard)
@@ -126,7 +135,7 @@ defmodule Omunculus.Tools.Edit do
         :ok
 
       [{_, _, _, a}, {_, _, _, b}] ->
-        {:error, "edits[#{min(a, b)}] and edits[#{max(a, b)}] overlap"}
+        {:error, "#{label}[#{min(a, b)}] and #{label}[#{max(a, b)}] overlap"}
     end
   end
 

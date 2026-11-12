@@ -49,7 +49,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Grep / find | **P** `grep` and `find` leave out `.git` and what `.gitignore` ignores | **P** | **P** | **P** |
 | | LSP | **T** | **P** | ✗ | ✗ |
 | **Coding: editing** | Exact, unique replacement | **P** | **P** | **P** | **P** |
-| | Multi-edit, patch, diff, read before edit | ◐ per-call diff through `changes`; **T** multi-edit and patch | **P** | **P** | **P** |
+| | Multi-edit, patch, diff, read before edit | **P** `edit` applies several replacements atomically, `patch` several files; refuses a file that changed since it was read; per-call diff through `changes` | **P** | **P** | **P** |
 | | Formatter after edit | **T** hook | ? | **P** | ? |
 | **Coding: execution** | Shell | ◐ new `sh -c` per call (codex-like preset) | **P** persistent | **P** | **P** persistent |
 | | Background processes | **—** event-driven | **P** | **P** | **P** |
@@ -75,8 +75,7 @@ Core changes (**K**):
 - a deeper history view, for search beyond the last run
 - execution outside Linux and Bubblewrap
 
-Tools and hooks (**T**), a `coding` package for the presets: multi-edit and
-patch, reply on the CLI, worktree per run, formatter, LSP, image and PDF
+Tools and hooks (**T**), a `coding` package for the presets: reply on the CLI, worktree per run, formatter, LSP, image and PDF
 reading. For reach: a messaging channel and web search.
 
 ## Sources

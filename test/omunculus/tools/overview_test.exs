@@ -87,7 +87,7 @@ defmodule Omunculus.Tools.OverviewTest do
     assert %{"name" => "review", "deny" => deny, "agent" => %{"name" => "reviewer"}} = review
     assert "fs.write" in deny
     assert tool(to_do["agent"], "fs.write")["state"] == "have"
-    assert tool(to_do["agent"], "fs.write")["members"] == ["edit", "write"]
+    assert tool(to_do["agent"], "fs.write")["members"] == ["edit", "patch", "write"]
     assert tool(to_do["agent"], "sandbox.write")["state"] == "sealed"
   end
 

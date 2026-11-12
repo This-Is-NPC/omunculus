@@ -537,11 +537,42 @@ The coordinator itself cannot read the workspace, open a network, see
 the host environment or spawn a process. Those are tools, classified by
 the ceiling, run in their own sandboxed sessions.
 
+## Editing files
+
+`write` replaces a file whole. `edit` takes a `path` and a list of
+`{old, new}` spans: each `old` must appear once in the file as it was
+before the call, apart from the others; otherwise nothing is written and
+the error names the failing item (`edits[2]: old text not found`).
+`patch` takes one `patch` string of files in a small format, written whole
+or not at all:
+
+```text
+*** Begin Patch
+*** Add File: notes.md
++first line
+*** Update File: src/app.ex
+@@
+ context line
+-old line
++new line
+*** Delete File: old.txt
+*** End Patch
+```
+
+A hunk is matched as the lines it keeps and removes, once in the file and
+apart from the other hunks, with the matching of `edit` (`hunk[1]: old
+text not found`, prefixed with the file). It needs at least one such line.
+An added file must not exist. A failed write puts back the files already
+written. Each path follows the sandbox and workspace rules, and `edit` and
+`patch` refuse a file that changed since the run last read it. The files
+each call changed are recorded for `changes` and `revert` like those of
+`write`.
+
 ## Groups the default package uses
 
 ```text
 fs.read   = read, ls, grep, find
-fs.write  = write, edit
+fs.write  = write, edit, patch
 store     = comment, request_access, reply, grant, notify, read_work
 sequence  = work, delegate, continue, break, wait, end, done, cancel, ask, escalate, forward, reopen, retire
 catalog   = tool_search
