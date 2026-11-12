@@ -774,7 +774,8 @@ name it in an agent's `tools`.
 
 | Argument | Meaning |
 | --- | --- |
-| `port` (required) | The port the server listens on, on `127.0.0.1` |
+| `url` | The page as one `http://` URL, such as `http://app.localhost:8080/pricing`. Its host, port (80 when missing) and path stand for `host`, `port` and `paths` (when `paths` is left out). Needed when `port` is not given |
+| `port` | The port the server listens on, on `127.0.0.1`. Needed when `url` is not given. A number in a string is accepted |
 | `host` | The host name the pages are loaded by, for a server that tells sites apart by it, such as `app.localhost`; `127.0.0.1` by default |
 | `command` | The dev server command, run through `sh`; left out, a server already listening on `port` is used |
 | `cwd` | Where the command runs, relative to the workspace root |
@@ -783,6 +784,9 @@ name it in an agent's `tools`.
 | `steps` | Checks run on each page after it loads: `click` and `wait_for` take a `selector`, `fill` a `selector` and a `value`, `expect_text` a `text` |
 | `full_page` | Screenshot the whole page |
 | `ready_timeout_ms` | How long to wait for the port; 30000 by default |
+
+`url` and `port` or `host` must agree: the call is refused with a sentence
+naming both when `url` says one port or host and the argument another.
 
 Per path and viewport the output gives the HTTP status, the title, the
 console errors and uncaught exceptions, the requests that failed or

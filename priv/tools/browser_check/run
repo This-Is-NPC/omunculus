@@ -5,9 +5,6 @@
 const input = JSON.parse(await new Response(Deno.stdin.readable).text());
 const args = input.args ?? {};
 const root = (input.roots ?? [])[0] ?? Deno.cwd();
-const port = args.port;
-const host = args.host ?? "127.0.0.1";
-const paths = args.paths?.length ? args.paths : ["/"];
 const viewports = args.viewports?.length ? args.viewports : ["1440x900"];
 const steps = args.steps ?? [];
 const readyMs = args.ready_timeout_ms ?? 30000;
@@ -21,9 +18,36 @@ function finish(ok, output) {
   Deno.exit(0);
 }
 
+// One resolution of the target: a url is another way to state host, port and path.
+function resolveTarget() {
+  let port = args.port;
+  if (typeof port === "string") port = Number(port.replace(/^"|"$/g, ""));
+  let host = args.host;
+  let paths = args.paths?.length ? args.paths : null;
+  if (args.url) {
+    let u;
+    try { u = new URL(args.url); } catch { return { error: `url ${args.url} is not a valid URL` }; }
+    if (u.protocol !== "http:") return { error: `url must be http://, not ${u.protocol}//` };
+    const urlPort = Number(u.port || 80);
+    if (args.port !== undefined && port !== urlPort) {
+      return { error: `url ${args.url} says port ${urlPort} but port is ${args.port}; give one of them` };
+    }
+    if (host !== undefined && host !== u.hostname) {
+      return { error: `url ${args.url} says host ${u.hostname} but host is ${host}; give one of them` };
+    }
+    port = urlPort;
+    host = u.hostname;
+    paths ??= [u.pathname + u.search];
+  }
+  if (!Number.isInteger(port)) return { error: "port or url required" };
+  return { port, host: host ?? "127.0.0.1", paths: paths ?? ["/"] };
+}
+const target = resolveTarget();
+const { port, host, paths } = target;
+
 const parsed = viewports.map((v) => /^(\d+)x(\d+)$/.exec(v));
 if (parsed.some((m) => !m)) finish(false, "viewports are WIDTHxHEIGHT, such as 1440x900");
-if (!Number.isInteger(port)) finish(false, "port required");
+if (target.error) finish(false, target.error);
 
 async function listening() {
   try {

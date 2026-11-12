@@ -1,18 +1,21 @@
 name = "browser_check"
 kind = "tool"
 triggers = ["model"]
-description = "Looks at a web page the way a person would: starts the project's dev server (command, port), waits for the port, loads each of paths in a headless browser at each of viewports, then stops the server. Per page it returns the HTTP status, console errors, failed requests, the title, an outline of the visible headings, links and buttons, and the checks of steps (click, fill, expect_text, wait_for); each screenshot is shown to you, and saved as a PNG under .browser_check/ of the workspace (needs sandbox.write), which attach hands to the person. With no command it loads an already running server on port. Fix what it reports and call it again."
+description = "Looks at a web page the way a person would: starts the project's dev server (command, port), waits for the port, loads each of paths in a headless browser at each of viewports, then stops the server. Per page it returns the HTTP status, console errors, failed requests, the title, an outline of the visible headings, links and buttons, and the checks of steps (click, fill, expect_text, wait_for); each screenshot is shown to you, and saved as a PNG under .browser_check/ of the workspace (needs sandbox.write), which attach hands to the person. With no command it loads an already running server on port. Give the target as port (and host), or as one url such as http://app.localhost:8080/pricing that carries the host, port and path; url and port or host must not disagree. Fix what it reports and call it again."
 tags = ["web", "test"]
 command = ["./run"]
 
 [parameters]
 type = "object"
-required = ["port"]
+
+[parameters.properties.url]
+type = "string"
+description = "The page as one http URL, such as http://app.localhost:8080/pricing: its host, port (80 when missing) and path stand for host, port and paths (paths left out). Required when port is not given; refused when it disagrees with port or host."
 
 [parameters.properties.port]
 type = "integer"
 minimum = 1
-description = "The port the dev server listens on, on 127.0.0.1."
+description = "The port the dev server listens on, on 127.0.0.1. Required when url is not given."
 
 [parameters.properties.host]
 type = "string"

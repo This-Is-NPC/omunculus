@@ -19,6 +19,7 @@ defmodule Omunculus.Tools.BrowserCheckTest do
   setup do
     root = Omunculus.Fixtures.tmp_dir()
     File.write!(Path.join(root, "index.html"), @index)
+    File.write!(Path.join(root, "about.html"), "<!doctype html><title>About</title>")
     %{root: root}
   end
 
@@ -100,6 +101,52 @@ defmodule Omunculus.Tools.BrowserCheckTest do
     assert out.ok, out.output
     assert out.output =~ "title: Fixture"
     assert out.output =~ "404 http://fixture.localhost:48735/missing.png"
+  end
+
+  test "takes host, port and path from a url", %{root: root} do
+    url_args =
+      args(48_736, %{"viewports" => ["800x600"]})
+      |> Map.delete("port")
+      |> Map.put("url", "http://fixture.localhost:48736/about.html")
+
+    out = call(root, url_args, read_only: [@tool], read_write: [root])
+
+    assert out.ok, out.output
+    assert out.output =~ "## /about.html at 800x600"
+    assert out.output =~ "title: About"
+
+    # A port given as a numeric string works too.
+    out =
+      call(root, args(48_737, %{"port" => "48737", "viewports" => ["800x600"]}),
+        read_only: [@tool],
+        read_write: [root]
+      )
+
+    assert out.ok, out.output
+  end
+
+  test "refuses a url that disagrees with port or host", %{root: root} do
+    out =
+      call(root, args(48_738, %{"url" => "http://127.0.0.1:48739/"}),
+        read_only: [@tool],
+        read_write: [root]
+      )
+
+    refute out.ok
+    assert out.output =~ "says port 48739 but port is 48738; give one of them"
+
+    out =
+      call(root, args(48_738, %{"url" => "http://a.localhost:48738/", "host" => "b.localhost"}),
+        read_only: [@tool],
+        read_write: [root]
+      )
+
+    refute out.ok
+    assert out.output =~ "says host a.localhost but host is b.localhost; give one of them"
+
+    out = call(root, %{"viewports" => ["800x600"]}, read_only: [@tool], read_write: [root])
+    refute out.ok
+    assert out.output == "port or url required"
   end
 
   test "a step that fails fails the call and says which", %{root: root} do
