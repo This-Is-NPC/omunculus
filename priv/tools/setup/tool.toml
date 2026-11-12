@@ -1,0 +1,13 @@
+name = "setup"
+kind = "tool"
+triggers = ["cli"]
+config = false
+description = """
+Prepares the user's side of an installed omunculus. It writes server.toml under $XDG_CONFIG_HOME/omunculus, or ~/.config/omunculus, when the file is missing, with its `[server]` values printed, then runs `systemctl --user enable --now omunculus`, and prints how to start a project. A file that exists is kept and said so; running it again changes nothing that exists. It runs without a config.
+"""
+tags = ["cli", "setup"]
+groups = ["cli"]
+module = "Omunculus.Tools.Setup"
+
+[parameters]
+type = "object"

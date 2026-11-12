@@ -47,7 +47,7 @@ config = "/path/to/project/omunculus.toml"
 bin/omunculus serve --config /path/to/server.toml
 ```
 
-Paths in the registry resolve relative to it. `max_concurrent`, `max_queue` and `queue_timeout_ms` bound runs across projects in addition to each project's `[execution]` limits. `max_connections` bounds simultaneous event streams.
+`omunculus setup` writes this file, with the `[server]` table above and no project, to `$XDG_CONFIG_HOME/omunculus/server.toml` (`~/.config/omunculus/server.toml`) when it is missing, and enables the user unit that serves it ([How to install and remove](how-to-install-and-remove.md)). A registry without `[projects]` serves nothing until a `[projects.<id>]` table is added and the server restarted. Paths in the registry resolve relative to it. `max_concurrent`, `max_queue` and `queue_timeout_ms` bound runs across projects in addition to each project's `[execution]` limits. `max_connections` bounds simultaneous event streams.
 
 ## Local socket
 

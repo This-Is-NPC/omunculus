@@ -1,0 +1,13 @@
+name = "version"
+kind = "tool"
+triggers = ["cli"]
+config = false
+description = """
+Prints the version of the running omunculus. It runs without a config.
+"""
+tags = ["cli", "version"]
+groups = ["cli"]
+module = "Omunculus.Tools.Version"
+
+[parameters]
+type = "object"

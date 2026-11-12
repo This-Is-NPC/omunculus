@@ -28,7 +28,8 @@ manifest sets `config = false`, as `preset`, which writes the file.
 After the name come `--key value` pairs, or one bare value, which goes to
 the first required key of the tool's parameters: `omunculus send "count
 to 5"` gives `message`. A second bare value, or a `--key` without a value,
-is a usage error. A key the parameters do not list is still passed on.
+is a usage error, except for a key the tool declares boolean, which stands
+alone (`omunculus update --check`) or takes `true` or `false`. A key the parameters do not list is still passed on.
 Every value arrives as text; a tool that takes JSON decodes it.
 
 ### Output
@@ -368,6 +369,16 @@ Delivers the message and opens the first run: of the work work_id names, else of
 | `subject` | string | no | The message's subject, one line, kept apart from its text. |
 | `work_id` | string | no | The work the message is for. |
 
+### `omunculus setup`
+
+```text
+omunculus setup
+```
+
+Prepares the user's side of an installed omunculus. It writes server.toml under $XDG_CONFIG_HOME/omunculus, or ~/.config/omunculus, when the file is missing, with its `[server]` values printed, then runs `systemctl --user enable --now omunculus`, and prints how to start a project. A file that exists is kept and said so; running it again changes nothing that exists. It runs without a config.
+
+Runs without a project config.
+
 ### `omunculus tools`
 
 ```text
@@ -375,3 +386,27 @@ omunculus tools
 ```
 
 Prints the project's catalog as JSON. Under tools, each tool, hook and skill with its name, kind, description, triggers, groups, the secrets it declares and the binding [secrets.&lt;tool&gt;] gives them, a skill's uses, its source (folder, inline or skill) and dir; under mcp, each [[mcp.servers]] with its command and secrets, since a server's tools are known only once a run starts it.
+
+### `omunculus update`
+
+```text
+omunculus update [--check true]
+```
+
+Updates the installed packages to the latest release. It asks GitHub for the latest release once, with no telemetry, and compares it with the running version. When the release is newer it downloads the omunculus package, and omunculus-apps when that is installed, checks both against SHA256SUMS, installs them with `sudo pacman -U`, which asks on the terminal, and restarts the user unit when it is active. With check, it only says what it would do. It runs without a config.
+
+Runs without a project config.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `check` | boolean | no | Report the latest release and what would be installed, and install nothing. |
+
+### `omunculus version`
+
+```text
+omunculus version
+```
+
+Prints the version of the running omunculus. It runs without a config.
+
+Runs without a project config.
