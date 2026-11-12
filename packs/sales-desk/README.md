@@ -259,6 +259,15 @@ omunculus pack --path packs/design-team --models team=<model> --depth 2
 
 The client talks with it by name: `omunculus send --agent front-desk "…"`.
 
+## Memory
+
+The front desk and the project manager hold the `memory` group: the front
+desk keeps what a client prefers, the project manager what went right or
+wrong in an engagement, for later conversations
+([Memory](../../docs/tools.md#memory)). With `[policy] memory_bytes` in the
+project's file the newest entries are in each prompt; without it an agent
+calls `recall`.
+
 ## What the project configures
 
 The accounts and the interceptors. The pack names one account, `owner`
