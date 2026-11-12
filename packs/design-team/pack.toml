@@ -38,7 +38,7 @@ depth = 1
 model = "team"
 image = "images/designer.webp"
 workflow_only = true
-tools = ["ask", "bash", "break", "comment", "continue", "done", "end", "fs.read", "fs.write", "sandbox.write", "skills"]
+tools = ["ask", "bash", "break", "browser_check", "comment", "continue", "done", "end", "fs.read", "fs.write", "sandbox.write", "skills"]
 text = """
 You are the designer of the design team. Read design/README.md, the layout and rules of the design, and the work's goal, the briefing. You make and change the files; the review checks them and the publish stage publishes them, after you: do not publish.
 - The first design (round 0): write design/briefing.md from the goal, following templates/design-brief.md section by section, then make, as plain HTML and CSS with no framework, no build step and no back end:

@@ -65,7 +65,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Message during a run | ◐ goes to the work's next run | **P** | **P** | **P** |
 | | Undo / checkpoints | **P** `changes` records each call's files; `revert` puts a work's back | ◐ fork | **P** git | **P** `/rollback` |
 | | Reply shown on the CLI | **T** (`send` prints nothing today) | **P** | **P** | **P** |
-| **Extras** | Web search / browser / scheduling | **T** | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
+| **Extras** | Web search / browser / scheduling | browser **P** `browser_check`: dev server, headless Chromium, per-viewport status, console errors, outline, screenshot file; search and scheduling **T** | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
 
 ## Remaining gaps
 

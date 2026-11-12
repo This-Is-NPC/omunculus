@@ -1,0 +1,49 @@
+name = "browser_check"
+kind = "tool"
+triggers = ["model"]
+description = "Looks at a web page the way a person would: starts the project's dev server (command, port), waits for the port, loads each of paths in a headless browser at each of viewports, then stops the server. Per page it returns the HTTP status, console errors, failed requests, the title, an outline of the visible headings, links and buttons, and the checks of steps (click, fill, expect_text, wait_for); a screenshot is saved as a PNG under .browser_check/ of the workspace (needs sandbox.write), which attach hands to the person. With no command it loads an already running server on port. Fix what it reports and call it again."
+tags = ["web", "test"]
+command = ["./run"]
+
+[parameters]
+type = "object"
+required = ["port"]
+
+[parameters.properties.port]
+type = "integer"
+minimum = 1
+description = "The port the dev server listens on, on 127.0.0.1."
+
+[parameters.properties.command]
+type = "string"
+description = "The dev server command, run through sh in cwd; left out when a server already listens on port."
+
+[parameters.properties.cwd]
+type = "string"
+description = "Where the command runs, relative to the workspace root; the root when left out."
+
+[parameters.properties.paths]
+type = "array"
+items = { type = "string" }
+description = "URL paths to load, such as \"/\" or \"/pricing\"; [\"/\"] when left out."
+
+[parameters.properties.viewports]
+type = "array"
+items = { type = "string" }
+description = "Sizes as WIDTHxHEIGHT, such as \"1440x900\" and \"390x844\" (a phone); [\"1440x900\"] when left out."
+
+[parameters.properties.steps]
+type = "array"
+description = "Checks run on each page after it loads, in order: {action: click|fill|expect_text|wait_for, selector, value, text}. click and wait_for take a CSS selector, fill a selector and a value, expect_text the text the page must show."
+
+[parameters.properties.steps.items]
+type = "object"
+
+[parameters.properties.full_page]
+type = "boolean"
+description = "Screenshot the whole page, not only the viewport."
+
+[parameters.properties.ready_timeout_ms]
+type = "integer"
+minimum = 1
+description = "How long to wait for the port; 30000 when left out."

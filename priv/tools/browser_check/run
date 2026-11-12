@@ -1,0 +1,265 @@
+#!/usr/bin/env -S deno run --no-config --no-lock --no-prompt --allow-all
+// browser_check: dev server + headless Chromium over CDP, no dependencies.
+// Reads the call as JSON on stdin and prints { ok, output, emit }.
+
+const input = JSON.parse(await new Response(Deno.stdin.readable).text());
+const args = input.args ?? {};
+const root = (input.roots ?? [])[0] ?? Deno.cwd();
+const port = args.port;
+const paths = args.paths?.length ? args.paths : ["/"];
+const viewports = args.viewports?.length ? args.viewports : ["1440x900"];
+const steps = args.steps ?? [];
+const readyMs = args.ready_timeout_ms ?? 30000;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function finish(ok, output) {
+  console.log(JSON.stringify({ ok, output, emit: [] }));
+  Deno.exit(0);
+}
+
+const parsed = viewports.map((v) => /^(\d+)x(\d+)$/.exec(v));
+if (parsed.some((m) => !m)) finish(false, "viewports are WIDTHxHEIGHT, such as 1440x900");
+if (!Number.isInteger(port)) finish(false, "port required");
+
+async function listening() {
+  try {
+    (await Deno.connect({ hostname: "127.0.0.1", port })).close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let server = null;
+let browser = null;
+let profile = null;
+
+async function stop() {
+  if (browser) {
+    try { browser.kill("SIGKILL"); await browser.status; } catch { /* gone */ }
+  }
+  if (server) {
+    try { Deno.kill(-server.pid, "SIGTERM"); } catch { /* gone */ }
+    const ended = await Promise.race([server.status.then(() => true), sleep(2000).then(() => false)]);
+    if (!ended) try { Deno.kill(-server.pid, "SIGKILL"); } catch { /* gone */ }
+  }
+  if (profile) await Deno.remove(profile, { recursive: true }).catch(() => {});
+}
+
+function chromiumPath() {
+  const dirs = (Deno.env.get("PATH") ?? "/usr/bin").split(":").concat("/usr/bin");
+  for (const name of ["chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "chrome"]) {
+    for (const dir of dirs) {
+      try {
+        if (Deno.statSync(`${dir}/${name}`).isFile) return `${dir}/${name}`;
+      } catch { /* next */ }
+    }
+  }
+  return null;
+}
+
+async function startServer() {
+  if (!args.command) {
+    return (await listening()) ? null : `nothing listens on port ${port} and no command was given`;
+  }
+  if (await listening()) return `port ${port} is already in use`;
+  const cwd = args.cwd ? `${root}/${args.cwd}` : root;
+  server = new Deno.Command("setsid", {
+    args: ["sh", "-c", args.command],
+    cwd,
+    stdin: "null",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+  // Keep the last output of the server for a failure message.
+  let tail = "";
+  for (const stream of [server.stdout, server.stderr]) {
+    stream.pipeTo(new WritableStream({
+      write(chunk) { tail = (tail + new TextDecoder().decode(chunk)).slice(-1500); },
+    })).catch(() => {});
+  }
+  const deadline = Date.now() + readyMs;
+  let exited = null;
+  server.status.then((s) => { exited = s; });
+  while (Date.now() < deadline) {
+    if (await listening()) return null;
+    if (exited) return `the dev server exited with ${exited.code} before port ${port} opened:\n${tail}`;
+    await sleep(100);
+  }
+  return `port ${port} did not open within ${readyMs} ms:\n${tail}`;
+}
+
+class Cdp {
+  constructor(ws) {
+    this.ws = ws;
+    this.next = 1;
+    this.pending = new Map();
+    this.listeners = [];
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.id) {
+        const p = this.pending.get(m.id);
+        this.pending.delete(m.id);
+        if (p) m.error ? p.reject(new Error(m.error.message)) : p.resolve(m.result);
+      } else {
+        for (const l of this.listeners) l(m);
+      }
+    };
+  }
+  send(method, params = {}, sessionId) {
+    const id = this.next++;
+    this.ws.send(JSON.stringify({ id, method, params, sessionId }));
+    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+  }
+}
+
+async function startBrowser(binary) {
+  profile = await Deno.makeTempDir({ prefix: "browser-check-" });
+  browser = new Deno.Command(binary, {
+    args: [
+      "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+      "--no-first-run", "--hide-scrollbars", "--remote-debugging-port=0",
+      `--user-data-dir=${profile}`, "about:blank",
+    ],
+    stdin: "null",
+    stdout: "null",
+    stderr: "null",
+  }).spawn();
+  const file = `${profile}/DevToolsActivePort`;
+  for (let i = 0; i < 300; i++) {
+    try {
+      const [p, path] = (await Deno.readTextFile(file)).trim().split("\n");
+      const ws = new WebSocket(`ws://127.0.0.1:${p}${path}`);
+      await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = () => reject(new Error("devtools refused")); });
+      return new Cdp(ws);
+    } catch { await sleep(100); }
+  }
+  throw new Error("the browser did not start");
+}
+
+const OUTLINE = `(() => {
+  const shown = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none"; };
+  const text = (el) => (el.innerText || el.value || el.getAttribute("aria-label") || "").trim().replace(/\\s+/g, " ").slice(0, 80);
+  const pick = (sel, fmt) => [...document.querySelectorAll(sel)].filter(shown).map(fmt).filter(Boolean).slice(0, 40);
+  return {
+    title: document.title,
+    headings: pick("h1,h2,h3", (e) => e.tagName.toLowerCase() + " " + text(e)),
+    links: pick("a[href]", (e) => text(e) && text(e) + " -> " + e.getAttribute("href")),
+    buttons: pick("button,[role=button],input[type=submit],input[type=button]", (e) => text(e)),
+    overflow: document.documentElement.scrollWidth > innerWidth,
+  };
+})()`;
+
+async function runStep(cdp, session, step) {
+  const evaluate = async (expression) => {
+    const r = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }, session);
+    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? "script error");
+    return r.result.value;
+  };
+  const sel = JSON.stringify(step.selector ?? "");
+  const wait = async (condition) => {
+    for (let i = 0; i < 50; i++) {
+      if (await evaluate(condition)) return true;
+      await sleep(100);
+    }
+    return false;
+  };
+  switch (step.action) {
+    case "click":
+      if (!(await wait(`!!document.querySelector(${sel})`))) return `click ${step.selector}: no such element`;
+      await evaluate(`document.querySelector(${sel}).click()`);
+      await sleep(300);
+      return null;
+    case "fill":
+      if (!(await wait(`!!document.querySelector(${sel})`))) return `fill ${step.selector}: no such element`;
+      await evaluate(`(() => { const e = document.querySelector(${sel}); e.focus(); e.value = ${JSON.stringify(step.value ?? "")};
+        e.dispatchEvent(new Event("input", { bubbles: true })); e.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+      return null;
+    case "wait_for":
+      return (await wait(`!!document.querySelector(${sel})`)) ? null : `wait_for ${step.selector}: never appeared`;
+    case "expect_text":
+      return (await wait(`document.body.innerText.includes(${JSON.stringify(step.text ?? "")})`))
+        ? null
+        : `expect_text "${step.text}": not on the page`;
+    default:
+      return `unknown action ${step.action}`;
+  }
+}
+
+async function check(cdp, path, width, height) {
+  const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
+  const { sessionId: s } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
+  const result = { errors: [], failed: [], problems: [], status: null };
+  cdp.listeners.push((m) => {
+    if (m.sessionId !== s) return;
+    const p = m.params;
+    if (m.method === "Runtime.exceptionThrown") result.errors.push(p.exceptionDetails.exception?.description?.split("\n")[0] ?? p.exceptionDetails.text);
+    if (m.method === "Runtime.consoleAPICalled" && p.type === "error") result.errors.push(p.args.map((a) => a.value ?? a.description).join(" "));
+    if (m.method === "Network.responseReceived") {
+      if (p.type === "Document" && result.status === null) result.status = p.response.status;
+      if (p.response.status >= 400 && !p.response.url.endsWith("/favicon.ico")) result.failed.push(`${p.response.status} ${p.response.url}`);
+    }
+    if (m.method === "Network.loadingFailed" && !p.canceled) result.failed.push(`${p.errorText} ${p.requestId}`);
+  });
+  const loaded = new Promise((resolve) => {
+    cdp.listeners.push((m) => { if (m.sessionId === s && m.method === "Page.loadEventFired") resolve(true); });
+    setTimeout(() => resolve(false), 15000);
+  });
+  for (const m of ["Page.enable", "Runtime.enable", "Network.enable"]) await cdp.send(m, {}, s);
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 500 }, s);
+  await cdp.send("Page.navigate", { url: `http://127.0.0.1:${port}${path}` }, s);
+  if (!(await loaded)) result.problems.push("the page did not finish loading in 15 s");
+  await sleep(300);
+  for (const step of steps) {
+    const problem = await runStep(cdp, s, step);
+    if (problem) result.problems.push(problem);
+  }
+  const outline = await cdp.send("Runtime.evaluate", { expression: OUTLINE, returnByValue: true }, s);
+  result.outline = outline.result.value;
+  const shot = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: !!args.full_page }, s);
+  const slug = (path.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "index") + `-${width}x${height}.png`;
+  try {
+    await Deno.mkdir(`${root}/.browser_check`, { recursive: true });
+    await Deno.writeFile(`${root}/.browser_check/${slug}`, Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0)));
+    result.screenshot = `.browser_check/${slug}`;
+  } catch {
+    result.screenshot = null;
+  }
+  await cdp.send("Target.closeTarget", { targetId });
+  return result;
+}
+
+const binary = chromiumPath();
+if (!binary) finish(false, "no Chromium found in the sandbox (looked for chromium, chromium-browser, google-chrome)");
+
+let ok = true;
+const lines = [];
+try {
+  const refusal = await startServer();
+  if (refusal) throw new Error(refusal);
+  const cdp = await startBrowser(binary);
+  for (const path of paths) {
+    for (const [i, m] of parsed.entries()) {
+      const r = await check(cdp, path, Number(m[1]), Number(m[2]));
+      const bad = r.problems.length > 0 || r.status === null || r.status >= 400;
+      if (bad) ok = false;
+      const o = r.outline ?? {};
+      lines.push(`## ${path} at ${viewports[i]}${bad ? " (FAILED)" : ""}`);
+      lines.push(`status: ${r.status ?? "none"}`, `title: ${o.title ?? ""}`);
+      lines.push(`screenshot: ${r.screenshot ?? "not saved (the workspace is read-only; needs sandbox.write)"}`);
+      if (o.overflow) lines.push("horizontal overflow: the page is wider than the viewport");
+      for (const [label, list] of [["console errors", r.errors], ["failed requests", r.failed], ["problems", r.problems],
+        ["headings", o.headings], ["links", o.links], ["buttons", o.buttons]]) {
+        if (list?.length) lines.push(`${label}:`, ...list.map((x) => `- ${x}`));
+      }
+      lines.push("");
+    }
+  }
+} catch (error) {
+  ok = false;
+  lines.push(String(error.message ?? error));
+} finally {
+  await stop();
+}
+finish(ok, lines.join("\n").trimEnd());

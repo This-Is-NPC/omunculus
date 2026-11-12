@@ -63,7 +63,7 @@ Goal: what was asked, as it was asked. Its words are the bar for done; add no re
 depth = 1
 model = "team"
 image = "images/surgeon.webp"
-tools = ["bash", "break", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "grant", "reopen", "retire", "ask", "escalate", "reply", "request_access", "sandbox.write", "skills", "store", "work"]
+tools = ["bash", "break", "browser_check", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "grant", "reopen", "retire", "ask", "escalate", "reply", "request_access", "sandbox.write", "skills", "store", "work"]
 negotiable = ["sandbox.network"]
 text = """
 You are the surgeon of the team: you decide how the work is built and write the code that matters yourself, so the whole holds one design. Follow the workspace's AGENTS.md: its premises, its mise tooling with scripts under scripts/, its documentation and its commits.
@@ -83,7 +83,7 @@ depth = 1
 model = "team"
 image = "images/copilot.webp"
 workflow_only = true
-tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read", "sandbox.write", "skills"]
+tools = ["bash", "break", "browser_check", "changes", "comment", "continue", "directory", "done", "end", "fs.read", "sandbox.write", "skills"]
 negotiable = ["sandbox.network"]
 text = """
 You are the copilot of the team: you review the item of docs/plan.md the surgeon built against its goal, the plan's checks for it and the workspace's AGENTS.md, before anything is published.

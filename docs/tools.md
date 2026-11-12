@@ -643,6 +643,48 @@ tool see: a server that needs a writable cache or the network needs the
 run's `sandbox.write` or `sandbox.network` grant, and its executable must
 be in a runtime of the policy.
 
+## Looking at a web page
+
+`browser_check` closes the build, look, fix loop for web work. In one call
+it starts the dev server in the run's sandbox, waits for its port, loads
+pages in a headless Chromium and stops the server. It is not in a group:
+name it in an agent's `tools`.
+
+| Argument | Meaning |
+| --- | --- |
+| `port` (required) | The port the server listens on, on `127.0.0.1` |
+| `command` | The dev server command, run through `sh`; left out, a server already listening on `port` is used |
+| `cwd` | Where the command runs, relative to the workspace root |
+| `paths` | URL paths to load; `["/"]` by default |
+| `viewports` | `WIDTHxHEIGHT` sizes, such as `1440x900` and `390x844`; `["1440x900"]` by default. A width under 500 emulates a phone |
+| `steps` | Checks run on each page after it loads: `click` and `wait_for` take a `selector`, `fill` a `selector` and a `value`, `expect_text` a `text` |
+| `full_page` | Screenshot the whole page |
+| `ready_timeout_ms` | How long to wait for the port; 30000 by default |
+
+Per path and viewport the output gives the HTTP status, the title, the
+console errors and uncaught exceptions, the requests that failed or
+answered 400 or more, the visible headings, links and buttons, whether the
+page is wider than the viewport, and each step that failed. The call fails
+when a page answers 400 or more, did not load, or a step failed; console
+errors are reported and do not fail it. A call that fails still stops the
+server.
+
+The screenshot is a PNG at `.browser_check/<path>-<W>x<H>.png` in the
+workspace, so it needs `sandbox.write`; without it the page is still
+checked and the output says the screenshot was not saved. The model reads
+the text outline: `read` refuses a PNG, and an artifact or an `emit` carries
+text only. `attach` with that `path` gives the person the image.
+
+It is a Deno script that speaks the DevTools protocol to the Chromium it
+finds on `PATH` (`chromium`, `chromium-browser`, `google-chrome-stable`,
+`google-chrome`), with `--no-sandbox` since the Bubblewrap sandbox is the
+boundary. The policy's `runtimes` must hold both `deno` and the browser, as
+`/usr` does. It needs no grant beyond the run's own: the server and the
+browser talk over the loopback of the sandbox, which exists without
+`sandbox.network`, so only a page that loads something from the internet
+needs that grant, and its failed requests show up in the output when it is
+missing.
+
 ## Groups the default package uses
 
 ```text
