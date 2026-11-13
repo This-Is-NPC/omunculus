@@ -1186,8 +1186,11 @@ defmodule Omunculus.ServerTest do
     assert %{"op" => "create", "origin" => %{"channel" => "console"}} = first
     assert %{"op" => "transition", "to" => "paused", "reason" => "holiday"} = second
 
-    assert %{body: %{"events" => [%{"op" => "fire", "state" => "due"}]}} =
+    # The scheduler may already have started the fire the run asked for.
+    assert %{body: %{"events" => [%{"op" => "fire", "state" => state}]}} =
              Req.get!(base <> "/jobs/review/history?limit=1", headers: admin)
+
+    assert state in ~w(due running)
 
     assert Req.get!(base <> "/jobs/review/history?limit=0", headers: admin).status == 400
 
