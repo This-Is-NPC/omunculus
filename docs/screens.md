@@ -36,7 +36,7 @@ These keys work on every screen of the console:
 | --- | --- |
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
-| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, tree, log, cost and artifacts; only while you navigate, not a second after typing |
+| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations, the board and the jobs, or, in a conversation, its chat, tree, log, cost and artifacts; only while you navigate, not a second after typing |
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Ctrl+P | the projects, also from a field being written |
@@ -57,16 +57,16 @@ and a key pressed with no field to take it only says "Click a field to type".
 The console answers Quickshell IPC too (`quickshell ipc --path apps/console
 call omunculus <function>`): `start`, `page <name>`, `projects`,
 `project <id>`, `conversations`,
-`tree`, `log`, `board`, `open <conversation id>`, `work <work id>`,
+`tree`, `log`, `board`, `jobs`, `open <conversation id>`, `work <work id>`,
 `newConversation`, `back` and `send <message>`.
 
 ### 1. The start
 
-On a project, its name, "What now?" and four ways in as cards, two by two
+On a project, its name, "What now?" and five ways in as cards, two by two
 (one column on a narrow window), each with
 its number and one line of what is there, the first one filled: NEW
 CONVERSATION, CONVERSATIONS (how many, how many need you, how many work),
-BOARD and PROJECTS. On the registry alone, two: PROJECTS (how many it holds)
+BOARD, JOBS (how many, how many active) and PROJECTS. On the registry alone, two: PROJECTS (how many it holds)
 and BOARD. Under them, in the warning tone, the projects
 where conversations need you and how many, each a way into that project's
 conversations with NEEDS YOU lit (a line says it is reading until every
@@ -75,7 +75,7 @@ keys.
 
 | Keys | What they do |
 | --- | --- |
-| 1 · 2 · 3 · 4 | the card of that number: a new conversation, the conversations, the board, the projects (on the registry alone, 1 and 2) |
+| 1 · 2 · 3 · 4 · 5 | the card of that number: a new conversation, the conversations, the board, the jobs, the projects (on the registry alone, 1 and 2) |
 | Enter | the first card |
 
 ### 2. Projects
@@ -184,12 +184,14 @@ tree page.
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
+| `/job`, then Enter, in a composer | open the form of a new job, with the words after it as its message; nothing is sent |
 
 ### 6. The request cards
 
 Everything whose arbiter you are, reviews included, is a card in the chat, at
 the time it was asked; there is no separate list. A card is one of four kinds, each with
-its icon and word: QUESTION, DECISION, PERMISSION or REVIEW. It says what it asks in a
+its icon and word: QUESTION, DECISION, PERMISSION or REVIEW; an agent's proposal of a job
+is a DECISION worded JOB PROPOSAL (see 19). It says what it asks in a
 sentence; for a permission, what it grants or, for a review with several
 reviewers, its step; every text wraps inside it. Who asks, the way down from
 the front desk, the work and what it unblocks are behind a small "details"
@@ -305,6 +307,37 @@ right.
 
 `?` or F1 opens it on any screen: every key above, by where it works. The
 arrows and PgUp/PgDn scroll it.
+
+### 19. Jobs
+
+Third in a project's rail (digit 3), after CONVERSATIONS and BOARD, and a card
+on the start. Numbered 19 to keep the other numbers as they were.
+
+The list shows each job as a row: name, schedule in words, state (icon and
+word), next and last fire, success, cost, owner and origin; under 700 px the
+row stacks into lines. The search line (`/`) and the chips ALL, ACTIVE,
+PAUSED, PROPOSED, ENDED and ARCHIVED narrow it. The bar has BACK and NEW JOB,
+filled. A row opens the job's page.
+
+A job's page has its name, state and schedule, its figures (next and last
+fire, fires, success, cost, calls, tokens, time) and three tabs: FIRES (state,
+duration, calls, tokens and cost of each; one that opened a conversation opens
+it), VERSIONS (who changed it, through which channel, what) and FIELDS. The bar
+has BACK, EDIT (filled), PAUSE or RESUME, RUN NOW, DUPLICATE and ARCHIVE.
+
+The form, from NEW JOB, EDIT or `/job` in a composer: name, conversation (a new
+one for each fire, or a fixed one), an agent or a workflow, the message, the
+schedule and its time zone, a condition tool, an end and the delivery; beside it
+the preview with the next three fires and the estimated cost of a fire, or why
+there is none. CREATE (SAVE when changing) is the one filled action.
+
+| Keys | What they do |
+| --- | --- |
+| / | search the jobs |
+| ↑ ↓ · Enter | move along the rows · open the job |
+| Esc | back |
+
+Nothing that changes a job has a key.
 
 ## The mailbox
 

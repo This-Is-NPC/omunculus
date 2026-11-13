@@ -533,7 +533,7 @@ number and a chevron; the first is filled in the accent, the one filled action
 of the screen. On a project: 01 NEW CONVERSATION ("Say what you need; it goes
 to front-desk unless you choose another", the default agent's name, or "Say what
 you need and choose who gets it" without one), 02 CONVERSATIONS ("16 conversations · 13 need you ·
-1 working", as `Projects.meta` words it), 03 BOARD and 04 PROJECTS. The digits
+1 working", as `Projects.meta` words it), 03 BOARD, 04 JOBS ("3 jobs · 2 active", "None yet · schedule the first", or "Messages sent on a schedule" until they are read) and 05 PROJECTS. The digits
 open them, as a click does, and Enter opens the first; they are keys of this
 screen only. On the registry alone, the masthead says READY, or READING while
 a project is read: 01 PROJECTS ("3 projects · open one to see its
@@ -569,6 +569,7 @@ The registry's level:
 
 The project's level:
 
+- JOBS and a job's pages, [below](#jobs);
 - CONVERSATIONS (`HistoryView`, `ConversationsTable`), the project's: those
   needing you first under NEEDS YOU, the one waiting longest first, then the
   others under a rule of the day each began, newest first; filtered by
@@ -683,6 +684,92 @@ The log, the tree, the cost and the artifacts are loaded when first on screen an
 after it, so a closed page costs nothing; the work picked on the tree page
 is kept meanwhile.
 
+## Jobs
+
+A job sends a message on a schedule ([how to schedule a job](how-to-schedule-a-job.md)).
+The console is where one is made in detail and managed: the JOBS page lists
+them, a job has a page of its own, and NEW JOB is a form. They are pages of a
+project's level, third in its rail after CONVERSATIONS and BOARD (the digit 3
+and the IPC page `jobs` choose them); a job's page and the form are entered
+from JOBS or, for the form, from a conversation, and BACK restores where each
+was opened from. Every read and action goes through the project's jobs routes
+([the server](server.md#jobs)) by `JobsClient`, as the window's actor with
+the channel `console`; a refusal shows in the server's own words, in a toast, or, in the
+form, under CREATE. What the pages say of a job is derived in
+`apps/kit/client/Jobs.js` (the schedule in words, the states, the figures, the
+fire and version history folded from the job's events, the form's body, the
+proposal), tested by `test/omunculus/gui_jobs_test.exs`.
+
+**The list** (`JobsView`, `JobsTable`) shows every job but the archived ones,
+live first. A row has the job's name, its schedule in words ("every day at
+07:00", "every Monday at 09:00"), its state as an icon and a word (ACTIVE,
+PAUSED in the warning tone with its reason on hover, PROPOSED, ENDED,
+ARCHIVED), its next and last fire, the share of its fires that succeeded, what
+they cost, its owner and its origin ("proposal by seller", "console by
+local:1000"). Under 700 px a row stacks into lines: the name and its state, the
+schedule and the next fire, the last fire, the figures, then the owner and the
+origin. The search (`/`) reads those words; the chips ALL, ACTIVE, PAUSED,
+PROPOSED, ENDED and ARCHIVED keep a state. The list is read again every ten
+seconds while the page is on screen. Its bar has BACK and NEW JOB, filled; its
+readout counts the jobs ("3 JOBS", "1 OF 3 JOBS"). With no job the table offers
+NEW JOB.
+
+**A job's page** (`JobView`) has its name and state on top, its schedule in
+words with its time zone and target, the reason it is paused, when there is one,
+and a line of figures: next fire, last fire, fires (and how they ended),
+success, cost, calls, tokens and time, from the job's totals. Under them, three
+tabs:
+
+- FIRES, the newest first, each with when it was scheduled, its state (SUCCEEDED,
+  FAILED, SKIPPED when the condition said no, MISSED, LATE, RUNNING, CANCELLED),
+  how long it took, its calls, tokens and cost, the job version it ran, and a
+  note (the reason, "run now"); a fire that opened a conversation opens it;
+- VERSIONS, each creation, change and move between states with who did it and
+  through which channel (console, cli, api, tool, pack, proposal, scheduler) and
+  what changed or why;
+- FIELDS, everything the job holds: what it runs and sends, the schedule, the
+  conversation, the workspace, the condition, the end, the owner, the delivery,
+  its origin and its version.
+
+The page reads at most the job's newest 500 events, so the longest histories
+show their newest fires; the totals are the server's and count every fire. Its
+bar has BACK, EDIT (filled), PAUSE or RESUME, RUN NOW, DUPLICATE and ARCHIVE.
+Each is one call of the jobs routes. EDIT opens the form with the job's
+fields, and SAVE makes a new version. DUPLICATE asks the name of the copy,
+which is a draft in state PROPOSED to resume. ARCHIVE asks first: the history
+stays and the name is free again.
+
+**The form** (`JobForm`) makes a job (CREATE) or changes one (SAVE): its name; the
+conversation, a new one for each fire or a fixed one chosen from the project's
+conversations (a job's conversation cannot change afterwards, nor can its name);
+whether it runs an agent of depth 0 or a workflow, and which, with the message it
+is sent; the schedule (a 5-field cron expression, `every 2h` or `daily at 07:00`)
+and its time zone, which starts as this computer's; an optional condition tool
+that must pass before each fire; an optional end, `2026-12-31` or
+`2026-12-31 18:00` in the person's own time; and the delivery, none or the
+owner's inbox. Beside it, under it on a narrow window, the preview
+(`JobPreview`) reads `POST .../jobs/preview` a moment after each change: the schedule in
+words, the next three fires and the estimated cost of a fire with what it is drawn
+from, or the server's sentence when there is no history, never a figure of its
+own; a schedule the server refuses shows its reason there. CREATE is the one
+filled action; while a field is missing it is off and a line says which, and the
+server's refusal (a name taken, a schedule too frequent) shows under it with the
+form kept as it was. Made, the job's page opens.
+
+**`/job` in the composer** opens the same form, from any composer of the
+console: with the words after it as the message, and, in a conversation, the fixed
+conversation chosen. It is only a way to the form; the composer sends nothing and
+there is no second way to make a job.
+
+**An agent's proposal** is the request `propose_job` raises, a card in the chat
+like any other (`RequestDecision`, [Requests](#requests)). It is a DECISION
+with its own word, JOB PROPOSAL, and a clock icon: the agent's reason, what the
+job sends, its schedule in words, the next fires and the estimate (the
+same `JobPreview`; read only while the card waits), with who it runs as, its chat and its workspace behind "details". APPROVE
+creates the job and is filled; EDIT opens the box "what to change in the job" and
+SEND CHANGES sends the words back to the agent; DENY drops it. Settled, the line reads "You approved the job
+morning that seller proposed".
+
 ## The board
 
 The board (`BoardView`) is a kanban, a column per state: open, waiting on a
@@ -781,7 +868,7 @@ about 860 px for CONVERSATIONS), it shows them beside their numbers; from
 page while the pointer or the keyboard is in it. One click chooses a page and folds the rail, which stays folded until
 the pointer has left and come back, and the page takes the keyboard; Esc
 folds it too. Under 700 px there is no rail: the bar's page switcher names
-the page and lists the five in a menu. The chat, tree, log, cost and artifacts
+the page and lists the others in a menu. The chat, tree, log, cost and artifacts
 pages are named so. When the desktop setting `enable-animations` is off, nothing in the
 window slides, sweeps or decodes.
 
@@ -847,6 +934,8 @@ logs each text drawn out of its box, the window or a clipping item as a
 - On LOG, `/` filters, and its own `⋯` copies the event picked or else the
   rows shown.
 - On BOARD, its groupings (Alt+S, Alt+A, Alt+J) and FILTER (`/`).
+- On JOBS, NEW JOB and FILTER (`/`); on a job's page, EDIT, PAUSE or RESUME,
+  RUN NOW, DUPLICATE and ARCHIVE. None has a key: they change jobs.
 - On a work's page, BACK alone; ANSWER in its header strip (Alt+R) and its
   tree's tool (Alt+O).
 
@@ -861,7 +950,7 @@ the keys dialog:
   composer and in a request's words send what is written there; no other key
   does.
 - Bare keys, for navigation without effect: the digit of a page, `/`, `[`
-  and `]` on the tree page, `?`, F1 and Esc, and 1 to 4 on the start screen. They act only while an item to navigate has the keyboard and
+  and `]` on the tree page, `?`, F1 and Esc, and 1 to 5 on the start screen. They act only while an item to navigate has the keyboard and
   no text field saw a key in the last second (`Typing`, marked by every
   `TextArea` and `TextBox`), so text that lost its field is not taken for
   commands. With nothing holding the keyboard, a printable key does nothing
@@ -872,10 +961,10 @@ the keys dialog:
   Ctrl+N for a new conversation, Ctrl+P for the projects, Alt with a
   letter for the commands of a page (R, P, M, O, W, C, E, L, G, F, S, A, J).
 
-The IPC's `start`, `page <name>` (`projects`, `conversations`, `board` and,
+The IPC's `start`, `page <name>` (`projects`, `conversations`, `board`, `jobs` and,
 with a conversation open, `chat`, `tree`, `log`, `cost`, `artifacts`), `projects`,
 `project <id>` (a project of the registry, at its conversations),
-`conversations`, `tree`, `log`, `board`, `open <id>`, `work <id>` (a work
+`conversations`, `jobs`, `tree`, `log`, `board`, `open <id>`, `work <id>` (a work
 of the board, on its page), `newConversation` and `back` move it too, and `send <message>`
 sends a message to the conversation open, as the composer does.
 
