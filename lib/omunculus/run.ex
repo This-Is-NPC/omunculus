@@ -799,9 +799,11 @@ defmodule Omunculus.Run do
            state.config
          ) do
       {:ok, :retry} ->
+        via = retry_via(project.conn, state.run)
+
         Cycle.open(project, %{
           work_id: work.id,
-          via: "retry",
+          via: via,
           origin_issuer: state.run.origin_issuer,
           origin_subject: state.run.origin_subject
         })
@@ -817,6 +819,15 @@ defmodule Omunculus.Run do
 
       {:error, _reason} = error ->
         error
+    end
+  end
+
+  # A retry has no cause to link it to the run above, so a run in a fire keeps
+  # `via = "job"` for the loop guard of `Jobs`.
+  defp retry_via(conn, run) do
+    case Omunculus.Jobs.in_fire?(conn, run.id) do
+      {:ok, true} -> "job"
+      _ -> "retry"
     end
   end
 end
