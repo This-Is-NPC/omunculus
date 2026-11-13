@@ -1365,6 +1365,13 @@ defmodule Omunculus.ServerTest do
              "no_such_tool"
 
     assert local.(:post, "/v1/call", json: %{argv: ["runs"]}).status == 400
+
+    assert %{status: 415, body: %{"error" => "unsupported_media_type"}} =
+             local.(:post, "/v1/call",
+               body: "name=runs",
+               headers: [{"content-type", "text/plain"}]
+             )
+
     assert local.(:post, "/v1/call", json: %{name: "runs", args: ["x"]}).status == 400
 
     assert {:error, {:forwarded, _members_exist}} =

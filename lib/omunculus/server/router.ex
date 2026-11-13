@@ -798,8 +798,14 @@ defmodule Omunculus.Server.Router do
     reply(conn, 500, %{error: "internal_error"})
   end
 
-  # A request that crashes still answers with the contract's error body.
+  # A request that crashes still answers with the contract's error body, once.
   @impl Plug.ErrorHandler
+  def handle_errors(conn, %{reason: %Plug.Parsers.ParseError{}}),
+    do: reply(conn, 400, %{error: "invalid"})
+
+  def handle_errors(conn, %{reason: %Plug.Parsers.UnsupportedMediaTypeError{}}),
+    do: reply(conn, 415, %{error: "unsupported_media_type"})
+
   def handle_errors(conn, _failure), do: reply(conn, conn.status, %{error: "internal_error"})
 
   # A refused command of the local socket: the reason as a sentence.
