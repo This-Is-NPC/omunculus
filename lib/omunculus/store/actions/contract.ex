@@ -9,7 +9,8 @@ defmodule Omunculus.Store.Actions.Contract do
     "attach" => ~w(attachments note),
     "artifact" => ~w(name kind media_type content base64 note base),
     "memory" => ~w(op id scope kind text),
-    "job" => ~w(op job name to reason state channel request_id) ++ Omunculus.Jobs.Fields.keys(),
+    "job" =>
+      ~w(op job name to reason state channel pack request_id) ++ Omunculus.Jobs.Fields.keys(),
     "work" => ~w(report works),
     "request" => ~w(reason options to),
     "reply" => ~w(request_id option body parts attachments),

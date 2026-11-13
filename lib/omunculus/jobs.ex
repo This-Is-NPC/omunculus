@@ -7,7 +7,7 @@ defmodule Omunculus.Jobs do
 
   - `job`: `create`, `change` (which bumps `version`) and `transition` (with
     its reason) of a job, each with its `origin`: the author, the channel
-    (`cli`, `api`, `console`, `tool`, `pack` or `proposal`), the request that
+    (`cli`, `api`, `console`, `tool`, `pack`, with the pack's name, or `proposal`), the request that
     approved it and the run, work and conversation it came from;
   - `job_fire`: one event for each state a fire reaches, with what it cost
     (`record_fire/3`).
@@ -810,9 +810,16 @@ defmodule Omunculus.Jobs do
          "run_id" => ctx.run_id,
          "work_id" => ctx.work_id,
          "conversation_id" => Map.get(ctx, :conversation_id)
-       }}
+       }
+       |> pack(channel, body)}
     end
   end
+
+  # A create from a pack's template names the pack.
+  defp pack(origin, "pack", %{"pack" => name}) when is_binary(name),
+    do: Map.put(origin, "pack", name)
+
+  defp pack(origin, _channel, _body), do: origin
 
   defp author(%{author: "harness"}), do: {:ok, %{"kind" => "harness"}}
 

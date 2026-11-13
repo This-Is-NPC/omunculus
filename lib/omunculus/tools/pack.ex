@@ -12,10 +12,11 @@ defmodule Omunculus.Tools.Pack do
 
   alias Omunculus.{Config, Errors}
   alias Omunculus.Config.Packs
+  alias Omunculus.Jobs.Templates
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{args: args, config_path: config_path}) when is_binary(config_path) do
+  def run(%{args: args, config_path: config_path} = input) when is_binary(config_path) do
     dir = Path.expand(args["path"] || "", Path.dirname(config_path))
 
     with nil <- Args.missing(args, ~w(path)),
@@ -29,7 +30,8 @@ defmodule Omunculus.Tools.Pack do
         config_path,
         dir,
         pack,
-        if(depth > 0, do: Map.put(entry, "depth", depth), else: entry)
+        if(depth > 0, do: Map.put(entry, "depth", depth), else: entry),
+        Enum.map(get_in(input, [:view, "jobs"]) || [], & &1["name"])
       )
     else
       {:error, reason} -> Out.fail("cannot import #{args["path"]}: #{inspect(reason)}")
@@ -61,22 +63,45 @@ defmodule Omunculus.Tools.Pack do
     end)
   end
 
-  defp import(config_path, dir, pack, entry) do
+  defp import(config_path, dir, pack, entry, jobs) do
     needs = needs(pack, entry)
 
     if needs == [] do
-      case Config.import_pack(config_path, entry) do
-        {:ok, config} ->
-          Out.ok(Enum.join([imported(pack) | copied(dir, config)] ++ environment(dir), "\n"))
-
+      with {:ok, config} <- Config.try_pack(config_path, entry),
+           {:ok, emits, note} <- job_emits(pack, config, jobs),
+           {:ok, config} <- Config.import_pack(config_path, entry) do
+        lines = [imported(pack) | copied(dir, config)] ++ note ++ environment(dir)
+        Out.ok(Enum.join(lines, "\n"), emits)
+      else
         {:error, {:packs, {_pack, :requires, _lacked}} = reason} ->
           Out.fail(Errors.format(reason))
+
+        {:error, reason} when is_binary(reason) ->
+          Out.fail("cannot import #{entry["path"]}: #{reason}")
 
         {:error, reason} ->
           Out.fail("cannot import #{entry["path"]}: #{inspect(reason)}")
       end
     else
       Out.fail(Enum.join(needs ++ environment(dir), "\n"))
+    end
+  end
+
+  # The jobs the pack's templates make, and a line saying so.
+  defp job_emits(pack, config, jobs) do
+    templates = Map.get(pack, "jobs", %{})
+
+    cond do
+      templates == %{} ->
+        {:ok, [], []}
+
+      is_nil(config.jobs) ->
+        {:ok, [], ["job templates skipped: the project has no [jobs] table"]}
+
+      true ->
+        with {:ok, emits} <- Templates.emits(pack, config, jobs) do
+          {:ok, emits, ["jobs: #{length(emits)} new of #{map_size(templates)} templates"]}
+        end
     end
   end
 
