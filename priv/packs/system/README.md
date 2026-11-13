@@ -23,6 +23,11 @@ account for review, not only whoever the request passes through.
 
 Only the steward proposes importing a pack: the auditor and the refiner
 are granted `config`, `overview` and `propose_config`, not `propose_pack`.
+They are also granted `propose_job`: the refiner proposes a scheduled job
+for a request the runs show the person making by hand, with those runs
+cited, and the auditor for a routine the config says is done by hand. The
+person approves it like any proposal
+([how to schedule a job](../../../docs/how-to-schedule-a-job.md)).
 
 A proposal is a patch over the file's item: a key it gives replaces the
 file's, a key it leaves out stays, a key given as `null` is removed. The
@@ -45,4 +50,5 @@ Their skills:
 - `audit`: the auditor's — grants past the work, what never runs or cannot
   run, each cut proposed on its own.
 - `refine`: the refiner's — what the last runs show went wrong, its cause
-  in the config, and the change, with the runs that show it, cited by id.
+  in the config, and the change, with the runs that show it, cited by id;
+  and when to propose a scheduled job.

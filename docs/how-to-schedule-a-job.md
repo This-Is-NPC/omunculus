@@ -74,6 +74,14 @@ Approving creates the job, owned by whoever approves it unless an owner was name
 With `agent_may_create = true` the job is made at once, owned by the agent.
 Nothing creates or changes a job from a run that a job's fire opened.
 
+## Having a pack bring it
+
+A pack can carry job templates, `[jobs.<name>]` tables in its `pack.toml`
+([packs](packs.md#job-templates)). Importing the pack creates each as a
+job named `<pack>.<name>`, owned by you, `active` or `proposed` as the
+template says; importing again creates only the ones you lack. Read them
+with `omunculus jobs list`; start a `proposed` one with `jobs resume`.
+
 ## If it fails
 
 | You see | Because |
@@ -83,6 +91,7 @@ Nothing creates or changes a job from a run that a job's fire opened.
 | `<name> is not a time zone of the host's database` | the zone is not in `/usr/share/zoneinfo`; use an IANA name |
 | `a job named <name> exists` | names are unique among jobs that are not archived |
 | `the project holds <n> jobs, the most [jobs] max_jobs allows` | archive one, or raise the limit |
+| `cannot import <path>: job template <name>: …` | the project's policy refuses the pack's template; the import wrote nothing |
 | `a run that a job's fire opened may not create or change jobs` | create it from a person's message |
 
 ## Next

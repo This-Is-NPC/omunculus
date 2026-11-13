@@ -301,7 +301,7 @@ Also called by a model.
 omunculus pack <path> [--auth <auth>] [--depth <depth>] [--models <models>]
 ```
 
-Imports the pack in path into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, and copies its workspace/ files where none are; without them, says what it needs.
+Imports the pack in path into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, copies its workspace/ files where none are and creates the jobs of its job templates that the project does not hold; without them, says what it needs.
 
 Also called by a chain.
 
