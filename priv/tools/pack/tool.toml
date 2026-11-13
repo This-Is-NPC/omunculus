@@ -1,18 +1,25 @@
 name = "pack"
 kind = "tool"
 triggers = ["cli", "chain"]
-description = "Imports the pack in path into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, copies its workspace/ files where none are and creates the jobs of its job templates that the project does not hold; without them, says what it needs."
+description = "Imports the pack in path, or the pack of the .omupack file (a path or an https URL), into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, copies its workspace/ files where none are and creates the jobs of its job templates that the project does not hold. A file is checked against its manifest and the running omunculus, then laid in .omunculus/packs/<name>-<version>; one whose name is imported at another version is refused without upgrade. Without the models, says what it needs and what the pack is: its description, agents, executables, logins, secrets and job templates."
 tags = ["cli", "pack"]
 groups = ["cli"]
 module = "Omunculus.Tools.Pack"
 
 [parameters]
 type = "object"
-required = ["path"]
 
 [parameters.properties.path]
 type = "string"
-description = "The pack's folder, relative to the config's directory."
+description = "The pack's folder, relative to the config's directory. Give this or file."
+
+[parameters.properties.file]
+type = "string"
+description = "The pack as a .omupack file, relative to the config's directory, or an https URL. Give this or path."
+
+[parameters.properties.upgrade]
+type = "boolean"
+description = "Replace the imported version of the file's pack; the old folder stays until removed by hand."
 
 [parameters.properties.models]
 type = "string"
