@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.3.0](https://github.com/This-Is-NPC/omunculus/compare/v0.2.1...v0.3.0) (2026-11-13)
+
+
+### Features
+
+* **console:** add the jobs page, form and /job ([1e14e50](https://github.com/This-Is-NPC/omunculus/commit/1e14e5093fd4b2addb178846f805ae73f1199c7c))
+* **console:** show a job proposal on its request card ([c5d5d9d](https://github.com/This-Is-NPC/omunculus/commit/c5d5d9da9adf8af85892da0455ce49f236720a25))
+* **harness:** let a caller name the via of its runs ([40da614](https://github.com/This-Is-NPC/omunculus/commit/40da6143758d2bfb15f3cb7ea4ad74811aa01dd3))
+* **jobs:** add the jobs and propose_job tools ([e7e01d3](https://github.com/This-Is-NPC/omunculus/commit/e7e01d37ac14d90618fd0eb66a94276d6eaad4c4))
+* **jobs:** keep jobs and their fires as events ([cf90f54](https://github.com/This-Is-NPC/omunculus/commit/cf90f543e9998f0d20b534c73b73c98d65f4038c))
+* **jobs:** preview the next fires of a tool job ([71466bd](https://github.com/This-Is-NPC/omunculus/commit/71466bd50567afe46c4407bc3a3b10c8fba27cc1))
+* **jobs:** read schedules in a time zone ([736bd39](https://github.com/This-Is-NPC/omunculus/commit/736bd396a0566ef4fc8c50bb56740e5309b84dca))
+* **jobs:** run due jobs with a per-project scheduler ([48de707](https://github.com/This-Is-NPC/omunculus/commit/48de707342a03618029d1c7ec40a6b83ac9121a6))
+* **jobs:** show a job's times with their zone ([41248b1](https://github.com/This-Is-NPC/omunculus/commit/41248b15c05382505472224c9782323b4ab07bf6))
+* **jobs:** tell the agent a message is a job's ([0e6f152](https://github.com/This-Is-NPC/omunculus/commit/0e6f152036e913cdf47206ed132b40a5bd14ec25))
+* **kit:** derive scheduled jobs for the apps ([6f17583](https://github.com/This-Is-NPC/omunculus/commit/6f17583280511aaaa1f33363d262aacd988df4cd))
+* **mailbox:** read job messages and proposals ([9842e5e](https://github.com/This-Is-NPC/omunculus/commit/9842e5ec87a31040efc8732ef3b120b6586f2030))
+* **mailbox:** show jobs in the inbox and pending ([a32a490](https://github.com/This-Is-NPC/omunculus/commit/a32a490892e457d0db840dd4d1535bb16549234c))
+* **packs:** create jobs from a pack's job templates ([32fe480](https://github.com/This-Is-NPC/omunculus/commit/32fe48048e157adb10e8e97ea5ad201378314158))
+* **sales-desk:** front desk answers and proposes jobs ([0b9efdf](https://github.com/This-Is-NPC/omunculus/commit/0b9efdf58db6f6cf2510a9547aa938346663c75d))
+* **server:** say which job opened a conversation ([58b582c](https://github.com/This-Is-NPC/omunculus/commit/58b582c2e5872e2191a66dafc308f6e6e2274f8f))
+* **server:** serve jobs under their capabilities ([8e8c6a6](https://github.com/This-Is-NPC/omunculus/commit/8e8c6a6391574d2af8ada4a8f047e082c9683f23))
+* **system:** let the refiner and auditor propose jobs ([b8362fb](https://github.com/This-Is-NPC/omunculus/commit/b8362fbdf8eec6e93c286df4b8d777e6e8b144d9))
+
+
+### Bug Fixes
+
+* **console:** raise the window when a job is opened ([f820eb8](https://github.com/This-Is-NPC/omunculus/commit/f820eb8df3c6de7f86f7fb5fef17b52adbd6ba25))
+* **console:** say that /job opens the form on Enter ([8534f3b](https://github.com/This-Is-NPC/omunculus/commit/8534f3ba4238339a0e5ff2274af4d6146605b953))
+* **console:** say the schedule once in a job's fields ([ae66d80](https://github.com/This-Is-NPC/omunculus/commit/ae66d80165e18e0215ec7c01fcc2e01f5d55027b))
+* **jobs:** ask the proposal preview one way ([e013674](https://github.com/This-Is-NPC/omunculus/commit/e013674f4d648000a6cfc2dbbad9a7f1a109968e))
+* **jobs:** count every finished fire in the totals ([f807278](https://github.com/This-Is-NPC/omunculus/commit/f8072782e6b1e15cb4737384b37cb204df9e8a31))
+* **jobs:** deliver the last thing a fire said ([0057a09](https://github.com/This-Is-NPC/omunculus/commit/0057a09dd99af40f2d771277456767d8b9221508))
+* **jobs:** keep the loop guard on a retried fire run ([8da3f19](https://github.com/This-Is-NPC/omunculus/commit/8da3f19546bf1f70a9693480dbaa98cf1def8efc))
+* **jobs:** keep via job on a fire's message after a crash ([cc77df9](https://github.com/This-Is-NPC/omunculus/commit/cc77df9548b320a56531dce6ad4f41756d13e474))
+* **jobs:** record missed slots as one fire ([540be41](https://github.com/This-Is-NPC/omunculus/commit/540be413d642116c195193121b8440a6dc7c8f0a))
+* **jobs:** refuse propose_job inside a fire ([5088e52](https://github.com/This-Is-NPC/omunculus/commit/5088e52576dc3fd0836b3a7b1a0dfe66e15ad564))
+* **jobs:** say a job's times in its own zone ([836fb89](https://github.com/This-Is-NPC/omunculus/commit/836fb8957a664bc9d7285b930438e66c95b062c7))
+* **kit:** keep a placeholder on one line ([d62ff3d](https://github.com/This-Is-NPC/omunculus/commit/d62ff3d68c544f7412fe78a8dd030ff61c064bbc))
+* **kit:** keep a scrolled page where it was put ([5063dec](https://github.com/This-Is-NPC/omunculus/commit/5063decc0a794b37124348491b1dfa96008e7108))
+* **kit:** keep the state words in StateMark ([6cc6d8f](https://github.com/This-Is-NPC/omunculus/commit/6cc6d8f61ed467bd42d2e1720efd9dbabbe9508b))
+* **local-check:** keep hook git env out of the gate ([4eddacf](https://github.com/This-Is-NPC/omunculus/commit/4eddacf8e2502dedd6da1d11bd73ce276b7b21c7))
+* **mailbox:** keep DENY with APPROVE and EDIT on a phone ([dc32ec7](https://github.com/This-Is-NPC/omunculus/commit/dc32ec7ee5a3d2ee3e00b0d8b05bdcf3dcdb23d8))
+* **mailbox:** keep fire conversations out of the folders ([e1ea0cc](https://github.com/This-Is-NPC/omunculus/commit/e1ea0cc5f68e010abc4c04b822db203d0f6ca887))
+* **mailbox:** stop list rows laying over each other ([2f035c1](https://github.com/This-Is-NPC/omunculus/commit/2f035c1c9a513a46e9d20f46f7335ef59e34dd0a))
+* **mailbox:** wrap the links of a job's message ([97c233a](https://github.com/This-Is-NPC/omunculus/commit/97c233aa5b0bc57d0fc79d607be52e62bd5c5e0e))
+* **usage:** price replies by their config model key ([856e9c5](https://github.com/This-Is-NPC/omunculus/commit/856e9c51dfd7c42348a88204bf6808c97218f449))
+
 ## [0.2.1](https://github.com/This-Is-NPC/omunculus/compare/v0.2.0...v0.2.1) (2026-11-13)
 
 
