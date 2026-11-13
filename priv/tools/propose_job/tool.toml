@@ -90,3 +90,7 @@ relation = "answered"
 
 [views.jobs]
 source = "jobs"
+
+[views.fire]
+source = "jobs"
+relation = "fire"

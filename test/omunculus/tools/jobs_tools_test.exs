@@ -111,6 +111,17 @@ defmodule Omunculus.Tools.JobsToolsTest do
              ]
            } = body["options"]
 
+    # A run that a job's fire opened proposes nothing.
+    assert %{
+             "ok" => false,
+             "output" => "a run that a job's fire opened may not create or change jobs"
+           } =
+             ProposeJob.run(%{
+               args: args,
+               config_path: path,
+               view: %{"fire" => %{"fired" => true}}
+             })
+
     # The project holds as many jobs as it may.
     assert %{"ok" => false, "output" => "the project holds 1 jobs" <> _} =
              ProposeJob.run(%{

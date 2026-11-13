@@ -60,6 +60,8 @@ defmodule Omunculus.Tool.Views do
   - `jobs`: the project's jobs that are not archived, oldest first, each as
     `Omunculus.Jobs.list/1` gives it; with `relation = "history"` and a
     `limit`, from `args.name`, the newest `limit` events of that job; with
+    `relation = "fire"`, `%{"fired" => boolean}`: whether the call's run is
+    one a job's fire opened (`Omunculus.Jobs.in_fire?/2`); with
     `relation = "preview"`, what the `args` `schedule`, `timezone` and
     `agent` or `workflow` would do (`Omunculus.Jobs.Preview`), or its `error`.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`,
@@ -236,9 +238,9 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("jobs", table, spec) do
     with :ok <- only_keys(table, ~w(relation limit)),
-         {:ok, relation} <- one_of(table, "relation", ~w(list history preview), "list") do
+         {:ok, relation} <- one_of(table, "relation", ~w(list history preview fire), "list") do
       case {relation, table["limit"]} do
-        {relation, nil} when relation in ~w(list preview) ->
+        {relation, nil} when relation in ~w(list preview fire) ->
           {:ok, %{spec | relation: relation}}
 
         {"history", limit} when is_integer(limit) and limit > 0 ->
@@ -393,6 +395,14 @@ defmodule Omunculus.Tool.Views do
     do: Store.unread_inbox(conn, nil)
 
   defp read(conn, %{source: "jobs", relation: "list"}, _scope), do: Omunculus.Jobs.list(conn)
+
+  # Whether the call's run is one a job's fire opened, or below one.
+  defp read(conn, %{source: "jobs", relation: "fire"}, %{run_id: run_id})
+       when is_binary(run_id) do
+    with {:ok, fired?} <- Omunculus.Jobs.in_fire?(conn, run_id), do: {:ok, %{"fired" => fired?}}
+  end
+
+  defp read(_conn, %{source: "jobs", relation: "fire"}, _scope), do: {:ok, %{"fired" => false}}
 
   # The args name a job that does not exist yet: its schedule and target.
   defp read(conn, %{source: "jobs", relation: "preview"}, %{args: args, config: config}) do
