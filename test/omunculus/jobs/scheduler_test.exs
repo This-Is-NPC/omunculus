@@ -360,6 +360,11 @@ defmodule Omunculus.Jobs.SchedulerTest do
 
       assert {:error, {:jobs, {:unknown_agent, "ghost"}}} =
                Preview.build(project.conn, config, put_in(params, ["target", "agent"], "ghost"))
+
+      assert {:ok, %{"next" => [_, _, _], "estimate_usd" => nil, "basis" => tool_basis}} =
+               Preview.build(project.conn, config, %{params | "target" => %{"tool" => "ls"}})
+
+      assert tool_basis =~ "no model"
     end)
 
     assert {:ok, said} =
