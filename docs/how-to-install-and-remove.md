@@ -110,15 +110,16 @@ does not ask again.
 
 - With `pkexec` installed (polkit), it asks for the password in its own
   window.
-- Otherwise, in a terminal, `sudo` asks for the password there. What you
-  type is not shown.
+- Otherwise, in a terminal, `sudo` asks for the password there, once. What
+  you type is not shown.
 - With neither (a script, a service, or `ssh` without `-t` on a system
   without polkit), it stops and installs nothing: "pkexec is not
   installed, and there is no terminal for sudo to ask for the password;
   install polkit, or run omunculus update in a terminal".
 
-If the password is not given, it says so and installs nothing. If `pacman`
-fails, it prints the exit status. Either way `update` exits non-zero.
+If `pkexec`'s password is not given, it says so and installs nothing. If
+the install fails, it prints the exit status; with `sudo`, a wrong password
+shows the same way, as `sudo pacman -U failed with exit status 1`. Either way `update` exits non-zero.
 
 Running `install.sh` again does the same by hand.
 

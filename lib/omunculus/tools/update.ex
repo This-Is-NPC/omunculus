@@ -194,24 +194,33 @@ defmodule Omunculus.Tools.Update do
 
   # Running `update` is the consent, so pacman never asks. sudo reads its password
   # on the terminal device (the runner's child has no controlling terminal) with
-  # echo off, and pacman runs on the credentials that leaves.
-  defp pacman(:pkexec, files), do: elevated("pkexec", @pacman ++ files)
+  # echo off, once: its credential cache is per terminal, so a later call would ask again.
+  defp pacman(:pkexec, files), do: elevated("pkexec", @pacman ++ files, [])
 
-  defp pacman(:sudo, files) do
-    case runner().run_tty("sudo", ["-S", "-p", @prompt, "-v"], echo: false) do
-      0 -> elevated("sudo", ["-n" | @pacman] ++ files)
-      _ -> {:error, @refused}
+  defp pacman(:sudo, files),
+    do: elevated("sudo", ["-S", "-p", @prompt] ++ @pacman ++ files, echo: false)
+
+  defp elevated(elevator, args, opts) do
+    case runner().run_tty(elevator, args, opts) do
+      0 ->
+        :ok
+
+      status when status in [126, 127] and elevator == "pkexec" ->
+        {:error, @refused}
+
+      status when status in 129..159 ->
+        {:error, "#{command(elevator)} was stopped by a signal"}
+
+      status ->
+        {:error, "#{command(elevator)} failed with exit status #{status}#{nothing(elevator)}"}
     end
   end
 
-  defp elevated(elevator, args) do
-    case runner().run_tty(elevator, args, []) do
-      0 -> :ok
-      status when status in [126, 127] and elevator == "pkexec" -> {:error, @refused}
-      status when status in 129..159 -> {:error, "pacman -U was stopped by a signal"}
-      status -> {:error, "pacman -U failed with exit status #{status}"}
-    end
-  end
+  # sudo's own failures (a wrong password) share the status of pacman's.
+  defp command("pkexec"), do: "pacman -U"
+  defp command("sudo"), do: "sudo pacman -U"
+  defp nothing("pkexec"), do: ""
+  defp nothing("sudo"), do: "; nothing was installed"
 
   defp restart do
     with {_, 0} <- runner().run("systemctl", ["--user", "is-active", "--quiet", "omunculus"]),
