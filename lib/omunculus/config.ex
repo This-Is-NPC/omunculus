@@ -14,7 +14,7 @@ defmodule Omunculus.Config do
   is for, plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries`, the optional `[accounts]`
   (names for identities a request can be addressed to), the optional
-  `[[interceptors]]` (`Omunculus.Interceptors`) and `[policy] default_agent` (the agent of depth 0 that receives a
+  `[[interceptors]]` (`Omunculus.Interceptors`), the optional `[jobs]` (`Omunculus.Jobs.Policy`) and `[policy] default_agent` (the agent of depth 0 that receives a
   new conversation when the person names none), the optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
@@ -81,6 +81,7 @@ defmodule Omunculus.Config do
     :store,
     :auth,
     :access,
+    :jobs,
     :secrets,
     :data
   ]
@@ -184,6 +185,7 @@ defmodule Omunculus.Config do
           },
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           access: map | nil,
+          jobs: Omunculus.Jobs.Policy.t() | nil,
           secrets: %{String.t() => %{String.t() => String.t()}},
           data: map
         }
@@ -744,6 +746,7 @@ defmodule Omunculus.Config do
              "store",
              "auth",
              "access",
+             "jobs",
              "accounts",
              "interceptors",
              "secrets",
@@ -762,6 +765,7 @@ defmodule Omunculus.Config do
              {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
              {:ok, auth} <- parse_auth(Map.get(data, "auth"), config_dir),
              {:ok, access} <- parse_access(Map.get(data, "access")),
+             {:ok, jobs} <- Omunculus.Jobs.Policy.parse(Map.get(data, "jobs")),
              {:ok, models} <- parse_models(Map.get(data, "models"), auth, config_dir),
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
@@ -831,6 +835,7 @@ defmodule Omunculus.Config do
               store: store,
               auth: auth,
               access: access,
+              jobs: jobs,
               secrets: secrets,
               data: data
             }
@@ -847,6 +852,7 @@ defmodule Omunculus.Config do
     project.manage_access project.manage_config conversation.create
     conversation.read conversation.send conversation.comment
     conversation.reply conversation.manage_access conversation.manage
+    job.create job.manage job.read
   )
 
   defp parse_access(nil), do: {:ok, nil}
@@ -879,7 +885,7 @@ defmodule Omunculus.Config do
             Map.keys(data) -- ~w(scope capabilities) != [] or
               not Enum.all?(caps, &(&1 in @capabilities)) or
                 (scope != "project" and
-                   not Enum.all?(caps, &String.starts_with?(&1, "conversation."))) ->
+                   not Enum.all?(caps, &String.starts_with?(&1, ["conversation.", "job."]))) ->
               {:halt, {:error, {:access, :invalid_role, name}}}
 
             true ->

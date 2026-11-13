@@ -58,6 +58,26 @@ defmodule Omunculus.Errors do
   def format({:interceptors, {position, reason}}),
     do: "omunculus.toml [[interceptors]] number #{position}: " <> interceptor_reason(reason)
 
+  def format({:jobs, :invalid}),
+    do: "omunculus.toml [jobs] must be a table"
+
+  def format({:jobs, {:unknown_key, key}}),
+    do: "omunculus.toml [jobs] has an unknown key #{key}"
+
+  def format({:jobs, {:missing, key}}),
+    do: "omunculus.toml [jobs] must give #{key}: it has no default"
+
+  def format({:jobs, {:invalid, key}}) when key in ~w(missed agent_may_create),
+    do:
+      "omunculus.toml [jobs] #{key} must be " <>
+        if(key == "missed", do: "skip or run_once", else: "true or false")
+
+  def format({:jobs, {:invalid, key}})
+      when key in ~w(max_parallel min_interval_minutes max_jobs lateness_seconds failures_before_pause),
+      do: "omunculus.toml [jobs] #{key} must be a positive integer"
+
+  def format({:jobs, reason}), do: jobs_reason(reason)
+
   def format({:policy, {:invalid, :default_agent}}) do
     "omunculus.toml [policy] default_agent must name an agent of depth 0 that is not workflow_only"
   end
@@ -171,6 +191,54 @@ defmodule Omunculus.Errors do
     do: "the requests to pass up must be pending, distinct, and yours to arbitrate"
 
   def format(reason), do: inspect(reason)
+
+  defp jobs_reason(:disabled),
+    do: "omunculus.toml has no [jobs] table, so the project has no jobs"
+
+  defp jobs_reason(:one_target), do: "a job aims at one of agent, workflow or tool"
+  defp jobs_reason(:in_fire), do: "a run that a job's fire opened may not create or change jobs"
+  defp jobs_reason(:unchanged), do: "the job already holds that"
+  defp jobs_reason(:no_author), do: "a job is written by a person or an agent"
+  defp jobs_reason(:no_owner), do: "a job needs an owner: name one"
+
+  defp jobs_reason(:approval_required),
+    do: "an agent may not create a job without a request the person approved: use propose_job"
+
+  defp jobs_reason(:agent_creates_only), do: "an agent may only create jobs"
+  defp jobs_reason(:owner_not_self), do: "an agent's job without approval is owned by that agent"
+  defp jobs_reason({:unknown, ref}), do: "no job #{ref}"
+  defp jobs_reason({:name_taken, name}), do: "a job named #{name} exists"
+
+  defp jobs_reason({:too_many, max}),
+    do: "the project holds #{max} jobs, the most [jobs] max_jobs allows"
+
+  defp jobs_reason({:unknown_agent, name}),
+    do: "#{name} is not an agent of depth 0 that can run without a work"
+
+  defp jobs_reason({:unknown_workflow, name}), do: "no workflow #{name}"
+  defp jobs_reason({:unknown_workspace, name}), do: "no workspace #{name}"
+  defp jobs_reason({:unknown_account, name}), do: "#{name} is neither an account nor an agent"
+  defp jobs_reason({:unknown_conversation, id}), do: "no conversation #{id}"
+
+  defp jobs_reason({:unknown_timezone, name}),
+    do: "#{name} is not a time zone of the host's database"
+
+  defp jobs_reason({:unknown_fire, id}), do: "no fire #{id} of that job"
+  defp jobs_reason({:slot_taken, slot}), do: "a fire of that job holds #{slot} already"
+  defp jobs_reason({:not_approved, id}), do: "request #{id} is not an approved proposal of a job"
+
+  defp jobs_reason({:fire_state, from, to}), do: "a fire #{from} does not go to #{to}"
+  defp jobs_reason({:state, from, to}), do: "a #{from} job cannot #{to}"
+
+  defp jobs_reason({:too_frequent, gap, limit}),
+    do:
+      "the schedule fires every #{gap} seconds; [jobs] min_interval_minutes allows no less than #{limit}"
+
+  defp jobs_reason({:invalid, "schedule"}),
+    do:
+      "schedule is a 5-field cron expression, every Nm or Nh, or daily at HH:MM, and fires at least once"
+
+  defp jobs_reason({:invalid, field}), do: "the job's #{field} is missing or not valid"
 
   defp interceptor_reason(:not_a_table), do: "it must be a table"
   defp interceptor_reason({:unknown_key, key}), do: "#{key} is not a key of an interceptor"

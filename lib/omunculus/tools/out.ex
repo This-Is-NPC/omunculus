@@ -422,6 +422,8 @@ defmodule Omunculus.Tools.Out do
       "Work #{work_id} keeps breaking: it was sent back as many times in a row as the project allows, so it does not go back once more on its own. Say how to go on: send it back anyway, retire it and hand out what must come first, or pass this work up. The instructions it would have gone back with: #{instructions}"
 
   @spec refused(term) :: String.t()
+  def refused({:jobs, reason}), do: "refused: " <> Omunculus.Errors.format({:jobs, reason})
+
   def refused({:request, {:blocked, name}}),
     do:
       "refused: no one can grant #{inspect(name)} to this run: it is not in the catalog, or the configuration denies it; name a tool as your tool list writes it, with no prefix (bash, not functions.bash)"
