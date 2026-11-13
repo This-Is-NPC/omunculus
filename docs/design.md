@@ -344,8 +344,9 @@ set `OMUNCULUS_SKIP_LOCAL_CHECK=1`; no status is posted. `git commit
 
 The branch protection of `master`:
 
-- it requires the status `local-check`, up to date with `master` (strict);
-- administrators can bypass the rule;
+- it requires the status `local-check`, up to date with `master` (strict),
+  for administrators too, so changes reach `master` only through a merged
+  pull request;
 - force pushes and deletions are refused;
 - only rebase merges are allowed.
 
@@ -353,8 +354,8 @@ The branch protection of `master`:
 
 [release-please](https://github.com/googleapis/release-please) cuts releases
 from the Conventional Commits on `master` (`.github/workflows/release.yml`,
-`release-please-config.json`, `.release-please-manifest.json`). Each push to
-`master` updates a release pull request with the next version and its
+`release-please-config.json`, `.release-please-manifest.json`). Each pull
+request merged into `master` updates a release pull request with the next version and its
 `CHANGELOG.md` entry. Merging it tags `vX.Y.Z` and publishes the GitHub
 release. Before 1.0, `feat` bumps the minor version and `fix` the patch. The
 version lives in `mix.exs`. Pull requests follow `.github/pull_request_template.md`; the

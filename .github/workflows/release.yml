@@ -1,7 +1,11 @@
 name: Release
 
+# pull_request_target: a merged pull request from a fork gets a token that can
+# write, which release-please needs. No job runs the pull request's code: they
+# check out the release tag.
 on:
-  push:
+  pull_request_target:
+    types: [closed]
     branches: [master]
 
 permissions:
@@ -9,6 +13,7 @@ permissions:
 
 jobs:
   release-please:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
