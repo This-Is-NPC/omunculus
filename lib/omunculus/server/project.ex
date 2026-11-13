@@ -160,6 +160,18 @@ defmodule Omunculus.Server.Project do
   @doc "The job `ref`, for a principal who may read it."
   def job(id, principal, ref), do: Access.job(project(id), principal, ref)
 
+  @doc """
+  What a job with the `params` (`schedule`, `timezone`, `target`) would do
+  (`Omunculus.Jobs.Preview`), for a principal who may create jobs.
+  """
+  def job_preview(id, principal, params) do
+    project = project(id)
+
+    with :ok <- Access.check(project, principal, "job.create"),
+         {:ok, config} <- Config.load(project.config_path),
+         do: Omunculus.Jobs.Preview.build(project.conn, config, params)
+  end
+
   @doc "The thread of the job `ref`, for a principal who may read it."
   def job_messages(id, principal, ref), do: Access.job_messages(project(id), principal, ref)
 
@@ -214,8 +226,8 @@ defmodule Omunculus.Server.Project do
 
   defp via(id), do: {:via, Registry, {Omunculus.Server.Registry, id}}
 
-  # The project the process opened, which it keeps as its registry value.
-  defp project(id) do
+  @doc "The project the process of `id` opened, which it keeps as its registry value."
+  def project(id) do
     [{_pid, %Project{} = project}] = Registry.lookup(Omunculus.Server.Registry, id)
     project
   end

@@ -5,7 +5,9 @@ defmodule Omunculus.Tools.Jobs do
 
   - `list`, `show` and `history` (`name`), which read the `jobs` and
     `history` views: the jobs with their totals, one in full with its next
-    fires, and the newest events of one;
+    fires, and the newest events of one; `preview` (`schedule`, `timezone`,
+    `agent` or `workflow`), which reads the `preview` view: the next three
+    fires and what a fire is estimated to cost;
   - `create` (`name` and the fields of `Omunculus.Jobs.Fields`),
     `edit` (`name` and the fields to change), `duplicate` (`name` and the
     new name `as`), `pause` and `resume` (`name`, optionally a `reason`),
@@ -18,7 +20,7 @@ defmodule Omunculus.Tools.Jobs do
   alias Omunculus.Tools.{Args, Out}
 
   @moves %{"pause" => "paused", "resume" => "active", "archive" => "archived"}
-  @actions ~w(list show history create edit duplicate run read) ++ Map.keys(@moves)
+  @actions ~w(list show history preview create edit duplicate run read) ++ Map.keys(@moves)
 
   @spec run(map) :: map
   def run(%{args: args, view: view}) do
@@ -26,6 +28,7 @@ defmodule Omunculus.Tools.Jobs do
       "list" -> list(view["jobs"] || [])
       "show" -> with_job(args, view, &show/1)
       "history" -> with_job(args, view, fn _job -> history(view["history"] || []) end)
+      "preview" -> preview(view["preview"])
       action when action in @actions -> write(action, args)
       _other -> Out.fail("action is one of: #{Enum.join(@actions, ", ")}")
     end
@@ -90,6 +93,20 @@ defmodule Omunculus.Tools.Jobs do
       {:error, message} -> Out.fail(message)
       nil -> Out.fail("no job #{args["name"]}")
     end
+  end
+
+  defp preview(%{"error" => message}), do: Out.fail(message)
+
+  defp preview(preview) do
+    estimate =
+      case preview["estimate_usd"] do
+        nil -> "no estimate"
+        usd -> "about $#{Float.round(usd * 1.0, 4)} each"
+      end
+
+    Out.ok(
+      "next fires: #{Enum.join(preview["next"], ", ")}\ncost per fire: #{estimate} (#{preview["basis"]})"
+    )
   end
 
   defp list([]), do: Out.ok("No jobs.")

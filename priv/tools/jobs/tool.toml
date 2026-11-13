@@ -2,7 +2,7 @@ name = "jobs"
 kind = "tool"
 triggers = ["cli", "chain"]
 description = """
-Reads and changes the project's scheduled jobs. action is list, show, history, create, edit, duplicate, pause, resume, run, archive or read. list prints each job with its state, schedule, next fire and what its fires cost; show prints one job (name) with its next fires and totals; history prints the newest events of one: its changes, its moves between states and its fires. create takes a name, a target (agent with message, workflow with message, or tool with args), a schedule and a timezone: the schedule is a 5-field cron expression, "every 30m" or "every 2h", or "daily at 09:00", read in the timezone, an IANA name such as America/Sao_Paulo; the job runs as owner, an account or agent name, or as whoever created it. edit changes the fields it is given on a job and bumps its version; an empty text clears a field. duplicate copies a job under the name given as, as a draft; resume starts it. pause and resume move a job between paused and active; run queues one fire now; archive removes a job and keeps its history; read marks what the job delivered as read. A job with delivery owner_inbox hands the final reply of each fire to its owner's mailbox as a message from the job. It needs job.create for create and duplicate, job.manage for the other changes and job.read for the reads and read. Refused without a [jobs] table in omunculus.toml.
+Reads and changes the project's scheduled jobs. action is list, show, history, preview, create, edit, duplicate, pause, resume, run, archive or read. list prints each job with its state, schedule, next fire and what its fires cost; show prints one job (name) with its next fires and totals; history prints the newest events of one: its changes, its moves between states and its fires; preview takes a schedule, a timezone and an agent or workflow and prints the next three fires and an estimate of what each costs from that target's recent fires or runs, or says there is none. create takes a name, a target (agent with message, workflow with message, or tool with args), a schedule and a timezone: the schedule is a 5-field cron expression, "every 30m" or "every 2h", or "daily at 09:00", read in the timezone, an IANA name such as America/Sao_Paulo; the job runs as owner, an account or agent name, or as whoever created it. edit changes the fields it is given on a job and bumps its version; an empty text clears a field. duplicate copies a job under the name given as, as a draft; resume starts it. pause and resume move a job between paused and active; run queues one fire now; archive removes a job and keeps its history; read marks what the job delivered as read. A job with delivery owner_inbox hands the final reply of each fire to its owner's mailbox as a message from the job. It needs job.create for create and duplicate, job.manage for the other changes and job.read for the reads and read. Refused without a [jobs] table in omunculus.toml.
 """
 tags = ["cli", "jobs"]
 groups = ["cli"]
@@ -14,7 +14,7 @@ required = ["action"]
 
 [parameters.properties.action]
 type = "string"
-enum = ["list", "show", "history", "create", "edit", "duplicate", "pause", "resume", "run", "archive", "read"]
+enum = ["list", "show", "history", "preview", "create", "edit", "duplicate", "pause", "resume", "run", "archive", "read"]
 
 [parameters.properties.name]
 type = "string"
@@ -62,7 +62,7 @@ description = "The workspace the fires work in."
 
 [parameters.properties.condition]
 type = "string"
-description = "A tool that gates each fire before any model is spent: the fire is skipped when it fails."
+description = "A tool that gates each fire before any model is spent. It prints {\"run\": true} to go on, or {\"run\": false, \"reason\": \"...\"} to skip the fire, adding \"pause\": true to also pause the job; any other answer skips the fire."
 
 [parameters.properties.condition_args]
 type = "object"
@@ -101,6 +101,10 @@ description = "The request whose approval this call carries; set when an approve
 
 [views.jobs]
 source = "jobs"
+
+[views.preview]
+source = "jobs"
+relation = "preview"
 
 [views.history]
 source = "jobs"

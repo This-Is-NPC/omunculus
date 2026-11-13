@@ -894,6 +894,65 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
+  test "the scheduler of a served project fires a due job as its owner in a conversation of its own" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access <> "\n" <> @jobs)
+
+    Fixtures.use_model(dir, fn _assembled, _tools, _call, record, _delta, _execution ->
+      :ok = record.("the digest")
+      {:ok, "the digest"}
+    end)
+
+    # The clock is the test's: the job is due once it says so.
+    {:ok, clock} = Agent.start_link(fn -> DateTime.utc_now() end)
+    {server, local} = serve_local(dir, project_path, clock: fn -> Agent.get(clock, & &1) end)
+    :ok = Omunculus.Server.Project.subscribe("solo")
+
+    job = %{
+      name: "pulse",
+      agent: "concierge",
+      message: "Digest.",
+      schedule: "every 5m",
+      timezone: "UTC",
+      delivery: "owner_inbox"
+    }
+
+    created =
+      local.(:post, "/v1/projects/solo/jobs", headers: [{"idempotency-key", "j1"}], json: job)
+
+    assert created.status == 202
+
+    {:ok, anchor, _offset} =
+      DateTime.from_iso8601(local.(:get, "/v1/projects/solo/jobs/pulse", []).body["anchor"])
+
+    Agent.update(clock, fn _ -> DateTime.add(anchor, 5 * 60 + 10) end)
+
+    fired = fn fired ->
+      case local.(:get, "/v1/projects/solo/jobs/pulse", []).body["last_fire"] do
+        %{"state" => "succeeded"} = fire ->
+          fire
+
+        _other ->
+          receive do
+            {:store, _owner, :events} -> fired.(fired)
+          after
+            15_000 -> flunk("the job did not fire")
+          end
+      end
+    end
+
+    fire = fired.(fired)
+    assert is_binary(fire["conversation_id"])
+    assert fire["message"] == "the digest"
+
+    assert %{status: 200, body: %{"items" => [%{"text" => "the digest", "unread" => true}]}} =
+             local.(:get, "/v1/projects/solo/jobs/pulse/messages", [])
+
+    :ok = Supervisor.stop(server)
+  end
+
   test "config, members and usage need the capabilities that manage them" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
@@ -1046,6 +1105,18 @@ defmodule Omunculus.ServerTest do
     assert listed["origin"]["channel"] == "console"
     assert Req.get!(base <> "/jobs/review", headers: admin).body == listed
     assert Req.get!(base <> "/jobs/#{listed["id"]}", headers: admin).status == 200
+
+    # A preview needs job.create, and says in words when it has no history to estimate from.
+    preview = %{schedule: "every 30m", timezone: "UTC", target: %{agent: "concierge"}}
+
+    assert %{status: 200, body: %{"next" => [_, _, _], "estimate_usd" => nil, "basis" => basis}} =
+             Req.post!(base <> "/jobs/preview", headers: admin, json: preview)
+
+    assert basis =~ "no estimate"
+    assert Req.post!(base <> "/jobs/preview", headers: outsider, json: preview).status == 404
+
+    assert Req.post!(base <> "/jobs/preview", headers: admin, json: %{preview | schedule: "soon"}).status ==
+             422
 
     # Whoever reads the conversation reads its jobs, and no one else does.
     assert %{status: 200, body: %{"items" => []}} = Req.get!(base <> "/jobs", headers: outsider)
@@ -1662,7 +1733,7 @@ defmodule Omunculus.ServerTest do
 
   # Bootstraps the local administrator of the project at `project_path`, serves
   # it alone as "solo", and gives a request on its local socket.
-  defp serve_local(dir, project_path) do
+  defp serve_local(dir, project_path, scheduler \\ []) do
     uid = Operations.local_principal().subject
 
     assert {:ok, "access bootstrapped"} =
@@ -1687,7 +1758,7 @@ defmodule Omunculus.ServerTest do
 
     {:ok, config} = Config.load(project_path)
     socket = Socket.path(config.store.path)
-    {:ok, server} = Server.start_link(server_path)
+    {:ok, server} = Server.start_link(server_path, scheduler)
 
     local = fn method, path, opts ->
       Req.request!(
