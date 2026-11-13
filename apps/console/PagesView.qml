@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Jobs.js" as Jobs
 import "kit/client/Requests.js" as Requests
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
@@ -50,11 +51,11 @@ Item {
   property string level: "project"
   // The pages of the level on screen, in their order.
   readonly property var pages: level === "conversation" ? (open ? inConversation : ["chat"])
-    : level === "registry" ? ["projects", "board"] : ["conversations", "board"]
+    : level === "registry" ? ["projects", "board"] : ["conversations", "board", "jobs"]
   // The one on screen: a page, or "new", the first message of a new
   // conversation, a screen of the conversations.
   property string page: "conversations"
-  readonly property int tabIndex: pages.indexOf(({ new: "conversations", work: "board", thread: "chat" })[page] || page)
+  readonly property int tabIndex: pages.indexOf(({ new: "conversations", work: "board", thread: "chat", job: "jobs", "job-form": "jobs" })[page] || page)
   // Whether a conversation's pages are on screen, under its head and tabs.
   readonly property bool inside: level === "conversation"
   readonly property string title: page === "new" ? "new conversation" : page
@@ -74,6 +75,8 @@ Item {
     if (level === "registry")
       return [{ text: title }]
     const place = [{ text: Omunculus.project, run: () => view.go("projects") }]
+    if (page === "job" || page === "job-form")
+      return place.concat([{ text: "jobs", run: () => view.go("jobs") }], [{ text: page === "job" ? jobKey : jobForm.editing ? "change " + jobForm.draft.name : "new job" }])
     if (level === "project")
       return place.concat([{ text: title }])
     const subject = { text: named }
@@ -88,6 +91,8 @@ Item {
   property string pickedNode: ""
   // The work whose thread is on the thread page.
   property string threadWork: ""
+  // The job on the job page, by its name.
+  property string jobKey: ""
 
   // Whether the conversation open has said nothing yet.
   readonly property bool fresh: open && Omunculus.thread("").count === 0
@@ -113,7 +118,7 @@ Item {
       Omunculus.loadConversations()
     level = name === "projects" ? "registry"
       : ofConversation.includes(name) ? "conversation"
-      : ["conversations", "new"].includes(name) || level === "conversation" ? "project"
+      : ["conversations", "new", "jobs", "job", "job-form"].includes(name) || level === "conversation" ? "project"
       : level
     page = name
   }
@@ -283,6 +288,51 @@ Item {
     show("work")
   }
 
+  // Shows a job on its page.
+  function showJob(job) {
+    remember()
+    jobKey = job.name
+    show("job")
+  }
+
+  // Opens the form of a new job, a fixed conversation `conversation` when
+  // one is given; `message` is what it starts with.
+  function newJob(message, conversation) {
+    if (page !== "job-form")
+      remember()
+    jobForm.reset(Jobs.blank({
+      mode: conversation ? "fixed" : "new", conversation: conversation || "", target: Omunculus.agent || Omunculus.lastAgent || Omunculus.startAgent,
+      message: message || "", timezone: Omunculus.timezone
+    }), false)
+    show("job-form")
+  }
+
+  // Opens the form of the job on its page, to change it.
+  function editJob() {
+    const job = Omunculus.jobs.find(jobKey)
+    if (!job)
+      return
+    remember()
+    jobForm.reset(Jobs.fromJob(job), true)
+    show("job-form")
+  }
+
+  // The form made or changed a job: its page, which BACK leaves for where the
+  // form was opened from; a change forgets the page it came from, which this one is.
+  function jobSaved(name) {
+    if (jobForm.editing)
+      history = history.slice(0, -1)
+    jobKey = name
+    show("job")
+  }
+
+  // Does an action to the job on its page, and says it was done.
+  function jobAct(action, said) {
+    const job = Omunculus.jobs.find(jobKey)
+    if (job)
+      Omunculus.jobs.act(job.name, action, {}, () => Omunculus.tell(said, false), reason => Omunculus.tell(reason, true))
+  }
+
   // Shows another work of the conversation open on the work page.
   function showOther(key) {
     remember()
@@ -371,6 +421,7 @@ Item {
   readonly property string readout: page === "projects" ? projectsList.readout
     : page === "conversations" ? conversations.readout
     : page === "board" ? board.readout
+    : page === "jobs" ? jobsList.readout
     : ""
 
   // The commands of the page on screen, as the PageBar takes them; those with
@@ -393,6 +444,25 @@ Item {
           run: () => view.newConversation() },
         { text: "PROJECTS", icon: "folder", tip: "every project of the server  " + Shortcuts.label("projects"), run: () => view.showProjects("") }
       ]
+    if (page === "jobs")
+      return [
+        back,
+        { text: "NEW JOB", short: "NEW", icon: "plus", role: "primary", tip: "make a job that runs on a schedule", run: () => view.newJob("", "") }
+      ]
+    if (page === "job") {
+      const job = Omunculus.jobs.find(jobKey)
+      const state = job ? job.state : ""
+      return [
+        back,
+        { text: "EDIT", icon: "edit", role: "primary", enabled: state !== "" && state !== "archived", tip: "change its fields: each change is a new version", run: () => view.editJob() },
+        state === "active"
+          ? { text: "PAUSE", icon: "clock", tip: "stop its fires until it is resumed", run: () => view.jobAct("pause", "paused") }
+          : { text: "RESUME", icon: "play", enabled: state === "paused" || state === "proposed", tip: "let it fire on its schedule again", run: () => view.jobAct("resume", "resumed") },
+        { text: "RUN NOW", icon: "send", enabled: state === "active" || state === "paused", tip: "fire it once now, outside its schedule", run: () => view.jobAct("run", "running now") },
+        { text: "DUPLICATE", icon: "copy", enabled: state !== "", tip: "copy it as a draft under another name", run: () => duplicateDialog.show(jobKey) },
+        { text: "ARCHIVE", icon: "trash", enabled: state !== "" && state !== "archived", tip: "remove it; its history stays", run: () => archiveDialog.open() }
+      ]
+    }
     if (page === "board")
       return [
         back,
@@ -445,7 +515,7 @@ Item {
     : page === "thread" ? threadComposer.height + gap : 0
 
   // Whether the decision of a request or a new project is open over the page.
-  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible
+  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible || duplicateDialog.visible || archiveDialog.visible
 
   function focusEntry() {
     if (page === "projects")
@@ -454,6 +524,12 @@ Item {
       conversations.focusEntry()
     else if (page === "board")
       board.focusEntry()
+    else if (page === "jobs")
+      jobsList.focusEntry()
+    else if (page === "job")
+      jobPage.forceActiveFocus()
+    else if (page === "job-form")
+      jobForm.focusEntry()
     else if (page === "new")
       newPage.focusEntry()
     else if (page === "tree")
@@ -642,6 +718,7 @@ Item {
           Composer {
             id: mainComposer
             Layout.fillWidth: true
+            onJobWanted: message => view.newJob(message, Omunculus.conversationId)
           }
         }
       }
@@ -685,6 +762,7 @@ Item {
         Composer {
           id: threadComposer
           Layout.fillWidth: true
+          onJobWanted: message => view.newJob(message, Omunculus.conversationId)
         }
       }
     }
@@ -722,6 +800,7 @@ Item {
           id: newComposer
           Layout.fillWidth: true
           starting: true
+          onJobWanted: message => view.newJob(message, "")
         }
         Item { Layout.fillHeight: true }
       }
@@ -824,6 +903,49 @@ Item {
 
     Stage {
       anchors.fill: parent
+      shown: view.page === "jobs"
+
+      JobsView {
+        id: jobsList
+        anchors.fill: parent
+        active: parent.shown && view.active
+        focus: view.page === "jobs"
+        onOpened: job => view.showJob(job)
+        onNewWanted: view.newJob("", "")
+        onLeave: view.back()
+      }
+    }
+
+    Stage {
+      anchors.fill: parent
+      shown: view.page === "job"
+
+      JobView {
+        id: jobPage
+        anchors.fill: parent
+        active: parent.shown && view.active
+        focus: view.page === "job"
+        key: view.jobKey
+        onOpenConversation: id => view.openConversation(id)
+        onLeave: view.back()
+      }
+    }
+
+    Stage {
+      anchors.fill: parent
+      shown: view.page === "job-form"
+
+      JobForm {
+        id: jobForm
+        anchors.fill: parent
+        focus: view.page === "job-form"
+        onDone: name => view.jobSaved(name)
+        onCancelled: view.back()
+      }
+    }
+
+    Stage {
+      anchors.fill: parent
       shown: view.page === "work"
 
       WorkView {
@@ -840,6 +962,27 @@ Item {
   }
 
   RequestDialog { id: decision }
+
+  DuplicateJobDialog {
+    id: duplicateDialog
+    function show(name) {
+      source = name
+      open()
+    }
+    onCopied: name => {
+      Omunculus.tell("copied as the draft " + name, false)
+      view.go("jobs")
+    }
+  }
+
+  ConfirmDialog {
+    id: archiveDialog
+    title: "archive " + view.jobKey
+    question: "Archive this job? It stops firing and leaves the list; its history stays, and its name is free again."
+    confirmText: "ARCHIVE"
+    confirmIcon: "trash"
+    onConfirmed: view.jobAct("archive", "archived")
+  }
 
   // Once a project is registered, the projects are read again and its row
   // is picked.

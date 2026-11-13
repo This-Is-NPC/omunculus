@@ -36,6 +36,7 @@ Singleton {
       if (root.registry)
         return
       root.loadConversations()
+      root.jobs.load()
       root.loadSetup()
       root.loadCapabilities()
     }
@@ -53,6 +54,15 @@ Singleton {
   // What the window tells, as toasts.
   readonly property Notices notices: connection.notices
   readonly property Http http: connection.http
+  // The project's scheduled jobs.
+  readonly property JobsClient jobs: JobsClient { client: connection }
+  // The time zone of this computer, the one a new job's schedule starts in.
+  property string timezone: ""
+  Process {
+    running: true
+    command: ["timedatectl", "show", "-p", "Timezone", "--value"]
+    stdout: StdioCollector { onStreamFinished: root.timezone = text.trim() }
+  }
   // The project capabilities the member holds, such as project.manage_config.
   property var capabilities: []
   property var conversations: []

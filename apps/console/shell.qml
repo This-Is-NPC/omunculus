@@ -63,7 +63,7 @@ ShellRoot {
     property int notesKept: -1
 
     // The ways in at the start, each a card with a line of what is there: on a
-    // project, a new conversation, its conversations, the board and the
+    // project, a new conversation, its conversations, the board, its jobs and the
     // projects; on the registry alone, the projects and the board.
     readonly property var ways: {
       const row = Omunculus.projectRows.find(item => item.id === Omunculus.project) || null
@@ -72,10 +72,14 @@ ShellRoot {
         ? (count > 0 ? count + (count === 1 ? " project" : " projects") + Theme.type.meta.separator + "open one to see its conversations" : "None yet" + Theme.type.meta.separator + "add the first")
         : "Switch to another project" }
       const board = { page: "board", text: "BOARD", detail: Omunculus.registry ? "The works of every project, by state" : "The works of this project, by state" }
+      const jobs = Omunculus.jobs.items
+      const jobsWay = { page: "jobs", text: "JOBS", detail: !Omunculus.jobs.loaded ? "Messages sent on a schedule"
+        : jobs.length === 0 ? "None yet" + Theme.type.meta.separator + "schedule the first"
+        : jobs.length + (jobs.length === 1 ? " job" : " jobs") + Theme.type.meta.separator + jobs.filter(job => job.state === "active").length + " active" }
       return Omunculus.registry ? [projects, board] : [
         { page: "new", text: "NEW CONVERSATION", detail: Omunculus.startAgent !== "" ? "Say what you need; it goes to " + Omunculus.startAgent + " unless you choose another" : "Say what you need and choose who gets it" },
         { page: "conversations", text: "CONVERSATIONS", detail: !row || row.reading ? "Reading the conversations…" : Projects.meta(row, "", 80, Theme.type.meta.separator) },
-        board, projects
+        board, jobsWay, projects
       ]
     }
 
@@ -449,6 +453,7 @@ ShellRoot {
       panel.started ? pagesView.newConversation() : panel.enter("new")
     }
     function conversations(): void { page("conversations") }
+    function jobs(): void { page("jobs") }
     function open(conversationId: string): void {
       if (Omunculus.project === "")
         return
@@ -467,12 +472,12 @@ ShellRoot {
       else
         panel.enterProject(place)
     }
-    // A page by its name: projects, conversations or board, or, with a
+    // A page by its name: projects, conversations, board or jobs, or, with a
     // conversation open, chat, tree, log, cost or artifacts.
     function page(name: string): void {
-      if (!["projects", "conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
+      if (!["projects", "conversations", "board", "jobs"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
         return
-      if (name === "conversations" && Omunculus.project === "")
+      if (["conversations", "jobs"].includes(name) && Omunculus.project === "")
         return
       if (panel.started)
         pagesView.go(name)

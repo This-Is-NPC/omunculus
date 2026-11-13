@@ -88,7 +88,7 @@ defmodule Omunculus.GuiRequestsTest do
   end
 
   test "a gathered permission grants whoever arbitrates it, so its scopes stay behind Always" do
-    run!(["Requests", "Pending"], """
+    run!(["Requests", "Jobs", "Pending"], """
     const step = {name: "grant", args: {kind: "tool", name: "promote"}};
     const origin = {id: "o1", status: "pending", arbiter: agent("project-manager"), origins: {},
       options: {grant: [step], grant_agent: [step], grant_depth: [step], deny: []}};

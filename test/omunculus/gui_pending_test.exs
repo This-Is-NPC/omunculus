@@ -3,7 +3,7 @@ defmodule Omunculus.GuiPendingTest do
 
   alias Omunculus.GuiModules
 
-  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Pending"]
+  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Jobs", "Pending"]
 
   # A sale (w1, seller) handing a design down to a designer (w2), the front
   # agent being sales; times in seconds, stamps as the server's.
@@ -32,6 +32,24 @@ defmodule Omunculus.GuiPendingTest do
 
   defp run!(assertions) do
     assert {"", 0} = GuiModules.run(@modules, @fixtures <> assertions)
+  end
+
+  test "a job proposal reads as a job, with its own heading and its resolution" do
+    run!("""
+    const job = {action: "create", name: "morning", agent: "seller", message: "Summarize the news.", schedule: "daily at 7:00", timezone: "UTC", delivery: "owner_inbox"};
+    const proposal = asked("j1", {requester: agent("seller"), work_id: null, reason: "Every day.\\n\\njob morning as it would run:\\nruns: seller\\n\\napprove creates it", options: {approve: [{name: "jobs", args: job}], edit: [], deny: []}});
+    const item = Pending.describe(proposal, input(proposal));
+    check(item.kind === "decision", "still a decision for the counts", item.kind);
+    check(item.word === "JOB PROPOSAL" && item.icon === "clock", "its word and icon", item);
+    check(item.title === "Seller proposes a job: morning", "title", item.title);
+    check(item.body === "Every day.", "its reason alone", item.body);
+    const said = answer => Pending.resolved(proposal, {option: answer, body: answer}, {flat: out.flat, folder: "/work/site", text: ""}).sentence;
+    check(said("approve") === "You approved the job morning that seller proposed", "approved", said("approve"));
+    check(said("edit") === "You asked for changes to the job morning that seller proposed", "edit", said("edit"));
+    check(said("deny") === "You denied the job morning that seller proposed", "denied", said("deny"));
+    const actions = Pending.actions(Object.keys(proposal.options), false);
+    check(actions.primary === "approve" && actions.once.join() === "approve,edit" && actions.denies.join() === "deny", "approve filled, edit, deny", actions);
+    """)
   end
 
   test "the queue is what waits on you, oldest first, each climbing question once" do
