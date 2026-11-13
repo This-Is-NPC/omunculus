@@ -39,6 +39,10 @@ ModalDialog {
       ["↑ · ↓", "choose"],
       ["Enter", "open"]
     ].concat(Shortcuts.rows("conversations"))],
+    ["jobs", [
+      ["↑ · ↓", "choose"],
+      ["Enter", "open the job's page"]
+    ].concat(Shortcuts.rows("jobs"))],
     ["new conversation", [
       ["Enter", "on TO, open the list; on a name, address it"],
       ["↑ · ↓", "move along the list"],
@@ -71,6 +75,7 @@ ModalDialog {
     ["composer", [
       ["Enter", "send, or leave the note"],
       ["Shift+Enter", "a new line"],
+      ["/job", "open the form of a new job, with the words after it as its message"],
       ["Esc", "write to the agent rather than note"]
     ]],
     ["request", [
