@@ -170,7 +170,7 @@ defmodule Omunculus.Tools.Process do
     else
       "Activities (tool calls and model replies; duration is the time since the run's previous event):\n" <>
         Enum.map_join(stats, "\n", fn stat ->
-          "- #{stat.activity}: #{stat.count} times, mean #{seconds(stat.mean)}, p90 #{seconds(stat.p90)}" <>
+          "- #{stat.activity}: #{times(stat.count)}, mean #{seconds(stat.mean)}, p90 #{seconds(stat.p90)}" <>
             if(stat.usd > 0, do: ", $#{:erlang.float_to_binary(stat.usd, decimals: 4)}", else: "") <>
             if(stat.refusals > 0, do: ", #{stat.refusals} refused", else: "")
         end)
@@ -216,5 +216,8 @@ defmodule Omunculus.Tools.Process do
   defp ratio(count, total), do: round2(count / total)
 
   defp round2(number), do: :erlang.float_to_binary(number * 1.0, decimals: 2)
+  defp times(1), do: "once"
+  defp times(count), do: "#{count} times"
+
   defp seconds(number), do: :erlang.float_to_binary(number * 1.0, decimals: 1) <> " s"
 end

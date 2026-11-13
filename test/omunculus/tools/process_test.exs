@@ -147,7 +147,7 @@ defmodule Omunculus.Tools.ProcessTest do
     ])
 
     scoped = output(ctx, %{"workflow" => "delivery", "support" => 0.1, "confidence" => 0.1})
-    assert scoped =~ "- below: 1 times"
+    assert scoped =~ "- below: once"
     assert scoped =~ "- read: 11 times"
     for outside <- ["elsewhere", "config", "propose_config"], do: refute(scoped =~ outside)
 
