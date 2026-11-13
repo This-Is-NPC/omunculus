@@ -396,10 +396,10 @@ defmodule Omunculus.Harness do
   among `opened ++ events`. `opened` are earlier events of the same run
   whose runs `open_due/2` already opened.
   """
-  @spec follow_up(Project.t(), [map], [map]) :: :ok | {:error, term}
-  def follow_up(project, events, opened \\ []) do
+  @spec follow_up(Project.t(), [map], [map], String.t() | nil) :: :ok | {:error, term}
+  def follow_up(project, events, opened \\ [], via \\ nil) do
     Cycle.run(project, nil, fn project ->
-      with :ok <- open(project, events),
+      with :ok <- open(project, events, via),
            {:ok, catalog} <- follow_catalog(project),
            {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
            {:ok, reactions} <- openings(project, catalog, opened ++ events, :hooks) do
@@ -411,7 +411,7 @@ defmodule Omunculus.Harness do
   @doc "Writes the permanent grants among `events` and opens the runs their actions ask for."
   @spec open_due(Project.t(), [map]) :: :ok | {:error, term}
   def open_due(project, events) do
-    Cycle.run(project, nil, &open(&1, events))
+    Cycle.run(project, nil, &open(&1, events, nil))
   end
 
   defp follow_catalog(project) do
@@ -462,11 +462,15 @@ defmodule Omunculus.Harness do
   end
 
   # Only the calling hooks walk needs the catalog.
-  defp open(project, events) do
+  defp open(project, events, via) do
     with :ok <- write_grants(project, events),
          {:ok, openings} <- openings(project, nil, events, :actions),
-         do: due(project, openings)
+         do: due(project, Enum.map(openings, &carry(&1, via)))
   end
+
+  # The runs a caller names `via` for carry it, whatever call made them.
+  defp carry(opening, nil), do: opening
+  defp carry(opening, via), do: Map.put(opening, :via, via)
 
   defp openings(project, catalog, events, phase) do
     events
@@ -691,6 +695,7 @@ defmodule Omunculus.Harness do
       inbox_id: env.views.inbox_id,
       prompt_id: Map.get(env.ctx, :prompt_id),
       args: args,
+      config: env.config,
       computed: env.views.computed
     }
   end
