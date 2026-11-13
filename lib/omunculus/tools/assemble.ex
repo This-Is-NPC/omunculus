@@ -311,10 +311,19 @@ defmodule Omunculus.Tools.Assemble do
 
   defp message_section(nil), do: []
 
-  defp message_section(%{subject: subject} = message) when is_binary(subject),
-    do: ["## Message\nSubject: #{subject}\n\n#{message.body}"]
+  defp message_section(message) do
+    head = Enum.reject([from_job(message), subject_line(message)], &is_nil/1)
+    body = if head == [], do: message.body, else: Enum.join(head, "\n") <> "\n\n" <> message.body
+    ["## Message\n" <> body]
+  end
 
-  defp message_section(message), do: ["## Message\n#{message.body}"]
+  defp from_job(%{via: "job", job: job}) when is_binary(job),
+    do: "From: job #{job}, sent by the scheduler for the owner"
+
+  defp from_job(_message), do: nil
+
+  defp subject_line(%{subject: subject}) when is_binary(subject), do: "Subject: #{subject}"
+  defp subject_line(_message), do: nil
 
   defp work_section(nil), do: []
 

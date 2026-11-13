@@ -179,6 +179,19 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "## Message\nSubject: A site\n\nfor my shop"
   end
 
+  test "a message a job's fire sent says so, with the job's name" do
+    job = %{via: "job", job: "morning-status", body: "status?"}
+    output = whole(%{@input | view: %{"message" => job}})
+
+    assert output =~
+             "## Message\nFrom: job morning-status, sent by the scheduler for the owner\n\nstatus?"
+
+    output = whole(%{@input | view: %{"message" => Map.put(job, :subject, "Daily")}})
+    assert output =~ "sent by the scheduler for the owner\nSubject: Daily\n\nstatus?"
+
+    refute whole(%{@input | view: %{"message" => %{body: "hi"}}}) =~ "From: job"
+  end
+
   test "with the work card, each agent comes with the tools it has that this run has not" do
     cards =
       for name <- ["work", "read"],

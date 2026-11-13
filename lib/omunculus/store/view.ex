@@ -31,11 +31,15 @@ defmodule Omunculus.Store.View do
   WHERE runs.work_id = ? AND runs.status = 'done'
   """
 
-  # A prompt with its `subject`, which only its event keeps.
+  # A prompt with its `subject` and, for a job's fire, its `via` and `job`, which only its event keeps.
   @prompts """
   SELECT prompts.*,
     (SELECT json_extract(events.body, '$.subject') FROM events
-      WHERE events.prompt_id = prompts.id AND events.type = 'prompt') AS subject
+      WHERE events.prompt_id = prompts.id AND events.type = 'prompt') AS subject,
+    (SELECT json_extract(events.body, '$.via') FROM events
+      WHERE events.prompt_id = prompts.id AND events.type = 'prompt') AS via,
+    (SELECT json_extract(events.body, '$.job') FROM events
+      WHERE events.prompt_id = prompts.id AND events.type = 'prompt') AS job
   FROM prompts
   """
 

@@ -107,7 +107,12 @@ defmodule Omunculus.Jobs.Fire do
 
     with {:ok, conversation_id} <- conversation(project, job, principal),
          :ok <- opened(project, job, fire, conversation_id),
-         actor = %{principal: principal, conversation_id: conversation_id, via: "job"},
+         actor = %{
+           principal: principal,
+           conversation_id: conversation_id,
+           via: "job",
+           job: job["name"]
+         },
          {:ok, started} <-
            Cycle.command(project, nil, fn project ->
              {name, args} = request(job)

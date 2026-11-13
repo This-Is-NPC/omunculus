@@ -25,6 +25,7 @@ defmodule Omunculus.Operations do
            capability: authorization.capability,
            conversation_id: authorization.conversation_id || Map.get(actor, :conversation_id),
            via: Map.get(actor, :via),
+           job: Map.get(actor, :job),
            command_id: Map.get(actor, :command_id),
            command_hash: Map.get(actor, :command_hash)
          },
