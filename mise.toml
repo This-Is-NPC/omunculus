@@ -189,6 +189,12 @@ flag "--label <name>" help="Name of the result folder"
 description = "Build the Arch packages omunculus and omunculus-apps of the committed HEAD into target/arch/pkg"
 run = "scripts/package"
 
+[tasks."test:install"]
+description = "Install, exercise and remove the packages in a disposable unprivileged Arch container (needs Docker and network; OMUNCULUS_PACKAGES points at other packages)"
+depends = ["package"]
+run = "scripts/test-install"
+sources = ["install.sh", "scripts/test-install", "target/arch/pkg/*.pkg.tar.zst"]
+
 [tasks.pre-commit]
 description = "Check the boundaries, formatting and documentation before a commit"
 run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]
