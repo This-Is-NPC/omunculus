@@ -5,7 +5,8 @@
 // own docked at the bottom right, as a mail client keeps them. Everything here
 // is pure: the state is {items, active, seq}, every change returns the next
 // one, and the window draws it. An item is {id, kind, draft, subject, body, to,
-// thread, request, quoted, mode} with `kind` "new", "reply" or "forward" and
+// thread, request, quoted, mode} with `kind` "new", "reply", "forward" or "job"
+// (a new message answering a job's) and
 // `mode` "open" (docked, or the active one on a phone), "min" (a tab) or
 // "full" (expanded over a dim backdrop).
 
@@ -19,6 +20,7 @@ function replying(thread, key, all, when) {
   const last = thread.messages[thread.messages.length - 1];
   const message = thread.messages.find(each => each.key === key) || last;
   if (!message) return null;
+  if (thread.job) return Mailbox.jobReply(thread, message, when(message.at));
   const target = Mailbox.replyTarget(thread, message.key);
   return {
     kind: "reply", thread: thread.key, replied: message.key, subject: Mailbox.re(thread.subject), body: "",
