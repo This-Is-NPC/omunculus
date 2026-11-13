@@ -858,11 +858,20 @@ defmodule Omunculus.Jobs do
     end
   end
 
-  # A run a fire opened has `via = "job"`; so does any run below it, which
-  # `cause_id` links to the event of the run above.
   defp outside_fires(_conn, nil), do: :ok
 
   defp outside_fires(conn, run_id) do
+    with {:ok, fired?} <- in_fire?(conn, run_id),
+         do: if(fired?, do: {:error, {:jobs, :in_fire}}, else: :ok)
+  end
+
+  @doc """
+  Whether a run is one a fire opened, or below one. A fire's run has
+  `via = "job"`; so does any run below it, which `cause_id` links to the event
+  of the run above.
+  """
+  @spec in_fire?(Omunculus.Store.Connection.t(), String.t()) :: {:ok, boolean} | {:error, term}
+  def in_fire?(conn, run_id) do
     with {:ok, row} <-
            Query.one(
              conn,
@@ -876,8 +885,7 @@ defmodule Omunculus.Jobs do
              SELECT 1 AS fired FROM chain WHERE via = 'job' LIMIT 1
              """,
              [run_id]
-           ) do
-      if row, do: {:error, {:jobs, :in_fire}}, else: :ok
-    end
+           ),
+         do: {:ok, row != nil}
   end
 end

@@ -1559,6 +1559,20 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
+    test "the retry of a run in a fire stays in the fire for the loop guard", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("first try"), ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id, %{via: "job"}))
+
+      assert [%{via: "job"}, %{via: "job"} = retry] = runs_of(project, work_id)
+      assert {:ok, true} = Omunculus.Jobs.in_fire?(project.conn, retry.id)
+
+      Project.close(project)
+    end
+
     test "the retry prompt has the last comment and the stopped run's calls", %{dir: dir} do
       retry_config(dir, "max_retries = 1")
       project = open_project(dir)
