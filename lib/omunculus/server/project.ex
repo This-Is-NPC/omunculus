@@ -154,6 +154,22 @@ defmodule Omunculus.Server.Project do
 
   def members(id, principal), do: Access.members(project(id), principal)
 
+  @doc "The jobs `principal` may read."
+  def jobs(id, principal), do: Access.jobs(project(id), principal)
+
+  @doc "The job `ref`, for a principal who may read it."
+  def job(id, principal, ref), do: Access.job(project(id), principal, ref)
+
+  @doc "The thread of the job `ref`, for a principal who may read it."
+  def job_messages(id, principal, ref), do: Access.job_messages(project(id), principal, ref)
+
+  @doc "The messages of the jobs that deliver to `principal` as their owner."
+  def owner_messages(id, principal), do: Access.owner_messages(project(id), principal)
+
+  @doc "The newest `limit` events of the job `ref`, all without it, for a principal who may read it."
+  def job_history(id, principal, ref, limit),
+    do: Access.job_history(project(id), principal, ref, limit)
+
   @doc """
   The usage of the project's recorded model replies, or of one conversation's,
   per agent and per work, each with the models its calls used and what they
@@ -232,7 +248,7 @@ defmodule Omunculus.Server.Project do
       )
       |> Base.encode16(case: :lower)
 
-    with :ok <- Access.check(project, principal, capability(name), conversation_id),
+    with :ok <- check_capability(project, principal, name, conversation_id),
          :ok <- ensure_target_conversation(project, name, args, conversation_id),
          {:ok, receipt} <- Access.receipt(project, principal, command_id),
          {:ok, result} <-
@@ -250,6 +266,13 @@ defmodule Omunculus.Server.Project do
     end
   end
 
+  # What a job call needs depends on the action and the job's conversation:
+  # `Operations.call/5` checks it, on the principal.
+  defp check_capability(_project, _principal, "jobs", _conversation_id), do: :ok
+
+  defp check_capability(project, principal, name, conversation_id),
+    do: Access.check(project, principal, capability(name), conversation_id)
+
   defp capability("ask"), do: "conversation.send"
   defp capability("escalate"), do: "conversation.reply"
   defp capability("send"), do: "conversation.send"
@@ -258,7 +281,9 @@ defmodule Omunculus.Server.Project do
   defp capability("inbox_read"), do: "conversation.read"
   defp capability("revert"), do: "project.manage_config"
 
-  defp ensure_target_conversation(_project, "revert", _args, _conversation_id), do: :ok
+  defp ensure_target_conversation(_project, name, _args, _conversation_id)
+       when name in ~w(revert jobs),
+       do: :ok
 
   defp ensure_target_conversation(project, "escalate", args, conversation_id) do
     with {:ok, origins} <- Omunculus.Tools.Args.object(args, "origins") do

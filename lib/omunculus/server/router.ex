@@ -10,6 +10,9 @@ defmodule Omunculus.Server.Router do
   alias Omunculus.Server.{Auth, Contract, EventStream, OpenAPI, Project}
   require OpenAPI
 
+  @job_actions ~w(edit duplicate pause resume run archive read)
+  @job_channels ~w(api console)
+
   Module.register_attribute(__MODULE__, :openapi_routes, accumulate: true)
   @before_compile OpenAPI
 
@@ -215,6 +218,62 @@ defmodule Omunculus.Server.Router do
     else
       error -> error_reply(conn, error)
     end
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/jobs", :list_jobs do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, jobs} <- Project.jobs(project_id, principal) do
+      reply(conn, 200, %{items: jobs})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/job-messages", :list_job_messages do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, messages} <- Project.owner_messages(project_id, principal) do
+      reply(conn, 200, %{items: messages})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/jobs/:job/messages", :job_messages do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, messages} <- Project.job_messages(project_id, principal, job) do
+      reply(conn, 200, %{items: messages})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :post, "/v1/projects/:project_id/jobs", :create_job do
+    job_command(conn, opts, project_id, "create", nil)
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/jobs/:job", :get_job do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, found} <- Project.job(project_id, principal, job) do
+      reply(conn, 200, found)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/jobs/:job/history", :job_history do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, limit} <- limit(conn.params["limit"]),
+         {:ok, events} <- Project.job_history(project_id, principal, job, limit) do
+      reply(conn, 200, %{events: events})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :post, "/v1/projects/:project_id/jobs/:job/actions/:action", :job_action do
+    if action in @job_actions,
+      do: job_command(conn, opts, project_id, action, job),
+      else: reply(conn, 404, %{error: "not_found"})
   end
 
   OpenAPI.route :get, "/v1/projects/:project_id/usage", :get_usage do
@@ -608,6 +667,43 @@ defmodule Omunculus.Server.Router do
   defp served(opts),
     do: Keyword.get_lazy(opts, :projects, fn -> Server.project_ids(opts[:stream_key]) end)
 
+  # A job call: the body is the tool's own fields; the channel says whether
+  # the Console or another client made it.
+  defp job_command(conn, opts, project_id, action, name) do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, args} <- job_args(conn.body_params, action, name),
+         {:ok, result} <-
+           Project.command(project_id, "jobs", args, principal, nil, command_id) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  defp job_args(body, action, name) when is_map(body) do
+    allowed = ~w(name as state reason channel) ++ Omunculus.Jobs.Fields.keys()
+    channel = Map.get(body, "channel", "api")
+
+    if Map.keys(body) -- allowed == [] and channel in @job_channels do
+      args = body |> Map.put("action", action) |> Map.put("channel", channel)
+      {:ok, if(name, do: Map.put(args, "name", name), else: args)}
+    else
+      {:error, :invalid}
+    end
+  end
+
+  defp job_args(_body, _action, _name), do: {:error, :invalid}
+
+  defp limit(nil), do: {:ok, nil}
+
+  defp limit(text) do
+    case Integer.parse(text) do
+      {limit, ""} when limit > 0 -> {:ok, limit}
+      _ -> {:error, :invalid}
+    end
+  end
+
   defp command_id(conn) do
     case get_req_header(conn, "idempotency-key") do
       [id] when byte_size(id) in 1..128 -> {:ok, id}
@@ -780,6 +876,9 @@ defmodule Omunculus.Server.Router do
   defp error_reply(conn, {:error, {action, _reason}})
        when action in [:request, :escalate, :reply, :grant],
        do: reply(conn, 422, %{error: "request_refused"})
+
+  defp error_reply(conn, {:error, {:jobs, _reason} = reason}),
+    do: reply(conn, 422, %{error: "job_refused", message: Errors.format(reason)})
 
   defp error_reply(conn, {:error, {:attachment, reason}}),
     do: reply(conn, 422, %{error: "attachment_refused", message: inspect(reason)})

@@ -14,7 +14,7 @@ defmodule Omunculus.ServerTest do
 
   [access.roles.admin]
   scope = "project"
-  capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
+  capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage", "job.create", "job.manage", "job.read"]
 
   [access.roles.participant]
   scope = "conversation"
@@ -23,6 +23,21 @@ defmodule Omunculus.ServerTest do
   [access.roles.reader]
   scope = "conversation"
   capabilities = ["conversation.read"]
+
+  [access.roles.client]
+  scope = "conversation"
+  capabilities = ["conversation.read", "job.read"]
+  """
+
+  @jobs """
+  [jobs]
+  max_parallel = 2
+  min_interval_minutes = 5
+  max_jobs = 10
+  missed = "skip"
+  lateness_seconds = 60
+  failures_before_pause = 3
+  agent_may_create = false
   """
 
   test "HTTP authenticates users, scopes conversations and preserves membership" do
@@ -938,6 +953,172 @@ defmodule Omunculus.ServerTest do
 
     assert Req.get!(base <> "/config/models/extra", headers: admin).status == 404
     assert Req.put!(base <> "/config/models/extra", headers: admin, json: body).status == 200
+
+    :ok = Supervisor.stop(server)
+  end
+
+  test "jobs are listed to whoever reads their conversation and changed by whoever manages them" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access <> "\n" <> @jobs)
+
+    assert {:ok, "access bootstrapped"} =
+             CLI.run(
+               ["--config", project_path, "access", "bootstrap"] ++
+                 ["--issuer", "test", "--subject", "admin"],
+               dir
+             )
+
+    private_key = JOSE.JWK.generate_key({:rsa, 2048})
+    {_fields, public_pem} = JOSE.JWK.to_pem(JOSE.JWK.to_public(private_key))
+    File.write!(Path.join(dir, "public.pem"), public_pem)
+    port = free_port()
+    server_path = Path.join(dir, "server.toml")
+
+    File.write!(server_path, """
+    [server]
+    host = "127.0.0.1"
+    port = #{port}
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    max_connections = 1
+
+    [auth]
+    issuer = "test"
+    audience = "omunculus"
+    algorithm = "RS256"
+    public_key = "public.pem"
+
+    [projects.alpha]
+    config = "omunculus.toml"
+    """)
+
+    {:ok, server} = Server.start_link(server_path)
+    base = "http://127.0.0.1:#{port}/v1/projects/alpha"
+    admin = auth(token(private_key, "admin"))
+    client = auth(token(private_key, "client"))
+    outsider = auth(token(private_key, "outsider"))
+    key = fn -> [{"idempotency-key", Omunculus.Id.new()}] end
+
+    conversation = Req.post!(base <> "/conversations", headers: admin ++ key.()).body["id"]
+
+    job = fn extra ->
+      Map.merge(
+        %{
+          name: "review",
+          agent: "concierge",
+          message: "Review.",
+          schedule: "daily at 09:00",
+          timezone: "America/Sao_Paulo",
+          conversation_id: conversation
+        },
+        extra
+      )
+    end
+
+    # A person who may not create jobs is told there is nothing, as for any other resource.
+    assert Req.post!(base <> "/jobs", headers: outsider ++ key.(), json: job.(%{})).status == 404
+
+    assert Req.post!(base <> "/jobs", headers: admin ++ key.(), json: job.(%{foo: 1})).status ==
+             400
+
+    assert Req.post!(base <> "/jobs", headers: admin ++ key.(), json: job.(%{channel: "cli"})).status ==
+             400
+
+    created =
+      Req.post!(base <> "/jobs", headers: admin ++ key.(), json: job.(%{channel: "console"}))
+
+    assert %{status: 202, body: %{"status" => "accepted"}} = created
+
+    refused = Req.post!(base <> "/jobs", headers: admin ++ key.(), json: job.(%{}))
+    assert %{status: 422, body: %{"error" => "job_refused", "message" => message}} = refused
+    assert message =~ "a job named review exists"
+
+    assert %{status: 200, body: %{"items" => [listed]}} =
+             Req.get!(base <> "/jobs", headers: admin)
+
+    assert %{"name" => "review", "state" => "active", "version" => 1, "next_fire" => next} =
+             listed
+
+    assert next
+    assert listed["origin"]["channel"] == "console"
+    assert Req.get!(base <> "/jobs/review", headers: admin).body == listed
+    assert Req.get!(base <> "/jobs/#{listed["id"]}", headers: admin).status == 200
+
+    # Whoever reads the conversation reads its jobs, and no one else does.
+    assert %{status: 200, body: %{"items" => []}} = Req.get!(base <> "/jobs", headers: outsider)
+    assert Req.get!(base <> "/jobs/review", headers: outsider).status == 404
+    member = %{issuer: "test", subject: "client", role: "client"}
+
+    assert Req.post!(base <> "/conversations/#{conversation}/members",
+             headers: admin,
+             json: member
+           ).status == 200
+
+    assert %{status: 200, body: %{"items" => [%{"name" => "review"}]}} =
+             Req.get!(base <> "/jobs", headers: client)
+
+    assert Req.get!(base <> "/jobs/review", headers: client).status == 200
+    assert Req.get!(base <> "/jobs/review/history", headers: client).status == 200
+
+    # But they change nothing without job.manage or job.create.
+    assert Req.post!(base <> "/jobs/review/actions/pause", headers: client ++ key.(), json: %{}).status ==
+             404
+
+    assert Req.post!(base <> "/jobs", headers: client ++ key.(), json: job.(%{name: "mine"})).status ==
+             404
+
+    assert Req.post!(base <> "/jobs/review/actions/pause",
+             headers: admin ++ key.(),
+             json: %{reason: "holiday"}
+           ).status == 202
+
+    assert %{"state" => "paused", "state_reason" => "holiday", "next_fire" => nil} =
+             Req.get!(base <> "/jobs/review", headers: admin).body
+
+    assert Req.post!(base <> "/jobs/review/actions/edit",
+             headers: admin ++ key.(),
+             json: %{message: "Review twice."}
+           ).status == 202
+
+    assert %{"version" => 2, "message" => "Review twice."} =
+             Req.get!(base <> "/jobs/review", headers: admin).body
+
+    assert %{status: 200, body: %{"items" => []}} =
+             Req.get!(base <> "/jobs/review/messages", headers: admin)
+
+    assert %{status: 200, body: %{"items" => []}} =
+             Req.get!(base <> "/job-messages", headers: admin)
+
+    assert Req.post!(base <> "/jobs/review/actions/read", headers: client ++ key.(), json: %{}).status ==
+             202
+
+    assert Req.post!(base <> "/jobs/review/actions/duplicate",
+             headers: admin ++ key.(),
+             json: %{as: "copy"}
+           ).status == 202
+
+    assert Req.post!(base <> "/jobs/review/actions/run", headers: admin ++ key.(), json: %{}).status ==
+             202
+
+    assert Req.post!(base <> "/jobs/review/actions/explode", headers: admin ++ key.(), json: %{}).status ==
+             404
+
+    assert Req.post!(base <> "/jobs/ghost/actions/pause", headers: admin ++ key.(), json: %{}).status ==
+             404
+
+    assert %{status: 200, body: %{"events" => [first, second | _]}} =
+             Req.get!(base <> "/jobs/review/history", headers: admin)
+
+    assert %{"op" => "create", "origin" => %{"channel" => "console"}} = first
+    assert %{"op" => "transition", "to" => "paused", "reason" => "holiday"} = second
+
+    assert %{body: %{"events" => [%{"op" => "fire", "state" => "due"}]}} =
+             Req.get!(base <> "/jobs/review/history?limit=1", headers: admin)
+
+    assert Req.get!(base <> "/jobs/review/history?limit=0", headers: admin).status == 400
 
     :ok = Supervisor.stop(server)
   end
