@@ -477,7 +477,7 @@ may, an agent only as the arbiter. The request closes and the reply's body
 is commented on it. Without an option it executes no effects; with an option
 its calls run as steps `reply` chains — under the arbiter's
 ceiling, in the reply's transaction, each an `EVENTS(tool)` with
-`via = reply`. The builtin `reply` chains `grant`, `cancel`, `configure` and `pack`;
+`via = reply`. The builtin `reply` chains `grant`, `cancel`, `configure`, `pack` and `jobs`;
 a call outside that list fails the reply and writes nothing. The
 requester's work, if it still waits on the request, is reopened; if it
 is open once the calls applied, its next run opens with the request

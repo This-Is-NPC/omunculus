@@ -101,6 +101,10 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /agents/{agent}/image` | Read an agent's `image`, with its media type, if the project is visible to you; `404` for an agent without one. |
 | `GET, POST /conversations` | List visible conversations or create one. |
 | `GET /works?state={state}` | List the works of every conversation you may read, oldest first, each with its `conversation_id`; `state` (`open`, `waiting`, `done` or `cancelled`) keeps those in it alone, and any other value is `400`. |
+| `GET /jobs`, `GET /jobs/{job}` | List the jobs you may read, or read one by name or id: `id`, `name`, `state`, `version`, the target, `schedule`, `timezone`, `conversation_id`, `workspace`, `condition`, `end_at`, `owner`, `delivery`, `origin`, `state_reason`, `fires` (totals of the fires that finished: counts by state, `usd`, `calls`, tokens, `duration_ms`, `success_rate`), `last_fire` and `next_fire`. A job is read with `job.read` where its conversation is, else in the project. |
+| `GET /jobs/{job}/history?limit=n` | The newest `n` events of a job, oldest first: `create`, `change`, `transition`, `read` and `fire`. |
+| `POST /jobs`, `POST /jobs/{job}/actions/{action}` | Create a job, or `edit`, `duplicate` (`as` names the copy), `pause`, `resume`, `run`, `archive` or `read` one. The body is the `jobs` tool's fields; `channel` is `api` or `console`. They need an `Idempotency-Key` and `job.create` or `job.manage`; a job the store refuses is `422 job_refused` with the sentence in `message`. |
+| `GET /jobs/{job}/messages`, `GET /job-messages` | The messages jobs deliver ([Jobs](#jobs)). |
 | `GET /capabilities` | List the project capabilities your role grants. |
 | `POST /works/{id}/revert` | Put back the files the work's calls changed, as they were before it, in the root of the workspace the work ran in; it needs `project.manage_config` and an `Idempotency-Key`. The workspace's write rules decide which files may change, as for a run, with `sandbox.write` taken as granted unless the workspace or policy denies it. A refusal (a file changed since the work's last change, or is not writable) is `422 tool_failed` with the sentence in `message`, and nothing is restored. |
 | `GET /stream?after={cursor}` | Open a WebSocket of the later events of every conversation you may read; see [Event stream](#event-stream). |
@@ -119,7 +123,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `POST /members`, `DELETE /members/{issuer}/{subject}` | Assign or revoke a project role. |
 | `POST /conversations/{id}/members`, `DELETE /conversations/{id}/members/{issuer}/{subject}` | Assign or revoke a conversation role. |
 
-Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `conversation_id`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources, and for the config, members and usage routes without the capability they name. A config write against a file that changed since `revision` was read is `409 stale_revision`; one whose result does not load, or whose section is not one of those above, is `422 config_refused` with the reason in `message`, and the file stays as it was. Config writes take no `Idempotency-Key`.
+Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `conversation_id`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources and jobs, and for the config, members and usage routes without the capability they name. A config write against a file that changed since `revision` was read is `409 stale_revision`; one whose result does not load, or whose section is not one of those above, is `422 config_refused` with the reason in `message`, and the file stays as it was. Config writes take no `Idempotency-Key`.
 
 Request resources expose `requester` and `arbiter` as participant objects:
 `{"kind":"agent","agent":"name"}` or
@@ -132,6 +136,18 @@ maps part names to their canonical requests, including the original `reason`,
 original target and the actual authenticated answerer. Omit `option` for text;
 explicit null or empty values return `400`. A person escalates through
 `/requests/escalate`, below.
+
+## Jobs
+
+A job with `delivery = "owner_inbox"` turns the final reply of each fire into a
+message of its thread: `{"id","job_id","sender":{"kind":"job","name"},"at","text","conversation_id","run_ids","unread"}`.
+`GET /jobs/{job}/messages` lists a job's thread; `GET /job-messages` lists, newest
+first, the messages of every job that delivers to you as its owner, which is a
+mailbox's Inbox. `conversation_id` and `run_ids` are the conversation the fire
+opened: answering a message is an ordinary message there, to the agent, and never
+changes the job. `unread` is true after the job's `read_at`; `POST
+/jobs/{job}/actions/read` marks the thread read. A job's thread needs the same
+`job.read` as the job. The Console links a message to `GET /jobs/{job}/history`.
 
 ## Artifacts
 

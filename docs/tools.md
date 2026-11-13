@@ -827,6 +827,45 @@ browser talk over the loopback of the sandbox, which exists without
 needs that grant, and its failed requests show up in the output when it is
 missing.
 
+## Scheduled jobs
+
+A job runs a message, or a tool with no model, on a schedule. Jobs are data
+in the store ([how to schedule a job](how-to-schedule-a-job.md)); two builtin
+tools reach them.
+
+`jobs` is the command line's tool and the call an approved proposal chains.
+`action` is `list`, `show`, `history`, `create`, `edit`, `duplicate`, `pause`,
+`resume`, `run`, `archive` or `read`; `--name` is the job. A job aims at one
+target: `agent` (of depth 0) or `workflow`, each with a `message`, or `tool`
+with `args`. `schedule` is a 5-field cron expression, `every 30m`, `every 2h`
+or `daily at 09:00`, read in `timezone`. Optional: `conversation_id` (fires go
+there, and whoever reads it reads the job; it cannot change later),
+`workspace`, `condition` (a tool run before each fire; the fire is skipped when
+it fails) with `condition_args`, `end_at`, `owner` (an `[accounts]` name or an
+agent; else whoever creates the job) and `delivery` (`owner_inbox`, below).
+`list`, `show` and `history` read the `jobs` view source; `history` shows the
+newest 50 events. Each other action emits one `job` action, which the store
+applies as `Omunculus.Jobs.write/3`: it is refused without `[jobs]`, past
+`max_jobs`, for a schedule faster than `min_interval_minutes`, for a name
+taken, and in a run that a job's fire opened (a run with `via = job`, or below
+one), so a job cannot make jobs. It needs `job.create` (create, duplicate),
+`job.manage` (edit, pause, resume, run, archive) or `job.read` (the reads,
+`read`) on the job's conversation, else on the project.
+
+`propose_job` is the model's way to create one. It checks the job as `jobs
+create` would, then asks: a request to whoever gave the agent its work, with
+the job in words and its next fires, and the options `approve` (calls `jobs
+create` with the proposal and the request's id), `edit` (calls nothing; the
+reply says what to change) and `deny`. A job approved is owned by `owner`, else
+by whoever approves it. It refuses a proposal the person already answered
+without approving. Where `[jobs] agent_may_create` is true the job is created
+at once and nothing is asked. It works from any conversation, which is how a
+mailbox sends one: the card is an ordinary request.
+
+**Delivery.** A job whose `delivery` is `owner_inbox` hands the final reply of
+each fire to its owner as a message of the job's thread, with the job as
+sender (`Jobs.messages/2`; the API in [the server](server.md#jobs)).
+
 ## Groups the default package uses
 
 ```text
@@ -837,8 +876,9 @@ sequence  = work, delegate, continue, break, wait, end, done, cancel, ask, escal
 catalog   = tool_search
 memory    = remember, recall, forget
 skills    = skill, and every skill.<name> of [skills] paths
-cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset, version, update, setup
+cli       = send, jobs, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset, version, update, setup
 configuring = config, overview, propose_config, propose_pack
+scheduling  = propose_job
 assembly  = assemble
 artifacts = put_artifact, get_artifact, list_artifacts
 ```
