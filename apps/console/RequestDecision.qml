@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Jobs.js" as Jobs
 import "kit/client/Questions.js" as Questions
 import "kit/client/Events.js" as Events
 import "kit/client/Pending.js" as Pending
@@ -34,7 +35,12 @@ import "kit/ui"
 // (`collapsible`) a button in the heading folds it to one line, its kind, its
 // title, its progress and its time; the words written stay, and the state is
 // kept per request while the app runs. The asker, the way down, the work and
-// what it unblocks are behind "details".
+// what it unblocks are behind "details". An agent's job proposal is a
+// DECISION with its own word, JOB PROPOSAL: under its reason, the job as it
+// would run (what it sends, when it holds back, where replies go), and the
+// preview of its schedule (JobPreview): the schedule in words, the next fires
+// and the estimated cost of a fire. APPROVE creates the job and is filled; EDIT
+// sends back, in words, what to change; DENY drops it.
 SurfaceFrame {
   id: card
 
@@ -102,14 +108,18 @@ SurfaceFrame {
   }) : null
   // The lines under the title, as [{name, value, tone, detail}]; those that
   // say who and where are `detail`, behind the toggle.
-  readonly property var fields: !facts ? [] : [
+  // The job it proposes when it is an agent's `propose_job`: it is a decision,
+  // approved, sent back with words (EDIT) or denied; it also says what the job
+  // sends and, from the server, its schedule's next fires and its estimated cost.
+  readonly property var proposal: request ? Jobs.proposal(request) : null
+  readonly property var fields: !facts ? [] : (proposal ? Jobs.lines(proposal).filter(line => line.detail) : []).concat([
     { name: "ASKS", value: facts.asker, tone: Omunculus.toneOf(facts.asker), detail: true },
     { name: "PATH", value: facts.path.join(" › "), detail: true },
     { name: "WORK", value: facts.work, detail: true },
     { name: "UNBLOCKS", value: facts.unblocks, detail: true },
     { name: "GRANTS", value: kind === "permission" ? facts.grants : "", tone: Theme.warning },
     { name: "STEP", value: request.interception && request.interception.of > 1 ? request.interception.step + " of " + request.interception.of : "" }
-  ].filter(field => field.value !== "")
+  ]).filter(field => field.value !== "")
 
   readonly property var shownFields: fields.filter(field => detailed || !field.detail)
   // Whether those details show; each card starts without them.
@@ -394,6 +404,19 @@ SurfaceFrame {
         wrapMode: Text.Wrap
       }
 
+      // A proposed job: its schedule in words, its next fires and what a fire
+      // costs, as the server works them out.
+      Loader {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 620
+        active: card.open && card.proposal !== null
+        visible: active
+        sourceComponent: JobPreview {
+          fields: card.proposal
+          lines: Jobs.lines(card.proposal).filter(line => !line.detail)
+          dim: card.dim
+        }
+      }
       Label {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
@@ -568,7 +591,7 @@ SurfaceFrame {
         spacing: Theme.space.tight
         Caption {
           Layout.fillWidth: true
-          text: card.escalating ? "WHY IT GOES UP" : card.editing ? "WHAT IT WILL DO INSTEAD" : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
+          text: card.escalating ? "WHY IT GOES UP" : card.editing ? (card.proposal ? "WHAT TO CHANGE IN THE JOB" : "WHAT IT WILL DO INSTEAD") : card.kind === "permission" ? ("REASON FOR A NO (OPTIONAL)")
             : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
         }
         TextBlock {
@@ -578,7 +601,7 @@ SurfaceFrame {
           implicitHeight: contentHeight + topPadding + bottomPadding
           readOnly: card.busy
           opacity: readOnly ? 0.5 : 1
-          placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.editing ? "the text to go ahead with" : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
+          placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.editing ? (card.proposal ? "what the agent should change in the job" : "the text to go ahead with") : card.kind === "needs-you" ? "type your answer" : card.kind === "decision" ? "answer its questions or add a note" : "a reason or a note"
           Accessible.name: card.escalating ? "why it goes up" : "your words"
           Keys.onPressed: Typing.mark()
           submits: card.kind !== "decision" && card.kind !== "review"
@@ -663,10 +686,10 @@ SurfaceFrame {
           role: "progress"
           filled: card.hasWords
           icon: card.escalating ? "chevron-up" : "enter"
-          text: card.escalating ? "ESCALATE" : card.editing ? "SEND EDIT" : "ANSWER"
-          tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : card.editing ? "let it go ahead with your words in place of its text" : "answer in your words, choosing no option"
+          text: card.escalating ? "ESCALATE" : card.editing ? (card.proposal ? "SEND CHANGES" : "SEND EDIT") : "ANSWER"
+          tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : card.editing ? (card.proposal ? "send your words back to the agent, which proposes the job again" : "let it go ahead with your words in place of its text") : "answer in your words, choosing no option"
           sending: card.busy && (card.chosen === "words" || card.editing)
-          reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : card.editing ? "write the text it goes ahead with first" : "type your answer first"
+          reason: card.hasWords ? "" : card.escalating ? "say why it goes up first" : card.editing ? (card.proposal ? "say what to change first" : "write the text it goes ahead with first") : "type your answer first"
           onClicked: card.submitWords()
         }
         TraceButton {

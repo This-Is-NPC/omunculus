@@ -1,5 +1,6 @@
 .pragma library
 .import "Requests.js" as Requests
+.import "Jobs.js" as Jobs
 .import "Questions.js" as Questions
 .import "Progress.js" as Progress
 
@@ -109,14 +110,15 @@ function describe(request, input) {
   const unlocks = wanted ? Requests.unlocks(wanted, input.folder) : "";
   const above = route.slice(0, -1);
   const held = request.interception;
-  const lead = wanted || form || held ? null : sentence(headline(input.text));
+  const job = Jobs.proposal(request);
+  const lead = wanted || form || held || job ? null : sentence(headline(input.text));
   const unblocks = [asker + " resumes " + (work !== "" ? work : "its work")]
     .concat(above.length > 0 ? [names(above) + (above.length > 1 ? " are" : " is") + " waiting for it"] : []).join(" · ");
   return {
-    id: request.id, kind: kind, word: look.text, icon: look.icon,
+    id: request.id, kind: kind, word: job ? "JOB PROPOSAL" : look.text, icon: job ? "clock" : look.icon,
     asker: asker, line: Requests.line(request, input.me), path: route, work: work,
-    title: held ? capital(held.summary) : wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
-    body: lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",
+    title: job ? Jobs.proposes(capital(asker), job) : held ? capital(held.summary) : wanted ? capital(asker) + " asks to " + unlocks : form ? capital(asker) + " asks " + form.items.length + " questions" : lead.first,
+    body: job ? Jobs.reason(request) : lead ? [lead.more, rest(input.text)].filter(part => part !== "").join("\n\n") : "",
     unblocks: held ? asker + " waits for your review" : unblocks,
     grants: wanted && Object.keys(request.options || {}).includes("grant") ? unlocks + " · this work only" : unlocks,
     since: request.created_at || "",
@@ -153,6 +155,11 @@ function resolved(request, reply, input) {
       return { icon: "close", word: "DENIED", sentence: "You denied " + asker + " permission to " + unlocks + where };
     const scope = option === "grant" || option === "" ? "" : " · " + Requests.optionLabel(option, { who: asker, folder: input.folder }).toLowerCase();
     return { icon: "shield", word: "GRANTED", sentence: "You granted " + asker + " permission to " + unlocks + scope + where };
+  }
+  const job = Jobs.proposal(request);
+  if (job) {
+    const said = { approve: ["check", "APPROVED", "approved"], edit: ["edit", "SENT BACK", "asked for changes to"], deny: ["close", "DENIED", "denied"] }[option] || ["diamond", "ANSWERED", "answered"];
+    return { icon: said[0], word: said[1], sentence: "You " + said[2] + " the job " + job.name + " that " + asker + " proposed" + where };
   }
   if (option === "adjust")
     return { icon: "diamond", word: "ASKED", sentence: "You asked " + asker + " to adjust" + where };

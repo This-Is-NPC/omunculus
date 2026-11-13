@@ -59,6 +59,7 @@ defmodule Omunculus.GuiArtifactsTest do
                  "Usage",
                  "Time",
                  "Progress",
+                 "Jobs",
                  "Pending",
                  "Tree",
                  "Artifacts"

@@ -3,7 +3,17 @@ defmodule Omunculus.GuiTreeTest do
 
   alias Omunculus.GuiModules
 
-  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress", "Pending", "Tree"]
+  @modules [
+    "Requests",
+    "Questions",
+    "Phrases",
+    "Usage",
+    "Time",
+    "Progress",
+    "Jobs",
+    "Pending",
+    "Tree"
+  ]
 
   # An agency run four levels deep, as the TREE page shows it: sales talks
   # with you; seller's sale (w1) handed down a design preview to design-lead
