@@ -17,6 +17,10 @@ license=('MIT')
 makedepends=('elixir' 'erlang-nox' 'git')
 options=('!lto' '!debug')
 
+# The release links the libcrypto of the machine that built it. Naming its
+# soname, not the package, makes pacman refuse an openssl it cannot run on.
+_crypto="$(LC_ALL=C pacman -Qi openssl | sed -n 's/^Provides .*\(libcrypto\.so=[0-9]*-[0-9]*\).*/\1/p')"
+
 _tree="${OMUNCULUS_TREE:-$startdir/../..}"
 
 prepare() {
@@ -36,7 +40,7 @@ build() {
 
 package_omunculus() {
   pkgdesc='A hierarchy of AI agents that work a project: server, command line and tools'
-  depends=('glibc' 'gcc-libs' 'ncurses' 'openssl' 'zlib' 'bubblewrap' 'git' 'util-linux')
+  depends=('glibc' 'gcc-libs' 'ncurses' "$_crypto" 'zlib' 'bubblewrap' 'git' 'util-linux')
   install=omunculus.install
   optdepends=('deno: code mode and browser_check'
               'chromium: browser_check'
