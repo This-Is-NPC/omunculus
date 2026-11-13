@@ -35,7 +35,7 @@ defmodule Omunculus.ReleaseCommandsTest do
     def init(opts), do: opts
 
     def call(%{request_path: "/latest"} = conn, opts) do
-      base = "http://127.0.0.1:#{opts.port.()}/files/"
+      base = "http://127.0.0.1:#{opts.port.()}/moved/"
 
       assets =
         for name <- Map.keys(opts.files),
@@ -46,6 +46,9 @@ defmodule Omunculus.ReleaseCommandsTest do
       |> put_resp_content_type("application/json")
       |> send_resp(200, Jason.encode!(%{"tag_name" => opts.tag, "assets" => assets}))
     end
+
+    def call(%{request_path: "/moved/" <> name} = conn, _opts),
+      do: conn |> put_resp_header("location", "/files/" <> name) |> send_resp(302, "")
 
     def call(%{request_path: "/files/" <> name} = conn, opts),
       do: send_resp(conn, 200, Map.fetch!(opts.files, name))
@@ -154,6 +157,17 @@ defmodule Omunculus.ReleaseCommandsTest do
     serve("v#{@next}")
     assert {:error, reason} = CLI.run(["update"], dir)
     assert CLI.message(reason) == "sudo pacman -U failed with status 1; nothing was updated"
+  end
+
+  test "update never logs the redirect of a download", %{dir: dir} do
+    serve("v#{@next}")
+    level = Logger.level()
+    Logger.configure(level: :debug)
+    on_exit(fn -> Logger.configure(level: level) end)
+
+    log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, _} = CLI.run(["update"], dir) end)
+
+    refute log =~ "redirecting"
   end
 
   test "update refuses a package whose checksum differs", %{dir: dir} do

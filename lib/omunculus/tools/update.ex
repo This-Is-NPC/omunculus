@@ -141,7 +141,7 @@ defmodule Omunculus.Tools.Update do
   defp fetch(%{"name" => name, "browser_download_url" => url}, dir) do
     path = Path.join(dir, name)
 
-    case Req.get(url, into: File.stream!(path), retry: false) do
+    case Req.get(url, into: File.stream!(path), retry: false, redirect_log_level: false) do
       {:ok, %{status: 200}} -> {:ok, path}
       {:ok, %{status: status}} -> {:error, "downloading #{name} answered #{status}"}
       {:error, error} -> {:error, "cannot download #{name}: #{Exception.message(error)}"}
