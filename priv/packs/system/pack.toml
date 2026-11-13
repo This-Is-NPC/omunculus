@@ -7,6 +7,7 @@
 name = "system"
 version = "0.1.0"
 description = "Maintains the project itself: designs teams as packs, composes them, changes the config, audits it and refines its teams from their runs, each change approved by the person."
+omunculus = ">= 0.3.0"
 roles = ["system"]
 
 [agents.steward]

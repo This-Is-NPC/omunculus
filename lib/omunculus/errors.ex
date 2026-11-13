@@ -146,6 +146,16 @@ defmodule Omunculus.Errors do
     "pack #{pack} requires tools the project lacks: #{tools}; add a [tools] path that holds them or import the pack that brings them"
   end
 
+  def format({:packs, {pack, :omunculus, {requirement, running}}}),
+    do:
+      "pack #{pack} needs omunculus #{requirement} and this is #{running}: " <>
+        "install a newer omunculus, or an older version of the pack"
+
+  def format({:packs, {pack, :header, key}}),
+    do:
+      "pack #{pack}: [pack] #{key} is missing or not valid; " <>
+        "a shareable pack gives a name, a semver version, a one-line description and the omunculus it needs"
+
   def format({:worktree, reason}) when is_binary(reason), do: reason
 
   def format(:no_runs), do: "no runs"

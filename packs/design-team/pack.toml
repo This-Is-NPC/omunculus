@@ -5,6 +5,9 @@
 # deploy_preview. Every agent runs on the role `team`.
 [pack]
 name = "design-team"
+version = "0.1.0"
+description = "Makes the visual proposal a site starts from: a design system, a moodboard and the wireframes and a mockup of each page, published to homologation for the client to see."
+omunculus = ">= 0.3.0"
 roles = ["team"]
 
 [pack.requires]

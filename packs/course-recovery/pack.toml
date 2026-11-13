@@ -2,6 +2,7 @@
 name = "course-recovery"
 version = "0.1.0"
 description = "Experimental steward supervision of unanswered internal requests."
+omunculus = ">= 0.3.0"
 roles = []
 
 [pack.requires]
