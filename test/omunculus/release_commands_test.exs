@@ -181,4 +181,15 @@ defmodule Omunculus.ReleaseCommandsTest do
              &(&1 == {"systemctl", ["--user", "enable", "--now", "omunculus"]})
            ) == 2
   end
+
+  test "setup says when the unit is enabled but not running", %{dir: dir} do
+    System.put_env("XDG_CONFIG_HOME", dir)
+    on_exit(fn -> System.delete_env("XDG_CONFIG_HOME") end)
+    Application.put_env(:omunculus, :fake_runner, apps: false, active: false)
+
+    assert {:ok, output} = CLI.run(["setup"], dir)
+    assert output =~ "enabled but not running"
+    refute output =~ "enabled and started"
+    assert File.exists?(Path.join([dir, "omunculus", "server.toml"]))
+  end
 end

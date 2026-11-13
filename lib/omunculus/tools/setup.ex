@@ -22,10 +22,8 @@ defmodule Omunculus.Tools.Setup do
     path = Path.join([config_home(), "omunculus", "server.toml"])
 
     with {:ok, written} <- write(path),
-         :ok <- enable() do
-      Out.ok(
-        Enum.join([written, "The user unit omunculus is enabled and started.", next()], "\n")
-      )
+         {:ok, unit} <- enable() do
+      Out.ok(Enum.join([written, unit, next()], "\n"))
     else
       {:error, message} -> Out.fail(message)
     end
@@ -54,11 +52,27 @@ defmodule Omunculus.Tools.Setup do
 
   defp enable do
     case runner().run("systemctl", @unit) do
-      {_output, 0} ->
-        :ok
+      {output, 0} ->
+        started(output)
 
       {output, _status} ->
         {:error, "systemctl --user enable --now omunculus failed: #{String.trim(output)}"}
+    end
+  end
+
+  # systemctl exits 0 and only warns when no systemd runs the session.
+  defp started(output) do
+    case runner().run("systemctl", ["--user", "is-active", "--quiet", "omunculus"]) do
+      {_, 0} ->
+        {:ok, "The user unit omunculus is enabled and started."}
+
+      _inactive ->
+        {:ok,
+         "The user unit omunculus is enabled but not running: " <>
+           if(String.trim(output) == "",
+             do: "systemctl reports it inactive.",
+             else: String.trim(output)
+           )}
     end
   end
 
