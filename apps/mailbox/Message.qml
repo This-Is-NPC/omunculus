@@ -8,7 +8,7 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 // line with who wrote, the start of the text and the time; open, its header
 // (from, to, date), its text, the files it carries, each a chip that saves
 // the file to the downloads directory and opens it, and Reply, Forward and,
-// only when the thread has several counterparts, Reply all. A message a job delivers has the JOB badge beside its sender and a link that shows the job's history under it. The latest message's Reply is the screen's solid action unless that message is your own.
+// only when the thread has several counterparts, Reply all. A message a job delivers has the JOB badge beside its sender and a link that opens the job in the console. The latest message's Reply is the screen's solid action unless that message is your own.
 SurfaceFrame {
   id: mail
 
@@ -21,8 +21,6 @@ SurfaceFrame {
   // Whether the thread has more than one counterpart, so Reply all differs from Reply.
   property bool several: false
 
-  // Whether the job's history shows under the message.
-  property bool history: false
 
   readonly property bool agent: !message.mine
   // The latest message is the one the screen's solid action answers, unless it
@@ -113,35 +111,11 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
-    ColumnLayout {
-      Layout.fillWidth: true
+    LinkLabel {
       visible: mail.expanded && !!mail.message.job
-      spacing: 6
-      LinkLabel {
-        Layout.minimumHeight: Breakpoints.target(Window.width)
-        value: mail.history ? "HIDE JOB HISTORY" : "VIEW JOB HISTORY"
-        onClicked: {
-          mail.history = !mail.history
-          if (mail.history)
-            Mail.loadHistory(mail.thread)
-        }
-      }
-      Label {
-        visible: mail.history && Mail.histories[mail.thread] === undefined
-        text: "Reading the history..."
-        color: Theme.dim
-        font.pixelSize: 11
-      }
-      Repeater {
-        model: mail.history ? Mail.histories[mail.thread] || [] : []
-        delegate: RowLayout {
-          required property var modelData
-          Layout.fillWidth: true
-          spacing: 10
-          Label { Layout.preferredWidth: 140; text: Mail.stamp(modelData.at); color: Theme.dim; font.pixelSize: 11 }
-          Label { Layout.fillWidth: true; text: modelData.text; font.pixelSize: 12; elide: Text.ElideRight }
-        }
-      }
+      Layout.minimumHeight: Breakpoints.target(Window.width)
+      value: "VIEW JOB IN THE CONSOLE"
+      onClicked: Mail.openJob(mail.thread)
     }
 
     Flow {

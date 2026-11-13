@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
+import "kit/client/Jobs.js" as Jobs
 import "kit/ui"
 
 // ReviewView reads one review as a card, bordered in the warning tone, or a job
@@ -169,8 +170,8 @@ Item {
               }
               Repeater {
                 model: view.proposal ? [
-                  { name: "SCHEDULE", value: view.review.job.words },
-                  { name: "NEXT FIRES", value: view.review.job.next.length > 0 ? view.review.job.next.map(at => Mail.stamp(at)).join("\n") : "none in sight" },
+                  { name: "SCHEDULE", value: Jobs.when(view.review.job.schedule) + "  ·  " + view.review.job.timezone },
+                  { name: "NEXT FIRES", value: Mail.nextFires(view.review) },
                   { name: "ESTIMATE", value: Mail.estimate(view.review) }
                 ] : []
                 delegate: ColumnLayout {

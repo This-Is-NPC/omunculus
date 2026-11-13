@@ -454,6 +454,14 @@ ShellRoot {
     }
     function conversations(): void { page("conversations") }
     function jobs(): void { page("jobs") }
+    // A job of the project, by its name, on its page.
+    function job(name: string): void {
+      if (Omunculus.project === "")
+        return
+      if (!panel.started)
+        panel.enter("jobs")
+      pagesView.showJob({ name: name })
+    }
     function open(conversationId: string): void {
       if (Omunculus.project === "")
         return

@@ -88,11 +88,9 @@ final reply of each fire to its owner. The mailbox reads them from
   `seen.json`. Opening the thread marks it read with
   `POST .../jobs/{job}/actions/read`; MARK ALL READ does the same for the job
   threads shown; MARK UNREAD is off, since the API has no way to undo a read;
-- an open message has VIEW JOB HISTORY, which lists under it the events of
-  `GET .../jobs/{job}/history` (a fire is one line with its latest state,
-  reads are left out), newest first. The apps reach each other only through
-  Quickshell IPC, and the console has no job page to open on a name, so the
-  history shows inline rather than in the console;
+- an open message has VIEW JOB IN THE CONSOLE, which opens the job on its
+  page in the console through its Quickshell IPC (`job <name>`, in the
+  console's current project); it says so when the console is not running;
 - REPLY opens a composer for a **new** message to the job's agent (To
   prefilled with it; empty when the job runs a workflow or a tool, which is a
   message to the default agent), under "Re: <job name>", with the job's message
@@ -102,17 +100,17 @@ final reply of each fire to its owner. The mailbox reads them from
 **Proposals.** An agent's `propose_job` is a request to you whose `approve`
 creates the job. It is not mail: the Pending folder holds it, as a review card
 marked JOB PROPOSAL ([Reviews](#reviews)), and no thread shows it. The card
-gives the agent's reason, the schedule in words ("Every day at 07:00
-(Europe/Lisbon)"), the next fires from the request, and the estimate per fire
-from `POST .../jobs/preview` with the job's schedule, time zone and target (in
-words when there is no history to go by; a tool, which has no model, says so).
+gives the agent's reason, the schedule in words ("every day at 07:00 ·
+Europe/Lisbon"), and, from `POST .../jobs/preview` with the job's schedule,
+time zone and target, its next fires and the estimate per fire (in words when
+there is no history to go by; a tool, which has no model, says so).
 APPROVE, EDIT and DENY reply `approve`, `edit` or `deny` as for a review; EDIT
 takes the words of what to change, which the agent reads, and creates nothing.
 Your answer is mail you sent to the agent, in Sent.
 
-The logic is in `apps/kit/client/Mailbox.js` (`jobThreads`, `history`,
-`jobReply`, `proposal`) and `apps/kit/client/Schedule.js` (the schedule in
-words and the estimate).
+The logic is in `apps/kit/client/Mailbox.js` (`jobThreads`,
+`jobReply`, `proposed`) and `apps/kit/client/Jobs.js`, which the console
+shares (the schedule in words, the preview and the estimate).
 
 ## Folders
 

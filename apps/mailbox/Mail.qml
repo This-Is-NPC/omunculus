@@ -5,7 +5,7 @@ import Quickshell.Io
 import "kit/client"
 import "kit/client/Composers.js" as Composers
 import "kit/client/Mailbox.js" as Mailbox
-import "kit/client/Schedule.js" as Schedule
+import "kit/client/Jobs.js" as Jobs
 import "kit/ui"
 
 // Mail is every project of the server as an e-mail client shows it. A thread
@@ -222,17 +222,18 @@ Singleton {
       unread: false, messages: thread.messages.map(message => Object.assign({}, message, { unread: false })) }) })
   }
 
-  // The history of a job's thread, key -> the lines Mailbox.history makes.
-  property var histories: ({})
-
-  // Reads a job's history, to show it in its thread.
-  function loadHistory(key) {
+  // Opens a job's thread's job on its page in the console, through its IPC.
+  function openJob(key) {
     const thread = threads[key]
-    if (!thread || !thread.job)
-      return
-    http.call(projectOf(thread.project).socket, "GET", "/v1/projects/" + thread.project + "/jobs/" + encodeURIComponent(thread.job.id) + "/history?limit=50", null, false, data => {
-      histories = Object.assign({}, histories, { [key]: Mailbox.history(data.events) })
-    })
+    if (thread && thread.job)
+      consoleJob.exec(["quickshell", "ipc", "--path", Quickshell.shellPath("../console"), "call", "omunculus", "job", thread.job.name])
+  }
+  Process {
+    id: consoleJob
+    onExited: code => {
+      if (code !== 0)
+        tell("The console is not running.", true)
+    }
   }
 
   // Moves a thread to the archive and goes back to the list.
@@ -356,19 +357,24 @@ Singleton {
       })
   }
 
-  // What a proposal's job costs per fire, in words.
-  function estimate(review) {
-    return Schedule.estimate(review.job ? review.job.target : null, previews[review.key] || null)
+  // What the server previews of a proposal's job, in words: the next fires
+  // and what a fire costs; "" until it has answered.
+  function nextFires(review) {
+    return Jobs.nextFires(previews[review.key], Date.now()).join("\n")
   }
 
-  // Asks the server what a proposal's job would cost, once; a tool has no model to price.
+  function estimate(review) {
+    return previews[review.key] ? Jobs.estimate(previews[review.key]) : "Reading the recent runs..."
+  }
+
+  // Asks the server what a proposal's job would do, once.
   function preview(review) {
     const place = projectOf(review.project)
-    if (!place || !review.job || !review.job.target || previewing[review.key])
+    const body = review.job ? Jobs.previewOf(review.job.create) : null
+    if (!place || body === null || previewing[review.key])
       return
     previewing = Object.assign({}, previewing, { [review.key]: true })
-    const job = review.job
-    http.call(place.socket, "POST", "/v1/projects/" + review.project + "/jobs/preview", { schedule: job.schedule, timezone: job.timezone, target: job.target }, false, data => {
+    http.call(place.socket, "POST", "/v1/projects/" + review.project + "/jobs/preview", body, false, data => {
       previews = Object.assign({}, previews, { [review.key]: data })
     }, () => {
       const left = Object.assign({}, previewing)
