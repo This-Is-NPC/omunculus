@@ -34,6 +34,13 @@ QtObject {
     call(on, "POST", "/v1/call", { name: name, args: args }, false, data => done(data.output), failed)
   }
 
+  // What a job would do, as the server works it out: its next fires and the
+  // cost of one. `request` is what Jobs.previewOf gives for a schedule, a zone
+  // and a target. The one way both apps ask, so a proposal reads the same in each.
+  function previewJob(on, project, request, done, failed) {
+    call(on, "POST", "/v1/projects/" + encodeURIComponent(project) + "/jobs/preview", request, true, done, failed)
+  }
+
   // The setup of the project `project` on the socket `on`, as
   // GET /v1/projects/{id}/config?whole=true gives it.
   function setup(on, project, done, failed) {

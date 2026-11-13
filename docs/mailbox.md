@@ -107,7 +107,10 @@ marked JOB PROPOSAL ([Reviews](#reviews)), and no thread shows it. The card
 gives the agent's reason, the schedule in words ("every day at 07:00 ·
 Europe/Lisbon"), and, from `POST .../jobs/preview` with the job's schedule,
 time zone and target, its next fires and the estimate per fire (in words when
-there is no history to go by; a tool, which has no model, says so).
+there is no history to go by; a tool, which has no model, says so), asked the
+way the console asks it (`Http.previewJob`) each time the card is opened, so both
+show the estimate the fires so far give. Times of a job read in local time with
+the zone after them.
 APPROVE, EDIT and DENY reply `approve`, `edit` or `deny` as for a review; EDIT
 takes the words of what to change, which the agent reads, and creates nothing.
 Your answer is mail you sent to the agent, in Sent.

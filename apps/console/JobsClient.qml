@@ -41,7 +41,7 @@ QtObject {
   // Jobs.previewOf gives it.
   function preview(request, done, failed) {
     const on = client.project
-    client.call("POST", base + "/preview", request, true, data => {
+    client.http.previewJob(client.socket, on, request, data => {
       if (on === client.project)
         done(data)
     }, failed)

@@ -767,7 +767,7 @@ box says "Enter opens the job form".
 like any other (`RequestDecision`, [Requests](#requests)). It is a DECISION
 with its own word, JOB PROPOSAL, and a clock icon: the agent's reason, what the
 job sends, its schedule in words, the next fires and the estimate (the
-same `JobPreview`; read only while the card waits), with who it runs as, its chat and its workspace behind "details". APPROVE
+same `JobPreview`; read only while the card waits, asked as the mailbox asks it, through `Http.previewJob`), with who it runs as, its chat and its workspace behind "details". APPROVE
 creates the job and is filled; EDIT opens the box "what to change in the job" and
 SEND CHANGES sends the words back to the agent; DENY drops it. Settled, the line reads "You approved the job
 morning that seller proposed".

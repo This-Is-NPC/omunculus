@@ -217,3 +217,12 @@ end
     same(Jobs.commandHint("/job every day"), "Enter opens the job form", "with its words");
     same(Jobs.commandHint("/jo"), "", "not yet");
     same(Jobs.commandHint("hello"), "", "plain text says nothing");
+  test "a proposal and its form ask the preview the same thing" do
+    run!("""
+    const created = {action: "create", name: "daily", agent: "front-desk", message: "Summarize", schedule: "daily at 18:00", timezone: "UTC", delivery: "owner_inbox"};
+    const asked = JSON.stringify(Jobs.previewOf(created));
+    same(asked, JSON.stringify(Jobs.previewOf(Jobs.formFields(Jobs.fromJob(created)))), "one request");
+    same(asked, JSON.stringify({schedule: "daily at 18:00", timezone: "UTC", target: {agent: "front-desk"}}), "its target and schedule");
+    """)
+  end
+

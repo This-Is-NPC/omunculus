@@ -159,6 +159,9 @@ Singleton {
   function openReview(key) {
     selected = ""
     selectedReview = key
+    const open = reviews.find(item => item.key === key)
+    if (open)
+      preview(open)
   }
 
   // Opens the review `by` places from the one open.
@@ -367,20 +370,24 @@ Singleton {
     return previews[review.key] ? Jobs.estimate(previews[review.key]) : "Reading the recent runs..."
   }
 
-  // Asks the server what a proposal's job would do, once.
+  // Asks the server what a proposal's job would do, as the console asks, again
+  // each time the proposal is read, since what a fire costs follows the fires there are.
   function preview(review) {
     const place = projectOf(review.project)
-    const body = review.job ? Jobs.previewOf(review.job.create) : null
-    if (!place || body === null || previewing[review.key])
+    const request = review.job ? Jobs.previewOf(review.job.create) : null
+    if (!place || request === null || previewing[review.key])
       return
     previewing = Object.assign({}, previewing, { [review.key]: true })
-    http.call(place.socket, "POST", "/v1/projects/" + review.project + "/jobs/preview", body, false, data => {
+    http.previewJob(place.socket, review.project, request, data => {
       previews = Object.assign({}, previews, { [review.key]: data })
-    }, () => {
-      const left = Object.assign({}, previewing)
-      delete left[review.key]
-      previewing = left
-    })
+      settled(review.key)
+    }, () => settled(review.key))
+  }
+
+  function settled(key) {
+    const left = Object.assign({}, previewing)
+    delete left[key]
+    previewing = left
   }
 
   // Saves a file attached in a thread to the downloads directory and opens it.
