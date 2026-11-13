@@ -6,8 +6,9 @@ defmodule Omunculus.Runner do
   """
 
   @callback run(String.t(), [String.t()]) :: {String.t(), non_neg_integer}
-  @callback run_tty(String.t(), [String.t()]) :: non_neg_integer
-  @callback tty?() :: boolean
+  @callback run_tty(String.t(), [String.t()], keyword) :: non_neg_integer
+  @callback terminal() :: String.t() | nil
+  @callback executable(String.t()) :: String.t() | nil
   @callback finish(String.t()) :: no_return
 
   @doc "Prints the message and ends the program with status 0, loading no more code."
@@ -41,29 +42,50 @@ defmodule Omunculus.Runner do
     end)
   end
 
-  @doc "True when there is a terminal for a command to ask on."
-  @spec tty?() :: boolean
-  def tty?, do: terminal() != nil
+  @doc "The path of the command on the search path, or nil."
+  @spec executable(String.t()) :: String.t() | nil
+  def executable(command), do: System.find_executable(command)
 
-  @doc "Runs the command with its input on the terminal when there is one, and returns its exit status."
-  @spec run_tty(String.t(), [String.t()]) :: non_neg_integer
-  def run_tty(command, args) do
+  @doc """
+  Runs the command with its input on the terminal when there is one, and
+  returns its exit status. With `echo: false` the terminal does not show what
+  is typed while it runs (a password), and gets its echo and a newline back
+  afterwards, whatever the command did.
+  """
+  @spec run_tty(String.t(), [String.t()], keyword) :: non_neg_integer
+  def run_tty(command, args, opts \\ []) do
     case System.find_executable(command) do
       nil ->
         127
 
       path ->
-        {exe, argv} =
-          case terminal() do
-            nil -> {path, args}
-            tty -> {"/bin/sh", ["-c", "exec \"$@\" <\"$0\"", tty, path | args]}
-          end
-
+        {exe, argv} = spawn(terminal(), path, args, Keyword.get(opts, :echo, true))
         port = Port.open({:spawn_executable, exe}, [:nouse_stdio, :exit_status, args: argv])
 
         receive do
           {^port, {:exit_status, status}} -> status
         end
     end
+  end
+
+  defp spawn(nil, path, args, _echo), do: {path, args}
+
+  defp spawn(tty, path, args, true),
+    do: {"/bin/sh", ["-c", ~s(exec "$@" <"$0"), tty, path | args]}
+
+  # Without stty the password would show, so the command does not run.
+  defp spawn(tty, path, args, false) do
+    script = """
+    stty -echo <"$0" || exit 1
+    trap 'stty echo <"$0"' EXIT
+    trap 'exit 130' INT TERM
+    "$@" <"$0"
+    status=$?
+    stty echo <"$0"
+    echo >&2
+    exit $status
+    """
+
+    {"/bin/sh", ["-c", script, tty, path | args]}
   end
 end

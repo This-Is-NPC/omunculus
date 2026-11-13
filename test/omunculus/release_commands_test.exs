@@ -18,16 +18,19 @@ defmodule Omunculus.ReleaseCommandsTest do
       end
     end
 
-    def run_tty(command, args) do
+    # `auth` is the status of the sudo password check, `status` of pacman.
+    def run_tty(command, args, opts) do
       Agent.update(__MODULE__, &[{command, args} | &1])
+      if opts[:echo] == false, do: Agent.update(__MODULE__, &[{:echo_off, command} | &1])
       # Everything the command can call after pacman must already be loaded.
       loaded = for app <- [:omunculus, :elixir], m <- Application.spec(app, :modules), do: m
       all_loaded = Enum.all?(loaded, &Code.loaded?/1)
       Agent.update(__MODULE__, &[{:loaded, all_loaded} | &1])
-      opt(:status) || 0
+      if "-v" in args, do: opt(:auth), else: opt(:status)
     end
 
-    def tty?, do: opt(:tty)
+    def terminal, do: opt(:terminal)
+    def executable("pkexec"), do: opt(:pkexec)
 
     def finish(message), do: Agent.update(__MODULE__, &[{:finish, message} | &1])
 
@@ -56,8 +59,10 @@ defmodule Omunculus.ReleaseCommandsTest do
     def call(%{request_path: "/moved/" <> name} = conn, _opts),
       do: conn |> put_resp_header("location", "/files/" <> name) |> send_resp(302, "")
 
-    def call(%{request_path: "/files/" <> name} = conn, opts),
-      do: send_resp(conn, 200, Map.fetch!(opts.files, name))
+    def call(%{request_path: "/files/" <> name} = conn, opts) do
+      send(opts.owner, {:downloaded, name})
+      send_resp(conn, 200, Map.fetch!(opts.files, name))
+    end
   end
 
   # The running version and the next minor one, so the tests hold at any release.
@@ -76,7 +81,7 @@ defmodule Omunculus.ReleaseCommandsTest do
 
     files = Map.put(files, "SHA256SUMS", sums)
     {:ok, agent} = Agent.start_link(fn -> nil end)
-    opts = %{tag: tag, files: files, port: fn -> Agent.get(agent, & &1) end}
+    opts = %{owner: self(), tag: tag, files: files, port: fn -> Agent.get(agent, & &1) end}
 
     {:ok, server} =
       Bandit.start_link(plug: {Stub, opts}, port: 0, ip: :loopback, startup_log: false)
@@ -93,7 +98,15 @@ defmodule Omunculus.ReleaseCommandsTest do
     })
 
     Application.put_env(:omunculus, :runner, FakeRunner)
-    Application.put_env(:omunculus, :fake_runner, apps: false, active: true, tty: true, status: 0)
+
+    Application.put_env(:omunculus, :fake_runner,
+      apps: false,
+      active: true,
+      pkexec: "/usr/bin/pkexec",
+      terminal: "/dev/pts/1",
+      auth: 0,
+      status: 0
+    )
 
     on_exit(fn ->
       Enum.each([:runner, :fake_runner, :release_api], &Application.delete_env(:omunculus, &1))
@@ -102,10 +115,10 @@ defmodule Omunculus.ReleaseCommandsTest do
     %{dir: Fixtures.tmp_dir()}
   end
 
-  defp sudo_files,
-    do: for({"sudo", ["-S", "pacman", "-U" | files]} <- FakeRunner.log(), do: files)
+  @pacman ["pacman", "-U", "--noconfirm"]
+  @prompt "[sudo] password to install omunculus: "
 
-  defp pacman_args, do: for({"sudo", ["-S", "pacman", "-U" | args]} <- FakeRunner.log(), do: args)
+  defp sudo_files, do: for({"pkexec", @pacman ++ files} <- FakeRunner.log(), do: files)
 
   defp fake(opts),
     do: Application.put_env(:omunculus, :fake_runner, Keyword.merge(fake_opts(), opts))
@@ -145,11 +158,70 @@ defmodule Omunculus.ReleaseCommandsTest do
     refute {"systemctl", ["--user", "restart", "omunculus"]} in FakeRunner.log()
   end
 
-  test "update lets pacman ask on the terminal when there is one", %{dir: dir} do
+  test "update elevates through pkexec when it is installed", %{dir: dir} do
     serve("v#{@next}")
     assert {:ok, _output} = CLI.run(["update"], dir)
-    assert [[file]] = pacman_args()
+
+    assert [{"pkexec", @pacman ++ [file]}] =
+             Enum.filter(FakeRunner.log(), &match?({"pkexec", _}, &1))
+
     assert Path.basename(file) == @core
+    refute {:echo_off, "sudo"} in FakeRunner.log()
+  end
+
+  test "update asks sudo for the password with echo off, then runs pacman", %{dir: dir} do
+    fake(pkexec: nil)
+    serve("v#{@next}")
+    assert {:ok, _output} = CLI.run(["update"], dir)
+
+    assert [
+             {"sudo", ["-S", "-p", @prompt, "-v"]},
+             {:echo_off, "sudo"},
+             {:loaded, true},
+             {"sudo", ["-n", "pacman", "-U", "--noconfirm", file]},
+             {:loaded, true}
+           ] = Enum.filter(FakeRunner.log(), &(elem(&1, 0) in ["sudo", :echo_off, :loaded]))
+
+    assert Path.basename(file) == @core
+  end
+
+  test "update without pkexec or a terminal refuses and downloads nothing", %{dir: dir} do
+    fake(pkexec: nil, terminal: nil)
+    serve("v#{@next}")
+    assert {:error, reason} = CLI.run(["update"], dir)
+
+    assert CLI.message(reason) ==
+             "pkexec is not installed, and there is no terminal for sudo to ask for the password; " <>
+               "install polkit, or run omunculus update in a terminal"
+
+    refute_received {:downloaded, _}
+    assert FakeRunner.log() == [{"pacman", ["-Q", "omunculus-apps"]}]
+  end
+
+  test "update says a refused password and a failed pacman", %{dir: dir} do
+    serve("v#{@next}")
+
+    for status <- [126, 127] do
+      fake(status: status)
+      assert {:error, reason} = CLI.run(["update"], dir)
+      assert CLI.message(reason) == "the password was not given; nothing was installed"
+    end
+
+    fake(status: 1)
+    assert {:error, reason} = CLI.run(["update"], dir)
+    assert CLI.message(reason) == "pacman -U failed with exit status 1"
+
+    fake(status: 137)
+    assert {:error, reason} = CLI.run(["update"], dir)
+    assert CLI.message(reason) == "pacman -U was stopped by a signal"
+  end
+
+  test "update says a refused sudo password and installs nothing", %{dir: dir} do
+    fake(pkexec: nil, auth: 1)
+    serve("v#{@next}")
+    assert {:error, reason} = CLI.run(["update"], dir)
+    assert CLI.message(reason) == "the password was not given; nothing was installed"
+    refute Enum.any?(FakeRunner.log(), &match?({"sudo", ["-n" | _]}, &1))
   end
 
   test "update loads all its code before pacman replaces it, then finishes at once", %{dir: dir} do
@@ -158,21 +230,6 @@ defmodule Omunculus.ReleaseCommandsTest do
     log = FakeRunner.log()
     assert {:loaded, true} in log
     assert {:finish, "omunculus " <> _} = List.last(Enum.filter(log, &match?({:finish, _}, &1)))
-  end
-
-  test "update passes --noconfirm when there is no terminal", %{dir: dir} do
-    fake(tty: false)
-    serve("v#{@next}")
-    assert {:ok, _output} = CLI.run(["update"], dir)
-    assert [["--noconfirm", file]] = pacman_args()
-    assert Path.basename(file) == @core
-  end
-
-  test "update fails when pacman fails", %{dir: dir} do
-    fake(status: 1)
-    serve("v#{@next}")
-    assert {:error, reason} = CLI.run(["update"], dir)
-    assert CLI.message(reason) == "sudo pacman -U failed with status 1; nothing was updated"
   end
 
   test "update never logs the redirect of a download", %{dir: dir} do

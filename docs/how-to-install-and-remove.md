@@ -102,12 +102,23 @@ omunculus update
 you) and says whether it is newer than the running version and what an
 update would do, changing nothing. `update` downloads the packages the
 release lists (the apps only when `omunculus-apps` is installed), checks
-their checksums, installs them with `sudo pacman -U`, and restarts the user service when it is active.
+their checksums, installs them with `pacman -U --noconfirm` and restarts the
+user service when it is active. Running `update` is your consent, so pacman
+does not ask again.
 
-`pacman` asks you to confirm on the terminal. When there is no terminal
-(a script, a service, or `ssh` without `-t`), `update` passes
-`--noconfirm` instead. If `pacman` fails, `update` prints the status and
-exits non-zero.
+`update` picks how to get root before it downloads anything:
+
+- With `pkexec` installed (polkit), it asks for the password in its own
+  window.
+- Otherwise, in a terminal, `sudo` asks for the password there. What you
+  type is not shown.
+- With neither (a script, a service, or `ssh` without `-t` on a system
+  without polkit), it stops and installs nothing: "pkexec is not
+  installed, and there is no terminal for sudo to ask for the password;
+  install polkit, or run omunculus update in a terminal".
+
+If the password is not given, it says so and installs nothing. If `pacman`
+fails, it prints the exit status. Either way `update` exits non-zero.
 
 Running `install.sh` again does the same by hand.
 

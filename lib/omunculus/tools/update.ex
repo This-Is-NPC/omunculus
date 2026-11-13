@@ -2,7 +2,8 @@ defmodule Omunculus.Tools.Update do
   @moduledoc """
   `update` tool: compares the running version with the latest GitHub
   release (one GET, no telemetry), downloads its packages, checks them
-  against `SHA256SUMS` and installs them with `sudo pacman -U`. The
+  against `SHA256SUMS` and installs them with `pacman -U --noconfirm` run through `pkexec`, or
+  through `sudo` in a terminal. The
   release API is `:omunculus, :release_api`, which tests point at a stub.
   """
 
@@ -10,6 +11,11 @@ defmodule Omunculus.Tools.Update do
 
   @core ~r/^omunculus-\d.*-x86_64\.pkg\.tar\.zst$/
   @apps ~r/^omunculus-apps-.*-any\.pkg\.tar\.zst$/
+  @pacman ["pacman", "-U", "--noconfirm"]
+  @prompt "[sudo] password to install omunculus: "
+  @refused "the password was not given; nothing was installed"
+  @no_elevator "pkexec is not installed, and there is no terminal for sudo to ask for the password; " <>
+                 "install polkit, or run omunculus update in a terminal"
   @preload [:omunculus, :elixir, :logger, :stdlib, :kernel]
   @api "https://api.github.com/repos/This-Is-NPC/omunculus/releases/latest"
 
@@ -93,12 +99,13 @@ defmodule Omunculus.Tools.Update do
   defp install(release, assets, latest) do
     dir = Path.join(System.tmp_dir!(), "omunculus-update-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    preload()
 
     try do
-      with {:ok, sums} <- sums(release, dir),
+      with {:ok, elevator} <- elevator(),
+           :ok <- preload(),
+           {:ok, sums} <- sums(release, dir),
            {:ok, files} <- download(assets, sums, dir),
-           :ok <- pacman(files) do
+           :ok <- pacman(elevator, files) do
         message = "omunculus #{latest} installed.\n" <> restart()
         runner().finish(message)
         Out.ok(message)
@@ -171,17 +178,38 @@ defmodule Omunculus.Tools.Update do
     for app <- @preload,
         module <- Application.spec(app, :modules) || [],
         do: Code.ensure_loaded!(module)
+
+    :ok
   end
 
-  # pacman asks on the terminal when there is one; without it, nothing can answer.
-  # `sudo -S` asks for the password on the standard input, which is that terminal:
-  # the child of the runner has no controlling terminal for sudo to open.
-  defp pacman(files) do
-    flags = if runner().tty?(), do: [], else: ["--noconfirm"]
+  # Chosen before anything is downloaded: pkexec asks for the password in its
+  # own window; without it, sudo asks on the terminal there is.
+  defp elevator do
+    cond do
+      runner().executable("pkexec") -> {:ok, :pkexec}
+      runner().terminal() -> {:ok, :sudo}
+      true -> {:error, @no_elevator}
+    end
+  end
 
-    case runner().run_tty("sudo", ["-S", "pacman", "-U" | flags] ++ files) do
+  # Running `update` is the consent, so pacman never asks. sudo reads its password
+  # on the terminal device (the runner's child has no controlling terminal) with
+  # echo off, and pacman runs on the credentials that leaves.
+  defp pacman(:pkexec, files), do: elevated("pkexec", @pacman ++ files)
+
+  defp pacman(:sudo, files) do
+    case runner().run_tty("sudo", ["-S", "-p", @prompt, "-v"], echo: false) do
+      0 -> elevated("sudo", ["-n" | @pacman] ++ files)
+      _ -> {:error, @refused}
+    end
+  end
+
+  defp elevated(elevator, args) do
+    case runner().run_tty(elevator, args, []) do
       0 -> :ok
-      status -> {:error, "sudo pacman -U failed with status #{status}; nothing was updated"}
+      status when status in [126, 127] and elevator == "pkexec" -> {:error, @refused}
+      status when status in 129..159 -> {:error, "pacman -U was stopped by a signal"}
+      status -> {:error, "pacman -U failed with exit status #{status}"}
     end
   end
 
