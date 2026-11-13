@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/This-Is-NPC/omunculus/compare/v0.2.0...v0.2.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **update:** ask on the real terminal device ([a276d9d](https://github.com/This-Is-NPC/omunculus/commit/a276d9d606c76068cae5ab499507914c33a58e0e))
+* **update:** ask sudo once for the install ([60a289e](https://github.com/This-Is-NPC/omunculus/commit/60a289e9362522dc90f84e6cadc99cb28564cc38))
+* **update:** elevate like eco, without prompts ([f9ce874](https://github.com/This-Is-NPC/omunculus/commit/f9ce87412705a6092e74328defac3ceb96e0ff2f))
+* **update:** install without a terminal ([4b4cf73](https://github.com/This-Is-NPC/omunculus/commit/4b4cf739b6d8a8ea4116ba174ed71b417fb0c892))
+* **update:** keep debug logs off the terminal ([28b1a53](https://github.com/This-Is-NPC/omunculus/commit/28b1a539926d7d64a941d44d6ad5af465ac025b9))
+* **update:** survive replacing its own files ([5addc08](https://github.com/This-Is-NPC/omunculus/commit/5addc086fa491f435ab4bbd65e2c1c447d22a936))
+
 ## [0.2.0](https://github.com/This-Is-NPC/omunculus/compare/v0.1.0...v0.2.0) (2026-11-13)
 
 
