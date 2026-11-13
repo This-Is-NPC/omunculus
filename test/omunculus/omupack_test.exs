@@ -13,8 +13,21 @@ defmodule Omunculus.OmupackTest do
     team = Fixtures.pack(dir)
     toml = Path.join(team, "pack.toml")
     File.write!(toml, String.replace(File.read!(toml), "[pack]\nname = \"team\"\n", @header))
-    File.write!(Path.join([team, "tools", "run.sh"]), "#!/bin/sh\n")
-    File.chmod!(Path.join([team, "tools", "run.sh"]), 0o755)
+    File.mkdir_p!(Path.join([team, "tools", "runner"]))
+    File.write!(Path.join([team, "tools", "runner", "run"]), "#!/bin/sh\n")
+    File.chmod!(Path.join([team, "tools", "runner", "run"]), 0o755)
+    File.write!(Path.join([team, "tools", "runner", "data.txt"]), "data")
+
+    File.write!(Path.join([team, "tools", "runner", "tool.toml"]), """
+    name = "runner"
+    kind = "tool"
+    triggers = ["model"]
+    description = "Runs."
+    command = ["./run", "go"]
+    [parameters]
+    type = "object"
+    """)
+
     %{dir: dir, team: team, config_path: Fixtures.write_pack_config(dir)}
   end
 
@@ -77,14 +90,19 @@ defmodule Omunculus.OmupackTest do
 
     {:ok, tar} = :erl_tar.table(String.to_charlist(file), [:compressed])
     names = Enum.map(tar, &to_string/1)
-    assert "omupack.toml" in names and "pack.toml" in names and "tools/run.sh" in names
+    assert "omupack.toml" in names and "pack.toml" in names and "tools/runner/run" in names
     refute Enum.any?(names, &String.starts_with?(&1, ".git"))
 
     assert %{"ok" => true, "output" => out} = install(config_path, %{"file" => "team.omupack"})
     folder = Path.join([dir, ".omunculus", "packs", "team-0.1.0"])
+    assert out =~ "runs these executables:\n  runner: tools/runner/run go\nneeds"
+    refute out =~ "tool.toml"
+    refute out =~ "data.txt"
     assert out =~ "installed team 0.1.0 in #{folder}"
     assert out =~ "imported team"
-    assert File.stat!(Path.join([folder, "tools", "run.sh"])).mode |> Bitwise.band(0o777) == 0o755
+
+    assert File.stat!(Path.join([folder, "tools", "runner", "run"])).mode |> Bitwise.band(0o777) ==
+             0o755
 
     assert [%{"path" => ".omunculus/packs/team-0.1.0"}] = Toml.decode_file!(config_path)["packs"]
     assert {:ok, %{agents: %{"chief" => %{model: "fast"}}}} = Config.load(config_path)
@@ -107,7 +125,7 @@ defmodule Omunculus.OmupackTest do
     assert output =~ "models needed for: lead"
     assert output =~ "team 0.1.0: Makes things."
     assert output =~ "agents: chief, hand"
-    assert output =~ "runs these executables: tools/run.sh"
+    assert output =~ "runs these executables:\n  runner: tools/runner/run go\n"
     assert output =~ "needs these logins: vault"
     assert output =~ "needs these secrets: deploy (KEY)"
     assert output =~ "job templates: none"
@@ -252,6 +270,29 @@ defmodule Omunculus.OmupackTest do
     assert {:ok, _config} = Config.load(config_path)
   end
 
+  test "an install the config refuses leaves no folder it made", %{
+    dir: dir,
+    config_path: config_path
+  } do
+    export(dir)
+    folder = Path.join([dir, ".omunculus", "packs", "team-0.1.0"])
+
+    assert %{"ok" => false, "output" => output} =
+             install(config_path, %{"file" => "team.omupack", "auth" => "vault=nobody"})
+
+    assert output =~ "nobody"
+    refute File.exists?(folder)
+    refute Map.has_key?(Toml.decode_file!(config_path), "packs")
+
+    # A folder that was already there stays.
+    assert %{"ok" => true} = install(config_path, %{"file" => "team.omupack"})
+
+    assert %{"ok" => false} =
+             install(config_path, %{"file" => "team.omupack", "auth" => "vault=nobody"})
+
+    assert File.dir?(folder)
+  end
+
   test "the same version with other files is refused", %{
     dir: dir,
     team: team,
@@ -260,7 +301,7 @@ defmodule Omunculus.OmupackTest do
     export(dir)
     assert %{"ok" => true} = install(config_path, %{"file" => "team.omupack"})
 
-    File.write!(Path.join([team, "tools", "run.sh"]), "#!/bin/sh\necho changed\n")
+    File.write!(Path.join([team, "tools", "runner", "run"]), "#!/bin/sh\necho changed\n")
     export(dir, "changed.omupack")
 
     assert %{"ok" => false, "output" => output} =
@@ -287,7 +328,7 @@ defmodule Omunculus.OmupackTest do
                roots: [dir]
              })
 
-    assert body["reason"] =~ "runs these executables: tools/run.sh"
+    assert body["reason"] =~ "runs these executables:\n  runner: tools/runner/run go\n"
     assert body["reason"] =~ "team 0.1.0: Makes things."
 
     assert [%{"name" => "pack", "args" => %{"file" => file, "models" => "lead=fast"}}] =
