@@ -44,8 +44,8 @@ flag "--output <folder>" help="Result folder"
 '''
 
 [tasks.check]
-description = "Check that the code is formatted, docs/cli.md is current, the documentation's links resolve, the mailbox's list lays out, the console and kit read their spacing from the theme and every app's QML loads"
-depends = ["check:cli", "check:format", "check:layout", "check:links", "check:qml", "check:spacing"]
+description = "Check that the code is formatted, docs/cli.md is current, the documentation's links resolve, the mailbox's list lays out, a scrolled page stays put, the console and kit read their spacing from the theme and every app's QML loads"
+depends = ["check:cli", "check:format", "check:layout", "check:links", "check:qml", "check:scroll", "check:spacing"]
 
 [tasks."check:cli"]
 description = "Check that docs/cli.md is what docs:cli writes"
@@ -68,6 +68,11 @@ run = "scripts/check-links"
 description = "Check that every app's QML loads: each runs headless under quickshell and must report its configuration loaded without errors"
 run = "scripts/check-qml"
 sources = ["apps/**/*.qml", "apps/**/qmldir", "scripts/check-qml"]
+
+[tasks."check:scroll"]
+description = "Check that a ScrollPage scrolled by hand stays where it was put when the content above its focused control grows: a headless harness"
+run = "scripts/check-scroll-page"
+sources = ["apps/kit/ui/ScrollPage.qml", "apps/kit/ui/focus.js", "scripts/check-scroll-page", "scripts/check-scroll-page.qml"]
 
 [tasks."check:spacing"]
 description = "Check that the console and the kit read margins, paddings, spacings and heights from Theme, not numbers"

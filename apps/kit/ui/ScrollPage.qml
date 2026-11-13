@@ -3,8 +3,9 @@ import "focus.js" as Focus
 
 // ScrollPage is content taller than its room: it scrolls with the wheel, with
 // PgUp/PgDn, Home/End — and ↑/↓ while it holds the keyboard itself — and it
-// scrolls to keep the control the keyboard moves to in view, also when the content
-// around it changes height.
+// scrolls to keep the control the keyboard moves to in view. When the content
+// around that control changes height, the page follows the control to where it
+// moved and no further, so a page scrolled by the wheel stays where it was put.
 Flickable {
   id: page
 
@@ -14,8 +15,20 @@ Flickable {
   function scrollTo(y) { contentY = Math.max(0, Math.min(contentHeight - height, y)) }
 
   readonly property Item focused: Window.activeFocusItem
+  // Where the focused control was in the content the last time it was seen.
+  property real heldAt: -1
   onFocusedChanged: keep()
-  onContentHeightChanged: Qt.callLater(keep)
+  onContentHeightChanged: Qt.callLater(follow)
+
+  // Moves with the focused control when content above it grew or shrank.
+  function follow() {
+    if (!focused || focused === page || !Focus.within(focused, contentItem) || heldAt < 0)
+      return
+    const now = focused.mapToItem(contentItem, 0, 0).y
+    if (now !== heldAt)
+      scrollTo(contentY + now - heldAt)
+    heldAt = now
+  }
 
   // A text that wraps over several lines keeps its caret in view, not the
   // whole text, which may be taller than the page.
@@ -28,6 +41,7 @@ Flickable {
   function keep() {
     if (!focused || focused === page || !Focus.within(focused, contentItem))
       return
+    heldAt = focused.mapToItem(contentItem, 0, 0).y
     if (typing) {
       const caret = typing.cursorRectangle
       const at = typing.mapToItem(contentItem, 0, caret.y).y

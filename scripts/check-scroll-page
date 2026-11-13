@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Fails when a ScrollPage jumps back to its focused control after the content
+# above it grew: a page scrolled by hand stays where it was put. Runs
+# scripts/check-scroll-page.qml under quickshell, headless.
+set -euo pipefail
+
+root=${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+command -v quickshell >/dev/null || { echo "check-scroll-page: quickshell is not installed" >&2; exit 1; }
+
+mkdir -p "$tmp/app" "$tmp/run"
+chmod 700 "$tmp/run"
+ln -s "$root/apps/kit" "$tmp/app/kit"
+cp "$root/scripts/check-scroll-page.qml" "$tmp/app/shell.qml"
+
+XDG_RUNTIME_DIR=$tmp/run XDG_CONFIG_HOME=$tmp/config XDG_STATE_HOME=$tmp/state XDG_CACHE_HOME=$tmp/cache \
+  QT_QPA_PLATFORM=offscreen OMUNCULUS_SOCKET= NO_COLOR=1 \
+  timeout 30 quickshell --no-color --path "$tmp/app" >"$tmp/log" 2>&1 || true
+
+result=$(grep -o 'RESULT [0-9-]* [0-9-]* [a-z]*' "$tmp/log" || true)
+if [ -z "$result" ]; then
+  echo "check-scroll-page: the harness did not finish" >&2
+  sed 's/^/  /' "$tmp/log" >&2
+  exit 1
+fi
+read -r _ scrolled after focused <<<"$result"
+if [ "$focused" != true ] || [ "$scrolled" -le 0 ] || [ "$after" -ne "$scrolled" ]; then
+  echo "check-scroll-page: scrolled to $scrolled, then $after after the content above grew (focus kept: $focused)" >&2
+  exit 1
+fi
+echo "check-scroll-page: the page stayed at $after after the content above it grew"
