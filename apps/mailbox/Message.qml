@@ -114,19 +114,24 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
-    LinkLabel {
+    Flow {
+      Layout.fillWidth: true
       visible: mail.expanded && !!mail.message.job
-      Layout.minimumHeight: Breakpoints.target(Window.width)
-      value: "VIEW JOB IN THE CONSOLE"
-      onClicked: Mail.openJob(mail.thread)
-    }
-
-    LinkLabel {
-      readonly property string conversation: mail.message.conversation ? mail.project + "/" + mail.message.conversation : ""
-      visible: mail.expanded && !!mail.message.job && conversation !== "" && Mail.threads[conversation] !== undefined
-      Layout.minimumHeight: Breakpoints.target(Window.width)
-      value: "OPEN THE CONVERSATION OF THIS FIRE"
-      onClicked: Mail.open(conversation)
+      spacing: 16
+      LinkLabel {
+        height: Breakpoints.target(Window.width)
+        verticalAlignment: Text.AlignVCenter
+        value: "VIEW JOB IN THE CONSOLE"
+        onClicked: Mail.openJob(mail.thread)
+      }
+      LinkLabel {
+        readonly property string conversation: mail.message.conversation ? mail.project + "/" + mail.message.conversation : ""
+        visible: conversation !== "" && Mail.threads[conversation] !== undefined
+        height: Breakpoints.target(Window.width)
+        verticalAlignment: Text.AlignVCenter
+        value: "OPEN ITS CONVERSATION"
+        onClicked: Mail.open(conversation)
+      }
     }
 
     Flow {
