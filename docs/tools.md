@@ -861,7 +861,7 @@ the job in words and its next fires, and the options `approve` (calls `jobs
 create` with the proposal and the request's id), `edit` (calls nothing; the
 reply says what to change) and `deny`. A job approved is owned by `owner`, else
 by whoever approves it. It refuses a proposal the person already answered
-without approving. Where `[jobs] agent_may_create` is true the job is created
+without approving, and one from a run that a job's fire opened, before it asks. Where `[jobs] agent_may_create` is true the job is created
 at once and nothing is asked. It works from any conversation, which is how a
 mailbox sends one: the card is an ordinary request.
 
