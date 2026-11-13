@@ -22,7 +22,13 @@ lacks. What a pack holds and how teams talk to each other is
    ```console
    $ <checkout>/bin/omunculus pack --path <checkout>/packs/sales-desk
    models needed for: team
+   sales-desk 0.2.0: Front office of a web agency: …
+   agents: front-desk, project-manager, seller
+   …
    ```
+
+   The output is cut where `…` stands. After the roles, it says what the pack is, runs and needs: its
+   description, agents, executables, logins, secrets and job templates.
 
 2. Import it, each role on a model of the project. A pack that names
    logins takes `--auth provider=login` pairs the same way, and `--depth n`
@@ -70,6 +76,8 @@ lacks. What a pack holds and how teams talk to each other is
 
 ## Where to go next
 
+- [How to share a pack](how-to-share-a-pack.md): a pack as one file, to
+  send and install without a folder.
 - [Packs](packs.md): what a pack holds, the system team, and how a team is
   composed with others.
 - [The TOML](config.md), for the `[[packs]]` entry the import wrote.

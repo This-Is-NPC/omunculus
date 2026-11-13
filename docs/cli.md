@@ -298,19 +298,36 @@ Also called by a model.
 ### `omunculus pack`
 
 ```text
-omunculus pack <path> [--auth <auth>] [--depth <depth>] [--models <models>]
+omunculus pack [--auth <auth>] [--depth <depth>] [--file <file>] [--models <models>] [--path <path>] [--upgrade true]
 ```
 
-Imports the pack in path into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, copies its workspace/ files where none are and creates the jobs of its job templates that the project does not hold; without them, says what it needs.
+Imports the pack in path, or the pack of the .omupack file (a path or an https URL), into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, copies its workspace/ files where none are and creates the jobs of its job templates that the project does not hold. A file is checked against its manifest and the running omunculus, then laid in .omunculus/packs/&lt;name&gt;-&lt;version&gt;; one whose name is imported at another version is refused without upgrade. Without the models, says what it needs and what the pack is: its description, agents, executables, logins, secrets and job templates.
 
 Also called by a chain.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
-| `path` | string | yes | The pack's folder, relative to the config's directory. |
 | `auth` | string | no | provider=login pairs, comma separated: the config's [auth] provider each of the pack's stands for. |
 | `depth` | string | no | How many depths below its own the team works: every agent and depth layer of the pack moves down that many. |
+| `file` | string | no | The pack as a .omupack file, relative to the config's directory, or an https URL. Give this or path. |
 | `models` | string | no | role=model pairs, comma separated: the config's model each role runs on. |
+| `path` | string | no | The pack's folder, relative to the config's directory. Give this or file. |
+| `upgrade` | boolean | no | Replace the imported version of the file's pack; the old folder stays until removed by hand. |
+
+### `omunculus pack export`
+
+```text
+omunculus pack export <path> [--out <out>]
+```
+
+Writes the pack in path as one file, &lt;name&gt;-&lt;version&gt;.omupack, a gzip tar of its folder (VCS and build leftovers left out) with a manifest of the sha256 and mode of every file, and prints the file's path and sha256. The pack's [pack] table must give name, version, description and omunculus. Send the file by any means; the receiver installs it with pack --file. It runs without a config.
+
+Runs without a project config.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | string | yes | The pack's folder, relative to the working directory. |
+| `out` | string | no | The file to write; &lt;name&gt;-&lt;version&gt;.omupack in the working directory when left out. |
 
 ### `omunculus preset`
 
