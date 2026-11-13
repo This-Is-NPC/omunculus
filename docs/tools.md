@@ -869,6 +869,27 @@ mailbox sends one: the card is an ordinary request.
 each fire to its owner as a message of the job's thread, with the job as
 sender (`Jobs.messages/2`; the API in [the server](server.md#jobs)).
 
+## Importing packs
+
+`pack` imports the pack in `path`, or the pack of `file`, a `.omupack` path
+or an `https` URL, with `models`, `auth` and `depth`
+([packs](packs.md)). A file is checked first: every entry a plain file or
+folder inside the archive, every file the manifest's and matching its
+`sha256`, the header agreeing with `pack.toml` and the running omunculus.
+It is then laid in `.omunculus/packs/<name>-<version>` of the project and
+imported from there. A name already imported at another version is refused
+unless `upgrade` is set; the same version with other files is always
+refused. Without `models` it writes nothing and prints the card of the
+pack: description, agents, executables, logins, secrets and job templates.
+
+`propose_pack` takes `file` as it takes `path`. It loads the config the
+import would make from a scratch copy, then asks the person, with the card
+in the request; its `apply` option calls `pack` with the file.
+
+`pack export` is a command, not a tool a model calls: it runs without a
+config and writes the `.omupack` of a folder
+([how to share a pack](how-to-share-a-pack.md)).
+
 ## Groups the default package uses
 
 ```text

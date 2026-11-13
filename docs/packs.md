@@ -21,15 +21,36 @@ The `pack` tool imports a pack:
 
 ```sh
 omunculus pack --path <dir> --models role=model --auth provider=login [--depth n]
+omunculus pack --file <file.omupack | https URL> --models role=model [--upgrade]
 ```
 
 Given a model for each of its roles and a login for each of its providers,
 it writes the pack to `[[packs]]` and copies the pack's `workspace/` into
 the default workspace, keeping the files there, when the config loads with
-it. It lists the pack's `environment/`, which it does not run.
+it. It lists the pack's `environment/`, which it does not run. Without the
+models it writes nothing and says what the pack needs and, in words, its
+description, agents, executables (the files of `tools/`), logins, secrets
+and job templates.
 With `[project] conversations`, a conversation's folder starts as a copy
 of the workspace, so those files reach every conversation that starts
 after the import ([config](config.md#a-folder-per-conversation)).
+
+A pack is shared as one file with `omunculus pack export` and installed
+with `pack --file`: [how to share a pack](how-to-share-a-pack.md). Its
+`[pack]` table is the header that file carries:
+
+```toml
+[pack]
+name = "sales-desk"
+version = "0.2.0"
+description = "One line: what the team does."
+omunculus = ">= 0.3.0"
+```
+
+`version` is semver and names one set of files; `omunculus` is a version
+requirement, and a pack that the running omunculus does not meet is
+refused when it is loaded, from a folder or a file. A pack imported from a
+folder may leave the header out; one that is exported needs all four.
 
 A tool a team's agents use that the pack does not bring goes in
 `[pack.requires]`, its name and, as text, where to get it:

@@ -11,6 +11,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [How to start a project](how-to-start-a-project.md) | How do I get a project that answers a first message? |
 | [How to log in to a provider](how-to-log-in-to-a-provider.md) | How do I put the agents on a real model, with my key? |
 | [How to import a pack](how-to-import-a-pack.md) | How do I add a team that comes as a folder? |
+| [How to share a pack](how-to-share-a-pack.md) | How do I send a team as one file, and install one I received? |
 | [How to schedule a job](how-to-schedule-a-job.md) | How do I have an agent run something on a schedule? |
 | [How to sync artifacts to S3](how-to-sync-artifacts-to-s3.md) | How do I keep a copy of the artifacts in a bucket? |
 | [How to run the server](how-to-run-the-server.md) | How do I serve a project so the apps can reach it? |

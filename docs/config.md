@@ -835,6 +835,7 @@ needs what is missing:
 | `overrides of <tool> leave a then outside its chains or with end not last` | an override breaks the `then` rule |
 | `overrides.<tool>.schema names <variant>, which the <tool> manifest does not declare` | an override names an unknown schema |
 | `pack <pack> requires tools the project lacks: …` | an imported pack names tools no `[tools] path` holds |
+| `pack <pack> needs omunculus <requirement> and this is <version>: …` | a pack's `[pack] omunculus` is not met by the running version |
 | `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
 | `store tables differ from this schema; recreate the store` | a store whose tables differ from the schema |
 | `project is in use by another Omunculus process` | another direct command holds the project |
