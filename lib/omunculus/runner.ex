@@ -2,7 +2,7 @@ defmodule Omunculus.Runner do
   @moduledoc """
   The one place `update` and `setup` start external commands (`pacman`,
   `sudo`, `systemctl`). Tests point `:omunculus, :runner` at a module with
-  the same three functions.
+  the same functions.
   """
 
   @callback run(String.t(), [String.t()]) :: {String.t(), non_neg_integer}
@@ -18,12 +18,24 @@ defmodule Omunculus.Runner do
     end
   end
 
-  @doc "True when /dev/tty can be opened for reading, so a command can ask on the terminal."
-  @spec tty?() :: boolean
-  def tty?, do: match?({:ok, _}, File.open("/dev/tty", [:read]) |> close())
+  @doc """
+  The terminal device the program runs on (`/dev/pts/N` or `/dev/ttyN`),
+  read from its standard streams, or nil without one. A child started
+  through a port has no controlling terminal, so `/dev/tty` is no use there.
+  """
+  @spec terminal() :: String.t() | nil
+  def terminal do
+    Enum.find_value(0..2, fn fd ->
+      with {:ok, path} <- File.read_link("/proc/self/fd/#{fd}"),
+           true <- String.match?(path, ~r{^/dev/(pts/\d+|tty\d+)$}),
+           do: path,
+           else: (_ -> nil)
+    end)
+  end
 
-  defp close({:ok, io} = opened), do: tap(opened, fn _ -> File.close(io) end)
-  defp close(error), do: error
+  @doc "True when there is a terminal for a command to ask on."
+  @spec tty?() :: boolean
+  def tty?, do: terminal() != nil
 
   @doc "Runs the command with its input on the terminal when there is one, and returns its exit status."
   @spec run_tty(String.t(), [String.t()]) :: non_neg_integer
@@ -34,9 +46,10 @@ defmodule Omunculus.Runner do
 
       path ->
         {exe, argv} =
-          if tty?(),
-            do: {"/bin/sh", ["-c", "exec \"$@\" </dev/tty", "sh", path | args]},
-            else: {path, args}
+          case terminal() do
+            nil -> {path, args}
+            tty -> {"/bin/sh", ["-c", "exec \"$@\" <\"$0\"", tty, path | args]}
+          end
 
         port = Port.open({:spawn_executable, exe}, [:nouse_stdio, :exit_status, args: argv])
 

@@ -97,7 +97,8 @@ defmodule Omunculus.Tools.Update do
       with {:ok, sums} <- sums(release, dir),
            {:ok, files} <- download(assets, sums, dir),
            :ok <- pacman(files) do
-        Out.ok("omunculus #{latest} installed.\n" <> restart())
+        message = "omunculus #{latest} installed.\n" <> restart()
+        Out.ok(message)
       else
         {:error, message} -> Out.fail(message)
       end
@@ -162,10 +163,12 @@ defmodule Omunculus.Tools.Update do
   end
 
   # pacman asks on the terminal when there is one; without it, nothing can answer.
+  # `sudo -S` asks for the password on the standard input, which is that terminal:
+  # the child of the runner has no controlling terminal for sudo to open.
   defp pacman(files) do
     flags = if runner().tty?(), do: [], else: ["--noconfirm"]
 
-    case runner().run_tty("sudo", ["pacman", "-U" | flags] ++ files) do
+    case runner().run_tty("sudo", ["-S", "pacman", "-U" | flags] ++ files) do
       0 -> :ok
       status -> {:error, "sudo pacman -U failed with status #{status}; nothing was updated"}
     end

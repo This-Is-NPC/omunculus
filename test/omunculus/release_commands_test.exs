@@ -96,8 +96,10 @@ defmodule Omunculus.ReleaseCommandsTest do
     %{dir: Fixtures.tmp_dir()}
   end
 
-  defp sudo_files, do: for({"sudo", ["pacman", "-U" | files]} <- FakeRunner.log(), do: files)
-  defp pacman_args, do: for({"sudo", ["pacman", "-U" | args]} <- FakeRunner.log(), do: args)
+  defp sudo_files,
+    do: for({"sudo", ["-S", "pacman", "-U" | files]} <- FakeRunner.log(), do: files)
+
+  defp pacman_args, do: for({"sudo", ["-S", "pacman", "-U" | args]} <- FakeRunner.log(), do: args)
 
   defp fake(opts),
     do: Application.put_env(:omunculus, :fake_runner, Keyword.merge(fake_opts(), opts))
