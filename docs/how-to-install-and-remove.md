@@ -102,8 +102,12 @@ omunculus update
 you) and says whether it is newer than the running version and what an
 update would do, changing nothing. `update` downloads the packages the
 release lists (the apps only when `omunculus-apps` is installed), checks
-their checksums, installs them with `sudo pacman -U`, which asks on the
-terminal, and restarts the user service when it is active.
+their checksums, installs them with `sudo pacman -U`, and restarts the user service when it is active.
+
+`pacman` asks you to confirm on the terminal. When there is no terminal
+(a script, a service, or `ssh` without `-t`), `update` passes
+`--noconfirm` instead. If `pacman` fails, `update` prints the status and
+exits non-zero.
 
 Running `install.sh` again does the same by hand.
 

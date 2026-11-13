@@ -161,8 +161,11 @@ defmodule Omunculus.Tools.Update do
       else: {:error, "#{name} does not match its checksum in SHA256SUMS; nothing was installed"}
   end
 
+  # pacman asks on the terminal when there is one; without it, nothing can answer.
   defp pacman(files) do
-    case runner().run_tty("sudo", ["pacman", "-U" | files]) do
+    flags = if runner().tty?(), do: [], else: ["--noconfirm"]
+
+    case runner().run_tty("sudo", ["pacman", "-U" | flags] ++ files) do
       0 -> :ok
       status -> {:error, "sudo pacman -U failed with status #{status}; nothing was updated"}
     end

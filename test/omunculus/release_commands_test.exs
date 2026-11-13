@@ -20,8 +20,10 @@ defmodule Omunculus.ReleaseCommandsTest do
 
     def run_tty(command, args) do
       Agent.update(__MODULE__, &[{command, args} | &1])
-      0
+      opt(:status) || 0
     end
+
+    def tty?, do: opt(:tty)
 
     defp opt(key), do: Application.get_env(:omunculus, :fake_runner)[key]
     def log, do: Agent.get(__MODULE__, &Enum.reverse/1)
@@ -82,7 +84,7 @@ defmodule Omunculus.ReleaseCommandsTest do
     })
 
     Application.put_env(:omunculus, :runner, FakeRunner)
-    Application.put_env(:omunculus, :fake_runner, apps: false, active: true)
+    Application.put_env(:omunculus, :fake_runner, apps: false, active: true, tty: true, status: 0)
 
     on_exit(fn ->
       Enum.each([:runner, :fake_runner, :release_api], &Application.delete_env(:omunculus, &1))
@@ -92,6 +94,12 @@ defmodule Omunculus.ReleaseCommandsTest do
   end
 
   defp sudo_files, do: for({"sudo", ["pacman", "-U" | files]} <- FakeRunner.log(), do: files)
+  defp pacman_args, do: for({"sudo", ["pacman", "-U" | args]} <- FakeRunner.log(), do: args)
+
+  defp fake(opts),
+    do: Application.put_env(:omunculus, :fake_runner, Keyword.merge(fake_opts(), opts))
+
+  defp fake_opts, do: Application.get_env(:omunculus, :fake_runner)
 
   test "version prints the running version", %{dir: dir} do
     assert {:ok, version} = CLI.run(["version"], dir)
@@ -117,13 +125,35 @@ defmodule Omunculus.ReleaseCommandsTest do
   test "update installs both packages when apps are installed and skips a stopped unit", %{
     dir: dir
   } do
-    Application.put_env(:omunculus, :fake_runner, apps: true, active: false)
+    fake(apps: true, active: false)
     serve("v#{@next}")
     assert {:ok, output} = CLI.run(["update"], dir)
     assert output =~ "nothing was restarted"
     assert [files] = sudo_files()
     assert Enum.map(files, &Path.basename/1) == [@core, @apps]
     refute {"systemctl", ["--user", "restart", "omunculus"]} in FakeRunner.log()
+  end
+
+  test "update lets pacman ask on the terminal when there is one", %{dir: dir} do
+    serve("v#{@next}")
+    assert {:ok, _output} = CLI.run(["update"], dir)
+    assert [[file]] = pacman_args()
+    assert Path.basename(file) == @core
+  end
+
+  test "update passes --noconfirm when there is no terminal", %{dir: dir} do
+    fake(tty: false)
+    serve("v#{@next}")
+    assert {:ok, _output} = CLI.run(["update"], dir)
+    assert [["--noconfirm", file]] = pacman_args()
+    assert Path.basename(file) == @core
+  end
+
+  test "update fails when pacman fails", %{dir: dir} do
+    fake(status: 1)
+    serve("v#{@next}")
+    assert {:error, reason} = CLI.run(["update"], dir)
+    assert CLI.message(reason) == "sudo pacman -U failed with status 1; nothing was updated"
   end
 
   test "update refuses a package whose checksum differs", %{dir: dir} do
@@ -191,7 +221,7 @@ defmodule Omunculus.ReleaseCommandsTest do
   test "setup says when the unit is enabled but not running", %{dir: dir} do
     System.put_env("XDG_CONFIG_HOME", dir)
     on_exit(fn -> System.delete_env("XDG_CONFIG_HOME") end)
-    Application.put_env(:omunculus, :fake_runner, apps: false, active: false)
+    fake(active: false)
 
     assert {:ok, output} = CLI.run(["setup"], dir)
     assert output =~ "enabled but not running"
