@@ -1,6 +1,6 @@
 .pragma library
 .import "Requests.js" as Requests
-.import "Schedule.js" as Schedule
+.import "Jobs.js" as Jobs
 
 // The mailbox's mapping from a conversation to e-mail. A thread is one
 // conversation of one project, with the agent of depth 0 the person first
@@ -205,30 +205,18 @@ function outcome(who, text) {
     + ". Deny tells " + who + " no.";
 }
 
-// Whether a request is a job an agent proposes (`propose_job`): a decision
-// whose `approve` creates the job.
-function proposal(request) {
-  const steps = (request.options || {}).approve;
-  return Array.isArray(steps) && steps.length === 1 && steps[0].name === "jobs" && !!steps[0].args && steps[0].args.action === "create";
-}
-
 // Whether a request is held for the Pending folder rather than read as mail:
 // the review of a held action or a job proposal.
-function holds(request) { return Requests.review(request) || proposal(request); }
+function holds(request) { return Requests.review(request) || Jobs.proposal(request) !== null; }
 
-// A proposal's job, as the card tells it: {name, words (the schedule in words),
-// schedule, timezone, target ({agent|workflow}, null for a tool), next (the
-// instants of its next fires), why (the agent's reason) and args (its
-// {name, value} lines)}. The request's reason holds the agent's words, then
-// the job as it would run, whose "next fires" line this reads.
-function proposed(request) {
-  const job = request.options.approve[0].args;
-  const reason = String(request.reason || "");
-  const at = reason.search(/\n\njob \S+ as it would run:/);
+// A proposal's job, as the card tells it: {name, schedule, timezone, create
+// (the arguments of `jobs create`, which `Jobs.previewOf` reads), why (the
+// agent's reason) and args (its {name, value} lines)}.
+function proposed(request, job) {
   return {
-    name: job.name, schedule: job.schedule, timezone: job.timezone, words: Schedule.words(job.schedule, job.timezone),
-    target: job.agent ? { agent: job.agent } : job.workflow ? { workflow: job.workflow } : null,
-    next: Schedule.nextFires(reason), why: (at < 0 ? reason : reason.slice(0, at)).trim(),
+    name: job.name, schedule: job.schedule, timezone: job.timezone,
+    create: job,
+    why: Jobs.reason(request),
     args: Object.keys(job).filter(key => key !== "action" && job[key] !== null && job[key] !== "")
       .map(key => ({ name: key, value: typeof job[key] === "string" ? job[key] : JSON.stringify(job[key]) }))
   };
@@ -237,7 +225,8 @@ function proposed(request) {
 // What a held request says it wants, as a sentence: what a review holds, or
 // the job a proposal would make.
 function summary(request, who) {
-  return proposal(request) ? who + " proposes the job " + request.options.approve[0].args.name : sentence(request.interception.summary);
+  const job = Jobs.proposal(request);
+  return job ? who + " proposes the job " + job.name : sentence(request.interception.summary);
 }
 
 // The reviews waiting on the person in a conversation, which the Pending
@@ -252,7 +241,8 @@ function reviews(projectId, id, snapshot, me) {
   return snapshot.requests.filter(request => holds(request) && Requests.pending(request) && Requests.forYou(request, me))
     .map(request => {
       const from = requester(request, projectId);
-      const job = proposal(request) ? proposed(request) : null;
+      const made = Jobs.proposal(request);
+      const job = made ? proposed(request, made) : null;
       const text = job ? "" : Requests.editable(request);
       const base = {
         key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
@@ -411,26 +401,6 @@ function jobThreads(projectId, messages, jobs) {
       unread: items.some(message => message.unread), parties: parties(name, items, false, items.length), snippet: oneLine(latest.text)
     };
   });
-}
-
-// The events of a job (`GET /jobs/{job}/history`) as the lines its history
-// shows, newest first: {at, text}. A fire is one line, as its latest state
-// leaves it; reads are left out.
-function history(events) {
-  const lines = [];
-  const fires = {};
-  const moved = { active: "Resumed", paused: "Paused", ended: "Ended", archived: "Archived" };
-  for (const event of events) {
-    if (event.op === "read") continue;
-    if (event.op === "fire") {
-      const line = { at: event.at, text: "Fire " + event.state };
-      if (fires[event.fire_id] === undefined) fires[event.fire_id] = lines.push(line) - 1;
-      else lines[fires[event.fire_id]] = line;
-    } else {
-      lines.push({ at: event.at, text: event.op === "create" ? "Created" : event.op === "change" ? "Changed" : moved[event.to] || capital(event.op) });
-    }
-  }
-  return lines.reverse();
 }
 
 // What a reply to a job's message starts: a new message to the job's agent,

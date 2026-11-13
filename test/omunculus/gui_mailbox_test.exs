@@ -18,7 +18,7 @@ defmodule Omunculus.GuiMailboxTest do
 
   defp run!(assertions) do
     assert {"", 0} =
-             GuiModules.run(["Requests", "Model", "Schedule", "Mailbox"], @fixtures <> assertions)
+             GuiModules.run(["Requests", "Model", "Jobs", "Mailbox"], @fixtures <> assertions)
   end
 
   test "the client scripts avoid String.trimEnd, which the QML engine lacks" do
@@ -409,7 +409,7 @@ defmodule Omunculus.GuiMailboxTest do
   test "a reply to a job's message is a new message to its agent that quotes it and keeps the job apart" do
     assert {"", 0} =
              GuiModules.run(
-               ["Requests", "Model", "Schedule", "Mailbox", "Composers"],
+               ["Requests", "Model", "Jobs", "Mailbox", "Composers"],
                """
                const t = Mailbox.jobThreads("agency", [{id: "f1", job_id: "j1", sender: {kind: "job", name: "news"}, at: "2026-01-01T07:00:00Z", text: "Item 1\\nItem 2", conversation_id: "c9", run_ids: [], unread: true}],
                  [{id: "j1", name: "news", agent: "sales"}])[0];
@@ -426,23 +426,7 @@ defmodule Omunculus.GuiMailboxTest do
              )
   end
 
-  test "a job's history is its events, a fire as one line, reads left out, newest first" do
-    run!("""
-    const lines = Mailbox.history([
-      {op: "create", at: "2026-01-01T06:00:00Z"},
-      {op: "fire", fire_id: "a", state: "due", at: "2026-01-01T07:00:00Z"},
-      {op: "fire", fire_id: "a", state: "running", at: "2026-01-01T07:00:01Z"},
-      {op: "read", at: "2026-01-01T07:05:00Z"},
-      {op: "fire", fire_id: "a", state: "succeeded", at: "2026-01-01T07:02:00Z"},
-      {op: "transition", to: "paused", at: "2026-01-01T08:00:00Z"},
-      {op: "change", at: "2026-01-01T09:00:00Z"}
-    ]);
-    if (lines.map(l => l.text).join("|") !== "Changed|Paused|Fire succeeded|Created") throw Error(JSON.stringify(lines));
-    if (lines[2].at !== "2026-01-01T07:02:00Z") throw Error("a fire shows when it last moved");
-    """)
-  end
-
-  test "a job proposal is a review in Pending, not mail, with its schedule in words and next fires" do
+  test "a job proposal is a review in Pending, not mail, with its schedule and fields" do
     run!("""
     const create = {action: "create", name: "news", agent: "sales", message: "Summarise the news", schedule: "daily at 07:00", timezone: "Europe/Lisbon", delivery: "owner_inbox"};
     const reason = "Every morning, as asked.\\n\\njob news as it would run:\\nruns: sales is sent \\"Summarise the news\\"\\nwhen: daily at 07:00 (Europe/Lisbon)\\nnext fires: 2026-01-02T07:00:00+00:00, 2026-01-03T07:00:00+00:00\\n\\napprove creates it, edit sends back what to change, deny drops it";
@@ -454,39 +438,17 @@ defmodule Omunculus.GuiMailboxTest do
     const r = t.reviews[0];
     const job = r.job;
     if (r.kind !== "job" || r.summary !== "Sales proposes the job news" || r.text !== "" || r.files.length !== 0) throw Error(JSON.stringify(r));
-    if (job.words !== "Every day at 07:00 (Europe/Lisbon)" || job.next.length !== 2 || job.why !== "Every morning, as asked.") throw Error(JSON.stringify(job));
-    if (job.target.agent !== "sales" || r.args.some(a => a.name === "action") || !r.args.some(a => a.name === "message" && a.value === "Summarise the news")) throw Error("target and fields");
+    if (job.schedule !== "daily at 07:00" || job.timezone !== "Europe/Lisbon" || job.why !== "Every morning, as asked.") throw Error(JSON.stringify(job));
+    if (job.create.agent !== "sales" || r.args.some(a => a.name === "action") || !r.args.some(a => a.name === "message" && a.value === "Summarise the news")) throw Error("target and fields");
     if (!r.outcome.includes("the job news is created as written")) throw Error(r.outcome);
     if (t.label !== "" || Mailbox.inFolder(t, "inbox", {})) throw Error("a proposal alone is no inbox mail");
     const edited = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("p1", {reason, options, status: "closed"})]}), events.concat([reply]));
     const sent = edited.messages.filter(m => m.mine && m.request === "p1");
     if (sent.length !== 1 || sent[0].text !== "Edited: Sales proposes the job news\\n\\nShorter") throw Error(JSON.stringify(sent));
     const tool = Object.assign({}, create, {agent: undefined, tool: "ls"});
-    if (build(snap({requests: [request("p2", {reason, options: {approve: [{name: "jobs", args: tool}]}})]}), events).reviews[0].job.target !== null) throw Error("a tool has no target");
+    if (build(snap({requests: [request("p2", {reason, options: {approve: [{name: "jobs", args: tool}]}})]}), events).reviews[0].job.create.tool !== "ls") throw Error("a tool job");
     const plain = build(snap({requests: [request("q", {options: {approve: [{name: "jobs", args: {action: "pause"}}]}})]}), events);
     if (plain.reviews.length !== 0) throw Error("only a create is a proposal");
     """)
-  end
-
-  test "schedules in words, and the estimate said as it is known" do
-    assert {"", 0} =
-             GuiModules.run(
-               ["Schedule"],
-               """
-               const words = Schedule.words;
-               const tz = "Europe/Lisbon";
-               if (words("daily at 7:00", tz) !== "Every day at 07:00 (Europe/Lisbon)") throw Error(words("daily at 7:00", tz));
-               if (words("every 30m", "") !== "Every 30 minutes" || words("every 1h", "") !== "Every 1 hour" || words("every 2h", "UTC") !== "Every 2 hours (UTC)") throw Error("intervals");
-               if (words("30 8 * * 1-5", "UTC") !== "Every weekday at 08:30 (UTC)") throw Error(words("30 8 * * 1-5", "UTC"));
-               if (words("0 9 * * 1", "") !== "Every Monday at 09:00" || words("0 9 * * *", "") !== "Every day at 09:00") throw Error("cron");
-               if (words("*/15 * * * *", "") !== "Every 15 minutes") throw Error("step");
-               if (words("0 9 1 * *", "") !== "On the schedule 0 9 1 * *") throw Error("written as it is when not read");
-               if (Schedule.nextFires("a\\nnext fires: x, y\\nb").join() !== "x,y" || Schedule.nextFires("none").length !== 0) throw Error("next fires");
-               if (Schedule.estimate(null, null) !== "None: it runs a tool, with no model") throw Error("tool");
-               if (Schedule.estimate({agent: "a"}, null) !== "Reading the recent runs...") throw Error("waiting");
-               if (Schedule.estimate({agent: "a"}, {estimate_usd: 0.042, basis: "from 5 recent runs of sales"}) !== "About $0.04 per fire, from 5 recent runs of sales") throw Error("with figure");
-               if (Schedule.estimate({agent: "a"}, {estimate_usd: null, basis: "no recent runs of sales"}) !== "no recent runs of sales") throw Error("no figure is not invented");
-               """
-             )
   end
 end

@@ -964,7 +964,7 @@ the keys dialog:
 The IPC's `start`, `page <name>` (`projects`, `conversations`, `board`, `jobs` and,
 with a conversation open, `chat`, `tree`, `log`, `cost`, `artifacts`), `projects`,
 `project <id>` (a project of the registry, at its conversations),
-`conversations`, `jobs`, `tree`, `log`, `board`, `open <id>`, `work <id>` (a work
+`conversations`, `jobs`, `job <name>` (a job of the project, on its page), `tree`, `log`, `board`, `open <id>`, `work <id>` (a work
 of the board, on its page), `newConversation` and `back` move it too, and `send <message>`
 sends a message to the conversation open, as the composer does.
 

@@ -57,7 +57,7 @@ and a key pressed with no field to take it only says "Click a field to type".
 The console answers Quickshell IPC too (`quickshell ipc --path apps/console
 call omunculus <function>`): `start`, `page <name>`, `projects`,
 `project <id>`, `conversations`,
-`tree`, `log`, `board`, `jobs`, `open <conversation id>`, `work <work id>`,
+`tree`, `log`, `board`, `jobs`, `job <name>`, `open <conversation id>`, `work <work id>`,
 `newConversation`, `back` and `send <message>`.
 
 ### 1. The start
