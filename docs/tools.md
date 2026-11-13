@@ -834,16 +834,19 @@ in the store ([how to schedule a job](how-to-schedule-a-job.md)); two builtin
 tools reach them.
 
 `jobs` is the command line's tool and the call an approved proposal chains.
-`action` is `list`, `show`, `history`, `create`, `edit`, `duplicate`, `pause`,
+`action` is `list`, `show`, `history`, `preview`, `create`, `edit`, `duplicate`, `pause`,
 `resume`, `run`, `archive` or `read`; `--name` is the job. A job aims at one
 target: `agent` (of depth 0) or `workflow`, each with a `message`, or `tool`
 with `args`. `schedule` is a 5-field cron expression, `every 30m`, `every 2h`
 or `daily at 09:00`, read in `timezone`. Optional: `conversation_id` (fires go
 there, and whoever reads it reads the job; it cannot change later),
-`workspace`, `condition` (a tool run before each fire; the fire is skipped when
-it fails) with `condition_args`, `end_at`, `owner` (an `[accounts]` name or an
+`workspace`, `condition` (a tool run before each fire, as the owner, with no model; it prints
+`{"run": true}`, or `{"run": false, "reason": "..."}` to skip the fire, with `"pause": true` to also pause the job)
+with `condition_args`, `end_at`, `owner` (an `[accounts]` name or an
 agent; else whoever creates the job) and `delivery` (`owner_inbox`, below).
-`list`, `show` and `history` read the `jobs` view source; `history` shows the
+`list`, `show` and `history` read the `jobs` view source; `preview` (`schedule`,
+`timezone` and `agent` or `workflow`) prints the next three fires and an estimate
+of the cost of a fire, or says there is no history to estimate from; `history` shows the
 newest 50 events. Each other action emits one `job` action, which the store
 applies as `Omunculus.Jobs.write/3`: it is refused without `[jobs]`, past
 `max_jobs`, for a schedule faster than `min_interval_minutes`, for a name
