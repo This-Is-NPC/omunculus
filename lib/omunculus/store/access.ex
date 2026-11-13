@@ -84,7 +84,8 @@ defmodule Omunculus.Store.Access do
   def conversation(project, principal, id) do
     with :ok <- check(project, principal, "conversation.read", id),
          {:ok, row} <- Query.one(project.conn, "SELECT * FROM conversations WHERE id = ?", [id]),
-         true <- not is_nil(row) do
+         true <- not is_nil(row),
+         {:ok, [row]} <- named_by_job(project.conn, [row]) do
       {:ok, row}
     else
       false -> {:error, :not_found}
@@ -115,6 +116,17 @@ defmodule Omunculus.Store.Access do
 
   @spec conversations(Project.t(), principal) :: {:ok, [map]} | {:error, term}
   def conversations(project, principal) do
+    with {:ok, rows} <- readable_conversations(project, principal),
+         do: named_by_job(project.conn, rows)
+  end
+
+  # Marks each conversation a job's fire opened with the job's name.
+  defp named_by_job(conn, rows) do
+    with {:ok, names} <- Omunculus.Jobs.fire_conversations(conn),
+         do: {:ok, Enum.map(rows, &Map.put(&1, :job, names[&1.id]))}
+  end
+
+  defp readable_conversations(project, principal) do
     with {:ok, config} <- Config.load(project.config_path) do
       case check(project.conn, config.access, principal, "conversation.read", nil) do
         :ok ->

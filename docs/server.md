@@ -109,7 +109,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /capabilities` | List the project capabilities your role grants. |
 | `POST /works/{id}/revert` | Put back the files the work's calls changed, as they were before it, in the root of the workspace the work ran in; it needs `project.manage_config` and an `Idempotency-Key`. The workspace's write rules decide which files may change, as for a run, with `sandbox.write` taken as granted unless the workspace or policy denies it. A refusal (a file changed since the work's last change, or is not writable) is `422 tool_failed` with the sentence in `message`, and nothing is restored. |
 | `GET /stream?after={cursor}` | Open a WebSocket of the later events of every conversation you may read; see [Event stream](#event-stream). |
-| `GET /conversations/{id}` | Read one visible conversation. |
+| `GET /conversations/{id}` | Read one visible conversation. A conversation a job's fire opened carries `job`, the job's name, else `null`; the list and the snapshot say it too. |
 | `GET /conversations/{id}/snapshot` | Read works (each with the `workflow` it goes through and its `stage`), runs, prompts, requests and inbox at one event cursor. |
 | `GET /conversations/{id}/{works,runs,prompts,requests,inbox}` | Read one resource list. |
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
@@ -144,13 +144,13 @@ Each project the server serves has a scheduler that starts the fires of its jobs
 ([how to schedule a job](how-to-schedule-a-job.md#what-happens-when-it-is-due)).
 A fire without a fixed conversation opens one as the job's owner.
 
-A job with `delivery = "owner_inbox"` turns the final reply of each fire into a
+A job with `delivery = "owner_inbox"` turns what the runs of each fire said last to the person (a model reply, or the question an agent put to an account) into a
 message of its thread: `{"id","job_id","sender":{"kind":"job","name"},"at","text","conversation_id","run_ids","unread"}`.
 `GET /jobs/{job}/messages` lists a job's thread; `GET /job-messages` lists, newest
 first, the messages of every job that delivers to you as its owner, which is a
 mailbox's Inbox. `conversation_id` and `run_ids` are the conversation the fire
 opened: answering a message is an ordinary message there, to the agent, and never
-changes the job. `unread` is true after the job's `read_at`; `POST
+changes the job. A conversation a fire opened is the conversation's `job`: mailboxes keep it out of the ordinary threads. `unread` is true after the job's `read_at`; `POST
 /jobs/{job}/actions/read` marks the thread read. A job's thread needs the same
 `job.read` as the job. The Console links a message to `GET /jobs/{job}/history`.
 

@@ -472,9 +472,10 @@ defmodule Omunculus.Server.OpenAPI do
             id: string(),
             created_at: string(),
             created_issuer: string(),
-            created_subject: string()
+            created_subject: string(),
+            job: nullable_string()
           },
-          ~w(id created_at created_issuer created_subject)
+          ~w(id created_at created_issuer created_subject job)
         ),
       "CreatedConversation" => object(%{id: string(), cursor: string()}, ~w(id cursor)),
       "CreateConversation" => object(%{}),

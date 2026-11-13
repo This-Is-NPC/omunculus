@@ -3,7 +3,7 @@ defmodule Omunculus.Jobs.SchedulerTest do
 
   alias Omunculus.{CLI, Cycle, Fixtures, Jobs, Project}
   alias Omunculus.Jobs.{Fire, Preview, Scheduler}
-  alias Omunculus.Store.Query
+  alias Omunculus.Store.{Access, Query}
 
   import Omunculus.Fixtures, only: [open_project: 1, write_config: 2]
 
@@ -22,6 +22,21 @@ defmodule Omunculus.Jobs.SchedulerTest do
   lateness_seconds = 60
   failures_before_pause = 2
   agent_may_create = false
+  """
+
+  @access """
+
+  [access]
+  creator_role = "participant"
+  bootstrap_role = "admin"
+
+  [access.roles.admin]
+  scope = "project"
+  capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "job.read", "job.create", "job.manage"]
+
+  [access.roles.participant]
+  scope = "conversation"
+  capabilities = ["conversation.read", "conversation.send", "conversation.manage_access", "job.read"]
   """
 
   @price %{"input" => 1.0, "output" => 2.0, "cache_write" => 0.0, "cache_read" => 0.0}
@@ -173,6 +188,27 @@ defmodule Omunculus.Jobs.SchedulerTest do
       # The slot is taken: the same instant fires nothing more.
       assert [] = tick(project, now)
       assert length(fires(project, "morning")) == 1
+    end)
+  end
+
+  test "a fire's conversation is the job's, and its message is the last thing said", %{dir: dir} do
+    setup_project(dir)
+    create(dir, "morning", delivery: "owner_inbox")
+    File.write!(Fixtures.config_path(dir), @access, [:append])
+
+    with_project(dir, fn project ->
+      {:ok, %{"owner" => owner}} = Jobs.get(project.conn, "morning")
+      :ok = Omunculus.Operations.bootstrap_access(project, Fire.principal(owner))
+      tick(project, after_anchor(project, "morning", 5))
+      assert [%{"conversation_id" => id}] = fires(project, "morning")
+      assert is_binary(id)
+      assert {:ok, %{^id => "morning"}} = Jobs.fire_conversations(project.conn)
+
+      principal = Fire.principal(owner)
+      assert {:ok, %{job: "morning"}} = Access.conversation(project, principal, id)
+
+      assert {:ok, [%{job: "morning"}]} =
+               Access.conversations(project, principal)
     end)
   end
 
