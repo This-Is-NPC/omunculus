@@ -49,3 +49,18 @@ function full(iso) {
   const date = new Date(iso);
   return two(date.getDate()) + " " + months[date.getMonth()] + " " + date.getFullYear() + " " + precise(iso);
 }
+
+// The local time zone's abbreviation at an instant, "-03" or "UTC": what
+// follows a time that says when a job runs, since the job's own zone is
+// elsewhere. QML formats it ("t"); the fallback writes the offset the same way.
+function zone(iso) {
+  const date = new Date(iso);
+  if (typeof Qt !== "undefined") return Qt.formatDateTime(date, "t");
+  const minutes = -date.getTimezoneOffset();
+  if (minutes === 0) return "UTC";
+  const abs = Math.abs(minutes);
+  return (minutes < 0 ? "-" : "+") + two(Math.floor(abs / 60)) + (abs % 60 ? ":" + two(abs % 60) : "");
+}
+
+// A moment as `began` says it, with its zone: "Today 21:59 -03".
+function zoned(iso, now) { return began(iso, now) + " " + zone(iso); }

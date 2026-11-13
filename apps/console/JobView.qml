@@ -73,12 +73,12 @@ FocusScope {
       ["CONVERSATION", conversation ? (Omunculus.summaries[conversation] || {}).title || conversation : "a new one each fire"],
       ["WORKSPACE", job.workspace || ""],
       ["CONDITION", job.condition ? job.condition + " must pass before each fire" : ""],
-      ["ENDS", job.end_at ? Time.full(job.end_at).slice(0, 17) : ""],
+      ["ENDS", job.end_at ? Time.full(job.end_at).slice(0, 17) + " " + Time.zone(job.end_at) : ""],
       ["OWNER", job.owner ? Requests.label(job.owner) : ""],
       ["DELIVERY", job.delivery === "owner_inbox" ? "each reply to the owner's inbox" : "none"],
       ["ORIGIN", Jobs.origin(job)],
       ["VERSION", String(job.version)],
-      ["CREATED", Time.began(job.created_at, now)],
+      ["CREATED", Time.zoned(job.created_at, now)],
       ["STATE", job.state_reason ? Jobs.mark(job.state).word.toLowerCase() + ": " + job.state_reason : ""]
     ]
     return lines.filter(line => line[1] !== "").map(line => ({ name: line[0], value: line[1] }))

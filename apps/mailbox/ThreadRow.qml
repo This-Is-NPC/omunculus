@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // ThreadRow is one thread in the list, as a mail client's row: a hairline
@@ -45,7 +46,7 @@ Rectangle {
         elide: Text.ElideRight
       }
       MailLabel { visible: !row.narrow; kind: row.thread.label }
-      Label { text: Mail.when(row.thread.at); color: row.unread ? Theme.primary : Theme.dim; font.pixelSize: 10 }
+      Label { text: Mail.when(row.thread.at) + (row.thread.job ? " " + Time.zone(row.thread.at) : ""); color: row.unread ? Theme.primary : Theme.dim; font.pixelSize: 10 }
     }
     RowLayout {
       Layout.fillWidth: true
