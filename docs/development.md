@@ -15,4 +15,6 @@
 
 `check:qml`, part of `mise run check`, starts each app of `apps/` under `quickshell`, headless (`QT_QPA_PLATFORM=offscreen`) and with no server to reach, and waits for it to report `Configuration Loaded`. It fails, with the `file[line:column]` Qt gives, on `Failed to load configuration` or any QML error: a binding to a property that does not exist, a property set twice, a type that is unavailable. The apps then show their connection state. It takes about two seconds.
 
+`check:layout`, also part of `mise run check`, runs the mailbox's thread list at 390 px under `quickshell`, headless, while threads arrive, change height, move and leave, and fails when a settled row starts above the end of the one before it or a section title sits over a row. It takes about twelve seconds.
+
 While the dev server runs, `bin/omunculus --config dev/omunculus.toml <command>` goes to it through the socket.

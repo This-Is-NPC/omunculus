@@ -5,8 +5,9 @@ import "kit/ui"
 
 // ThreadList is the threads of the folder, grouped by day under kickers. It
 // keeps a model of its own, of the threads' keys, in step with `Mail.shown`, so a thread that
-// arrives fades and rises in, one that leaves fades out, and the others slide
-// to their places.
+// arrives fades and rises in and one that leaves fades out; the others jump to
+// their places: a displacement animated on y left rows laid over each other
+// when a row changed height meanwhile (scripts/check-list-layout).
 // Empty, it says why, and offers to clear the search.
 Item {
   id: list
@@ -101,16 +102,6 @@ Item {
     remove: Transition {
       enabled: list.filled
       NumberAnimation { property: "opacity"; to: 0; duration: 140 }
-    }
-    displaced: Transition {
-      enabled: list.filled
-      NumberAnimation { property: "y"; duration: 180; easing.type: Easing.OutCubic }
-      NumberAnimation { property: "opacity"; to: 1; duration: 140 }
-    }
-    move: Transition {
-      enabled: list.filled
-      NumberAnimation { property: "y"; duration: 180; easing.type: Easing.OutCubic }
-      NumberAnimation { property: "opacity"; to: 1; duration: 140 }
     }
   }
 
