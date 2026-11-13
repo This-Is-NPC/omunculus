@@ -248,6 +248,8 @@ bin/omunculus serve --config server.toml
 apps/kit/run console --config server.toml [--project <id>]
 apps/kit/run mailbox --config server.toml [--project <id>]
 apps/kit/run studio --config server.toml [--project <id>]
+mise run package                # the Arch packages of HEAD into target/arch/pkg
+mise run test:install           # install, use and remove them in a disposable container
 mise run up                     # the dev server; the apps open with dev:console, dev:studio, dev:mailbox
 ```
 
@@ -255,6 +257,48 @@ mise run up                     # the dev server; the apps open with dev:console
 `mise run pre-commit` and `mise run validate:regular` pass and
 `mix compile --warnings-as-errors` is clean. The development server and
 its tasks are on [the development environment](development.md).
+
+### Testing the install
+
+`mise run test:install` builds the packages (`package`), then runs
+`scripts/test-install`. It needs Docker, network access and a `makepkg` that
+runs as your user. The script copies the packages, a `SHA256SUMS` and
+`install.sh` into a fresh, unprivileged `archlinux:latest` container with no
+init, as a user with `sudo` and no `LANG`. It removes the container and its
+temp files on exit, even after a failure, and touches no other container.
+
+It asserts, and stops at the first mismatch:
+
+- `install.sh` with `DRY_RUN=1` (with and without `APPS=0`), a tampered
+  checksum, a missing release, and the `cat install.sh | bash` form;
+- the install of both packages: `omunculus version` without a locale
+  warning, the files and launchers, and no `eval/`, `bench/`, `dev/`,
+  `test/` or domain `packs/` in the packages;
+- `omunculus preset default`, `send` and `runs`, on the fake model;
+- `omunculus setup` twice, and `systemd-analyze verify` on the unit;
+- the server: the unit's own `ExecStart` runs as the test user. A project
+  without `[access]` is refused in the log while the server stays up. After
+  an `[access]` table and `access bootstrap`, `omunculus socket` and the
+  socket answer, and `send` succeeds while the server holds the project's lock;
+- `omunculus update` against the real GitHub API;
+- a lower version, built by editing the `pkgver` of the package, then back up
+  with `pacman -U`, which print the restart message;
+- `pacman -R`, which prints the `systemctl --user disable --now` message,
+  followed by stopping the server and checking that no process, binary or
+  package remains, and that the config and the project stay.
+
+The container has no systemd user manager, so `systemctl --user enable --now`
+and the restarts are not exercised for real; the unit tests cover them with a
+fake runner, and `setup` must say that the unit is enabled but not running.
+`update` can only reach the real release, which carries no packages until one
+is published, so the test checks its wording and exit code only.
+
+The packages must come from an Arch as current as the container's: the
+release links the `libcrypto` of its build machine, and the package depends
+on that soname, so pacman refuses it on a newer openssl. To test packages
+built elsewhere, for example in a current container, set
+`OMUNCULUS_PACKAGES=<folder>`. A run takes about 75 s once the packages
+exist.
 
 ### Hooks and the local-check gate
 
