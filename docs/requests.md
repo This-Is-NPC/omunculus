@@ -187,7 +187,12 @@ keys, layers and overrides, now and as it would run, and the runs the agent
 cited, each checked against the project's recent runs. It is refused before it
 reaches the person when it cites a run that does not exist, changes nothing, or
 equals a change the person already denied in the conversation; the agent is
-told what they replied. A run without a work is told, under `## Answered`, each
+told what they replied. With `evidence` (`metric`, `before`, `expected` and the
+`workflow` to draw), the request also says what the change should move and
+names two BPMN artifacts of the conversation, `<workflow>-as-is.bpmn` mined
+from the log and `<workflow>-to-be.bpmn` drawn from the config as it would be
+once the change is applied; the harness draws both, the agent never does
+([tools](tools.md#process-mining)). A run without a work is told, under `## Answered`, each
 request its agent raised in its conversation that was answered, with the option
 picked and the reply.
 | Harness retry/cancel | A request to the account that opened the conversation after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |

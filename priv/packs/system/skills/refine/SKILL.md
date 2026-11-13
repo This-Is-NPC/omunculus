@@ -5,8 +5,15 @@ description: Read how the project's last runs went — where an agent stopped wi
 
 # Refining the teams from their runs
 
-Read before you judge: `runs` sums up the project's last closed runs; `runs`
-with `run` gives one call by call; `config` with `item` `agents.<name>` gives
+Read before you judge. Start with `process`: it mines the event log and
+gives the measured facts, so you do not read runs one by one to find a
+pattern. It gives each workflow's fitness (the share of works that follow
+the stages the config declares) and the deviations by kind with their cases,
+the most frequent variants, each activity's count, duration, cost and
+refusals and, with `support` and `confidence`, the rules the works that
+ended done keep and the cancelled ones break. Every case names its work,
+conversation and runs. Then `runs` sums up the project's last closed runs;
+`runs` with `run` gives one call by call; `config` with `item` `agents.<name>` gives
 what an agent was told, and `overview` with `agent` what it had where it
 ran; without arguments, each lists what there is to read. `config` with
 `section` `tools` lists every tool the project has, those an agent lacks
@@ -33,9 +40,25 @@ too: check there before you say a tool does not exist.
   again, a reply far longer than the work needed, a model costlier than
   the job.
 
+## What the numbers mean
+
+- **Low fitness, one kind of deviation.** Works skip, repeat or leave a
+  stage: a gate that refuses the move beats more words in a text. The
+  deviation's cases say which works.
+- **A rule the done works keep and cancelled ones break.** A step that
+  succeeding works always take and failing ones skip: the candidate for a
+  stage, or a tool's refusal, that makes it happen. Give `support` and
+  `confidence` as numbers from 0 to 1 and read the rules that most
+  cancelled works break.
+- **An activity with many refusals, or a high p90 or cost.** The agent
+  reaches for what it lacks, or the step is slow or dear: read its runs.
+- **A variant far more frequent than the declared workflow.** The work
+  really goes that way; the config should say so or stop it.
+
 ## How to propose
 
-1. Find the pattern in more than one run when you can; name the runs.
+1. Run `process` first and find the pattern in its numbers; read the runs
+   its cases name; cite the numbers and the cases in the reason.
 2. Find its cause in the config: the agent's text, its tools, its
    workflow, the model it runs on.
 3. Propose the change with `propose_config` (see configure), with a reason
@@ -44,6 +67,15 @@ too: check there before you say a tool does not exist.
    tool refuses an id that is not one of the recent runs and shows the
    person the runs cited; a change that no run shows, such as granting a
    tool the work needs, cites none. One cause, one proposal.
+   Name the metric the change should move in `evidence`: `metric`, in the
+   words `process` uses (fitness of a workflow, refusals of a tool, the
+   cost of an activity), `before`, its value in `process` now, `expected`,
+   what it should be after, and `workflow`, the workflow to draw. The
+   harness mines the as-is BPMN from the log and draws the to-be from the
+   config as it would be once the change is applied, keeps both as
+   artifacts of the conversation and names them in the request; you never
+   draw a diagram. Without a work that went through the workflow in the
+   log there is no as-is, and the tool says so.
 4. For an agent or workflow a pack brings, an item of the project's own
    with the same name overrides the pack's key by key: propose only the
    keys that change. What should change in the pack itself, tell the

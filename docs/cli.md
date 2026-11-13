@@ -271,6 +271,19 @@ Sends one short prompt, without tools, to a model, as saved or as the JSON table
 | `name` | string | yes | The model, by its name under [models]. |
 | `value` | string | no | The model as a JSON table, as configure would write it; the file stays as it is. |
 
+### `omunculus ocel`
+
+```text
+omunculus ocel [--last <last>] [--out <out>]
+```
+
+Exports the project's event log as OCEL 2.0 JSON, for process mining tools: the objects (conversations, works, runs, requests, artifacts, jobs) and the events (stage moves, tool calls and their refusals, model replies, requests raised, escalated and answered, artifacts, work ends and job fires), each event related to every object it touches, with agent, model, cost, tokens and duration. It prints the JSON, or writes it to out, a path relative to the project's folder. last keeps the last conversations.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `last` | integer | no | Only the last conversations, as many as this. |
+| `out` | string | no | A file to write the JSON to, relative to the project's folder, instead of printing it. |
+
 ### `omunculus omapass`
 
 ```text
@@ -343,6 +356,24 @@ Runs without a project config.
 | --- | --- | --- | --- |
 | `name` | string | yes | The preset's name: a bundled one (default, codex-like, pi-like) unless from names another folder; recorded in the receipt preset &lt;name&gt; applied. |
 | `from` | string | no | A folder that holds omunculus.toml, for a preset that is not bundled. |
+
+### `omunculus process`
+
+```text
+omunculus process [--bpmn <bpmn>] [--confidence <confidence>] [--last <last>] [--support <support>] [--workflow <workflow>]
+```
+
+Reads how the project's works went, mined from its event log instead of run by run: how closely each work followed the workflow the config declares (fitness, and the deviations by kind with their cases: a skipped stage, a repeated one, one out of order, a work that ended outside its last stage), the most frequent variants, each activity's count, mean and 90th percentile duration, cost and refusals, and, when support and confidence are given, the rules the works that ended done keep and how many cancelled works break each: a rule broken often is the mark of a step a gate should enforce. Each case names its work, conversation and runs, to read with runs. workflow keeps one workflow's works and last the last conversations. With bpmn, as-is or to-be, and a workflow, it prints that workflow's BPMN 2.0 instead: mined from the log, or as the config declares it.
+
+Also called by a model.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bpmn` | string | no | Print the BPMN of the workflow instead: as-is, mined from the log, or to-be, as the config declares it. |
+| `confidence` | number | no | The share of the done works that make a rule apply in which it must hold; gives the rules with support. |
+| `last` | integer | no | Only the last conversations, as many as this. |
+| `support` | number | no | The share of the done works a rule must be kept in to be reported; gives the rules with confidence. |
+| `workflow` | string | no | Only the works of this workflow. |
 
 ### `omunculus prompt`
 

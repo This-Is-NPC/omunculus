@@ -25,7 +25,9 @@ Go through every section and every agent before you judge one.
   asks it to do, a tool in `human` that it could ask for instead, a whole
   group where one tool of it is used. Each is a door left open.
 - **What never runs.** An agent `overview` shows idle in every place, a
-  workflow in `unused_workflows`, a workspace no policy or agent names.
+  workflow in `unused_workflows`, a workspace no policy or agent names;
+  `process` shows the stages and tools the works really went through, to
+  set against what the config declares.
 - **What cannot run.** A model whose `provider` names no login, a tool's
   secret bound to no provider, a stage whose agent its depth does not
   allow.

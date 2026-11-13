@@ -13,6 +13,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [How to import a pack](how-to-import-a-pack.md) | How do I add a team that comes as a folder? |
 | [How to share a pack](how-to-share-a-pack.md) | How do I send a team as one file, and install one I received? |
 | [How to schedule a job](how-to-schedule-a-job.md) | How do I have an agent run something on a schedule? |
+| [How to find what to improve](how-to-find-what-to-improve.md) | How do I see where the works really deviate, and have the refiner propose a measured change? |
 | [How to sync artifacts to S3](how-to-sync-artifacts-to-s3.md) | How do I keep a copy of the artifacts in a bucket? |
 | [How to run the server](how-to-run-the-server.md) | How do I serve a project so the apps can reach it? |
 | [The screens](screens.md) | What does each screen of the apps show, and which keys does it take? |

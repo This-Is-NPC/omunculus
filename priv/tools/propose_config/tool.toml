@@ -25,10 +25,30 @@ description = "The ids of the runs that show why, as runs prints them; each must
 [parameters.properties.runs.items]
 type = "string"
 
+[parameters.properties.evidence]
+type = "object"
+description = "What the change should move, with the process facts behind it: metric (what is measured, as process reports it), before (its value now), expected (its value after) and workflow, the workflow whose BPMN pair to attach: the as-is mined from the log and the to-be as the config would declare it once this change is applied, both drawn by the harness and kept as artifacts the request names. last limits the log to its last conversations, as for process."
+
+[parameters.properties.evidence.properties.metric]
+type = "string"
+
+[parameters.properties.evidence.properties.workflow]
+type = "string"
+
+[parameters.properties.evidence.properties.last]
+type = "integer"
+minimum = 1
+
 [views.recent]
 source = "runs"
 relation = "recent"
 limit = 40
+
+[views.log]
+source = "log"
+
+[views.artifacts]
+source = "artifacts"
 
 [views.answered]
 source = "requests"

@@ -221,6 +221,7 @@ argument of the call.
 | `works` | the work (`relation = "self"`, the default), its `parent`, or its `children`, oldest first; `"conversation"`, from `run`: for a run without a work, the root works of its conversation, oldest first | `from` is `work` (default) or `args.<name>` with `within = "descendants"`, which reads only a work below the call's own; children take `state` (a list) and `since = "last_run"` (changed after the work's last closed run finished); `include` adds `last_comment`, `comments` or the closed `runs` with their record to each work |
 | `comments` | the comments of the first of `from` among `work`, `request`, `inbox`, oldest first | `from` (default all three, in that order) |
 | `runs` | `relation = "last_closed"`: the work's last closed run; `"opener"`: the run that opened the call's request — each with the message that opened it (`message`) and every event it recorded (`events`); `"conversation"`, from `run`: for a run without a work, the closed runs of its conversation that had none, oldest first, each with its record; `"recent"`: the project's last `limit` closed runs, of every conversation, newest first, each with its work's `work_title`, `work_state`, `work_workflow` and `work_stage` and its `events` | `relation` (required); `limit` (required for `recent`, a positive integer) |
+| `log` | the rows of the project's event log for process mining: the works, runs, requests, the events that matter to a process (tool calls, model replies, stage moves, request traffic, artifacts) and the job fires, of the call's last `last` conversations (its `last` argument, or `evidence.last`; all of them without one) | none |
 | `events` | `relation = "run"`: the events of the call's run so far; `"cause"`: the event that made the call's run due; `"attachments"`: the files attached in the run's conversation, oldest first, each `{name, media_type, bytes, sha256}` with its `event_id`, `at` and `by` | `relation` (required) |
 | `requests` | the request named by the `request_id` argument, or the call's request; `relation = "answered"`, from `run`: the closed requests the run's agent raised in its conversation but for the one that opened the run, oldest first, each with its `answer` (the option picked) and its `reply` | `from`; `relation` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
@@ -346,6 +347,66 @@ document for the person from data for the agents, since kinds are the
 pack's. A pack that keeps internal data in an artifact renders a document
 of its own for the person, as the sales desk does, and tells its agents
 to attach that.
+
+## Process mining
+
+`process` reads the project's event log instead of one run at a time. It is
+read-only; the system pack grants it to the refiner and the auditor, and
+`omunculus process` runs it from the command line. Arguments: `workflow`
+keeps one workflow's works, `last` the last conversations, `support` and
+`confidence` (numbers from 0 to 1, given together) turn on the rules, and
+`bpmn` (`as-is` or `to-be`, with a `workflow`) prints that workflow's BPMN 2.0
+instead. It prints:
+
+- **Conformance.** Each work's stage sequence against the workflow the config
+  declares: fitness, the share of the works that follow it, and the deviations
+  by kind with their cases: a skipped stage, a repeated one, one out of order
+  (back to an earlier stage, or to one the workflow lacks), a work that ended
+  outside its last stage. A work that is open is not judged on where it ended.
+- **Variants.** The ten most frequent activity sequences, a run of one activity
+  counted once, with their works.
+- **Activities.** For each tool and for the model's replies: how often, mean and
+  90th percentile duration (nearest rank), cost and refusals. A duration is the
+  time since the previous event of the run, so a model reply's is its latency and
+  a call's is mostly its own execution.
+- **Rules.** Declare rules mined from the works that ended done, with the
+  thresholds given and no default. `response(a, b)`: after `a`, `b` happens.
+  `precedence(a, b)`: `b` happens only after `a`. A rule's support is the share
+  of done works that activate and satisfy it, its confidence the share of those
+  that activate it that satisfy it. The cancelled works that activate a rule and
+  break it are listed: a rule the done works keep and the cancelled ones break is
+  the signal for a deterministic gate, a stage or a tool's refusal.
+
+Every case is a work with its conversation and run ids, which `runs` reads.
+The output is the same for the same log.
+
+The log is built from the store by `Omunculus.Store.Log` and
+`Omunculus.Process.Log`: the activities are the model's tool calls (the harness's
+`assemble` before the first reply and the `end` call are left out), `model reply`,
+`enter <stage>`, `work done`, `work cancelled`, `request raised`, `request
+escalated`, `request answered`, `artifact written` and `job fire <state>`. A
+work's first stage is the `from` of its first `continue`, else the stage its first
+`reopen` names, else the stage it holds.
+
+`omunculus ocel [--out <file>] [--last <n>]` exports the same log as OCEL 2.0
+JSON, for tools such as pm4py or OCPM. Object types: conversation, work, run,
+request, artifact, job. Each event is one of the activities above, related to
+every object it touches, with `agent`, `model`, `usd`, `tokens`, `duration` and
+`ok` (false for a refusal) where they apply. Without `--out` it prints; `--out`
+is relative to the project's folder. It is a command line tool only: a model
+never writes a file through it.
+
+**BPMN.** `process --bpmn to-be` draws the workflow as the config declares it: a
+task per stage named with its agent, whose documentation gives what the agent and
+the stage grant, what the stage denies and the tools its overrides gate.
+`--bpmn as-is` draws what the works did: an inductive miner turns their stage
+sequences into a process tree (choice, sequence, loop, and a flower for what no
+cut tells apart; no parallel branches, no noise filter), and the tree becomes
+tasks and exclusive gateways, so the model is block structured and replays every
+sequence it was mined from. Both carry BPMNDI coordinates, left to right, and
+open in bpmn.io. Neither is drawn by a model. `propose_config` attaches the pair
+to a proposal through its `evidence` argument
+([requests](requests.md#forms-and-effects)).
 
 ## Artifacts in a bucket
 
