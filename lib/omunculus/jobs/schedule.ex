@@ -151,6 +151,10 @@ defmodule Omunculus.Jobs.Schedule do
     end
   end
 
+  @doc "An instant of the schedule as ISO 8601 with its zone's offset then."
+  @spec iso8601(t, DateTime.t()) :: String.t()
+  def iso8601(%__MODULE__{zone: zone}, instant), do: Zone.iso8601(zone, instant)
+
   @doc """
   The next `count` instants after `from` (now when left out) the schedule
   fires at, in UTC, oldest first. A rule that has no instant within eight

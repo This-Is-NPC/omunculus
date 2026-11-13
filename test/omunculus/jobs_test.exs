@@ -100,6 +100,7 @@ defmodule Omunculus.JobsTest do
 
       assert {:ok, next, _} = DateTime.from_iso8601(job["next_fire"])
       assert DateTime.diff(next, DateTime.utc_now()) in 3590..3600
+      assert job["next_fire"] =~ ~r/[+-]\d\d:\d\d$/
 
       assert {:ok, [^job]} = Jobs.list(conn)
       assert {:ok, ^job} = Jobs.get(conn, job["id"])
