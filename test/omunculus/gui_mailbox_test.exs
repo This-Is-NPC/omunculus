@@ -17,7 +17,8 @@ defmodule Omunculus.GuiMailboxTest do
   """
 
   defp run!(assertions) do
-    assert {"", 0} = GuiModules.run(["Requests", "Model", "Mailbox"], @fixtures <> assertions)
+    assert {"", 0} =
+             GuiModules.run(["Requests", "Model", "Schedule", "Mailbox"], @fixtures <> assertions)
   end
 
   test "the client scripts avoid String.trimEnd, which the QML engine lacks" do
@@ -381,5 +382,111 @@ defmodule Omunculus.GuiMailboxTest do
     const f = Mailbox.forward(t, t.messages[1]);
     if (f.subject !== "Fwd: Hi" || !f.body.includes("From: Sales <sales@agency>") || !f.body.endsWith("Hello")) throw Error(f.body);
     """)
+  end
+
+  test "a job's messages are one thread each, from <name> <no-reply · job>, unread as the API says" do
+    run!("""
+    const msg = (id, job, name, at, text, unread) => ({id, job_id: job, sender: {kind: "job", name}, at, text, conversation_id: "c" + id, run_ids: [], unread});
+    const threads = Mailbox.jobThreads("agency", [
+      msg("f2", "j1", "news", "2026-01-02T07:00:00Z", "Day two", true),
+      msg("f1", "j1", "news", "2026-01-01T07:00:00Z", "Day one", false),
+      msg("g1", "j2", "report", "2026-01-01T09:00:00Z", "Weekly", false)
+    ], [{id: "j1", name: "news", agent: "sales"}, {id: "j2", name: "report", workflow: "flow"}]);
+    if (threads.length !== 2) throw Error("one thread per job");
+    const t = threads[0];
+    if (t.key !== "agency/job:j1" || t.subject !== "news" || t.label !== "job" || t.agent !== "sales") throw Error(JSON.stringify(t));
+    if (t.with.text !== "news <no-reply \u00b7 job>" || t.with.job !== true || t.messages[0].from.name !== "news") throw Error("sender " + t.with.text);
+    if (t.messages.map(m => m.text).join() !== "Day one,Day two" || t.at !== "2026-01-02T07:00:00Z") throw Error("oldest first");
+    if (t.messages.some(m => m.mine) || t.received !== 2 || t.sent !== 0 || t.messages[1].conversation !== "cf2") throw Error("only theirs, with the conversation");
+    if (!Mailbox.isUnread(t, {[t.key]: t.heard}) || Mailbox.isUnread(threads[1], {})) throw Error("unread follows the API, not what the mailbox saw");
+    if (!Mailbox.inFolder(t, "inbox", {}) || Mailbox.inFolder(t, "sent", {})) throw Error("a job's thread is in the inbox");
+    if (threads[1].agent !== "" || Mailbox.canReplyAll(t)) throw Error("a workflow has no agent; one counterpart");
+    if (!Mailbox.matches(t, "day two") || !Mailbox.matches(t, "NEWS")) throw Error("search");
+    if (Mailbox.labels.job !== "JOB") throw Error("badge");
+    """)
+  end
+
+  test "a reply to a job's message is a new message to its agent that quotes it and keeps the job apart" do
+    assert {"", 0} =
+             GuiModules.run(
+               ["Requests", "Model", "Schedule", "Mailbox", "Composers"],
+               """
+               const t = Mailbox.jobThreads("agency", [{id: "f1", job_id: "j1", sender: {kind: "job", name: "news"}, at: "2026-01-01T07:00:00Z", text: "Item 1\\nItem 2", conversation_id: "c9", run_ids: [], unread: true}],
+                 [{id: "j1", name: "news", agent: "sales"}])[0];
+               const r = Composers.replying(t, "", false, at => "07:00");
+               if (r.kind !== "job" || r.subject !== "Re: news" || r.to.map(x => x.address).join() !== "sales@agency") throw Error(JSON.stringify(r));
+               if (r.request !== "" || r.quoted !== null || !r.body.includes("On 07:00, news wrote:\\n> Item 1\\n> Item 2")) throw Error("quoted in the text: " + r.body);
+               let s = Composers.open(Composers.empty(), r);
+               if (s.items[0].to.length !== 1 || s.items[0].kind !== "job") throw Error("the composer opens to the agent");
+               if (Composers.open(s, Composers.replying(t, "f1", false, at => "07:00")).items.length !== 1) throw Error("asked twice shows the same one");
+               if (Composers.written(s.items[0], {subject: "Re: news", body: r.body, files: 0})) throw Error("the quote alone is nothing written");
+               const none = Mailbox.jobThreads("agency", [{id: "g", job_id: "j2", sender: {kind: "job", name: "w"}, at: "2026-01-01T07:00:00Z", text: "x", conversation_id: "c", run_ids: [], unread: false}], [{id: "j2", name: "w", workflow: "flow"}])[0];
+               if (Composers.replying(none, "", false, at => "").to.length !== 0) throw Error("a job with no agent starts with To empty");
+               """
+             )
+  end
+
+  test "a job's history is its events, a fire as one line, reads left out, newest first" do
+    run!("""
+    const lines = Mailbox.history([
+      {op: "create", at: "2026-01-01T06:00:00Z"},
+      {op: "fire", fire_id: "a", state: "due", at: "2026-01-01T07:00:00Z"},
+      {op: "fire", fire_id: "a", state: "running", at: "2026-01-01T07:00:01Z"},
+      {op: "read", at: "2026-01-01T07:05:00Z"},
+      {op: "fire", fire_id: "a", state: "succeeded", at: "2026-01-01T07:02:00Z"},
+      {op: "transition", to: "paused", at: "2026-01-01T08:00:00Z"},
+      {op: "change", at: "2026-01-01T09:00:00Z"}
+    ]);
+    if (lines.map(l => l.text).join("|") !== "Changed|Paused|Fire succeeded|Created") throw Error(JSON.stringify(lines));
+    if (lines[2].at !== "2026-01-01T07:02:00Z") throw Error("a fire shows when it last moved");
+    """)
+  end
+
+  test "a job proposal is a review in Pending, not mail, with its schedule in words and next fires" do
+    run!("""
+    const create = {action: "create", name: "news", agent: "sales", message: "Summarise the news", schedule: "daily at 07:00", timezone: "Europe/Lisbon", delivery: "owner_inbox"};
+    const reason = "Every morning, as asked.\\n\\njob news as it would run:\\nruns: sales is sent \\"Summarise the news\\"\\nwhen: daily at 07:00 (Europe/Lisbon)\\nnext fires: 2026-01-02T07:00:00+00:00, 2026-01-03T07:00:00+00:00\\n\\napprove creates it, edit sends back what to change, deny drops it";
+    const options = {approve: [{name: "jobs", args: create}], edit: [], deny: []};
+    const events = [prompt("1", "2026-01-01T10:00:00Z", "Every morning at 7 summarise the news")];
+    const reply = {type: "reply", cursor: "9", at: "2026-01-01T10:06:00Z", request_id: "p1", actor: human, body: {body: "Shorter", option: "edit"}};
+    const t = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("p1", {reason, options})]}), events);
+    if (t.reviews.length !== 1 || t.messages.some(m => m.request === "p1")) throw Error("held, not mail");
+    const r = t.reviews[0];
+    const job = r.job;
+    if (r.kind !== "job" || r.summary !== "Sales proposes the job news" || r.text !== "" || r.files.length !== 0) throw Error(JSON.stringify(r));
+    if (job.words !== "Every day at 07:00 (Europe/Lisbon)" || job.next.length !== 2 || job.why !== "Every morning, as asked.") throw Error(JSON.stringify(job));
+    if (job.target.agent !== "sales" || r.args.some(a => a.name === "action") || !r.args.some(a => a.name === "message" && a.value === "Summarise the news")) throw Error("target and fields");
+    if (!r.outcome.includes("the job news is created as written")) throw Error(r.outcome);
+    if (t.label !== "" || Mailbox.inFolder(t, "inbox", {})) throw Error("a proposal alone is no inbox mail");
+    const edited = build(snap({runs: [run("r1", "sales", "closed")], requests: [request("p1", {reason, options, status: "closed"})]}), events.concat([reply]));
+    const sent = edited.messages.filter(m => m.mine && m.request === "p1");
+    if (sent.length !== 1 || sent[0].text !== "Edited: Sales proposes the job news\\n\\nShorter") throw Error(JSON.stringify(sent));
+    const tool = Object.assign({}, create, {agent: undefined, tool: "ls"});
+    if (build(snap({requests: [request("p2", {reason, options: {approve: [{name: "jobs", args: tool}]}})]}), events).reviews[0].job.target !== null) throw Error("a tool has no target");
+    const plain = build(snap({requests: [request("q", {options: {approve: [{name: "jobs", args: {action: "pause"}}]}})]}), events);
+    if (plain.reviews.length !== 0) throw Error("only a create is a proposal");
+    """)
+  end
+
+  test "schedules in words, and the estimate said as it is known" do
+    assert {"", 0} =
+             GuiModules.run(
+               ["Schedule"],
+               """
+               const words = Schedule.words;
+               const tz = "Europe/Lisbon";
+               if (words("daily at 7:00", tz) !== "Every day at 07:00 (Europe/Lisbon)") throw Error(words("daily at 7:00", tz));
+               if (words("every 30m", "") !== "Every 30 minutes" || words("every 1h", "") !== "Every 1 hour" || words("every 2h", "UTC") !== "Every 2 hours (UTC)") throw Error("intervals");
+               if (words("30 8 * * 1-5", "UTC") !== "Every weekday at 08:30 (UTC)") throw Error(words("30 8 * * 1-5", "UTC"));
+               if (words("0 9 * * 1", "") !== "Every Monday at 09:00" || words("0 9 * * *", "") !== "Every day at 09:00") throw Error("cron");
+               if (words("*/15 * * * *", "") !== "Every 15 minutes") throw Error("step");
+               if (words("0 9 1 * *", "") !== "On the schedule 0 9 1 * *") throw Error("written as it is when not read");
+               if (Schedule.nextFires("a\\nnext fires: x, y\\nb").join() !== "x,y" || Schedule.nextFires("none").length !== 0) throw Error("next fires");
+               if (Schedule.estimate(null, null) !== "None: it runs a tool, with no model") throw Error("tool");
+               if (Schedule.estimate({agent: "a"}, null) !== "Reading the recent runs...") throw Error("waiting");
+               if (Schedule.estimate({agent: "a"}, {estimate_usd: 0.042, basis: "from 5 recent runs of sales"}) !== "About $0.04 per fire, from 5 recent runs of sales") throw Error("with figure");
+               if (Schedule.estimate({agent: "a"}, {estimate_usd: null, basis: "no recent runs of sales"}) !== "no recent runs of sales") throw Error("no figure is not invented");
+               """
+             )
   end
 end
