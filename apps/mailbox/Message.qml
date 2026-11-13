@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Mailbox.js" as Mailbox
 import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 
@@ -80,7 +81,7 @@ SurfaceFrame {
         Label {
           Layout.fillWidth: true
           visible: !mail.expanded
-          text: mail.message.text.replace(/\s+/g, " ") + (mail.message.files.length > 0 ? "  [" + mail.message.files.length + (mail.message.files.length === 1 ? " file]" : " files]") : "")
+          text: Mailbox.oneLine(mail.message.text) + (mail.message.files.length > 0 ? "  [" + mail.message.files.length + (mail.message.files.length === 1 ? " file]" : " files]") : "")
           color: Theme.dim
           font.pixelSize: 12
           elide: Text.ElideRight
@@ -116,6 +117,14 @@ SurfaceFrame {
       Layout.minimumHeight: Breakpoints.target(Window.width)
       value: "VIEW JOB IN THE CONSOLE"
       onClicked: Mail.openJob(mail.thread)
+    }
+
+    LinkLabel {
+      readonly property string conversation: mail.message.conversation ? mail.project + "/" + mail.message.conversation : ""
+      visible: mail.expanded && !!mail.message.job && conversation !== "" && Mail.threads[conversation] !== undefined
+      Layout.minimumHeight: Breakpoints.target(Window.width)
+      value: "OPEN THE CONVERSATION OF THIS FIRE"
+      onClicked: Mail.open(conversation)
     }
 
     Flow {

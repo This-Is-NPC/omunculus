@@ -575,7 +575,8 @@ The project's level:
   others under a rule of the day each began, newest first; filtered by
   their state (chips NEEDS YOU, WORKING, NOT STARTED; ALL lists every one)
   and by their titles and what was first said in them, which it opens from.
-  Each row is two or three lines at every width, with no header; a line too
+  A conversation a job's fire opened starts its second line with
+  "job <name>". Each row is two or three lines at every width, with no header; a line too
   long for its room ends at a word, with an ellipsis, never mid-word
   (`DecodeLabel`'s `byWords`, on every table). Its title
   is its first work's, else what was first said, with its state at the top

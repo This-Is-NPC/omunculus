@@ -16,7 +16,7 @@ import "kit/ui"
 // agent holds its first work, at which stage of how many, and since when it
 // waits, else when it began, and its tree in a few words ("14 works · 4 levels
 // · 2 open"); then what the newest request asks, or, under a work's title, what
-// was first said. Each row's menu opens it at its tree or its log. Its cells
+// was first said; one a job's fire opened starts that line with "job <name>". Each row's menu opens it at its tree or its log. Its cells
 // decode into view.
 DataTable {
   id: table
@@ -104,6 +104,7 @@ DataTable {
     return [
       titleOf(conversation),
       [
+        conversation.job ? "job " + conversation.job : "",
         whoOf(conversation, root),
         treeOf(works),
         needing ? "waiting since " + Time.clock(known.since, now) : "began " + Time.began(conversation.created_at, now)

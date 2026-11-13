@@ -88,6 +88,10 @@ final reply of each fire to its owner. The mailbox reads them from
   `seen.json`. Opening the thread marks it read with
   `POST .../jobs/{job}/actions/read`; MARK ALL READ does the same for the job
   threads shown; MARK UNREAD is off, since the API has no way to undo a read;
+- the conversation a fire opens (the server marks it with `job`, the job's
+  name) is in no folder, so no second thread repeats the job's: the message's
+  OPEN THE CONVERSATION OF THIS FIRE reads it, and a review waiting in it
+  still shows in Pending;
 - an open message has VIEW JOB IN THE CONSOLE, which opens the job on its
   page in the console through its Quickshell IPC (`job <name>`, in the
   console's current project); it says so when the console is not running;
