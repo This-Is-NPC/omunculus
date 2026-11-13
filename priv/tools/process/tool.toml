@@ -1,0 +1,38 @@
+name = "process"
+kind = "tool"
+triggers = ["model", "cli"]
+description = "Reads how the project's works went, mined from its event log instead of run by run: how closely each work followed the workflow the config declares (fitness, and the deviations by kind with their cases: a skipped stage, a repeated one, one out of order, a work that ended outside its last stage), the most frequent variants, each activity's count, mean and 90th percentile duration, cost and refusals, and, when support and confidence are given, the rules the works that ended done keep and how many cancelled works break each: a rule broken often is the mark of a step a gate should enforce. Each case names its work, conversation and runs, to read with runs. workflow keeps one workflow's works and last the last conversations. With bpmn, as-is or to-be, and a workflow, it prints that workflow's BPMN 2.0 instead: mined from the log, or as the config declares it."
+tags = ["runs", "review"]
+module = "Omunculus.Tools.Process"
+
+[parameters]
+type = "object"
+
+[parameters.properties.workflow]
+type = "string"
+description = "Only the works of this workflow."
+
+[parameters.properties.last]
+type = "integer"
+minimum = 1
+description = "Only the last conversations, as many as this."
+
+[parameters.properties.support]
+type = "number"
+minimum = 0
+maximum = 1
+description = "The share of the done works a rule must be kept in to be reported; gives the rules with confidence."
+
+[parameters.properties.confidence]
+type = "number"
+minimum = 0
+maximum = 1
+description = "The share of the done works that make a rule apply in which it must hold; gives the rules with support."
+
+[parameters.properties.bpmn]
+type = "string"
+enum = ["as-is", "to-be"]
+description = "Print the BPMN of the workflow instead: as-is, mined from the log, or to-be, as the config declares it."
+
+[views.log]
+source = "log"
