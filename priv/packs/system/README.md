@@ -22,7 +22,12 @@ proposals with an `[[interceptors]]` rule for the tool
 account for review, not only whoever the request passes through.
 
 Only the steward proposes importing a pack: the auditor and the refiner
-are granted `config`, `overview` and `propose_config`, not `propose_pack`.
+are granted `config`, `overview`, `process` and `propose_config`, not
+`propose_pack`. `process` mines the event log for measured facts — how
+closely works followed their workflows, the variants, each activity's cost
+and refusals, the rules done works keep and cancelled ones break — so the
+refiner reasons over numbers, not run by run ([how to find what to
+improve](../../../docs/how-to-find-what-to-improve.md)).
 They are also granted `propose_job`: the refiner proposes a scheduled job
 for a request the runs show the person making by hand, with those runs
 cited, and the auditor for a routine the config says is done by hand. The
@@ -49,6 +54,7 @@ Their skills:
   workflow a pack brings changed by that item's keys in the project's file.
 - `audit`: the auditor's — grants past the work, what never runs or cannot
   run, each cut proposed on its own.
-- `refine`: the refiner's — what the last runs show went wrong, its cause
-  in the config, and the change, with the runs that show it, cited by id;
-  and when to propose a scheduled job.
+- `refine`: the refiner's — what `process` and the last runs show went
+  wrong, its cause in the config, and the change, with the numbers, cases
+  and runs that show it, the metric it should move and the BPMN pair, as-is
+  and to-be; and when to propose a scheduled job.

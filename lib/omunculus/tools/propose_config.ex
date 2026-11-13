@@ -22,7 +22,7 @@ defmodule Omunculus.Tools.ProposeConfig do
 
   alias Omunculus.Config
   alias Omunculus.Config.Toml, as: ConfigToml
-  alias Omunculus.Tools.{Args, Cites, Out, Steps}
+  alias Omunculus.Tools.{Args, Cites, Evidence, Out, Steps}
   alias Omunculus.Tools.Config, as: ConfigTool
 
   @spec run(map) :: map
@@ -39,21 +39,28 @@ defmodule Omunculus.Tools.ProposeConfig do
          :ok <- not_refused(view["answered"] || [], args, value),
          {:ok, before} <- Config.load(path),
          {:ok, config} <- Config.try_item(path, item, value),
-         [] <- steps(config, item, value) do
-      Out.ok("", [
-        %{
-          "type" => "request",
-          "body" =>
-            request(
-              args,
-              value,
-              revision,
-              cited,
-              {shown(before, item, held), shown(config, item, value)}
-            )
-        }
-      ])
+         [] <- steps(config, item, value),
+         {:ok, evidence} <- Evidence.build(args["evidence"], config, view) do
+      Out.ok(
+        "",
+        evidence.emit ++
+          [
+            %{
+              "type" => "request",
+              "body" =>
+                request(
+                  args,
+                  value,
+                  revision,
+                  cited,
+                  evidence.lines,
+                  {shown(before, item, held), shown(config, item, value)}
+                )
+            }
+          ]
+      )
     else
+      {:error, reason} when is_binary(reason) -> Out.fail(reason)
       {:error, reason} -> Out.fail("the config would not load: #{inspect(reason)}")
       [_ | _] = missing -> Out.fail("the agent would be refused:\n" <> Enum.join(missing, "\n"))
       message -> Out.fail(message)
@@ -116,7 +123,7 @@ defmodule Omunculus.Tools.ProposeConfig do
 
   defp steps(_config, _item, _value), do: []
 
-  defp request(args, value, revision, cited, {was, would_be}) do
+  defp request(args, value, revision, cited, evidence, {was, would_be}) do
     configure =
       %{"item" => args["item"], "value" => Jason.encode!(value), "revision" => revision}
       |> Args.put_present("from", args)
@@ -126,10 +133,13 @@ defmodule Omunculus.Tools.ProposeConfig do
         Enum.join(
           [
             args["reason"],
-            Cites.line(cited),
-            "#{args["item"]} as it runs now:\n" <> was,
-            "#{args["item"]} as it would run:\n" <> would_be
-          ],
+            Cites.line(cited)
+          ] ++
+            evidence ++
+            [
+              "#{args["item"]} as it runs now:\n" <> was,
+              "#{args["item"]} as it would run:\n" <> would_be
+            ],
           "\n\n"
         ),
       "options" => %{
