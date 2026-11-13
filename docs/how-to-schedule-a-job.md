@@ -90,7 +90,9 @@ Each slot of the schedule becomes a fire, recorded in the job's history:
   cancelled. A tool that fails or prints anything else skips the fire with that as
   the reason.
 - **Run.** The fire sends the job's message to its agent, or opens a root work for
-  its workflow, or calls its tool, as the owner. Each fire opens a conversation of
+  its workflow, or calls its tool, as the owner. The agent reads the message under
+  `## Message` with a first line `From: job <name>, sent by the scheduler for the
+  owner`, so it can tell a job's message from a person's. Each fire opens a conversation of
   its own, or goes to the job's `--conversation_id`. The fire is `running`, then
   `succeeded` or `failed`, with the conversation, the runs, the duration, the model
   calls, the tokens and the dollars at the models' prices. With `--delivery

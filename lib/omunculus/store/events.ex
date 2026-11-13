@@ -25,7 +25,8 @@ defmodule Omunculus.Store.Events do
           :origin_issuer,
           :origin_subject,
           :released_by,
-          :via
+          :via,
+          :job
         ])
       )
 
@@ -72,8 +73,17 @@ defmodule Omunculus.Store.Events do
 
   # What opens a run, written for a fire, says so in its body: a crash before
   # the run opens must not lose the `via` the loop guard of `Jobs` reads.
-  defp fired(%{type: type, body: body} = fields, %{via: "job"}) when type in ~w(prompt work),
-    do: %{fields | body: body |> Jason.decode!() |> Map.put("via", "job") |> Jason.encode!()}
+  defp fired(%{type: type, body: body} = fields, %{via: "job"} = actor)
+       when type in ~w(prompt work) do
+    body =
+      body
+      |> Jason.decode!()
+      |> Map.put("via", "job")
+      |> Map.put("job", Map.get(actor, :job))
+      |> Jason.encode!()
+
+    %{fields | body: body}
+  end
 
   defp fired(fields, _actor), do: fields
 

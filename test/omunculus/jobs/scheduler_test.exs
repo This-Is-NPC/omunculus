@@ -3,7 +3,7 @@ defmodule Omunculus.Jobs.SchedulerTest do
 
   alias Omunculus.{CLI, Cycle, Fixtures, Jobs, Project}
   alias Omunculus.Jobs.{Fire, Preview, Scheduler}
-  alias Omunculus.Store.{Access, Query}
+  alias Omunculus.Store.{Access, Query, View}
 
   import Omunculus.Fixtures, only: [open_project: 1, write_config: 2]
 
@@ -179,6 +179,14 @@ defmodule Omunculus.Jobs.SchedulerTest do
       # The run carries the loop guard: it came from a job.
       assert {:ok, %{via: "job"}} =
                Query.one(project.conn, "SELECT via FROM runs WHERE id = ?", [run_id])
+
+      # The prompt the fire sent says which job sent it.
+      assert {:ok, %{via: "job", job: "morning"}} =
+               Query.one(
+                 project.conn,
+                 View.prompts_sql() <> " WHERE kind = 'message'",
+                 []
+               )
 
       assert {:ok, [%{"text" => "all done", "unread" => true}]} =
                Jobs.messages(project.conn, "morning")
