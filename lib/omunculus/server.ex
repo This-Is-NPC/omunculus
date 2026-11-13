@@ -9,10 +9,16 @@ defmodule Omunculus.Server do
 
   require Logger
 
+  alias Omunculus.Jobs.Scheduler
   alias Omunculus.Server.{Auth, Config, Endpoint, Project, Socket, StreamLimiter}
 
-  @spec start_link(String.t()) :: Supervisor.on_start()
-  def start_link(path) do
+  @doc """
+  Starts the server whose registry file is `path`. `scheduler` is handed to
+  the scheduler of each project (`Omunculus.Jobs.Scheduler`), which a test
+  gives a `clock`.
+  """
+  @spec start_link(String.t(), keyword) :: Supervisor.on_start()
+  def start_link(path, scheduler \\ []) do
     with {:ok, config} <- Config.load(path),
          {:ok, http} <- http_listener(config, Path.expand(path)) do
       stream_key = Path.expand(path)
@@ -21,7 +27,7 @@ defmodule Omunculus.Server do
         [{StreamLimiter, {stream_key, config.max_connections}}] ++
           Enum.flat_map(config.projects, fn {id, project_path} ->
             if servable?(id, project_path),
-              do: project_children(id, project_path, config.limits, stream_key),
+              do: project_children(id, project_path, config.limits, stream_key, scheduler),
               else: []
           end) ++ http
 
@@ -50,11 +56,12 @@ defmodule Omunculus.Server do
 
   defp via(stream_key), do: {:via, Registry, {Omunculus.Server.Registry, {:server, stream_key}}}
 
-  defp project_children(id, project_path, limits, stream_key) do
+  defp project_children(id, project_path, limits, stream_key, scheduler) do
     limits = Map.put(limits, :scope, {:server, stream_key})
 
     [
       Supervisor.child_spec({Project, {id, project_path, limits}}, id: {:project, id}),
+      Supervisor.child_spec({Scheduler, {id, scheduler}}, id: {:scheduler, id}),
       Supervisor.child_spec({Socket, {id, project_path, stream_key}}, id: {:socket, id})
     ]
   end
@@ -94,7 +101,7 @@ defmodule Omunculus.Server do
   end
 
   defp start(stream_key, id, config, limits) do
-    Enum.reduce_while(project_children(id, config, limits, stream_key), :ok, fn spec, :ok ->
+    Enum.reduce_while(project_children(id, config, limits, stream_key, []), :ok, fn spec, :ok ->
       case Supervisor.start_child(via(stream_key), spec) do
         {:ok, _pid} ->
           {:cont, :ok}
@@ -107,7 +114,7 @@ defmodule Omunculus.Server do
   end
 
   defp stop(stream_key, id) do
-    for key <- [{:socket, id}, {:project, id}] do
+    for key <- [{:socket, id}, {:scheduler, id}, {:project, id}] do
       Supervisor.terminate_child(via(stream_key), key)
       Supervisor.delete_child(via(stream_key), key)
     end

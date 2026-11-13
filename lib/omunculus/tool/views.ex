@@ -58,8 +58,10 @@ defmodule Omunculus.Tool.Views do
   - `memories`: from `run`, the memory entries the run sees, oldest first:
     the project's, its agent's and its workspace's.
   - `jobs`: the project's jobs that are not archived, oldest first, each as
-    `Omunculus.Jobs.list/1` gives it; or, with `relation = "history"` and a
-    `limit`, from `args.name`, the newest `limit` events of that job.
+    `Omunculus.Jobs.list/1` gives it; with `relation = "history"` and a
+    `limit`, from `args.name`, the newest `limit` events of that job; with
+    `relation = "preview"`, what the `args` `schedule`, `timezone` and
+    `agent` or `workflow` would do (`Omunculus.Jobs.Preview`), or its `error`.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`,
     `report_required`, `skills`:
     computed by the harness for the call, each only when a view asks for
@@ -234,10 +236,10 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("jobs", table, spec) do
     with :ok <- only_keys(table, ~w(relation limit)),
-         {:ok, relation} <- one_of(table, "relation", ~w(list history), "list") do
+         {:ok, relation} <- one_of(table, "relation", ~w(list history preview), "list") do
       case {relation, table["limit"]} do
-        {"list", nil} ->
-          {:ok, %{spec | relation: "list"}}
+        {relation, nil} when relation in ~w(list preview) ->
+          {:ok, %{spec | relation: relation}}
 
         {"history", limit} when is_integer(limit) and limit > 0 ->
           {:ok, %{spec | relation: "history", limit: limit, from: ["args.name"]}}
@@ -391,6 +393,20 @@ defmodule Omunculus.Tool.Views do
     do: Store.unread_inbox(conn, nil)
 
   defp read(conn, %{source: "jobs", relation: "list"}, _scope), do: Omunculus.Jobs.list(conn)
+
+  # The args name a job that does not exist yet: its schedule and target.
+  defp read(conn, %{source: "jobs", relation: "preview"}, %{args: args, config: config}) do
+    params = %{
+      "schedule" => args["schedule"],
+      "timezone" => args["timezone"],
+      "target" => Map.take(args, ~w(agent workflow))
+    }
+
+    case Omunculus.Jobs.Preview.build(conn, config, params) do
+      {:ok, preview} -> {:ok, preview}
+      {:error, reason} -> {:ok, %{"error" => Omunculus.Errors.format(reason)}}
+    end
+  end
 
   defp read(conn, %{source: "runs", relation: "recent", limit: limit}, _scope),
     do: Store.recent_runs(conn, limit)
