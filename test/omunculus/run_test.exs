@@ -2501,6 +2501,19 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
+    test "a fire's message keeps via job into the run recovery opens", %{dir: dir} do
+      project = due_config(dir)
+
+      # The server stopped after the fire wrote its message, before its run opened.
+      assert {:ok, _out, events} =
+               Operations.call(project, "send", %{"message" => "hi"}, %{via: "job"}, false)
+
+      assert [%{via: "job"} = run] = recovered(project, events, "prompt")
+      assert {:ok, true} = Omunculus.Jobs.in_fire?(project.conn, run.id)
+
+      Project.close(project)
+    end
+
     test "the run of a root work", %{dir: dir} do
       project = due_config(dir)
       run = due_run(project, %{agent: "lead"})

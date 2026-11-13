@@ -569,7 +569,7 @@ how `Jobs.write/3` refuses jobs from a fire. `Cycle.command/3` waits for those r
 an unpriced model adds zero). Consecutive failures count the fires that finished
 `failed` since the job's anchor, which a resume moves.
 
-A run that the server's crash left to `Run.recover/1` is reopened from its
-events, where the call that made it is not kept, so its `via` is not `job`: a
-recovered fire's run may create jobs. `Jobs.Preview` reads the same history for
+A fire's message or work is written with `"via": "job"` in its event body, so
+a run that the server's crash left to `Run.recover/1` is reopened `via = "job"`
+too, and a retry of a run in a fire keeps it: the guard holds after a crash. `Jobs.Preview` reads the same history for
 the cost estimate.
