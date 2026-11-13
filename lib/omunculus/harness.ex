@@ -677,6 +677,7 @@ defmodule Omunculus.Harness do
       capability: Map.get(ctx, :capability),
       conversation_id: Map.get(ctx, :conversation_id),
       command_id: Map.get(ctx, :command_id),
+      via: Map.get(ctx, :via),
       command_hash: Map.get(ctx, :command_hash),
       config: config,
       groups: Catalog.groups(catalog),

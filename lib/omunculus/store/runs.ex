@@ -18,7 +18,8 @@ defmodule Omunculus.Store.Runs do
   `continues/3` records the `session` event of a run that continues its
   agent's session: the run it continues and what it was told had happened.
   `uncaused/1` lists the events that may ask for a run and that no run
-  began for, each with the name of the call that emitted it as `via`;
+  began for, each with the name of the call that emitted it as `via`, or `job` when
+  a fire wrote it;
   `begun?/3` says whether an opening due for one of them began: a run it
   caused, or for a work's own run, any own run of the work begun after it,
   into which a run due while it waited was merged. `runnable/2` is the
@@ -123,11 +124,11 @@ defmodule Omunculus.Store.Runs do
     Query.all(
       conn,
       """
-      SELECT events.*, (
+      SELECT events.*, COALESCE(json_extract(events.body, '$.via'), (
         SELECT json_extract(call.body, '$.name') FROM events AS call
         WHERE call.type = 'tool' AND call.run_id IS events.run_id
           AND call.sequence < events.sequence
-        ORDER BY call.sequence DESC LIMIT 1) AS via
+        ORDER BY call.sequence DESC LIMIT 1)) AS via
       FROM events
       WHERE events.type IN
           ('prompt', 'reply', 'continue', 'break', 'cancel', 'delegate', 'reopen', 'request', 'work')

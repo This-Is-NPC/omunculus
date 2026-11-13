@@ -24,7 +24,8 @@ defmodule Omunculus.Store.Events do
           :subject,
           :origin_issuer,
           :origin_subject,
-          :released_by
+          :released_by,
+          :via
         ])
       )
 
@@ -56,6 +57,7 @@ defmodule Omunculus.Store.Events do
       |> run_context(conn)
       |> conversation_context(conn)
       |> harness_has_no_id()
+      |> fired(actor)
 
     id = Id.new()
 
@@ -67,6 +69,13 @@ defmodule Omunculus.Store.Events do
       View.view(conn, "event", id)
     end
   end
+
+  # What opens a run, written for a fire, says so in its body: a crash before
+  # the run opens must not lose the `via` the loop guard of `Jobs` reads.
+  defp fired(%{type: type, body: body} = fields, %{via: "job"}) when type in ~w(prompt work),
+    do: %{fields | body: body |> Jason.decode!() |> Map.put("via", "job") |> Jason.encode!()}
+
+  defp fired(fields, _actor), do: fields
 
   # The harness is one author: the agent of the run it acts for is not its id.
   defp harness_has_no_id(%{actor_kind: "harness"} = fields), do: %{fields | actor_id: nil}
