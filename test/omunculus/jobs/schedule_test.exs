@@ -63,6 +63,35 @@ defmodule Omunculus.Jobs.ScheduleTest do
              ["2026-11-01T05:30:00Z", "2026-11-02T06:30:00Z"]
   end
 
+  defp written(text, zone, count, from) do
+    schedule = schedule(text, zone)
+    {:ok, from, _} = DateTime.from_iso8601(from)
+    schedule |> Schedule.next_fires(count, from) |> Enum.map(&Schedule.iso8601(schedule, &1))
+  end
+
+  test "an instant is written with its zone's offset then, the same instant" do
+    # New York leaves daylight time on 2026-11-01: -04:00 before, -05:00 after.
+    assert written("daily at 18:00", "America/New_York", 3, "2026-10-30T12:00:00Z") ==
+             [
+               "2026-10-30T18:00:00-04:00",
+               "2026-10-31T18:00:00-04:00",
+               "2026-11-01T18:00:00-05:00"
+             ]
+
+    assert written("daily at 18:00", "America/Sao_Paulo", 1, "2026-11-13T12:00:00Z") ==
+             ["2026-11-13T18:00:00-03:00"]
+
+    assert written("daily at 18:00", "Asia/Kolkata", 1, "2026-11-13T12:00:00Z") ==
+             ["2026-11-13T18:00:00+05:30"]
+
+    assert written("daily at 18:00", "UTC", 1, "2026-11-13T12:00:00Z") ==
+             ["2026-11-13T18:00:00+00:00"]
+
+    schedule = schedule("daily at 18:00", "America/Sao_Paulo")
+    [slot] = Schedule.next_fires(schedule, 1, ~U[2026-11-13T12:00:00Z])
+    assert {:ok, ^slot, -10_800} = DateTime.from_iso8601(Schedule.iso8601(schedule, slot))
+  end
+
   test "a southern zone changes the other way" do
     assert fires("0 12 * * *", "Australia/Sydney", 2, "2026-10-03T00:00:00Z") ==
              ["2026-10-03T02:00:00Z", "2026-10-04T01:00:00Z"]

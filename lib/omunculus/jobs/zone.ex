@@ -62,6 +62,22 @@ defmodule Omunculus.Jobs.Zone do
   end
 
   @doc """
+  The instant `utc` as ISO 8601 with the offset `zone` has then, always
+  numeric (`2026-11-13T15:00:00-03:00`, `+00:00` for UTC): the same instant,
+  written the way the zone shows it.
+  """
+  @spec iso8601(zone, DateTime.t()) :: String.t()
+  def iso8601(zone, utc) do
+    offset = offset(zone, DateTime.to_unix(utc))
+    minutes = div(abs(offset), 60)
+    sign = if offset < 0, do: "-", else: "+"
+    pad = &(&1 |> Integer.to_string() |> String.pad_leading(2, "0"))
+
+    NaiveDateTime.to_iso8601(to_local(zone, utc)) <>
+      sign <> pad.(div(minutes, 60)) <> ":" <> pad.(rem(minutes, 60))
+  end
+
+  @doc """
   The UTC instant of a wall-clock time. A time shown twice, as clocks go
   back, is the earlier one; a time skipped, as clocks go forward, is read
   with the offset before the change, so it falls after the gap.

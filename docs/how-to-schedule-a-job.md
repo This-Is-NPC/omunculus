@@ -48,7 +48,7 @@ reach the same jobs through [the server](server.md#jobs).
    ```
 
    The output starts `morning [active], version 1` and lists what it runs, the
-   schedule, `next fires:` with three instants in UTC, who it runs as, and its
+   schedule, `next fires:` with three instants written with the offset of the job's time zone, who it runs as, and its
    totals.
 
 3. Change it. `edit` bumps the version and keeps the history; an empty value
@@ -65,7 +65,7 @@ reach the same jobs through [the server](server.md#jobs).
 
    ```console
    $ omunculus jobs preview --schedule "daily at 07:00" --timezone Europe/Paris --agent <agent>
-   next fires: 2026-11-14T06:00:00Z, 2026-11-15T06:00:00Z, 2026-11-16T06:00:00Z
+   next fires: 2026-11-14T07:00:00+01:00, 2026-11-15T07:00:00+01:00, 2026-11-16T07:00:00+01:00
    cost per fire: no estimate (no fires of jobs or runs of the agent <agent> to estimate from yet, so there is no estimate)
    ```
 

@@ -17,7 +17,8 @@ defmodule Omunculus.Jobs.Preview do
   @doc """
   The preview of `params`: `"schedule"`, `"timezone"` and a `"target"` that
   holds an `"agent"`, a `"workflow"` or a `"tool"`, which runs with no model
-  and has no estimate. Gives `"next"` (ISO 8601 instants),
+  and has no estimate. Gives `"next"` (ISO 8601 instants, with the
+  schedule zone's offset),
   `"estimate_usd"` and `"basis"`.
   """
   @spec build(Omunculus.Store.Connection.t(), Omunculus.Config.t(), map) ::
@@ -30,7 +31,8 @@ defmodule Omunculus.Jobs.Preview do
          {:ok, samples, source} <- samples(conn, config, kind, name) do
       {:ok,
        %{
-         "next" => schedule |> Schedule.next_fires(@fires) |> Enum.map(&DateTime.to_iso8601/1),
+         "next" =>
+           schedule |> Schedule.next_fires(@fires) |> Enum.map(&Schedule.iso8601(schedule, &1)),
          "estimate_usd" => mean(samples),
          "basis" => basis(samples, source, kind, name)
        }}

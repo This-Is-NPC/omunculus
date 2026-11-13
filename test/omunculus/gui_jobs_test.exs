@@ -194,6 +194,23 @@ defmodule Omunculus.GuiJobsTest do
     )
   end
 
+  test "a job's times read in the zone they are written in, whatever the viewer's" do
+    run!(
+      """
+      const now = Date.parse("2026-11-13T12:00:00Z");
+      same(Jobs.at("2026-11-13T18:00:00-05:00", now), "Today 18:00 -05", "written offset");
+      same(Jobs.at("2026-11-13T18:00:00+05:30", now), "Today 18:00 +05:30", "half hours");
+      same(Jobs.at("2026-11-13T18:00:00+00:00", now), "Today 18:00 UTC", "zero offset");
+      same(Jobs.nextFires({next: ["2026-11-14T09:00:00+09:00", "2026-11-20T09:00:00+09:00"]}, now), ["14 Nov 09:00 +09", "20 Nov 09:00 +09"], "next fires");
+      // 2026-11-13T02:00Z is the 12th at 23:00 in -03:00, and the 13th at 02:00 in UTC.
+      same(Jobs.at("2026-11-12T10:00:00-03:00", Date.parse("2026-11-13T02:00:00Z")), "Today 10:00 -03", "day read in the offset");
+      same(Jobs.at("2026-11-11T10:00:00-03:00", Date.parse("2026-11-13T02:00:00Z")), "Yesterday 10:00 -03", "yesterday in the offset");
+      same(Jobs.at("2026-11-13T18:00:00Z", now), "Today 22:00 +04", "a Z stamp stays local");
+      """,
+      [{"TZ", "Asia/Dubai"}]
+    )
+  end
+
   test "a request proposes a job when its approve option creates one" do
     run!("""
     const create = {action: "create", name: "morning", agent: "front", schedule: "daily at 7:00", timezone: "UTC", message: "go"};

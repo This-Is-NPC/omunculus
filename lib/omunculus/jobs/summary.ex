@@ -38,7 +38,7 @@ defmodule Omunculus.Jobs.Summary do
   defp next_fires(fields) do
     with {:ok, schedule} <- Fields.parse(fields["schedule"], fields["timezone"]),
          [_ | _] = fires <- Schedule.next_fires(schedule, @previews) do
-      "next fires: " <> Enum.map_join(fires, ", ", &DateTime.to_iso8601/1)
+      "next fires: " <> Enum.map_join(fires, ", ", &Schedule.iso8601(schedule, &1))
     else
       _ -> nil
     end

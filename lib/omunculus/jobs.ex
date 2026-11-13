@@ -348,7 +348,7 @@ defmodule Omunculus.Jobs do
         [slot] ->
           ending = job["end_at"]
           past = ending && DateTime.compare(slot, elem(DateTime.from_iso8601(ending), 1)) == :gt
-          {:ok, if(past, do: nil, else: DateTime.to_iso8601(slot))}
+          {:ok, if(past, do: nil, else: Schedule.iso8601(schedule, slot))}
 
         [] ->
           {:ok, nil}

@@ -102,8 +102,8 @@ function took(ms) {
   return seconds < 60 ? seconds + " s" : Math.floor(seconds / 60) + " min " + two(seconds % 60) + " s";
 }
 
-// A moment as the lists say it, in the local time with its zone, "Today 07:00
-// -03"; "—" for none.
+// A moment as the lists say it, with its zone, "Today 07:00 -03" (the zone the
+// stamp is written in, else the local one); "—" for none.
 function at(iso, now) { return iso ? Time.zoned(iso, now) : "—"; }
 
 // Where a job came from, "tool by seller"; the author and the channel of its
