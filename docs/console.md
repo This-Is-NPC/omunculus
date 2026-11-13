@@ -760,7 +760,8 @@ form kept as it was. Made, the job's page opens.
 **`/job` in the composer** opens the same form, from any composer of the
 console: with the words after it as the message, and, in a conversation, the fixed
 conversation chosen. It is only a way to the form; the composer sends nothing and
-there is no second way to make a job.
+there is no second way to make a job. From the first `/job` typed, a line over the
+box says "Enter opens the job form".
 
 **An agent's proposal** is the request `propose_job` raises, a card in the chat
 like any other (`RequestDecision`, [Requests](#requests)). It is a DECISION

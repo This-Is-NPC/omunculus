@@ -304,6 +304,12 @@ function lines(job) {
 // The words after `/job` in what was typed, or null for text that is not the
 // command: "/job" gives "", "/job every day" gives "every day".
 function command(text) {
-  const found = /^\/job(?:\s+([\s\S]*))?$/.exec(String(text || "").trim());
+  const found = /^\/job(?:\s+([\s\S]*))?$/i.exec(String(text || "").trim());
   return found ? (found[1] || "").trim() : null;
+}
+
+// What the composer says while `/job` is typed, since Enter opens the form
+// instead of sending: "" for any other text.
+function commandHint(text) {
+  return command(text) === null ? "" : "Enter opens the job form";
 }
