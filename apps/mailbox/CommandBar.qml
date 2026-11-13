@@ -28,7 +28,7 @@ Item {
     Mail.folder === "archive"
       ? { text: "MOVE TO INBOX", icon: "import", tip: "move the thread back to the inbox", run: () => Mail.restore(Mail.selected) }
       : { text: "ARCHIVE", icon: "folder", tip: "archive the thread", run: () => Mail.archive(Mail.selected) },
-    { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) }
+    { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", enabled: !(Mail.thread && Mail.thread.job), run: () => Mail.markUnread(Mail.selected) }
   ] : [
     { text: "MARK ALL READ", icon: "check", tip: "mark every thread shown read", enabled: Mail.shown.some(thread => Mail.isUnread(thread)), run: () => Mail.markAllRead() }
   ]

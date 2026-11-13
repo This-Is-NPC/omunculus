@@ -5,12 +5,14 @@ import Quickshell.Io
 import "kit/client"
 import "kit/client/Composers.js" as Composers
 import "kit/client/Mailbox.js" as Mailbox
+import "kit/client/Schedule.js" as Schedule
 import "kit/ui"
 
 // Mail is every project of the server as an e-mail client shows it. A thread
 // is a conversation with one agent of depth 0; Mailbox.js makes its e-mails
 // from the snapshot and the events. Every read and command goes to a
-// project's local socket through curl. Which threads you read, archived and
+// project's local socket through curl; the messages its jobs deliver are
+// threads of their own, read from /job-messages. Which threads you read, archived and
 // the drafts you left are kept in Quickshell's state directory.
 Singleton {
   id: root
@@ -35,7 +37,7 @@ Singleton {
   readonly property var blank: ({ key: "", project: "", id: "", agent: "", with: { agent: "", project: "", name: "", address: "", text: "" },
     subject: "", label: "", messages: [], pending: [], reviews: [], at: "", heard: "", received: 0, sent: 0, parties: "", snippet: "" })
   // A review with nothing in it, for a view whose review has just gone.
-  readonly property var blankReview: ({ key: "", project: "", conversation: "", request: "", summary: "", args: [], text: "", outcome: "", reason: "", at: "",
+  readonly property var blankReview: ({ key: "", project: "", conversation: "", request: "", kind: "action", job: null, level: 0, under: null, files: [], summary: "", args: [], text: "", outcome: "", reason: "", at: "",
     from: { agent: "", project: "", name: "", address: "", text: "" } })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
@@ -62,6 +64,10 @@ Singleton {
   // Review key -> true once its answer was taken: it leaves Pending at once,
   // not at the next sweep.
   property var given: ({})
+  // Review key -> what the server previews of the job a proposal makes
+  // ({next, estimate_usd, basis}); a key in `previewing` has asked for it.
+  property var previews: ({})
+  property var previewing: ({})
   readonly property var shownReviews: reviews.filter(review => Mailbox.reviewMatches(review, query))
   property string selected: ""
   readonly property var thread: threads[selected] || null
@@ -186,9 +192,12 @@ Singleton {
   // Marks every thread shown read.
   function markAllRead() {
     const next = Object.assign({}, seen)
-    for (const thread of shown)
-      if (thread.heard !== "")
+    for (const thread of shown) {
+      if (thread.job)
+        markJobRead(thread)
+      else if (thread.heard !== "")
         next[thread.key] = thread.heard
+    }
     seen = next
     keep(seenFile, seen)
   }
@@ -197,8 +206,33 @@ Singleton {
     const thread = threads[key]
     if (!thread || !isUnread(thread))
       return
+    if (thread.job)
+      return markJobRead(thread)
     seen = Object.assign({}, seen, { [key]: thread.heard })
     keep(seenFile, seen)
+  }
+
+  // Marks a job's thread read on the server, and here at once; the next sweep
+  // brings what the server holds.
+  function markJobRead(thread) {
+    if (!thread.unread)
+      return
+    http.call(projectOf(thread.project).socket, "POST", "/v1/projects/" + thread.project + "/jobs/" + encodeURIComponent(thread.job.id) + "/actions/read", {}, true, () => {})
+    threads = Object.assign({}, threads, { [thread.key]: Object.assign({}, thread, {
+      unread: false, messages: thread.messages.map(message => Object.assign({}, message, { unread: false })) }) })
+  }
+
+  // The history of a job's thread, key -> the lines Mailbox.history makes.
+  property var histories: ({})
+
+  // Reads a job's history, to show it in its thread.
+  function loadHistory(key) {
+    const thread = threads[key]
+    if (!thread || !thread.job)
+      return
+    http.call(projectOf(thread.project).socket, "GET", "/v1/projects/" + thread.project + "/jobs/" + encodeURIComponent(thread.job.id) + "/history?limit=50", null, false, data => {
+      histories = Object.assign({}, histories, { [key]: Mailbox.history(data.events) })
+    })
   }
 
   // Moves a thread to the archive and goes back to the list.
@@ -322,6 +356,27 @@ Singleton {
       })
   }
 
+  // What a proposal's job costs per fire, in words.
+  function estimate(review) {
+    return Schedule.estimate(review.job ? review.job.target : null, previews[review.key] || null)
+  }
+
+  // Asks the server what a proposal's job would cost, once; a tool has no model to price.
+  function preview(review) {
+    const place = projectOf(review.project)
+    if (!place || !review.job || !review.job.target || previewing[review.key])
+      return
+    previewing = Object.assign({}, previewing, { [review.key]: true })
+    const job = review.job
+    http.call(place.socket, "POST", "/v1/projects/" + review.project + "/jobs/preview", { schedule: job.schedule, timezone: job.timezone, target: job.target }, false, data => {
+      previews = Object.assign({}, previews, { [review.key]: data })
+    }, () => {
+      const left = Object.assign({}, previewing)
+      delete left[review.key]
+      previewing = left
+    })
+  }
+
   // Saves a file attached in a thread to the downloads directory and opens it.
   function openAttachment(key, file) {
     const thread = threads[key]
@@ -364,7 +419,7 @@ Singleton {
           http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations", null, false, list => {
             const ids = list.items.map(item => item.id)
             ids.forEach(id => keys.push(place.id + "/" + id))
-            readAll(place, ids, nextProject)
+            readAll(place, ids, () => readJobs(place, keys, nextProject))
           }, nextProject)
         }
         nextProject()
@@ -402,6 +457,22 @@ Singleton {
   function defaultRecipient() {
     const place = projectOf(home)
     return place && place.canWrite && place.defaultAgent !== "" ? Mailbox.person(place.defaultAgent, place.id) : null
+  }
+
+  // The messages the project's jobs deliver, a thread each, with the agent of
+  // each job. A project with no jobs, or none readable, has none.
+  function readJobs(place, keys, done) {
+    const base = "/v1/projects/" + place.id
+    http.call(place.socket, "GET", base + "/job-messages", null, false, delivered => {
+      http.call(place.socket, "GET", base + "/jobs", null, false, listed => {
+        for (const thread of Mailbox.jobThreads(place.id, delivered.items, listed.items)) {
+          keys.push(thread.key)
+          if (JSON.stringify(threads[thread.key]) !== JSON.stringify(thread))
+            update(thread.key, thread)
+        }
+        done()
+      }, done)
+    }, done)
   }
 
   function forget(key) {
@@ -445,6 +516,7 @@ Singleton {
   function update(key, thread) {
     const before = threads[key]
     threads = Object.assign({}, threads, { [key]: thread })
+    thread.reviews.forEach(preview)
     if (primed && selected !== key && thread.heard !== "" && (!before || before.heard < thread.heard))
       announce(thread.with.name + " · " + thread.subject, thread.snippet)
   }

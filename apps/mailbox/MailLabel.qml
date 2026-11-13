@@ -4,11 +4,11 @@ import "kit/ui"
 
 // MailLabel is the one status a thread shows, as a mail label: a small
 // outlined pill with a still icon and a word, "In progress", "Stuck" or
-// "Cancelled". A thread without one says nothing.
+// "Cancelled", or JOB beside a job's message. A thread without one says nothing.
 Rectangle {
   id: tag
 
-  // "progress", "stuck", "cancelled" or "".
+  // "progress", "stuck", "cancelled", "job" or "".
   property string kind
   readonly property color tone: kind === "progress" ? Theme.primary : kind === "stuck" ? Theme.error : Theme.dim
 
@@ -24,7 +24,7 @@ Rectangle {
     spacing: 5
     Icon {
       anchors.verticalCenter: parent.verticalCenter
-      name: tag.kind === "progress" ? "spark" : tag.kind === "stuck" ? "warning" : "close"
+      name: tag.kind === "progress" ? "spark" : tag.kind === "stuck" ? "warning" : tag.kind === "job" ? "clock" : "close"
       size: 10
       color: tag.tone
     }
