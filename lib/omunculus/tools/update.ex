@@ -10,6 +10,7 @@ defmodule Omunculus.Tools.Update do
 
   @core ~r/^omunculus-\d.*-x86_64\.pkg\.tar\.zst$/
   @apps ~r/^omunculus-apps-.*-any\.pkg\.tar\.zst$/
+  @preload [:omunculus, :elixir, :logger, :stdlib, :kernel]
   @api "https://api.github.com/repos/This-Is-NPC/omunculus/releases/latest"
 
   @spec run(map) :: map
@@ -92,12 +93,14 @@ defmodule Omunculus.Tools.Update do
   defp install(release, assets, latest) do
     dir = Path.join(System.tmp_dir!(), "omunculus-update-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
+    preload()
 
     try do
       with {:ok, sums} <- sums(release, dir),
            {:ok, files} <- download(assets, sums, dir),
            :ok <- pacman(files) do
         message = "omunculus #{latest} installed.\n" <> restart()
+        runner().finish(message)
         Out.ok(message)
       else
         {:error, message} -> Out.fail(message)
@@ -160,6 +163,14 @@ defmodule Omunculus.Tools.Update do
     if actual == expected,
       do: :ok,
       else: {:error, "#{name} does not match its checksum in SHA256SUMS; nothing was installed"}
+  end
+
+  # pacman replaces the files of this running program, so every module the rest
+  # of the command can call is loaded first; `finish` then ends it at once.
+  defp preload do
+    for app <- @preload,
+        module <- Application.spec(app, :modules) || [],
+        do: Code.ensure_loaded!(module)
   end
 
   # pacman asks on the terminal when there is one; without it, nothing can answer.

@@ -20,10 +20,16 @@ defmodule Omunculus.ReleaseCommandsTest do
 
     def run_tty(command, args) do
       Agent.update(__MODULE__, &[{command, args} | &1])
+      # Everything the command can call after pacman must already be loaded.
+      loaded = for app <- [:omunculus, :elixir], m <- Application.spec(app, :modules), do: m
+      all_loaded = Enum.all?(loaded, &Code.loaded?/1)
+      Agent.update(__MODULE__, &[{:loaded, all_loaded} | &1])
       opt(:status) || 0
     end
 
     def tty?, do: opt(:tty)
+
+    def finish(message), do: Agent.update(__MODULE__, &[{:finish, message} | &1])
 
     defp opt(key), do: Application.get_env(:omunculus, :fake_runner)[key]
     def log, do: Agent.get(__MODULE__, &Enum.reverse/1)
@@ -144,6 +150,14 @@ defmodule Omunculus.ReleaseCommandsTest do
     assert {:ok, _output} = CLI.run(["update"], dir)
     assert [[file]] = pacman_args()
     assert Path.basename(file) == @core
+  end
+
+  test "update loads all its code before pacman replaces it, then finishes at once", %{dir: dir} do
+    serve("v#{@next}")
+    assert {:ok, _output} = CLI.run(["update"], dir)
+    log = FakeRunner.log()
+    assert {:loaded, true} in log
+    assert {:finish, "omunculus " <> _} = List.last(Enum.filter(log, &match?({:finish, _}, &1)))
   end
 
   test "update passes --noconfirm when there is no terminal", %{dir: dir} do

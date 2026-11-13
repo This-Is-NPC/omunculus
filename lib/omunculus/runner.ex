@@ -8,6 +8,14 @@ defmodule Omunculus.Runner do
   @callback run(String.t(), [String.t()]) :: {String.t(), non_neg_integer}
   @callback run_tty(String.t(), [String.t()]) :: non_neg_integer
   @callback tty?() :: boolean
+  @callback finish(String.t()) :: no_return
+
+  @doc "Prints the message and ends the program with status 0, loading no more code."
+  @spec finish(String.t()) :: no_return
+  def finish(message) do
+    IO.puts(message)
+    System.halt(0)
+  end
 
   @doc "Runs the command and returns its output, stderr included, and its exit status."
   @spec run(String.t(), [String.t()]) :: {String.t(), non_neg_integer}
