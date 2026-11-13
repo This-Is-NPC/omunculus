@@ -500,7 +500,7 @@ defmodule Omunculus.Store.Access do
              %{
                agent: row.agent,
                work: row.work || "",
-               model: reply["model"],
+               reply: Map.take(reply, ~w(model model_key)),
                totals: Omunculus.Usage.sum([reply])
              }
            end,

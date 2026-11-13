@@ -39,25 +39,58 @@ defmodule Omunculus.GuiUsageTest do
     assert_in_delta Omunculus.Usage.spend(totals, price), 976.2 / 1.0e6, 1.0e-12
   end
 
-  test "each call is priced by the model it used, per agent and per work" do
+  defp priced_config do
+    Omunculus.Fixtures.config("""
+    [models.haiku]
+    api = "openai-completions"
+    url = "http://localhost:1/v1"
+    timeout_ms = 1000
+    model = "claude-haiku-5-5"
+    price = { input = 1.0, output = 2.0, cache_write = 0.0, cache_read = 0.0 }
+
+    [models.opus]
+    api = "openai-completions"
+    url = "http://localhost:1/v1"
+    timeout_ms = 1000
+    model = "claude-opus-5"
+    price = { input = 10.0, output = 20.0, cache_write = 0.0, cache_read = 0.0 }
+
+    [models.mystery]
+    api = "openai-completions"
+    url = "http://localhost:1/v1"
+    timeout_ms = 1000
+    model = "mystery-1"
+
+    [agents.a]
+    depth = 0
+    model = "haiku"
+    text = "a"
+
+    [agents.b]
+    depth = 1
+    model = "mystery"
+    text = "b"
+    """)
+  end
+
+  test "each call is priced by the config model that made it, per agent and per work" do
     totals = Omunculus.Usage.sum([%{"usage" => @anthropic}])
-    haiku = %{input: 1.0, output: 2.0, cache_write: 0.0, cache_read: 0.0}
-    opus = %{input: 10.0, output: 20.0, cache_write: 0.0, cache_read: 0.0}
-    call = fn agent, work, model -> %{agent: agent, work: work, model: model, totals: totals} end
     cheap = (12 * 1.0 + 300 * 2.0) / 1.0e6
+    call = fn agent, work, reply -> %{agent: agent, work: work, reply: reply, totals: totals} end
 
     usage =
       Omunculus.Server.Contract.usage(
         [
-          call.("a", "w2", "haiku"),
-          call.("a", "w2", "opus"),
-          call.("b", "w3", "mystery"),
-          call.("a", "w1", nil),
-          call.("a", "", "haiku")
+          # The provider's id alone, as master recorded it.
+          call.("a", "w2", %{"model" => "claude-haiku-5-5"}),
+          # The config key beside the provider's id.
+          call.("a", "w2", %{"model" => "claude-opus-5", "model_key" => "opus"}),
+          call.("b", "w3", %{"model" => "mystery-1", "model_key" => "mystery"}),
+          call.("a", "w1", %{}),
+          call.("a", "", %{"model" => "claude-haiku-5-5", "model_key" => "haiku"})
         ],
         %{"w1" => nil, "w2" => "w1", "w3" => "w1"},
-        %{"a" => "haiku", "b" => "mystery"},
-        %{"haiku" => haiku, "opus" => opus, "mystery" => nil}
+        priced_config()
       )
 
     [a, b] = usage.agents
@@ -70,7 +103,7 @@ defmodule Omunculus.GuiUsageTest do
 
     by = Map.new(usage.works, &{&1.work, &1})
     assert Map.keys(by) |> Enum.sort() == ["", "w1", "w2", "w3"]
-    assert [%{model: "haiku"}, %{model: "opus"}] = by["w2"].calls
+    assert [%{model: "haiku", provider: "claude-haiku-5-5"}, %{model: "opus"}] = by["w2"].calls
     assert_in_delta by["w2"].own.usd, cheap + cheap * 10, 1.0e-12
     assert by["w3"].own.usd == nil
     # The branch of w1 holds its own call and those of w2 and w3; "" holds no work's.

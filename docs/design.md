@@ -565,8 +565,8 @@ principal, the job's conversation (or one `Access.create_conversation/2` makes),
 whatever tool event made them; the runs below carry it through `cause_id`, which is
 how `Jobs.write/3` refuses jobs from a fire. `Cycle.command/3` waits for those runs.
 `Jobs.Cost` finds them (the runs the call's events caused, transitively, as
-`Store.said/2` does) and sums their model replies at the models' prices (`Usage`;
-an unpriced model adds zero). Consecutive failures count the fires that finished
+`Store.said/2` does) and sums their model replies at the models' prices (`Usage`; the model is the config key
+`Config.model_key/3` finds, as `GET /usage` does; an unpriced model adds zero). Consecutive failures count the fires that finished
 `failed` since the job's anchor, which a resume moves.
 
 A fire's message or work is written with `"via": "job"` in its event body, so

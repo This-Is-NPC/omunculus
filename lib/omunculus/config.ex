@@ -286,6 +286,30 @@ defmodule Omunculus.Config do
     config.models |> Map.fetch!(name) |> Map.get(:handoff_tokens)
   end
 
+  @doc """
+  The key of `[models.<key>]` that made a recorded model `reply` of `agent`:
+  the `model_key` it was recorded with, else the model whose provider id the
+  reply names (the agent's own when several do), else the agent's model. Nil
+  when the config holds none of them.
+  """
+  @spec model_key(t, String.t(), map) :: String.t() | nil
+  def model_key(%__MODULE__{} = config, agent, reply) do
+    own = get_in(config.agents, [agent, Access.key(:model)])
+
+    named =
+      for {key, spec} <- config.models,
+          is_binary(reply["model"]) and spec.input["model"] == reply["model"],
+          do: key
+
+    cond do
+      is_map_key(config.models, reply["model_key"]) -> reply["model_key"]
+      own in named -> own
+      named != [] -> Enum.min(named)
+      reply["model"] == nil and is_map_key(config.models, own) -> own
+      true -> nil
+    end
+  end
+
   @doc "The `price` of the model `name`, in US dollars per million tokens, or nil."
   @spec price(t, String.t()) :: price | nil
   def price(%__MODULE__{} = config, name),

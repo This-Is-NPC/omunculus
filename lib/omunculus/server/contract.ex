@@ -125,20 +125,27 @@ defmodule Omunculus.Server.Contract do
 
   @doc """
   Usage per agent and per work, from the model `calls` of `Access.usage/3`.
-  Each call is priced by the model it used, or by its agent's configured
-  model in `models` when the reply names none; `prices` maps a model to its
-  price or nil. An entry holds the totals, its `usd` (nil when no call has a
+  Each call is priced by the model of `config` that made it
+  (`Omunculus.Config.model_key/3`), shown by that key, with the provider's id
+  as `provider`. An entry holds the totals, its `usd` (nil when no call has a
   price), the `models` used and those `unpriced`. A work has `own`, its
-  calls, with each call's model and `usd` in `calls`, and `branch`, with the
-  works below it, `parents` mapping a work to its parent. Work "" is the
-  calls made outside any work.
+  calls, with each call's model, provider and `usd` in `calls`, and `branch`,
+  with the works below it, `parents` mapping a work to its parent. Work "" is
+  the calls made outside any work.
   """
-  def usage(calls, parents, models, prices) do
+  def usage(calls, parents, config) do
     calls =
       for call <- calls do
-        model = call.model || models[call.agent]
-        price = prices[model]
-        Map.merge(call, %{model: model, usd: price && Omunculus.Usage.spend(call.totals, price)})
+        model = Omunculus.Config.model_key(config, call.agent, call.reply)
+        price = model && Omunculus.Config.price(config, model)
+
+        call
+        |> Map.delete(:reply)
+        |> Map.merge(%{
+          model: model,
+          provider: call.reply["model"],
+          usd: price && Omunculus.Usage.spend(call.totals, price)
+        })
       end
 
     agents =
@@ -168,7 +175,7 @@ defmodule Omunculus.Server.Contract do
             for call <- mine do
               call.totals
               |> Map.take([:fresh, :cache_write, :cached, :output])
-              |> Map.merge(%{model: call.model, usd: call.usd})
+              |> Map.merge(%{model: call.model, provider: call.provider, usd: call.usd})
             end
         }
       end

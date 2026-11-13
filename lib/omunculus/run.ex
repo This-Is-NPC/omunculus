@@ -667,13 +667,22 @@ defmodule Omunculus.Run do
     Enum.split_with(events, &(&1.sequence <= seen))
   end
 
+  # A reply is recorded with the config key of the model that made it, next
+  # to the provider's own id in `model`: the key is what the prices hang on.
   defp record_model(project, state, text) do
-    body = if is_binary(text), do: text, else: Jason.encode!(text)
+    body =
+      cond do
+        is_binary(text) -> text
+        is_map(text) -> text |> Map.put("model_key", agent_model(state)) |> Jason.encode!()
+        true -> Jason.encode!(text)
+      end
 
     with {:ok, event} <- Store.record_model(project.conn, state.run.id, body),
          {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
          do: watch_context(state, text)
   end
+
+  defp agent_model(%{config: config, run: run}), do: config.agents[run.agent].model
 
   defp publish_delta(project, run, text) do
     Store.publish(
