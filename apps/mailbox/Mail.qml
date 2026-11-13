@@ -523,7 +523,7 @@ Singleton {
     const before = threads[key]
     threads = Object.assign({}, threads, { [key]: thread })
     thread.reviews.forEach(preview)
-    if (primed && selected !== key && thread.heard !== "" && (!before || before.heard < thread.heard))
+    if (primed && !thread.fire && selected !== key && thread.heard !== "" && (!before || before.heard < thread.heard))
       announce(thread.with.name + " · " + thread.subject, thread.snippet)
   }
 

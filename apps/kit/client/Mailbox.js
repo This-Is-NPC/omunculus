@@ -110,7 +110,8 @@ function replyRecipients(thread, message, all) {
 
 // A text on one line, without its Markdown marks, cut short when long.
 function oneLine(value) {
-  const line = String(value || "").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "").replace(/[*`|]/g, "").replace(/\s+/g, " ").trim();
+  const line = String(value || "").replace(/\[([^\]\n]*)\]\([^)\s]*\)/g, "$1").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "")
+    .replace(/[*`|]/g, "").replace(/(^|\s)_(\S[^_]*?)_(?=[\s.,:;!?]|$)/g, "$1$2").replace(/\s+/g, " ").trim();
   return line.length > 140 ? line.slice(0, 137) + "..." : line;
 }
 
@@ -282,7 +283,8 @@ function answered(request, reply, who) {
 //   key, project, id, agent, with: the agent as a person, subject, label,
 //   messages (oldest first), pending: the ids of the requests the person has
 //   to answer, oldest first, reviews: the reviews waiting on them, at: the last message's time, heard: the last
-//   message from the agent's, "" for none, received, sent, parties, snippet.
+//   message from the agent's, "" for none, received, sent, parties, snippet, fire:
+//   the name of the job whose fire opened the conversation, "" for none.
 // A message: {key, mine, from, to, text, subject (of yours, "" for none), at, files, request, pending, open}.
 function build(projectId, id, snapshot, events, me) {
   const agent = agentOf(snapshot, events);
@@ -364,6 +366,7 @@ function build(projectId, id, snapshot, events, me) {
   const mine = messages.length - theirs.length;
   return {
     key: projectId + "/" + id, project: projectId, id: id, agent: agent, with: agentPerson,
+    fire: (snapshot.conversation && snapshot.conversation.job) || "",
     subject: parts.subject || "(no subject)",
     label: label(snapshot, events, waiting.concat(held.map(review => review.request))),
     messages: messages, pending: waiting, reviews: held,
@@ -472,8 +475,10 @@ function matches(thread, query) {
 
 // Whether a thread shows in a folder. `archived` maps thread keys to when
 // they were archived; a thread comes back to the inbox when it receives mail
-// after that. "drafts" holds no threads.
+// after that. "drafts" holds no threads, and no folder holds the conversation
+// a job's fire opened: its job's thread leads to it.
 function inFolder(thread, folder, archived) {
+  if (thread.fire) return false;
   const away = archived[thread.key] !== undefined && thread.at <= archived[thread.key];
   if (folder === "archive") return away;
   if (away) return false;

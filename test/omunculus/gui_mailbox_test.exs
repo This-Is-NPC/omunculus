@@ -406,6 +406,24 @@ defmodule Omunculus.GuiMailboxTest do
     """)
   end
 
+  test "a conversation a job's fire opened is in no folder, but its reviews still wait" do
+    run!("""
+    const ordinary = build(snap(), [prompt("1", "2026-01-01T10:00:00Z", "Hi")]);
+    const fired = Mailbox.build("agency", "c2", snap({conversation: {created_at: "2026-01-01T09:00:00Z", job: "news"}, requests: [request("q1")]}), [prompt("1", "2026-01-01T10:00:00Z", "Hi")], me);
+    if (ordinary.fire !== "" || !Mailbox.inFolder(ordinary, "sent", {})) throw Error("an ordinary conversation is a thread");
+    if (fired.fire !== "news") throw Error("the job's name");
+    for (const folder of ["inbox", "sent", "archive", "drafts"]) if (Mailbox.inFolder(fired, folder, {})) throw Error("not in " + folder);
+    if (fired.pending.length !== 1) throw Error("its question still waits");
+    """)
+  end
+
+  test "a preview strips Markdown marks and links" do
+    run!("""
+    const line = Mailbox.oneLine("**done:** see [the page](http://x.io/a) and `code`\\n\\n_pending_: more");
+    if (line !== "done: see the page and code pending: more") throw Error(line);
+    """)
+  end
+
   test "a reply to a job's message is a new message to its agent that quotes it and keeps the job apart" do
     assert {"", 0} =
              GuiModules.run(
