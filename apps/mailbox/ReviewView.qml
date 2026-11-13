@@ -4,7 +4,10 @@ import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import "kit/ui"
 
-// ReviewView reads one review as a card, bordered in the warning tone: who
+// ReviewView reads one review as a card, bordered in the warning tone, or a job
+// an agent proposes (`review.kind` "job"), which it tells by the schedule in
+// words, the next fires and the estimate instead of a level and a held text, and
+// whose EDIT sends back what to change: who
 // acted with its level (depth marks, "level 3, under project-manager"), what it wants to do and the text it holds, then APPROVE (the one
 // filled action), EDIT and DENY. DETAILS shows the arguments as lines and what
 // each answer does. While an answer is on its way the buttons are off and SENDING shows. EDIT and DENY open the reply box under it, as a reply is written: EDIT
@@ -23,6 +26,7 @@ Item {
   // Whether Esc is the review's: it closes the reply box, or else the review.
   property bool escapes: true
 
+  readonly property bool proposal: review.kind === "job"
   readonly property bool writing: mode !== ""
   readonly property bool sending: Mail.answering[review.key] !== undefined
 
@@ -87,8 +91,8 @@ Item {
             RowLayout {
               Layout.fillWidth: true
               spacing: 6
-              Icon { name: "search"; size: 12; color: Theme.primary }
-              Label { text: "REVIEW"; color: Theme.primary; font.pixelSize: 10; font.letterSpacing: 3 }
+              Icon { name: view.proposal ? "clock" : "search"; size: 12; color: Theme.primary }
+              Label { text: view.proposal ? "JOB PROPOSAL" : "REVIEW"; color: Theme.primary; font.pixelSize: 10; font.letterSpacing: 3 }
               Item { Layout.fillWidth: true }
               Icon { name: "warning"; size: 12; color: Theme.warning }
               Label { text: "WAITING FOR YOU"; color: Theme.warning; font.pixelSize: 10; font.letterSpacing: 3 }
@@ -118,6 +122,7 @@ Item {
 
             RowLayout {
               Layout.fillWidth: true
+              visible: !view.proposal
               spacing: 6
               Row {
                 spacing: 3
@@ -147,6 +152,36 @@ Item {
               font.pixelSize: 15
               font.bold: true
               wrapMode: Text.Wrap
+            }
+
+            ColumnLayout {
+              Layout.fillWidth: true
+              visible: view.proposal
+              spacing: 10
+              Prose {
+                Layout.fillWidth: true
+                visible: view.proposal && view.review.job.why !== ""
+                source: view.proposal ? view.review.job.why : ""
+                color: Theme.foreground
+                font.pixelSize: 13
+                lineHeight: 1.25
+                wrapMode: Text.Wrap
+              }
+              Repeater {
+                model: view.proposal ? [
+                  { name: "SCHEDULE", value: view.review.job.words },
+                  { name: "NEXT FIRES", value: view.review.job.next.length > 0 ? view.review.job.next.map(at => Mail.stamp(at)).join("\n") : "none in sight" },
+                  { name: "ESTIMATE", value: Mail.estimate(view.review) }
+                ] : []
+                delegate: ColumnLayout {
+                  id: fact
+                  required property var modelData
+                  Layout.fillWidth: true
+                  spacing: 2
+                  Label { text: fact.modelData.name; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 2 }
+                  Label { Layout.fillWidth: true; text: fact.modelData.value; font.pixelSize: 13; wrapMode: Text.Wrap }
+                }
+              }
             }
 
             Flow {
@@ -230,7 +265,7 @@ Item {
                   role: "action"
                   enabled: !view.sending
                   text: "EDIT"
-                  tip: "rewrite the text, then send it in place of the held one"
+                  tip: view.proposal ? "say what to change; nothing is created yet" : "rewrite the text, then send it in place of the held one"
                   onClicked: view.start("edit")
                 }
                 TraceButton {
@@ -238,7 +273,7 @@ Item {
                   role: "action"
                   enabled: !view.sending
                   text: "DENY"
-                  tip: "refuse the action, with a reason if you like"
+                  tip: view.proposal ? "drop the proposal, with a reason if you like" : "refuse the action, with a reason if you like"
                   onClicked: view.start("deny")
                 }
                 Row {
@@ -253,7 +288,7 @@ Item {
                 Layout.alignment: Qt.AlignTop
                 icon: view.details ? "chevron-up" : "chevron-down"
                 text: "DETAILS"
-                tip: "the action's arguments and what each answer does"
+                tip: view.proposal ? "the job's fields and what each answer does" : "the action's arguments and what each answer does"
                 onClicked: view.details = !view.details
               }
             }
@@ -274,7 +309,9 @@ Item {
 
             Label {
               Layout.fillWidth: true
-              text: view.mode === "edit" ? "Edit: the words go ahead in place of the held text" : "Deny: the reason is optional"
+              text: view.mode === "edit"
+                ? (view.proposal ? "Edit: say what to change; nothing is created" : "Edit: the words go ahead in place of the held text")
+                : "Deny: the reason is optional"
               color: Theme.dim
               font.pixelSize: 11
               wrapMode: Text.Wrap
@@ -282,7 +319,7 @@ Item {
             Editor {
               id: editor
               Layout.fillWidth: true
-              placeholderText: view.mode === "edit" ? "the edited text" : "why it is denied"
+              placeholderText: view.mode === "edit" ? (view.proposal ? "what to change" : "the edited text") : "why it is denied"
               onSubmitted: view.send()
             }
             MailFooter {

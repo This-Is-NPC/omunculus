@@ -1,5 +1,6 @@
 .pragma library
 .import "Requests.js" as Requests
+.import "Schedule.js" as Schedule
 
 // The mailbox's mapping from a conversation to e-mail. A thread is one
 // conversation of one project, with the agent of depth 0 the person first
@@ -7,7 +8,10 @@
 // explicitly addressed to them (its comments on the root work and the files it
 // attached) and every question addressed to them, from its own requester. Everything here is pure: the window feeds it snapshots and events.
 
-const labels = { progress: "In progress", stuck: "Stuck", cancelled: "Cancelled" };
+const labels = { progress: "In progress", stuck: "Stuck", cancelled: "Cancelled", job: "JOB" };
+
+// The address a job writes from: it takes no answer.
+const noReply = "no-reply \u00b7 job";
 
 // An agent's display name: its name, capitalised, words apart.
 function capital(name) {
@@ -201,25 +205,72 @@ function outcome(who, text) {
     + ". Deny tells " + who + " no.";
 }
 
+// Whether a request is a job an agent proposes (`propose_job`): a decision
+// whose `approve` creates the job.
+function proposal(request) {
+  const steps = (request.options || {}).approve;
+  return Array.isArray(steps) && steps.length === 1 && steps[0].name === "jobs" && !!steps[0].args && steps[0].args.action === "create";
+}
+
+// Whether a request is held for the Pending folder rather than read as mail:
+// the review of a held action or a job proposal.
+function holds(request) { return Requests.review(request) || proposal(request); }
+
+// A proposal's job, as the card tells it: {name, words (the schedule in words),
+// schedule, timezone, target ({agent|workflow}, null for a tool), next (the
+// instants of its next fires), why (the agent's reason) and args (its
+// {name, value} lines)}. The request's reason holds the agent's words, then
+// the job as it would run, whose "next fires" line this reads.
+function proposed(request) {
+  const job = request.options.approve[0].args;
+  const reason = String(request.reason || "");
+  const at = reason.search(/\n\njob \S+ as it would run:/);
+  return {
+    name: job.name, schedule: job.schedule, timezone: job.timezone, words: Schedule.words(job.schedule, job.timezone),
+    target: job.agent ? { agent: job.agent } : job.workflow ? { workflow: job.workflow } : null,
+    next: Schedule.nextFires(reason), why: (at < 0 ? reason : reason.slice(0, at)).trim(),
+    args: Object.keys(job).filter(key => key !== "action" && job[key] !== null && job[key] !== "")
+      .map(key => ({ name: key, value: typeof job[key] === "string" ? job[key] : JSON.stringify(job[key]) }))
+  };
+}
+
+// What a held request says it wants, as a sentence: what a review holds, or
+// the job a proposal would make.
+function summary(request, who) {
+  return proposal(request) ? who + " proposes the job " + request.options.approve[0].args.name : sentence(request.interception.summary);
+}
+
 // The reviews waiting on the person in a conversation, which the Pending
 // folder lists and mail never holds: {key, project, conversation, request,
-// from (the requester as a person), summary (a sentence, the subject), args
-// (the {name, value} lines of a tool's arguments), text (what the action
-// holds, "" for a tool or a grant), files (the {name, bytes} the action carries), level (the requester's
-// depth) and under (the parent work's {agent, title}, or null), outcome, reason, at}.
+// kind ("action", or "job" for a proposal), from (the requester as a person),
+// summary (a sentence, the subject), args (the {name, value} lines of a
+// tool's arguments, or of a job), text (what the action holds, "" for a tool,
+// a grant or a job), files (the {name, bytes} the action carries), level (the
+// requester's depth) and under (the parent work's {agent, title}, or null),
+// job (a proposal's, see `proposed`, else null), outcome, reason, at}.
 function reviews(projectId, id, snapshot, me) {
-  return snapshot.requests.filter(request => Requests.review(request) && Requests.pending(request) && Requests.forYou(request, me))
+  return snapshot.requests.filter(request => holds(request) && Requests.pending(request) && Requests.forYou(request, me))
     .map(request => {
       const from = requester(request, projectId);
-      const text = Requests.editable(request);
-      return {
+      const job = proposal(request) ? proposed(request) : null;
+      const text = job ? "" : Requests.editable(request);
+      const base = {
         key: projectId + "/" + id + "/" + request.id, project: projectId, conversation: id, request: request.id,
-        from: from, summary: sentence(request.interception.summary), args: request.interception.args || [],
-        files: request.interception.files || [], level: request.interception.level || 0, under: request.interception.under || null,
-        text: text, outcome: outcome(from.name, text),
+        kind: job ? "job" : "action", from: from, summary: summary(request, from.name), text: text,
         reason: String(request.reason || ""), at: request.created_at
       };
+      return job
+        ? Object.assign(base, { args: job.args, files: [], level: 0, under: null, job: job, outcome: jobOutcome(job.name) })
+        : Object.assign(base, {
+          args: request.interception.args || [], files: request.interception.files || [], level: request.interception.level || 0,
+          under: request.interception.under || null, job: null, outcome: outcome(from.name, text)
+        });
     });
+}
+
+// What each answer to a job proposal does.
+function jobOutcome(name) {
+  return "If you approve: the job " + name + " is created as written. Edit sends back what to change and creates nothing. Deny drops it.";
 }
 
 // A summary as a subject: its first letter in capitals.
@@ -228,13 +279,13 @@ function sentence(text) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-// The record of an answer to a review, as the mail you sent: "Approved: <the
+// The record of an answer to a review, as the mail you sent from `who`: "Approved: <the
 // sentence>", then the words that went with an edit or a denial.
-function answered(request, reply) {
+function answered(request, reply, who) {
   const option = (reply.body || {}).option || "";
   const words = String((reply.body || {}).body || "");
   const more = words !== "" && words !== option ? "\n\n" + words : "";
-  return (decided[option] || "Answered") + ": " + sentence(request.interception.summary) + more;
+  return (decided[option] || "Answered") + ": " + summary(request, who) + more;
 }
 
 // The thread a conversation's snapshot and events make:
@@ -282,7 +333,7 @@ function build(projectId, id, snapshot, events, me) {
   const notes = noted(events);
   // What reaches the person: every question whose arbiter they are, from its
   // own requester; whoever else a question was written for stays off their mail.
-  const asked = snapshot.requests.filter(request => Requests.forYou(request, me) && !Requests.review(request)
+  const asked = snapshot.requests.filter(request => Requests.forYou(request, me) && !holds(request)
     && !(notes[request.id] && Requests.passedOn(request).length === 0));
   const held = reviews(projectId, id, snapshot, me);
   const waiting = asked.filter(request => Requests.pending(request)).map(request => request.id);
@@ -293,9 +344,10 @@ function build(projectId, id, snapshot, events, me) {
     if (reply) messages.push({ key: reply.cursor, mine: true, from: you, to: sender, text: String((reply.body || {}).body || ""), at: reply.at, files: (reply.body || {}).attachments || [], request: request.id, pending: false, open: false });
   }
   // An answer you gave to a review is mail you sent to its requester.
-  for (const request of snapshot.requests.filter(each => Requests.review(each) && Requests.isMe(each.arbiter, me) && replies[each.id])) {
+  for (const request of snapshot.requests.filter(each => holds(each) && Requests.isMe(each.arbiter, me) && replies[each.id])) {
     const reply = replies[request.id];
-    messages.push({ key: reply.cursor, mine: true, from: you, to: requester(request, projectId), text: answered(request, reply), at: reply.at, files: [], request: request.id, pending: false, open: false });
+    const to = requester(request, projectId);
+    messages.push({ key: reply.cursor, mine: true, from: you, to: to, text: answered(request, reply, to.name), at: reply.at, files: [], request: request.id, pending: false, open: false });
   }
   // A file belongs to the e-mail of its own run: the request that run raised
   // when it raised one, else its comments, else an e-mail of its own.
@@ -330,6 +382,66 @@ function build(projectId, id, snapshot, events, me) {
     received: theirs.length, sent: mine,
     parties: parties(agentPerson.name, theirs, mine > 0, messages.length),
     snippet: latest ? oneLine(latest.text + (latest.files.length > 0 ? " [" + latest.files.map(file => file.name).join(", ") + "]" : "")) : ""
+  };
+}
+
+// The threads the messages jobs deliver make (`GET /job-messages`), one for
+// each job, as `build` shapes a thread: its agent is the job's (`jobs` is
+// `GET /jobs`), "" for a workflow or a tool; its subject the job's name; its
+// sender "<name> <no-reply · job>", and `unread` follows the API, not the
+// state the mailbox keeps. A message also holds `conversation`, the one its
+// fire opened, and a thread `job`, {id, name}.
+function jobThreads(projectId, messages, jobs) {
+  const you = { name: "me", address: "", me: true };
+  const byJob = {};
+  for (const message of messages) (byJob[message.job_id] = byJob[message.job_id] || []).push(message);
+  return Object.keys(byJob).map(id => {
+    const name = byJob[id][0].sender.name;
+    const sender = { agent: "", project: projectId, name: name, address: noReply, text: name + " <" + noReply + ">", job: true };
+    const found = jobs.find(job => job.id === id);
+    const items = byJob[id].slice().sort((a, b) => a.at.localeCompare(b.at)).map(message => ({
+      key: message.id, mine: false, from: sender, to: you, text: String(message.text || ""), at: message.at, files: [], request: "", pending: false,
+      open: false, job: true, conversation: message.conversation_id, unread: !!message.unread
+    }));
+    const latest = items[items.length - 1];
+    return {
+      key: projectId + "/job:" + id, project: projectId, id: "job:" + id, job: { id: id, name: name },
+      agent: found && typeof found.agent === "string" ? found.agent : "", with: sender, subject: name, label: "job",
+      messages: items, pending: [], reviews: [], at: latest.at, heard: latest.at, received: items.length, sent: 0,
+      unread: items.some(message => message.unread), parties: parties(name, items, false, items.length), snippet: oneLine(latest.text)
+    };
+  });
+}
+
+// The events of a job (`GET /jobs/{job}/history`) as the lines its history
+// shows, newest first: {at, text}. A fire is one line, as its latest state
+// leaves it; reads are left out.
+function history(events) {
+  const lines = [];
+  const fires = {};
+  const moved = { active: "Resumed", paused: "Paused", ended: "Ended", archived: "Archived" };
+  for (const event of events) {
+    if (event.op === "read") continue;
+    if (event.op === "fire") {
+      const line = { at: event.at, text: "Fire " + event.state };
+      if (fires[event.fire_id] === undefined) fires[event.fire_id] = lines.push(line) - 1;
+      else lines[fires[event.fire_id]] = line;
+    } else {
+      lines.push({ at: event.at, text: event.op === "create" ? "Created" : event.op === "change" ? "Changed" : moved[event.to] || capital(event.op) });
+    }
+  }
+  return lines.reverse();
+}
+
+// What a reply to a job's message starts: a new message to the job's agent,
+// under "Re: <job>", with the message quoted in its text, since the
+// conversation it opens knows nothing of it. It never touches the job.
+function jobReply(thread, message, when) {
+  const quote = quoted(message, when);
+  return {
+    kind: "job", thread: thread.key, replied: message.key, subject: re(thread.subject),
+    body: "\n\n" + quote.head + "\n" + quote.lines.join("\n"),
+    to: thread.agent !== "" ? [person(thread.agent, thread.project)] : [], request: "", quoted: null
   };
 }
 
@@ -399,8 +511,9 @@ function inFolder(thread, folder, archived) {
 }
 
 // Whether a thread has mail from its agent that `seen` (thread key to the time
-// of the last one read) does not hold.
+// of the last one read) does not hold; a job's thread says so itself.
 function isUnread(thread, seen) {
+  if (thread.job) return thread.unread;
   return thread.heard !== "" && (seen[thread.key] || "") < thread.heard;
 }
 

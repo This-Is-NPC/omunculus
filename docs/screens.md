@@ -322,7 +322,7 @@ Beside them, the threads of the folder, newest first, each with its sender,
 subject, snippet, label and time; unread ones in bold. An empty folder says
 "Nothing here yet" and offers COMPOSE. Pending lists instead the reviews that
 wait on you, newest first, each with the agent that acted and what it wants to
-do. A command bar holds MARK ALL READ and the search. Each column ends in the
+do, or the job it proposes. A command bar holds MARK ALL READ and the search. Each column ends in the
 arrow that folds it: the folders to a rail of counts under a plus that
 composes, the list to its count. At phone width the folders are pills above the
 search and COMPOSE floats at the bottom right of the list.
@@ -348,6 +348,16 @@ warning tone and marked REVIEW and WAITING FOR YOU: who acted, what it wants to
 do and the text it holds. APPROVE is the filled action; EDIT opens a box with
 the held text and sends your words in its place; DENY opens it for an optional
 reason; DETAILS shows the arguments as lines and what each answer does.
+
+A job's messages are threads of the Inbox too, one per job, from
+`<job name> <no-reply · job>` with a JOB badge in the row, the head and each
+message. Opening one marks it read on the server. An open message has VIEW JOB
+HISTORY, which lists the job's events under it; REPLY writes a new message to
+the job's agent with the job's message quoted, and never changes the job.
+
+A job proposed by an agent is the same card, marked JOB PROPOSAL: the agent's
+reason, the schedule in words, the next fires, the estimate per fire, then
+APPROVE, EDIT (say what to change) and DENY; DETAILS lists the job's fields.
 
 | Keys | What they do |
 | --- | --- |

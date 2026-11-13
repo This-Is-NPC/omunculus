@@ -72,14 +72,56 @@ written with no text is the message itself.
 An agent's address is `<agent>@<project>` and its display name the agent's name,
 capitalised: `Front-desk <front-desk@agency>`.
 
+## Jobs in the mailbox
+
+A project's [jobs](how-to-schedule-a-job.md) reach the mailbox in two ways.
+
+**Messages a job delivers.** A job with `delivery = "owner_inbox"` sends the
+final reply of each fire to its owner. The mailbox reads them from
+`GET /job-messages` and, for each job's agent, `GET /jobs`:
+
+- each job is one thread in the Inbox, its subject the job's name, with a JOB
+  badge in the row, the head and each message;
+- the sender is `<job name> <no-reply · job>`; a thread has no agent portrait
+  and no Reply all;
+- whether it is unread is what the API says (`unread`), not the mailbox's own
+  `seen.json`. Opening the thread marks it read with
+  `POST .../jobs/{job}/actions/read`; MARK ALL READ does the same for the job
+  threads shown; MARK UNREAD is off, since the API has no way to undo a read;
+- an open message has VIEW JOB HISTORY, which lists under it the events of
+  `GET .../jobs/{job}/history` (a fire is one line with its latest state,
+  reads are left out), newest first. The apps reach each other only through
+  Quickshell IPC, and the console has no job page to open on a name, so the
+  history shows inline rather than in the console;
+- REPLY opens a composer for a **new** message to the job's agent (To
+  prefilled with it; empty when the job runs a workflow or a tool, which is a
+  message to the default agent), under "Re: <job name>", with the job's message
+  quoted in the text, which is sent: the new conversation knows nothing of it.
+  Answering never changes the job.
+
+**Proposals.** An agent's `propose_job` is a request to you whose `approve`
+creates the job. It is not mail: the Pending folder holds it, as a review card
+marked JOB PROPOSAL ([Reviews](#reviews)), and no thread shows it. The card
+gives the agent's reason, the schedule in words ("Every day at 07:00
+(Europe/Lisbon)"), the next fires from the request, and the estimate per fire
+from `POST .../jobs/preview` with the job's schedule, time zone and target (in
+words when there is no history to go by; a tool, which has no model, says so).
+APPROVE, EDIT and DENY reply `approve`, `edit` or `deny` as for a review; EDIT
+takes the words of what to change, which the agent reads, and creates nothing.
+Your answer is mail you sent to the agent, in Sent.
+
+The logic is in `apps/kit/client/Mailbox.js` (`jobThreads`, `history`,
+`jobReply`, `proposal`) and `apps/kit/client/Schedule.js` (the schedule in
+words and the estimate).
+
 ## Folders
 
-- **Inbox**: threads with at least one e-mail from the agent. A dot and bold
+- **Inbox**: threads with at least one e-mail from the agent, and the thread of each job that delivers to you. A dot and bold
   type mark a thread with unread mail; the count is how many.
 - **Sent**: threads with a message of yours.
 - **Drafts**: what you left unsent.
-- **Pending**: the reviews of held actions that wait on you, whoever acted,
-  newest first, with their count on the folder. Opening one reads it as a
+- **Pending**: the reviews of held actions and the jobs proposed to you that
+  wait on you, whoever acted, newest first, with their count on the folder. Opening one reads it as a
   message ([Reviews](#reviews)). It holds reviews, not threads, and a review
   leaves it once decided.
 - **Archive**: threads you archived. A thread that gets new mail after it was
@@ -156,7 +198,7 @@ FORWARD opens a composer with `Fwd:` and the message below your words.
 
 ## Reviews
 
-A review opens in the right pane as a card, bordered in the warning tone and
+A review opens in the right pane as a card (a [job proposal](#jobs-in-the-mailbox) is the same card, marked JOB PROPOSAL, with its schedule, next fires and estimate in place of a level and a held text), bordered in the warning tone and
 marked REVIEW and WAITING FOR YOU, from the agent that acted. Its title is the
 sentence of what it wants to do ("Seller wants to run promote"), under a line
 that gives the agent's level and the agent above it ("level 3, under
