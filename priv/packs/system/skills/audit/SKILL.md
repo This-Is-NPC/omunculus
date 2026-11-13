@@ -59,3 +59,14 @@ Go through every section and every agent before you judge one.
 
   What the project's file cannot reach — a pack's own tools, skills and
   files — say to the person.
+
+## A routine done by hand
+
+The audit may also find work that a schedule would do: an agent's text that
+says to do something every Monday or every morning, a workflow the person
+starts by hand on a rhythm the config names. That is a finding too:
+propose the job with `propose_job`, with a `reason` that quotes what the
+config says and the time zone you were told (ask the person for it; never
+guess it). You have no runs to cite, so leave `runs` out. The job is not
+created until the person approves it. A routine you only suspect is a
+question for the person, not a proposal.

@@ -26,6 +26,9 @@ too: check there before you say a tool does not exist.
   review, no plan, no question before building. A step that must not be
   skipped belongs in a workflow stage or a tool's refusal, not only in
   more words of its text.
+- **A request made by hand again and again.** The same message to the same
+  agent or workflow, from the person, in several runs, at a rhythm: a
+  schedule would do it. See *Proposing a job* below.
 - **Loops and waste.** The same call repeated, a file read again and
   again, a reply far longer than the work needed, a model costlier than
   the job.
@@ -48,3 +51,16 @@ too: check there before you say a tool does not exist.
 
 What the runs do not show, ask the person about; never change what
 worked to make it look tidier.
+
+## Proposing a job
+
+A request the runs show the person making by hand, on a rhythm — the same
+message to the same agent or workflow, run after run — is a candidate for a
+scheduled job. Propose it with `propose_job`, only when you see it in at
+least two runs: `runs` holds the ids of those runs, as `runs` prints them,
+and the `reason` says what the person keeps asking and why a schedule
+fits. Take the message, the target and the rhythm from the runs; read the
+time zone and the owner from the person, never guess them. The job is not
+created until the person approves it; `propose_job` refuses a name taken or
+a schedule the project does not allow, and says why. One recurring request,
+one proposal. A request seen once is not a rhythm: ask the person instead.
