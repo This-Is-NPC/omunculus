@@ -146,8 +146,8 @@ defmodule Omunculus.Jobs.Fire do
   defp put(map, key, value), do: Map.put(map, key, value)
 
   defp message(project, %{"delivery" => "owner_inbox"}, started) do
-    reply = Operations.reply(project, started)
-    if reply == "", do: nil, else: reply
+    reply = Operations.last_word(project, started)
+    if String.trim(reply) == "", do: nil, else: reply
   end
 
   defp message(_project, _job, _started), do: nil

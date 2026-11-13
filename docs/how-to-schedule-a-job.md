@@ -94,7 +94,9 @@ Each slot of the schedule becomes a fire, recorded in the job's history:
   its own, or goes to the job's `--conversation_id`. The fire is `running`, then
   `succeeded` or `failed`, with the conversation, the runs, the duration, the model
   calls, the tokens and the dollars at the models' prices. With `--delivery
-  owner_inbox` the replies are its `message`.
+  owner_inbox` what the runs said last to the person is its `message`: the last
+  reply, or the question an agent put to an account; when they said none, the
+  last report.
 - **At most `max_parallel` fires of a project run at once.** The others wait, due.
 - **Late.** A fire that did not start within `lateness_seconds` of its time is
   marked `late`, and its owner gets a request saying so.
