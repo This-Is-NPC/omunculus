@@ -36,21 +36,24 @@ jobs:
       TAG: ${{ needs.release-please.outputs.tag_name }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Install the build toolchain
-        run: pacman -Syu --noconfirm --needed elixir erlang-nox git github-cli
+      # mise builds the pinned Erlang from source (kerl) against this
+      # container's openssl, which the package's libcrypto soname names.
+      - name: Install mise and what builds Erlang
+        run: pacman -Syu --noconfirm --needed mise git github-cli ncurses openssl perl curl unzip
 
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
 
-      # makepkg refuses to run as root.
+      # makepkg refuses to run as root. The toolchain is the one mise.toml
+      # pins, as for `mise run package`.
       - name: Build the packages
         run: |
           git config --system --add safe.directory "$GITHUB_WORKSPACE"
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
-          su builder -c "cd '$GITHUB_WORKSPACE' && scripts/package"
+          su builder -c "cd '$GITHUB_WORKSPACE' && mise trust && mise install erlang elixir rebar && mise exec -- scripts/package"
 
       - name: Attach the packages to the release
         run: |
