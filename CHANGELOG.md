@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/This-Is-NPC/omunculus/compare/v0.1.0...v0.2.0) (2026-11-13)
+
+
+### Features
+
+* **cli:** add version, update and setup ([40c81e2](https://github.com/This-Is-NPC/omunculus/commit/40c81e276fea485ffff49d66bf559f1982082658))
+* **cli:** let a boolean flag stand alone ([a11c10b](https://github.com/This-Is-NPC/omunculus/commit/a11c10bb415b461b103b2fe6df716e5d660cfdd3))
+* **install:** add the release installer ([c33eed9](https://github.com/This-Is-NPC/omunculus/commit/c33eed9eb49b271265b6897b7abe75bd63b97312))
+* **package:** tell users to stop the service ([413342e](https://github.com/This-Is-NPC/omunculus/commit/413342eeb928e8ae291137483e9a22d6b9f6352e))
+* **preset:** find bundled presets by name ([d5cd68f](https://github.com/This-Is-NPC/omunculus/commit/d5cd68fd5437033ed88e6f4d6e52510275547c92))
+* **server:** start with no project registered ([1682cdc](https://github.com/This-Is-NPC/omunculus/commit/1682cdcbf3156fa1f500b83d0f215af6cf064478))
+* **setup:** say a project needs access ([d4076b2](https://github.com/This-Is-NPC/omunculus/commit/d4076b292586d85398435408e949fb3fac8bf789))
+
+
+### Bug Fixes
+
+* **cli:** start the application in a release ([d818877](https://github.com/This-Is-NPC/omunculus/commit/d8188778b3f0d03a107206931ec3a4fc4c9fddd9))
+* **package:** build-depend on erlang, not erlang-nox ([087e069](https://github.com/This-Is-NPC/omunculus/commit/087e0693dddf9faf45342982f763ae47f8e5b9b0))
+* **package:** depend on the libcrypto soname ([52fa9c2](https://github.com/This-Is-NPC/omunculus/commit/52fa9c2ddede03b94a198652e8c155997cb4ac8b))
+* **release:** force UTF-8 file names ([4d3aba2](https://github.com/This-Is-NPC/omunculus/commit/4d3aba2911556b10e69641bb0394bba2d0064d0b))
+* **server:** answer a bad body once, with its status ([a48138f](https://github.com/This-Is-NPC/omunculus/commit/a48138f291c2872ca572c84c72204de7bc474fc7))
+* **server:** refuse a project with no access ([216138b](https://github.com/This-Is-NPC/omunculus/commit/216138b10d6ecdb6108e4927b2b409a635a3ec59))
+* **setup:** say when the unit is not running ([3acc92c](https://github.com/This-Is-NPC/omunculus/commit/3acc92cba8af230c0143c29116e999b5818613ca))
+* **update:** say release errors in words ([15ce060](https://github.com/This-Is-NPC/omunculus/commit/15ce06017548199dff5f11cb015c93fbf1ddaa11))
+
 ## 0.1.0 (2026-11-12)
 
 
