@@ -223,12 +223,23 @@ The store refuses tables that differ from its schema with
 
 ## 7. Packaging
 
-There is no release and no installer yet. Omunculus runs from a checkout:
-`bin/omunculus` is a shell wrapper that runs `mise exec -- mix omunculus`
-in the checkout, so the Elixir, OTP and Deno pins of `mise.toml` are the
-ones that run. Teams come as packs: the system team under `priv/packs/system`,
-the others under `packs/` ([packs](packs.md)). The apps run on Quickshell
-from `apps/`, each through `apps/kit/run` ([clients](clients.md)).
+A release is two Arch packages built by `packaging/arch/PKGBUILD` from
+`git archive HEAD` of the tagged tree: `omunculus` (the `mix release` with
+its ERTS under `/usr/lib/omunculus`, the `omunculus` launcher, the builtin
+tools, the system pack and the systemd user unit) and `omunculus-apps` (the
+QML apps, their launchers, desktop entries and icon). The domain packs,
+`eval/`, `bench/`, `dev/` and `test/` stay out of both. `scripts/package`
+builds them with the toolchain `mise.toml` pins, the release workflow
+attaches them with a `SHA256SUMS`, and `install.sh` and `omunculus update`
+install them with `pacman -U` after checking it. The package depends on the
+libcrypto soname of the openssl its Erlang was built against. See
+[how to install, update and remove](how-to-install-and-remove.md).
+
+From a checkout, `bin/omunculus` runs `mise exec -- mix omunculus`, so the
+Elixir, OTP and Deno pins of `mise.toml` are the ones that run. Teams come as
+packs: the system team under `priv/packs/system`, the others under `packs/`
+([packs](packs.md)). The apps run on Quickshell from `apps/`, each through
+`apps/kit/run` ([clients](clients.md)).
 
 ## 8. Building and checking
 
