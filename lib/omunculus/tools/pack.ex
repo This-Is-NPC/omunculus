@@ -64,7 +64,16 @@ defmodule Omunculus.Tools.Pack do
 
     with {:ok, pack} <- Packs.read(dir),
          {:ok, files} <- Omupack.list(dir) do
-      {:ok, %{pack: pack, files: files, folder: dir, path: path, install: fn -> {:ok, nil} end}}
+      {:ok,
+       %{
+         pack: pack,
+         files: files,
+         read: &File.read(Path.join(dir, &1)),
+         folder: dir,
+         path: path,
+         card: false,
+         install: fn -> {:ok, [], fn -> :ok end} end
+       }}
     end
   end
 
@@ -75,11 +84,14 @@ defmodule Omunculus.Tools.Pack do
          {:ok, replaced} <-
            Omupack.replaces(config_path, archive.header, Args.flag?(args, "upgrade")) do
       folder = Omupack.folder(base, archive.header)
+      data = Map.new(archive.files, fn {path, file} -> {path, file.data} end)
 
       {:ok,
        %{
          pack: archive.pack,
          files: Map.keys(archive.files),
+         read: &Map.fetch(data, &1),
+         card: true,
          folder: folder,
          path: Path.relative_to(folder, base),
          install: fn -> install(archive, folder, replaced) end
@@ -87,6 +99,7 @@ defmodule Omunculus.Tools.Pack do
     end
   end
 
+  # What it wrote, and how to take back the folder this install made.
   defp install(archive, folder, replaced) do
     with {:ok, state} <- Omupack.install(archive, folder) do
       name = "#{archive.header["name"]} #{archive.header["version"]}"
@@ -98,7 +111,7 @@ defmodule Omunculus.Tools.Pack do
            else: "#{name} is already in #{folder}"
          )
          | upgraded(archive.header["name"], replaced)
-       ]}
+       ], fn -> if(state == :installed, do: File.rm_rf(folder)) end}
     end
   end
 
@@ -134,35 +147,39 @@ defmodule Omunculus.Tools.Pack do
 
   defp import(config_path, source, entry, jobs) do
     needs = needs(source.pack, entry)
+    card = card(source.pack, source.files, source.read)
 
     if needs == [] do
-      with {:ok, installed} <- source.install.(),
-           {:ok, config} <- Config.try_pack(config_path, entry),
-           {:ok, emits, note} <- job_emits(source.pack, config, jobs),
-           {:ok, config} <- Config.import_pack(config_path, entry) do
-        lines =
-          List.wrap(installed) ++
-            [imported(source.pack) | copied(source.folder, config)] ++
-            note ++ environment(source.files, source.folder)
+      with {:ok, installed, undo} <- source.install.() do
+        case settle(config_path, source, entry, jobs) do
+          {:ok, lines, emits} ->
+            Out.ok(
+              Enum.join((if(source.card, do: card, else: []) ++ installed) ++ lines, "\n"),
+              emits
+            )
 
-        Out.ok(Enum.join(lines, "\n"), emits)
+          {:error, message} ->
+            undo.()
+            Out.fail(message)
+        end
       else
-        {:error, {:packs, {_pack, :requires, _lacked}} = reason} ->
-          Out.fail(Errors.format(reason))
-
-        {:error, reason} when is_binary(reason) ->
-          Out.fail("cannot import #{entry["path"]}: #{reason}")
-
-        {:error, reason} ->
-          Out.fail("cannot import #{entry["path"]}: #{inspect(reason)}")
+        {:error, reason} -> Out.fail(failure(entry["path"], reason))
       end
     else
-      Out.fail(
-        Enum.join(
-          needs ++ card(source.pack, source.files) ++ environment(source.files, source.folder),
-          "\n"
-        )
-      )
+      Out.fail(Enum.join(needs ++ card ++ environment(source.files, source.folder), "\n"))
+    end
+  end
+
+  defp settle(config_path, source, entry, jobs) do
+    with {:ok, config} <- Config.try_pack(config_path, entry),
+         {:ok, emits, note} <- job_emits(source.pack, config, jobs),
+         {:ok, config} <- Config.import_pack(config_path, entry) do
+      {:ok,
+       [imported(source.pack) | copied(source.folder, config)] ++
+         note ++ environment(source.files, source.folder), emits}
+    else
+      {:error, {:packs, {_pack, :requires, _lacked}} = reason} -> {:error, Errors.format(reason)}
+      {:error, reason} -> {:error, failure(entry["path"], reason)}
     end
   end
 
@@ -246,8 +263,9 @@ defmodule Omunculus.Tools.Pack do
   the commands of its MCP servers), the logins and secrets it needs and its
   job templates.
   """
-  @spec card(map, [String.t()]) :: [String.t()]
-  def card(pack, files) do
+  @spec card(map, [String.t()], (String.t() -> {:ok, binary} | :error | {:error, term})) ::
+          [String.t()]
+  def card(pack, files, read) do
     header = Map.get(pack, "pack", %{})
     servers = get_in(pack, ["mcp", "servers"]) || []
 
@@ -260,11 +278,15 @@ defmodule Omunculus.Tools.Pack do
     [
       if(header["description"], do: "#{title}: #{header["description"]}", else: title),
       listed("agents", pack |> Map.get("agents", %{}) |> Map.keys()),
-      listed(
-        "runs these executables",
-        Enum.filter(files, &String.starts_with?(&1, "tools/")) ++
-          for(%{"command" => command} <- servers, do: Enum.join(command, " "))
-      ),
+      "runs these executables:" <>
+        case tools(files, read) ++
+               for(
+                 %{"command" => command} <- servers,
+                 do: "mcp server #{Enum.join(command, " ")}"
+               ) do
+          [] -> " none"
+          lines -> "\n" <> Enum.map_join(lines, "\n", &"  #{&1}")
+        end,
       listed("needs these logins", header["auth"] || []),
       listed(
         "needs these secrets",
@@ -275,6 +297,17 @@ defmodule Omunculus.Tools.Pack do
       ),
       listed("job templates", pack |> Map.get("jobs", %{}) |> Map.keys())
     ]
+  end
+
+  # The tools the pack brings: `<name>: <command>`, from each `tools/<dir>/tool.toml`.
+  defp tools(files, read) do
+    for file <- Enum.sort(files),
+        ["tools", dir, "tool.toml"] <- [Path.split(file)],
+        {:ok, text} <- [read.(file)],
+        {:ok, %{"name" => name, "command" => [program | args]}} <- [Toml.decode(text)],
+        {:ok, path} <- [Path.safe_relative(Path.join(["tools", dir, program]))] do
+      "#{name}: #{Enum.join([path | args], " ")}"
+    end
   end
 
   defp listed(label, items) do

@@ -70,6 +70,7 @@ defmodule Omunculus.Tools.ProposePack do
              pack: pack,
              files: files,
              folder: dir,
+             read: &File.read(Path.join(dir, &1)),
              apply: {"path", dir},
              load: dir,
              done: fn -> :ok end
@@ -88,12 +89,14 @@ defmodule Omunculus.Tools.ProposePack do
     with {:ok, archive} <- Omupack.read(file, base),
          {:ok, _replaced} <-
            Omupack.replaces(config_path, archive.header, Args.flag?(args, "upgrade")),
+         data = Map.new(archive.files, fn {path, file} -> {path, file.data} end),
          scratch = Path.join(System.tmp_dir!(), Id.new()),
          :ok <- Omupack.write(archive, scratch) do
       {:ok,
        %{
          pack: archive.pack,
          files: Map.keys(archive.files),
+         read: &Map.fetch(data, &1),
          folder: Omupack.folder(Path.dirname(config_path), archive.header),
          apply:
            {"file",
@@ -124,7 +127,7 @@ defmodule Omunculus.Tools.ProposePack do
             args["reason"],
             "Import #{source.pack["pack"]["name"]} from #{target}, its agents as they would run:\n" <>
               Enum.join(agents, "\n"),
-            Enum.join(Pack.card(source.pack, source.files), "\n")
+            Enum.join(Pack.card(source.pack, source.files, source.read), "\n")
           ] ++ Pack.environment(source.files, source.folder),
           "\n\n"
         ),
