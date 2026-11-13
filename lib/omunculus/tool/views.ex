@@ -57,6 +57,9 @@ defmodule Omunculus.Tool.Views do
     version of each name when it is of media type `application/json`.
   - `memories`: from `run`, the memory entries the run sees, oldest first:
     the project's, its agent's and its workspace's.
+  - `jobs`: the project's jobs that are not archived, oldest first, each as
+    `Omunculus.Jobs.list/1` gives it; or, with `relation = "history"` and a
+    `limit`, from `args.name`, the newest `limit` events of that job.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`,
     `report_required`, `skills`:
     computed by the harness for the call, each only when a view asks for
@@ -229,6 +232,22 @@ defmodule Omunculus.Tool.Views do
          do: {:ok, %{spec | include: include || [], prefix: prefix}}
   end
 
+  defp source_spec("jobs", table, spec) do
+    with :ok <- only_keys(table, ~w(relation limit)),
+         {:ok, relation} <- one_of(table, "relation", ~w(list history), "list") do
+      case {relation, table["limit"]} do
+        {"list", nil} ->
+          {:ok, %{spec | relation: "list"}}
+
+        {"history", limit} when is_integer(limit) and limit > 0 ->
+          {:ok, %{spec | relation: "history", limit: limit, from: ["args.name"]}}
+
+        _ ->
+          {:error, {:invalid, "limit"}}
+      end
+    end
+  end
+
   defp source_spec("memories", table, spec) do
     with :ok <- only_keys(table, []), do: {:ok, %{spec | from: ["run"]}}
   end
@@ -278,8 +297,9 @@ defmodule Omunculus.Tool.Views do
   defp check_anchors(%{source: "inbox", from: from} = spec),
     do: anchors_within(spec, from, ["work"])
 
-  defp check_anchors(%{source: source} = spec) when source in ~w(runs events prompts memories),
-    do: {:ok, spec}
+  defp check_anchors(%{source: source} = spec)
+       when source in ~w(runs events prompts memories jobs),
+       do: {:ok, spec}
 
   defp check_anchors(%{from: []} = spec), do: {:ok, spec}
   defp check_anchors(%{from: from}), do: {:error, {:anchors, from}}
@@ -370,6 +390,8 @@ defmodule Omunculus.Tool.Views do
   defp read(conn, %{source: "inbox", relation: "unread", from: []}, _scope),
     do: Store.unread_inbox(conn, nil)
 
+  defp read(conn, %{source: "jobs", relation: "list"}, _scope), do: Omunculus.Jobs.list(conn)
+
   defp read(conn, %{source: "runs", relation: "recent", limit: limit}, _scope),
     do: Store.recent_runs(conn, limit)
 
@@ -426,6 +448,14 @@ defmodule Omunculus.Tool.Views do
   defp read_from(conn, %{source: "events", relation: "attachments"}, _anchor, id, _scope) do
     with {:ok, run} <- Store.view(conn, "run", id) do
       if run, do: Store.attachments(conn, run.conversation_id), else: {:ok, []}
+    end
+  end
+
+  # A name that is no job leaves the view empty: a create names one yet to be.
+  defp read_from(conn, %{source: "jobs", limit: limit}, _anchor, name, _scope) do
+    case Omunculus.Jobs.history(conn, name, limit) do
+      {:error, {:jobs, {:unknown, _name}}} -> {:ok, nil}
+      history -> history
     end
   end
 

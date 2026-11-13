@@ -9,6 +9,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "attach" => ~w(attachments note),
     "artifact" => ~w(name kind media_type content base64 note base),
     "memory" => ~w(op id scope kind text),
+    "job" => ~w(op job name to reason state channel request_id) ++ Omunculus.Jobs.Fields.keys(),
     "work" => ~w(report works),
     "request" => ~w(reason options to),
     "reply" => ~w(request_id option body parts attachments),
@@ -75,9 +76,11 @@ defmodule Omunculus.Store.Actions.Contract do
   defp valid_value?(_key, nil), do: true
   defp valid_value?("base", base), do: is_integer(base) and base >= 0
   defp valid_value?("ids", ids), do: is_list(ids) and Enum.all?(ids, &is_binary/1)
-  defp valid_value?(key, value) when key in ~w(origins parts), do: is_map(value)
+
+  defp valid_value?(key, value) when key in ~w(origins parts args condition_args),
+    do: is_map(value)
+
   defp valid_value?("options", options), do: is_map(options)
-  defp valid_value?("args", args), do: is_map(args)
   defp valid_value?("works", works), do: is_list(works)
   defp valid_value?("attachments", list), do: is_list(list) and Enum.all?(list, &is_map/1)
 

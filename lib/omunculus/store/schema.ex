@@ -144,6 +144,9 @@ defmodule Omunculus.Store.Schema do
     """,
     "CREATE INDEX IF NOT EXISTS events_conversation_cursor ON events (conversation_id, sequence)",
     "CREATE INDEX IF NOT EXISTS events_memory ON events (sequence) WHERE type = 'memory'",
+    "CREATE INDEX IF NOT EXISTS events_jobs ON events (sequence) WHERE type = 'job'",
+    "CREATE INDEX IF NOT EXISTS events_job_fires ON events (json_extract(body, '$.id'), sequence) WHERE type = 'job_fire'",
+    "CREATE INDEX IF NOT EXISTS events_job_fire_ids ON events (json_extract(body, '$.fire_id'), sequence) WHERE type = 'job_fire'",
     "CREATE INDEX IF NOT EXISTS works_conversation ON works (conversation_id)",
     "CREATE INDEX IF NOT EXISTS runs_cause ON runs (cause_id)",
     """

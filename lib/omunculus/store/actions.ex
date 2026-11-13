@@ -22,10 +22,11 @@ defmodule Omunculus.Store.Actions do
   `continue`, `break`, `wait`, `reopen`, `retire`, `delegate`, `cancel` and `end` are
   dispatched to `Actions.Sequence`; `request`, `reply` and `grant` to
   `Actions.Requests`; `notify` and `inbox.read` to `Actions.Inbox`;
-  `compact` and `comment.delete` to `Actions.Comments`; `memory` to `Actions.Memory`.
+  `compact` and `comment.delete` to `Actions.Comments`; `memory` to `Actions.Memory`;
+  `job` to `Omunculus.Jobs`.
   """
 
-  alias Omunculus.{Artifacts, Attachments, Ceiling, Config, Id, Participant}
+  alias Omunculus.{Artifacts, Attachments, Ceiling, Config, Id, Jobs, Participant}
   alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Memory, Requests, Sequence}
   alias Omunculus.Store.{Destination, Events, Interception, Query, View}
 
@@ -65,6 +66,9 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "memory"} = emit, ctx),
     do: Memory.write(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "job"} = emit, ctx),
+    do: Jobs.write(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "work"} = emit, ctx),
     do: work(conn, Map.get(emit, "body", %{}), ctx)
