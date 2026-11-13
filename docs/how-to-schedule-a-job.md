@@ -60,10 +60,56 @@ reach the same jobs through [the server](server.md#jobs).
    $ omunculus jobs resume --name morning
    ```
 
-4. Run it once now with `jobs run --name morning`, copy it as a draft with
+4. Before creating a job, preview it: the next three fires of a schedule and an
+   estimate of what a fire costs.
+
+   ```console
+   $ omunculus jobs preview --schedule "daily at 07:00" --timezone Europe/Paris --agent <agent>
+   next fires: 2026-11-14T06:00:00Z, 2026-11-15T06:00:00Z, 2026-11-16T06:00:00Z
+   cost per fire: no estimate (no fires of jobs or runs of the agent <agent> to estimate from yet, so there is no estimate)
+   ```
+
+   The estimate is the mean cost of the target's latest fires in jobs or, with
+   none, of its latest runs, at the models' prices. With no history there is no
+   figure, and the sentence says so.
+
+5. Run it once now with `jobs run --name morning`, copy it as a draft with
    `jobs duplicate --name morning --as evening`, read what happened to it with
    `jobs history --name morning`, and remove it with `jobs archive --name
    morning`; the history stays, and the name is free again.
+
+## What happens when it is due
+
+The server runs one scheduler for each project, checking the clock every second.
+Each slot of the schedule becomes a fire, recorded in the job's history:
+
+- **Condition.** A job with a `--condition` tool first calls it, as the owner and
+  with no model. The tool prints JSON: `{"run": true}` goes on; `{"run": false,
+  "reason": "..."}` records the fire as `skipped` and spends nothing; adding
+  `"pause": true` also pauses the job with that reason, as when a subscription is
+  cancelled. A tool that fails or prints anything else skips the fire with that as
+  the reason.
+- **Run.** The fire sends the job's message to its agent, or opens a root work for
+  its workflow, or calls its tool, as the owner. Each fire opens a conversation of
+  its own, or goes to the job's `--conversation_id`. The fire is `running`, then
+  `succeeded` or `failed`, with the conversation, the runs, the duration, the model
+  calls, the tokens and the dollars at the models' prices. With `--delivery
+  owner_inbox` the replies are its `message`.
+- **At most `max_parallel` fires of a project run at once.** The others wait, due.
+- **Late.** A fire that did not start within `lateness_seconds` of its time is
+  marked `late`, and its owner gets a request saying so.
+- **Down.** The slots that passed while the server was down follow `[jobs] missed`:
+  `skip` records each as `missed`; `run_once` records all but the latest as
+  `missed` and runs that one. A fire left running when the server stopped fails.
+- **Failures.** After `failures_before_pause` fires in a row fail, the job is
+  paused with the reason and its owner told. `jobs resume` starts counting again.
+- **End date.** After `--end_at` the job moves to `ended`.
+
+A job's owner needs the capabilities its fires use (`conversation.create` and
+`conversation.send`, as for any message); an agent owner acts as the principal
+`agent:<name>`, which needs a membership of its own. A fire that is refused
+fails, and counts toward the pause. The workspace of a job applies to a workflow
+target; an agent target works in the default one.
 
 ## Having an agent propose it
 
@@ -84,9 +130,11 @@ Nothing creates or changes a job from a run that a job's fire opened.
 | `a job named <name> exists` | names are unique among jobs that are not archived |
 | `the project holds <n> jobs, the most [jobs] max_jobs allows` | archive one, or raise the limit |
 | `a run that a job's fire opened may not create or change jobs` | create it from a person's message |
+| A fire is `failed` with `the server stopped while the fire ran` | the server stopped during it; the next fire runs as usual |
+| A fire is `skipped` with `the condition failed: ...` | the condition tool failed or did not print `{"run": true|false}` |
 
 ## Next
 
 [The TOML](config.md#jobs) for the policy, [tools](tools.md#scheduled-jobs) for
-`jobs` and `propose_job`, [the server](server.md#jobs) for the routes. The
-scheduler that starts the fires is not part of this page.
+`jobs` and `propose_job`, [the server](server.md#jobs) for the routes, and
+[the design](design.md#the-scheduler) for how fires are claimed and run.
