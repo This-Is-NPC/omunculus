@@ -1,0 +1,108 @@
+name = "jobs"
+kind = "tool"
+triggers = ["cli", "chain"]
+description = """
+Reads and changes the project's scheduled jobs. action is list, show, history, create, edit, duplicate, pause, resume, run, archive or read. list prints each job with its state, schedule, next fire and what its fires cost; show prints one job (name) with its next fires and totals; history prints the newest events of one: its changes, its moves between states and its fires. create takes a name, a target (agent with message, workflow with message, or tool with args), a schedule and a timezone: the schedule is a 5-field cron expression, "every 30m" or "every 2h", or "daily at 09:00", read in the timezone, an IANA name such as America/Sao_Paulo; the job runs as owner, an account or agent name, or as whoever created it. edit changes the fields it is given on a job and bumps its version; an empty text clears a field. duplicate copies a job under the name given as, as a draft; resume starts it. pause and resume move a job between paused and active; run queues one fire now; archive removes a job and keeps its history; read marks what the job delivered as read. A job with delivery owner_inbox hands the final reply of each fire to its owner's mailbox as a message from the job. It needs job.create for create and duplicate, job.manage for the other changes and job.read for the reads and read. Refused without a [jobs] table in omunculus.toml.
+"""
+tags = ["cli", "jobs"]
+groups = ["cli"]
+module = "Omunculus.Tools.Jobs"
+
+[parameters]
+type = "object"
+required = ["action"]
+
+[parameters.properties.action]
+type = "string"
+enum = ["list", "show", "history", "create", "edit", "duplicate", "pause", "resume", "run", "archive", "read"]
+
+[parameters.properties.name]
+type = "string"
+description = "The job: its name, or its id for a job that was archived. For create, the new job's name: letters, digits, dot, underscore and dash."
+
+[parameters.properties.as]
+type = "string"
+description = "For duplicate, the name of the copy."
+
+[parameters.properties.agent]
+type = "string"
+description = "Target: an agent of depth 0 that is sent the message at each fire."
+
+[parameters.properties.workflow]
+type = "string"
+description = "Target: a workflow that is sent the message at each fire."
+
+[parameters.properties.tool]
+type = "string"
+description = "Target: a tool called at each fire with no model, with args."
+
+[parameters.properties.args]
+type = "object"
+description = "The arguments of the tool target, as a JSON object."
+
+[parameters.properties.message]
+type = "string"
+description = "What an agent or workflow target is sent at each fire."
+
+[parameters.properties.schedule]
+type = "string"
+description = "A 5-field cron expression, \"every 30m\" or \"every 2h\", or \"daily at 09:00\"."
+
+[parameters.properties.timezone]
+type = "string"
+description = "The IANA time zone the schedule is read in, such as UTC or Europe/Paris."
+
+[parameters.properties.conversation_id]
+type = "string"
+description = "For create, the conversation every fire goes to; it cannot change later. Without it each fire opens its own. Whoever reads the conversation reads the job."
+
+[parameters.properties.workspace]
+type = "string"
+description = "The workspace the fires work in."
+
+[parameters.properties.condition]
+type = "string"
+description = "A tool that gates each fire before any model is spent: the fire is skipped when it fails."
+
+[parameters.properties.condition_args]
+type = "object"
+description = "The arguments of the condition tool, as a JSON object."
+
+[parameters.properties.end_at]
+type = "string"
+description = "An ISO 8601 instant, such as 2026-12-31T23:59:00Z, after which no fire starts."
+
+[parameters.properties.owner]
+type = "string"
+description = "An [accounts] name or an agent: who the fires act as. Without it, whoever creates the job."
+
+[parameters.properties.delivery]
+type = "string"
+enum = ["owner_inbox"]
+description = "owner_inbox: each fire's final agent reply arrives in the owner's mailbox as a message from the job, one thread per job. Empty for none."
+
+[parameters.properties.state]
+type = "string"
+enum = ["proposed", "active"]
+description = "For create, whether the job starts active (the default) or as a draft that resume starts."
+
+[parameters.properties.reason]
+type = "string"
+description = "For pause and resume, why; the history keeps it."
+
+[parameters.properties.channel]
+type = "string"
+enum = ["cli", "api", "console", "pack"]
+description = "How the call came, kept in the job's history; cli without it."
+
+[parameters.properties.request_id]
+type = "string"
+description = "The request whose approval this call carries; set when an approved proposal chains it."
+
+[views.jobs]
+source = "jobs"
+
+[views.history]
+source = "jobs"
+relation = "history"
+limit = 50
