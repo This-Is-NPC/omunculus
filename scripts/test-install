@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+# Installs the packages of `mise run package` through install.sh into a
+# disposable, unprivileged Arch container (no init, no systemd), exercises
+# every command and option, and removes them again. The container and the temp
+# files are removed on exit, even after a failure.
+#
+# The container has no systemd user manager, so the unit is checked with
+# systemd-analyze and its ExecStart is run directly as the test user; the real
+# `systemctl --user enable --now` is covered by the unit tests' fake runner.
+set -euo pipefail
+
+root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+pkgdir="${OMUNCULUS_PACKAGES:-$root/target/arch/pkg}"
+image="${OMUNCULUS_TEST_IMAGE:-archlinux:latest}"
+name="omunculus-install-test-$$"
+tmp="$(mktemp -d)"
+started="$(date +%s)"
+home=/home/tester
+out="" status=0
+
+cleanup() {
+  docker rm -f "$name" >/dev/null 2>&1 || true
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+step() { printf '\n== %s\n' "$*"; }
+fail() {
+  printf 'FAIL: %s\n--- output (status %s)\n%s\n---\n' "$1" "$status" "$out" >&2
+  docker exec "$name" bash -c "echo '--- server log'; cat $home/serve.log; echo '--- processes'; ps -eo pid,args" >&2 2>/dev/null || true
+  exit 1
+}
+
+# run <root|user> <command>: sets $out (stdout and stderr) and $status. No
+# LANG is set, to exercise the UTF-8 fix.
+run() {
+  local who=$1 cmd=$2 args=(-u tester -e "HOME=$home" -w "$home")
+  [[ $who == root ]] && args=(-u root -w /)
+  set +e
+  out="$(docker exec "${args[@]}" "$name" bash -c "unset LANG LC_ALL; $cmd" 2>&1)"
+  status=$?
+  set -e
+}
+ok() { run "$1" "$2"; [[ $status == 0 ]] || fail "'$2' exited $status"; }
+bad() { run "$1" "$2"; [[ $status != 0 ]] || fail "'$2' should have failed"; }
+has() { grep -qF -- "$1" <<<"$out" || fail "output lacks: $1"; }
+lacks() { ! grep -qF -- "$1" <<<"$out" || fail "output has: $1"; }
+wait_for() { # wait_for <seconds> <user command that succeeds when ready>
+  local i
+  for ((i = 0; i < $1 * 5; i++)); do
+    run user "$2"
+    [[ $status == 0 ]] && return 0
+    sleep 0.2
+  done
+  fail "timed out waiting for: $2"
+}
+
+# The release the user would download: both packages, SHA256SUMS, install.sh.
+step "stage the release"
+packages=("$pkgdir"/omunculus-[0-9]*.pkg.tar.zst "$pkgdir"/omunculus-apps-[0-9]*.pkg.tar.zst)
+[[ -e ${packages[0]} && -e ${packages[1]} ]] || { echo "run mise run package first" >&2; exit 1; }
+mkdir "$tmp/release"
+cp "${packages[@]}" "$root/install.sh" "$tmp/release/"
+(cd "$tmp/release" && sha256sum -- *.pkg.tar.zst >SHA256SUMS)
+core="$(basename "${packages[0]}")"
+version="$(sed -E 's/^omunculus-([0-9.]+)-.*/\1/' <<<"$core")"
+
+step "start the container"
+docker run -d --init --name "$name" "$image" sleep infinity >/dev/null
+docker cp "$tmp/release" "$name:/srv/release"
+ok root 'pacman-key --init >/dev/null 2>&1 && pacman-key --populate archlinux >/dev/null 2>&1; pacman -Syu --noconfirm --needed sudo >/dev/null'
+ok root 'useradd -m tester && echo "tester ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/tester'
+ok user 'test -z "${LANG:-}" && echo no-lang'
+bad user 'command -v omunculus'
+
+step "install.sh: dry runs, refusals and the piped form"
+ok user 'cd /srv/release && DRY_RUN=1 BASE_URL=file:///srv/release bash install.sh'
+has "sudo pacman -U"; has "omunculus-apps-"
+ok user 'cd /srv/release && APPS=0 DRY_RUN=1 BASE_URL=file:///srv/release bash install.sh'
+has "sudo pacman -U"; lacks "omunculus-apps-"
+bad user 'command -v omunculus'
+ok root 'cp -r /srv/release /srv/tampered && echo x >>/srv/tampered/'"$core"
+bad user 'DRY_RUN=1 BASE_URL=file:///srv/tampered bash /srv/release/install.sh'
+has "does not match the release's SHA256SUMS; nothing was installed"
+bad user 'BASE_URL=file:///srv/tampered bash /srv/release/install.sh'
+has "nothing was installed"
+bad user 'command -v omunculus'
+bad user 'BASE_URL=file:///srv/nothing-here bash /srv/release/install.sh'
+has "could not download file:///srv/nothing-here/SHA256SUMS"
+ok user 'cat /srv/release/install.sh | DRY_RUN=1 BASE_URL=file:///srv/release bash'
+has "sudo pacman -U"
+
+step "install the release (the piped form, both packages)"
+ok user 'cat /srv/release/install.sh | BASE_URL=file:///srv/release bash'
+has "installed. Next: omunculus setup"
+has "sudo pacman -R omunculus omunculus-apps"
+ok root 'pacman -Q omunculus omunculus-apps'
+has "omunculus $version-1"; has "omunculus-apps $version-1"
+
+step "files, launchers, contents"
+ok user 'omunculus version'
+has "$version"; lacks "latin1"; lacks "warning"
+ok user 'for f in /usr/bin/omunculus /usr/bin/omunculus-console /usr/bin/omunculus-mailbox /usr/bin/omunculus-studio \
+  /usr/lib/systemd/user/omunculus.service /usr/share/applications/omunculus-console.desktop \
+  /usr/share/applications/omunculus-mailbox.desktop /usr/share/applications/omunculus-studio.desktop \
+  /usr/share/icons/hicolor/scalable/apps/omunculus.svg /usr/share/omunculus/apps/kit/run \
+  /usr/share/licenses/omunculus/LICENSE; do test -e "$f" || { echo "missing $f"; exit 1; }; done'
+ok user 'pacman -Ql omunculus omunculus-apps | cut -d" " -f2'
+has "/priv/packs/system/pack.toml"; has "/priv/presets/default/omunculus.toml"
+if grep -E '(^|/)(packs|eval|bench|dev|test)(/|$)' <<<"$out" | grep -Ev '/priv/packs/(system(/|$)|$)'; then
+  fail "the packages carry a repository folder that stays out of them"
+fi
+ok user 'pacman -Qi omunculus | grep -E "^Depends"'
+has "bubblewrap"; has "git"
+
+step "unit file"
+ok user 'systemd-analyze verify /usr/lib/systemd/user/omunculus.service'
+lacks "Unknown"
+ok user 'grep -E "^ExecStart=" /usr/lib/systemd/user/omunculus.service'
+has "ExecStart=/usr/bin/omunculus serve --config %h/.config/omunculus/server.toml"
+unit_exec="$(sed -E 's/^ExecStart=//; s#%h#'"$home"'#' <<<"$out")"
+
+step "preset, send and runs in a fresh folder"
+ok user 'mkdir -p ~/projects/noaccess && cd ~/projects/noaccess && omunculus preset default'
+has "preset default applied"
+ok user 'cd ~/projects/noaccess && omunculus send "count to 5" --agent concierge'
+has "fake model:"
+ok user 'cd ~/projects/noaccess && omunculus runs'
+has "1 runs"; has "concierge"
+
+step "setup: writes, keeps, and says the unit could not start"
+run user 'omunculus setup'
+echo "$out (exit $status)"
+has "Wrote $home/.config/omunculus/server.toml"
+has "enabled but not running"
+lacks "enabled and started"
+ok user 'cat ~/.config/omunculus/server.toml'
+has "[server]"; has "max_concurrent = 8"
+run user 'omunculus setup'
+has "already exists; kept as it is."
+ok user 'cat ~/.config/omunculus/server.toml'
+has "max_concurrent = 8"
+
+step "the server the unit runs, with a project without [access]"
+ok user 'printf "\n[projects.noaccess]\nconfig = \"%s/projects/noaccess/omunculus.toml\"\n" "$HOME" >>~/.config/omunculus/server.toml'
+serve() {
+  docker exec -d -u tester -e "HOME=$home" -w "$home" "$name" bash -c "exec $unit_exec >$home/serve.log 2>&1"
+}
+serve
+wait_for 20 'pgrep -u tester -f "[b]eam.smp" >/dev/null && grep -q noaccess ~/serve.log'
+ok user 'cat ~/serve.log'
+has "noaccess"; has "[access]"
+sleep 1
+ok user 'pgrep -u tester -f "[b]eam.smp" >/dev/null && echo up'
+has up
+ok user 'omunculus socket ~/.config/omunculus/server.toml'
+stop_server() {
+  run user 'pkill -TERM -u tester -f "[b]eam.smp"'
+  wait_for 20 '! pgrep -u tester -f "[b]eam.smp" >/dev/null'
+}
+stop_server
+
+step "a project with [access]: bootstrap, serve, socket, send"
+ok user 'mkdir -p ~/projects/first && cd ~/projects/first && omunculus preset default'
+ok user 'cd ~/projects/first && cat >>omunculus.toml <<EOF
+
+[access]
+creator_role = "participant"
+bootstrap_role = "admin"
+
+[access.roles.admin]
+scope = "project"
+capabilities = ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
+
+[access.roles.participant]
+scope = "conversation"
+capabilities = ["conversation.read", "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access"]
+EOF
+omunculus access bootstrap --issuer local --subject "$(id -u)"'
+ok user 'sed -i "s#projects/noaccess#projects/first#; s#projects.noaccess#projects.first#" ~/.config/omunculus/server.toml'
+serve
+wait_for 30 'omunculus socket ~/.config/omunculus/server.toml first'
+has "first"; has ".omunculus.sock"
+sock="${out#*$'\t'}"
+wait_for 30 "curl -fs --unix-socket '$sock' http://localhost/v1/projects"
+has "first"
+ok user "curl -fs --unix-socket '$sock' -H 'Content-Type: application/json' -d '{\"name\":\"runs\",\"args\":{}}' http://localhost/v1/call"
+has '"output"'
+# The server holds the project's flock, so a send that succeeds went through it.
+ok user 'cd ~/projects/first && omunculus send "count to 5" --agent concierge'
+has "fake model:"
+ok user 'cd ~/projects/first && omunculus runs'
+has "via send"
+ok user 'cat ~/serve.log'
+lacks "refus"
+
+step "update against GitHub"
+run user 'omunculus update --check'
+echo "$out"
+if [[ $status == 0 ]]; then
+  grep -qE "is up to date|is available" <<<"$out" || fail "unexpected update --check wording"
+else
+  grep -q "release server" <<<"$out" || fail "unexpected update --check failure"
+fi
+run user 'omunculus update </dev/null'
+echo "$out (exit $status)"
+if [[ $status != 0 ]]; then
+  grep -qE "no omunculus package|release server" <<<"$out" || fail "unexpected update failure"
+else
+  grep -q "up to date" <<<"$out" || fail "unexpected update wording"
+fi
+
+step "downgrade and upgrade with pacman"
+ok root 'set -e; d=$(mktemp -d); cd "$d"
+  bsdtar -xpf /srv/release/'"$core"'
+  sed -i "s/^pkgver = .*/pkgver = 0.0.9-1/" .PKGINFO
+  bsdtar --zstd -cf /srv/omunculus-0.0.9-1-x86_64.pkg.tar.zst .PKGINFO .INSTALL .MTREE usr'
+ok root 'pacman -U --noconfirm /srv/omunculus-0.0.9-1-x86_64.pkg.tar.zst'
+has "systemctl --user restart omunculus"
+ok root 'pacman -U --noconfirm /srv/release/'"$core"
+has "systemctl --user restart omunculus"
+ok root 'pacman -Q omunculus'
+has "$version-1"
+
+step "remove: the message, the server, the kept files"
+ok root 'pacman -R --noconfirm omunculus-apps omunculus 2>&1'
+has "systemctl --user disable --now omunculus"
+stop_server
+bad user 'pgrep -u tester -f "[b]eam.smp"'
+bad user 'command -v omunculus'
+bad user 'test -e /usr/lib/omunculus'
+ok user 'test -f ~/.config/omunculus/server.toml && test -f ~/projects/first/omunculus.toml && test -d ~/projects/first/.omunculus'
+ok root 'pacman -Q omunculus omunculus-apps 2>&1 | grep -c "was not found"'
+has 2
+
+printf '\ntest:install passed in %s s\n' "$(($(date +%s) - started))"
