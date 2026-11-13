@@ -22,7 +22,7 @@ defmodule Omunculus.Tools.ProposeConfig do
 
   alias Omunculus.Config
   alias Omunculus.Config.Toml, as: ConfigToml
-  alias Omunculus.Tools.{Args, Out, Steps}
+  alias Omunculus.Tools.{Args, Cites, Out, Steps}
   alias Omunculus.Tools.Config, as: ConfigTool
 
   @spec run(map) :: map
@@ -32,7 +32,7 @@ defmodule Omunculus.Tools.ProposeConfig do
     with nil <- Args.missing(args, ~w(item reason)),
          item = Config.item(args["item"]),
          {:ok, %{document: document, revision: revision}} <- Config.document(path),
-         {:ok, cited} <- cited(args["runs"], view["recent"] || []),
+         {:ok, cited} <- Cites.check(args["runs"], view["recent"] || []),
          held = get_in(document, Tuple.to_list(item)),
          value = patch(Map.get(args, "value"), held, document, item, args["from"]),
          :ok <- changes(value, held),
@@ -111,23 +111,6 @@ defmodule Omunculus.Tools.ProposeConfig do
     end
   end
 
-  # The runs cited, each one of the project's recent runs, by id or its start.
-  defp cited(nil, _recent), do: {:ok, []}
-
-  defp cited(ids, recent) when is_list(ids) do
-    Enum.reduce_while(ids, {:ok, []}, fn id, {:ok, acc} ->
-      found = is_binary(id) and id != "" && Enum.find(recent, &String.starts_with?(&1.id, id))
-
-      if found,
-        do: {:cont, {:ok, acc ++ [found]}},
-        else:
-          {:halt,
-           "no run #{inspect(id)} among the last #{length(recent)} closed runs; read them with runs"}
-    end)
-  end
-
-  defp cited(_ids, _recent), do: "runs is a list of run ids"
-
   defp steps(config, {"agents", name}, value) when not is_nil(value),
     do: Steps.missing(config, [name])
 
@@ -143,7 +126,7 @@ defmodule Omunculus.Tools.ProposeConfig do
         Enum.join(
           [
             args["reason"],
-            runs_line(cited),
+            Cites.line(cited),
             "#{args["item"]} as it runs now:\n" <> was,
             "#{args["item"]} as it would run:\n" <> would_be
           ],
@@ -154,16 +137,6 @@ defmodule Omunculus.Tools.ProposeConfig do
         "deny" => []
       }
     }
-  end
-
-  defp runs_line([]), do: "runs cited: none"
-
-  defp runs_line(cited) do
-    "runs cited:\n" <>
-      Enum.map_join(cited, "\n", fn run ->
-        "- #{run.id}, #{run.agent}" <>
-          if(run.work_title, do: ", work #{run.work_title}", else: "")
-      end)
   end
 
   # The item as the config runs it, in the file's own notation; what a
