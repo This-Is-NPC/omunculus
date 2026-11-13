@@ -69,7 +69,7 @@ FocusScope {
     const lines = [
       ["RUNS", Jobs.target(job)],
       [job.tool ? "TOOL" : "MESSAGE", job.tool ? job.tool : job.message || ""],
-      ["SCHEDULE", Jobs.when(job.schedule) + "  ·  " + job.schedule + "  ·  " + job.timezone],
+      ["SCHEDULE", Jobs.when(job.schedule) + "  ·  " + job.timezone],
       ["CONVERSATION", conversation ? (Omunculus.summaries[conversation] || {}).title || conversation : "a new one each fire"],
       ["WORKSPACE", job.workspace || ""],
       ["CONDITION", job.condition ? job.condition + " must pass before each fire" : ""],

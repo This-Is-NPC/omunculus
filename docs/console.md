@@ -728,8 +728,8 @@ tabs:
 - VERSIONS, each creation, change and move between states with who did it and
   through which channel (console, cli, api, tool, pack, proposal, scheduler) and
   what changed or why;
-- FIELDS, everything the job holds: what it runs and sends, the schedule, the
-  conversation, the workspace, the condition, the end, the owner, the delivery,
+- FIELDS, everything the job holds: what it runs and sends, the schedule (in
+  words, then its time zone, each said once), the conversation, the workspace, the condition, the end, the owner, the delivery,
   its origin and its version.
 
 The page reads at most the job's newest 500 events, so the longest histories
