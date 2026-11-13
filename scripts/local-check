@@ -29,6 +29,9 @@ fi
 
 root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 cd "$root"
+# A hook exports GIT_DIR and the like (absolute in a worktree); the gate's
+# tests run git in their own temporary repositories and must not inherit them.
+unset $(git rev-parse --local-env-vars)
 
 DRY_RUN=0
 PRE_PUSH=0
