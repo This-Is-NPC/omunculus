@@ -246,47 +246,42 @@ Item {
               }
             }
 
-            RowLayout {
+            Flow {
               Layout.fillWidth: true
               spacing: 8
-              Flow {
-                Layout.fillWidth: true
-                spacing: 8
-                TraceButton {
-                  dense: true
-                  role: "primary"
-                  enabled: !view.sending
-                  filled: !view.writing
-                  text: "APPROVE"
-                  tip: "let the action go ahead as it is"
-                  onClicked: Mail.decide(view.review, "approve", "")
-                }
-                TraceButton {
-                  dense: true
-                  role: "action"
-                  enabled: !view.sending
-                  text: "EDIT"
-                  tip: view.proposal ? "say what to change; nothing is created yet" : "rewrite the text, then send it in place of the held one"
-                  onClicked: view.start("edit")
-                }
-                TraceButton {
-                  dense: true
-                  role: "action"
-                  enabled: !view.sending
-                  text: "DENY"
-                  tip: view.proposal ? "drop the proposal, with a reason if you like" : "refuse the action, with a reason if you like"
-                  onClicked: view.start("deny")
-                }
-                Row {
-                  visible: view.sending
-                  height: Theme.size.control
-                  spacing: 6
-                  Icon { anchors.verticalCenter: parent.verticalCenter; name: "send"; size: 12; color: Theme.primary }
-                  Label { anchors.verticalCenter: parent.verticalCenter; text: "SENDING…"; color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 2 }
-                }
+              TraceButton {
+                dense: true
+                role: "primary"
+                enabled: !view.sending
+                filled: !view.writing
+                text: "APPROVE"
+                tip: "let the action go ahead as it is"
+                onClicked: Mail.decide(view.review, "approve", "")
+              }
+              TraceButton {
+                dense: true
+                role: "action"
+                enabled: !view.sending
+                text: "EDIT"
+                tip: view.proposal ? "say what to change; nothing is created yet" : "rewrite the text, then send it in place of the held one"
+                onClicked: view.start("edit")
+              }
+              TraceButton {
+                dense: true
+                role: "action"
+                enabled: !view.sending
+                text: "DENY"
+                tip: view.proposal ? "drop the proposal, with a reason if you like" : "refuse the action, with a reason if you like"
+                onClicked: view.start("deny")
+              }
+              Row {
+                visible: view.sending
+                height: Theme.size.control
+                spacing: 6
+                Icon { anchors.verticalCenter: parent.verticalCenter; name: "send"; size: 12; color: Theme.primary }
+                Label { anchors.verticalCenter: parent.verticalCenter; text: "SENDING…"; color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 2 }
               }
               Chip {
-                Layout.alignment: Qt.AlignTop
                 icon: view.details ? "chevron-up" : "chevron-down"
                 text: "DETAILS"
                 tip: view.proposal ? "the job's fields and what each answer does" : "the action's arguments and what each answer does"
