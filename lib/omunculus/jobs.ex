@@ -266,23 +266,24 @@ defmodule Omunculus.Jobs do
     if DateTime.compare(ending, now) == :lt, do: ending, else: now
   end
 
-  # Where counting resumes: the later of the job's anchor and its last slot.
+  # Where counting resumes: the later of the job's anchor, its last slot and
+  # the end of the last range of slots it missed.
   defp baseline(conn, job) do
     with {:ok, row} <-
            Query.one(
              conn,
              """
-             SELECT json_extract(body, '$.scheduled_for') AS scheduled_for FROM events
+             SELECT MAX(COALESCE(json_extract(body, '$.until'), json_extract(body, '$.scheduled_for'))) AS last FROM events
              WHERE type = 'job_fire' AND json_extract(body, '$.id') = ?
-               AND json_extract(body, '$.manual') IS NULL AND json_extract(body, '$.state') = 'due'
-             ORDER BY sequence DESC LIMIT 1
+               AND json_extract(body, '$.manual') IS NULL AND json_extract(body, '$.state') IN ('due', 'missed')
+               AND json_extract(body, '$.scheduled_for') IS NOT NULL
              """,
              [job["id"]]
            ) do
       {:ok, anchor, _} = DateTime.from_iso8601(job["anchor"])
 
       case row do
-        %{scheduled_for: text} when is_binary(text) ->
+        %{last: text} when is_binary(text) ->
           {:ok, last, _} = DateTime.from_iso8601(text)
           {:ok, Enum.max([anchor, last], DateTime)}
 
@@ -372,7 +373,7 @@ defmodule Omunculus.Jobs do
              conn,
              """
              SELECT json_extract(body, '$.id') AS id, json_extract(body, '$.state') AS state,
-               COUNT(*) AS fires, TOTAL(json_extract(body, '$.usd')) AS usd,
+               TOTAL(COALESCE(json_extract(body, '$.count'), 1)) AS fires, TOTAL(json_extract(body, '$.usd')) AS usd,
                TOTAL(json_extract(body, '$.duration_ms')) AS duration_ms,
                TOTAL(json_extract(body, '$.calls')) AS calls,
                TOTAL(json_extract(body, '$.input_tokens')) AS input_tokens,
@@ -393,8 +394,8 @@ defmodule Omunculus.Jobs do
     totals =
       Enum.reduce(rows, empty_totals(), fn row, acc ->
         acc
-        |> Map.put(row.state, row.fires)
-        |> Map.update!("fires", &(&1 + row.fires))
+        |> Map.put(row.state, trunc(row.fires))
+        |> Map.update!("fires", &(&1 + trunc(row.fires)))
         |> Map.update!("usd", &(&1 + row.usd))
         |> then(fn acc ->
           Enum.reduce(
@@ -703,7 +704,9 @@ defmodule Omunculus.Jobs do
 
   `skipped` (the condition said no, no model spent), `missed`, `succeeded`,
   `failed` and `cancelled` finish a fire; `late` is a mark on one that goes
-  on. A fire may carry `conversation_id`, `run_ids`, and, on the state that
+  on. A `missed` fire may start without a `due` one, for a range of slots: it
+  then gives `scheduled_for` (the first), `until` (the last) and `count`, and the
+  totals count its slots. A fire may carry `conversation_id`, `run_ids`, and, on the state that
   finishes it, `duration_ms`, `calls`, `input_tokens`, `output_tokens`,
   `usd`, a `reason` and, for a job that delivers, the final reply as `message`; the job's totals add those up. Returns the event's
   body, with the `fire_id` and the job's `version` the fire runs.
@@ -741,10 +744,12 @@ defmodule Omunculus.Jobs do
   defp fire_value?(key, value) when key in ~w(conversation_id reason message),
     do: is_binary(value)
 
+  defp fire_value?("count", value), do: is_integer(value) and value > 0
+
   defp fire_value?("usd", value), do: is_number(value) and value >= 0
   defp fire_value?(key, value) when key in @counters, do: is_integer(value) and value >= 0
 
-  defp fire_value?("scheduled_for", value),
+  defp fire_value?(key, value) when key in ~w(scheduled_for until),
     do: is_binary(value) and match?({:ok, _, _}, DateTime.from_iso8601(value))
 
   defp fire_value?(_key, _value), do: false
@@ -754,6 +759,20 @@ defmodule Omunculus.Jobs do
     with :ok <- slot_free(conn, job, attrs) do
       {:ok,
        Map.merge(attrs, %{"id" => job["id"], "fire_id" => Id.new(), "version" => job["version"]})}
+    end
+  end
+
+  # A range of slots the server was down for is one fire, `missed` from the
+  # start: `scheduled_for` is its first slot, `until` its last and `count` how many.
+  defp fire_state(_conn, job, %{"state" => "missed"} = attrs)
+       when not is_map_key(attrs, "fire_id") do
+    case Enum.find(~w(scheduled_for until count), &(not is_map_key(attrs, &1))) do
+      nil ->
+        {:ok,
+         Map.merge(attrs, %{"id" => job["id"], "fire_id" => Id.new(), "version" => job["version"]})}
+
+      key ->
+        {:error, {:jobs, {:invalid, key}}}
     end
   end
 

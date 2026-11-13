@@ -99,8 +99,9 @@ Each slot of the schedule becomes a fire, recorded in the job's history:
 - **Late.** A fire that did not start within `lateness_seconds` of its time is
   marked `late`, and its owner gets a request saying so.
 - **Down.** The slots that passed while the server was down follow `[jobs] missed`:
-  `skip` records each as `missed`; `run_once` records all but the latest as
-  `missed` and runs that one. A fire left running when the server stopped fails.
+  `skip` records them as one `missed` fire with the first and last slot and how
+  many there were; `run_once` does the same for all but the latest and runs that
+  one. The job's totals count each missed slot. A fire left running when the server stopped fails.
 - **Failures.** After `failures_before_pause` fires in a row fail, the job is
   paused with the reason and its owner told. `jobs resume` starts counting again.
 - **End date.** After `--end_at` the job moves to `ended`.

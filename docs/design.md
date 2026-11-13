@@ -548,7 +548,8 @@ whole decision for an instant `now` and so is driven in tests with any clock and
 no waiting (`Server.start_link/2` takes a `clock` for the same reason). `plan/3`
 reads `[jobs]` from the file each time, then: at the first call after the start,
 fails the fires a stopped server left `running` and applies `missed` to the slots
-that passed while it was down; claims every slot that has come as a `due` fire
+that passed while it was down (the missed ones are one `missed` fire with
+`scheduled_for`, `until` and `count`, which the next count of slots starts after); claims every slot that has come as a `due` fire
 (`record_fire/3` refuses a slot taken twice); ends the jobs whose `end_at` has
 passed; and goes through the `due` and `late` fires, oldest first, cancelling
 those of a paused job, marking `late` (and asking the owner, a request from the
