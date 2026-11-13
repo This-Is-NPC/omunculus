@@ -169,7 +169,14 @@ defmodule Omunculus.ProcessFixtures do
     id
   end
 
-  defp work(conn, conversation, state, stage, script) do
+  @doc """
+  A work of `workflow` (nil for none) below `parent` (nil for a root) in
+  `conversation`, with its script; returns its id.
+  """
+  def extra_work(conn, conversation, workflow, parent, script),
+    do: work(conn, conversation, "done", nil, script, workflow, parent)
+
+  defp work(conn, conversation, state, stage, script, workflow \\ "delivery", parent \\ nil) do
     id = Id.new()
     created = events_clock()
 
@@ -179,7 +186,8 @@ defmodule Omunculus.ProcessFixtures do
         conversation_id: conversation,
         title: "work #{id}",
         goal: "goal",
-        workflow: "delivery",
+        workflow: workflow,
+        parent_id: parent,
         stage: stage,
         assignee: "worker",
         state: state,

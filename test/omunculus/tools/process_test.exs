@@ -121,4 +121,37 @@ defmodule Omunculus.Tools.ProcessTest do
     assert output =~ "Variants: none."
     assert output =~ "Activities: none."
   end
+
+  test "with a workflow every section is of its works and the works below them, nothing else",
+       ctx do
+    [conversation | _] = ctx.conversations
+    # A descendant of a delivery work, another workflow's work, and a root
+    # system run of no workflow, each with a call of its own.
+    ProcessFixtures.extra_work(ctx.conn, conversation, nil, ctx.works.done_a, [
+      {:run, "worker"},
+      {:model, 0.0, 1},
+      {:tool, "below", 1}
+    ])
+
+    ProcessFixtures.extra_work(ctx.conn, conversation, "other", nil, [
+      {:run, "worker"},
+      {:model, 0.0, 1},
+      {:tool, "elsewhere", 1}
+    ])
+
+    ProcessFixtures.extra_work(ctx.conn, conversation, nil, nil, [
+      {:run, "steward"},
+      {:model, 0.0, 1},
+      {:tool, "config", 1},
+      {:refused, "propose_config", 1}
+    ])
+
+    scoped = output(ctx, %{"workflow" => "delivery", "support" => 0.1, "confidence" => 0.1})
+    assert scoped =~ "- below: 1 times"
+    assert scoped =~ "- read: 11 times"
+    for outside <- ["elsewhere", "config", "propose_config"], do: refute(scoped =~ outside)
+
+    all = output(ctx, %{})
+    for inside <- ["below", "elsewhere", "config", "propose_config"], do: assert(all =~ inside)
+  end
 end
