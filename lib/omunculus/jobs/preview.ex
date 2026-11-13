@@ -16,7 +16,8 @@ defmodule Omunculus.Jobs.Preview do
 
   @doc """
   The preview of `params`: `"schedule"`, `"timezone"` and a `"target"` that
-  holds an `"agent"` or a `"workflow"`. Gives `"next"` (ISO 8601 instants),
+  holds an `"agent"`, a `"workflow"` or a `"tool"`, which runs with no model
+  and has no estimate. Gives `"next"` (ISO 8601 instants),
   `"estimate_usd"` and `"basis"`.
   """
   @spec build(Omunculus.Store.Connection.t(), Omunculus.Config.t(), map) ::
@@ -51,10 +52,15 @@ defmodule Omunculus.Jobs.Preview do
       else: {:error, {:jobs, {:unknown_workflow, name}}}
   end
 
+  defp target(%{"tool" => name}, _config) when is_binary(name), do: {:ok, "tool", name}
+
   defp target(_target, _config), do: {:error, {:jobs, {:invalid, "target"}}}
 
   defp mean([]), do: nil
   defp mean(samples), do: Enum.sum(samples) / length(samples)
+
+  defp basis(_samples, :tool, _kind, name),
+    do: "the tool #{name} runs with no model, so there is no model cost to estimate"
 
   defp basis([], _source, kind, name),
     do:
@@ -66,6 +72,8 @@ defmodule Omunculus.Jobs.Preview do
   defp basis(samples, :runs, kind, name),
     do:
       "the mean of the #{length(samples)} latest runs of the #{kind} #{name}, their model calls at the models' prices"
+
+  defp samples(_conn, _config, "tool", _name), do: {:ok, [], :tool}
 
   defp samples(conn, config, kind, name) do
     with {:ok, fired} <- fired(conn, kind, name) do
