@@ -94,7 +94,8 @@ final reply of each fire to its owner. The mailbox reads them from
   still shows in Pending;
 - an open message has VIEW JOB IN THE CONSOLE, which opens the job on its
   page in the console through its Quickshell IPC (`job <name>`, in the
-  console's current project); it says so when the console is not running;
+  console's current project) and asks the console's window to come forward; it
+  says so when the console is not running;
 - REPLY opens a composer for a **new** message to the job's agent (To
   prefilled with it; empty when the job runs a workflow or a tool, which is a
   message to the default agent), under "Re: <job name>", with the job's message
