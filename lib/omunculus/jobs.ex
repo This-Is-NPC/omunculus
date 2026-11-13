@@ -46,7 +46,7 @@ defmodule Omunculus.Jobs do
   @fire_moves %{
     "due" => ~w(skipped missed late running cancelled),
     "late" => ~w(running missed skipped cancelled),
-    "running" => ~w(succeeded failed cancelled)
+    "running" => ~w(running succeeded failed cancelled)
   }
   @finished ~w(skipped missed succeeded failed cancelled)
   @counters ~w(duration_ms calls input_tokens output_tokens)
@@ -179,6 +179,30 @@ defmodule Omunculus.Jobs do
     else
       {:ok, _no_delivery} -> {:ok, []}
       error -> error
+    end
+  end
+
+  @doc """
+  The name of the job whose fire opened each conversation, by conversation id.
+  A conversation a job holds as its own is not one a fire opened.
+  """
+  @spec fire_conversations(Connection.t()) :: {:ok, %{String.t() => String.t()}} | {:error, term}
+  def fire_conversations(conn) do
+    with {:ok, jobs} <- fold(conn),
+         {:ok, rows} <-
+           Query.all(
+             conn,
+             "SELECT DISTINCT json_extract(body, '$.id') AS job_id, json_extract(body, '$.conversation_id') AS conversation_id FROM events WHERE type = 'job_fire' AND json_extract(body, '$.conversation_id') IS NOT NULL"
+           ) do
+      {:ok,
+       Map.new(
+         for(
+           %{job_id: id, conversation_id: conversation_id} <- rows,
+           job = jobs[id],
+           job["conversation_id"] != conversation_id,
+           do: {conversation_id, job["name"]}
+         )
+       )}
     end
   end
 

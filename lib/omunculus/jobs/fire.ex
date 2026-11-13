@@ -50,7 +50,7 @@ defmodule Omunculus.Jobs.Fire do
   @spec run(Omunculus.Project.t(), map, map) :: :ok | {:error, term}
   def run(project, job, fire) do
     started = System.monotonic_time(:millisecond)
-    outcome = execute(project, job)
+    outcome = execute(project, job, fire)
     duration = System.monotonic_time(:millisecond) - started
     conn = project.conn
 
@@ -102,10 +102,11 @@ defmodule Omunculus.Jobs.Fire do
   end
 
   # What one fire does: opens its work and waits for the runs it caused.
-  defp execute(project, job) do
+  defp execute(project, job, fire) do
     principal = principal(job["owner"])
 
     with {:ok, conversation_id} <- conversation(project, job, principal),
+         :ok <- opened(project, job, fire, conversation_id),
          actor = %{principal: principal, conversation_id: conversation_id, via: "job"},
          {:ok, started} <-
            Cycle.command(project, nil, fn project ->
@@ -116,6 +117,20 @@ defmodule Omunculus.Jobs.Fire do
     end
   catch
     kind, reason -> {:error, {:run_crashed, {kind, reason}}}
+  end
+
+  # Records a conversation the fire opened at once, so no reader sees it as an ordinary thread.
+  defp opened(_project, %{"conversation_id" => id}, _fire, id), do: :ok
+  defp opened(_project, _job, _fire, nil), do: :ok
+
+  defp opened(project, job, fire, conversation_id) do
+    with {:ok, _fire} <-
+           Jobs.record_fire(project.conn, job["id"], %{
+             "fire_id" => fire["fire_id"],
+             "state" => "running",
+             "conversation_id" => conversation_id
+           }),
+         do: :ok
   end
 
   defp record(project, config, job, {:ok, conversation_id, {_out, ids} = started}) do

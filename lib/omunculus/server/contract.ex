@@ -209,7 +209,7 @@ defmodule Omunculus.Server.Contract do
   end
 
   def conversation(row),
-    do: Map.take(row, ~w(id created_at created_issuer created_subject)a)
+    do: Map.take(row, ~w(id created_at created_issuer created_subject job)a)
 
   def accepted(result) do
     result
