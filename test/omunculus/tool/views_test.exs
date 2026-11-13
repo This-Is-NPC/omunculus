@@ -132,6 +132,16 @@ defmodule Omunculus.Tool.ViewsTest do
              hydrate(conn, views, %{run_id: run})
   end
 
+  test "jobs with the fire relation tells a run a job's fire opened", %{conn: conn} do
+    fire_run = Fixtures.insert(conn, :runs, %{via: "job"})
+    other = Fixtures.insert(conn, :runs, %{via: "send"})
+    views = %{"fire" => %{"source" => "jobs", "relation" => "fire"}}
+
+    assert {:ok, %{"fire" => %{"fired" => true}}} = hydrate(conn, views, %{run_id: fire_run})
+    assert {:ok, %{"fire" => %{"fired" => false}}} = hydrate(conn, views, %{run_id: other})
+    assert {:ok, %{"fire" => %{"fired" => false}}} = hydrate(conn, views, %{})
+  end
+
   test "events with the attachments relation read the files of the run's conversation", %{
     conn: conn
   } do

@@ -14,8 +14,8 @@ defmodule Omunculus.Tools.ProposeJob do
   A job that is not valid fails here, with why, and so does a name taken,
   a project already holding `[jobs] max_jobs`, a run cited that is not among
   the project's recent runs and a proposal the person already answered
-  without approving it. Whether the call came from a run that a job's fire
-  opened is checked when the job is created (`Omunculus.Jobs.write/3`).
+  without approving it. So does a call from a run that a job's fire opened
+  (`Omunculus.Jobs.in_fire?/2`), which `Omunculus.Jobs.write/3` also refuses.
   """
 
   alias Omunculus.{Config, Errors}
@@ -29,6 +29,7 @@ defmodule Omunculus.Tools.ProposeJob do
     with nil <- Args.missing(args, ~w(name reason schedule timezone)),
          {:ok, config} <- Config.load(path),
          :ok <- enabled(config),
+         :ok <- outside_fires(view["fire"]),
          {:ok, cited} <- Cites.check(args["runs"], view["recent"] || []),
          :ok <- Fields.name(args["name"]),
          {:ok, input} <- Fields.input(args, config),
@@ -50,6 +51,9 @@ defmodule Omunculus.Tools.ProposeJob do
 
   defp enabled(%{jobs: nil}), do: "omunculus.toml has no [jobs] table, so the project has no jobs"
   defp enabled(_config), do: :ok
+
+  defp outside_fires(%{"fired" => true}), do: {:error, {:jobs, :in_fire}}
+  defp outside_fires(_view), do: :ok
 
   defp free(name, jobs, config) do
     cond do
