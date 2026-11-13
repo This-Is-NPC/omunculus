@@ -293,10 +293,10 @@ fake runner, and `setup` must say that the unit is enabled but not running.
 `update` can only reach the real release, which carries no packages until one
 is published, so the test checks its wording and exit code only.
 
-The packages must come from an Arch as current as the container's: the
-release links the `libcrypto` of its build machine, and the package depends
-on that soname, so pacman refuses it on a newer openssl. To test packages
-built elsewhere, for example in a current container, set
+The release links the `libcrypto` of its build machine, so the package
+depends on that soname. On a newer Arch, pacman installs the matching
+`openssl-3` beside the current openssl, as it did here for a package built
+against openssl 3.6. To test packages built elsewhere, set
 `OMUNCULUS_PACKAGES=<folder>`. A run takes about 75 s once the packages
 exist.
 
