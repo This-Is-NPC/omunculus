@@ -157,6 +157,44 @@ defmodule Omunculus.Server.OpenAPI do
       status: 200,
       response: "Members"
     },
+    list_jobs: %{
+      summary: "List the jobs you may read, each with its totals and next fire",
+      status: 200,
+      response: "Jobs"
+    },
+    create_job: %{
+      summary: "Create a scheduled job; needs job.create",
+      status: 202,
+      response: "Accepted",
+      request: "JobWrite",
+      idempotent: true
+    },
+    list_job_messages: %{
+      summary:
+        "List, newest first, the messages jobs deliver to you as their owner: the Inbox of a mailbox, each from its job",
+      status: 200,
+      response: "JobMessages"
+    },
+    job_messages: %{
+      summary: "Read the thread of a job: one message for each fire that delivered a reply",
+      status: 200,
+      response: "JobMessages"
+    },
+    get_job: %{summary: "Read a job by its name or id", status: 200, response: "Job"},
+    job_history: %{
+      summary: "Read the newest events of a job: changes, state moves and fires",
+      status: 200,
+      response: "JobEvents",
+      limit: true
+    },
+    job_action: %{
+      summary:
+        "Change a job: edit, duplicate, pause, resume, run or archive, or mark its thread read; needs job.manage, job.create for duplicate",
+      status: 202,
+      response: "Accepted",
+      request: "JobWrite",
+      idempotent: true
+    },
     get_usage: %{
       summary:
         "Read the tokens and cost of the project's model replies, per agent and per work; with conversation, of that conversation's",
@@ -332,6 +370,15 @@ defmodule Omunculus.Server.OpenAPI do
           in: "query",
           schema: %{type: "string", enum: Omunculus.Server.Contract.work_states()},
           description: "Only the works in this state"
+        }
+    )
+    |> maybe_append(
+      spec[:limit] &&
+        %{
+          name: "limit",
+          in: "query",
+          schema: %{type: "integer", minimum: 1},
+          description: "Only the newest events"
         }
     )
     |> maybe_append(
@@ -744,6 +791,77 @@ defmodule Omunculus.Server.OpenAPI do
           ~w(v cursor project type at)
         ),
       "Events" => object(%{events: array(ref("Event"))}, ["events"]),
+      "Job" =>
+        object(
+          %{
+            id: string(),
+            name: string(),
+            state: %{type: "string", enum: Omunculus.Jobs.states()},
+            version: %{type: "integer"},
+            agent: nullable_string(),
+            workflow: nullable_string(),
+            tool: nullable_string(),
+            args: %{type: ["object", "null"]},
+            message: nullable_string(),
+            schedule: string(),
+            timezone: string(),
+            conversation_id: nullable_string(),
+            workspace: nullable_string(),
+            condition: nullable_string(),
+            condition_args: %{type: ["object", "null"]},
+            end_at: nullable_string(),
+            owner: %{type: "object"},
+            delivery: nullable_string(),
+            read_at: nullable_string(),
+            origin: %{type: "object"},
+            state_reason: nullable_string(),
+            created_at: string(),
+            updated_at: string(),
+            fires: %{type: "object"},
+            last_fire: %{type: ["object", "null"]},
+            next_fire: nullable_string()
+          },
+          ~w(id name state version schedule timezone owner)
+        ),
+      "Jobs" => object(%{items: array(ref("Job"))}, ["items"]),
+      "JobMessage" =>
+        object(
+          %{
+            id: string(),
+            job_id: string(),
+            sender: object(%{kind: %{const: "job"}, name: string()}, ~w(kind name)),
+            at: string(),
+            text: string(),
+            conversation_id: nullable_string(),
+            run_ids: array(string()),
+            unread: %{type: "boolean"}
+          },
+          ~w(id job_id sender at text unread)
+        ),
+      "JobMessages" => object(%{items: array(ref("JobMessage"))}, ["items"]),
+      "JobEvents" => object(%{events: array(%{type: "object"})}, ["events"]),
+      "JobWrite" =>
+        object(%{
+          name: string(),
+          as: string(),
+          state: %{type: "string", enum: ["proposed", "active"]},
+          reason: string(),
+          channel: %{type: "string", enum: ["api", "console"]},
+          agent: string(),
+          workflow: string(),
+          tool: string(),
+          args: %{type: "object"},
+          message: string(),
+          schedule: string(),
+          timezone: string(),
+          conversation_id: string(),
+          workspace: string(),
+          condition: string(),
+          condition_args: %{type: "object"},
+          end_at: string(),
+          owner: string(),
+          delivery: %{type: "string", enum: ["owner_inbox"]}
+        }),
       "Artifacts" => object(%{items: array(ref("Artifact"))}, ["items"]),
       "Artifact" =>
         object(

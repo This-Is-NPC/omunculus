@@ -195,8 +195,41 @@ defmodule Omunculus.Operations do
   defp operation(project, _config, "prompt", %{"run" => id}, _actor, _principal),
     do: scoped(project, :run, id, "conversation.read")
 
+  defp operation(project, _config, "jobs", args, _actor, _principal),
+    do: job_operation(project, args)
+
   defp operation(_project, _config, _name, _args, _actor, _principal),
     do: {:ok, "project.manage_config", nil}
+
+  # A job is read and managed where its conversation is, or in the project
+  # when it has none; a new one is created where it is to be sent.
+  @job_reads ~w(show history read)
+  @job_creates ~w(create duplicate)
+
+  defp job_operation(_project, %{"action" => "list"}), do: {:ok, "job.read", nil}
+
+  defp job_operation(_project, %{"action" => "create"} = args),
+    do: {:ok, "job.create", Omunculus.Tools.Args.present(args, "conversation_id")}
+
+  defp job_operation(project, %{"action" => action, "name" => ref} = args)
+       when is_binary(ref) and action != "create" do
+    with {:ok, job} <- Omunculus.Jobs.get(project.conn, ref) do
+      capability =
+        cond do
+          action in @job_reads -> "job.read"
+          action in @job_creates -> "job.create"
+          true -> "job.manage"
+        end
+
+      {:ok, capability,
+       job["conversation_id"] || Omunculus.Tools.Args.present(args, "conversation_id")}
+    else
+      {:error, {:jobs, {:unknown, _ref}}} -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp job_operation(_project, _args), do: {:error, :not_found}
 
   defp scoped(project, type, id, capability) when is_binary(id) do
     with {:ok, conversation_id} <- Access.conversation_for(project, type, id) do
@@ -206,21 +239,34 @@ defmodule Omunculus.Operations do
 
   defp scoped(_project, _type, _id, _capability), do: {:error, :not_found}
 
+  # What a reply's chosen calls need of its answerer beyond replying: a
+  # permanent grant needs the project's config; a job approved needs the
+  # right to create it where the request is.
   defp check_reply_option(project, config, "reply", args, principal) do
     with {:ok, parts} <- Omunculus.Tools.Args.object(args, "parts"),
-         {:ok, needed?} <-
-           Access.reply_needs_project_config?(
-             project,
-             args["request_id"],
-             Map.put(args, "parts", parts)
-           ) do
-      if needed?,
-        do: Access.check(project.conn, config.access, principal, "project.manage_config", nil),
-        else: :ok
+         {:ok, calls} <-
+           Access.reply_calls(project, args["request_id"], Map.put(args, "parts", parts)),
+         :ok <- check_grants(project, config, calls, principal) do
+      check_jobs(project, config, calls, args["request_id"], principal)
     end
   end
 
   defp check_reply_option(_project, _config, _name, _args, _principal), do: :ok
+
+  defp check_grants(project, config, calls, principal) do
+    if Enum.any?(calls, &(&1["name"] == "grant" and not is_nil(get_in(&1, ["args", "scope"])))),
+      do: Access.check(project.conn, config.access, principal, "project.manage_config", nil),
+      else: :ok
+  end
+
+  defp check_jobs(project, config, calls, request_id, principal) do
+    if Enum.any?(calls, &(&1["name"] == "jobs")) do
+      with {:ok, conversation_id} <- Access.conversation_for(project, :request, request_id),
+           do: Access.check(project.conn, config.access, principal, "job.create", conversation_id)
+    else
+      :ok
+    end
+  end
 
   @doc "The operating-system user running this process."
   @spec local_principal() :: Access.principal()

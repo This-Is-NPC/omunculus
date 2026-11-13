@@ -251,26 +251,107 @@ defmodule Omunculus.Store.Access do
     )
   end
 
-  @spec reply_needs_project_config?(Project.t(), String.t(), map) ::
-          {:ok, boolean} | {:error, term}
-  def reply_needs_project_config?(project, request_id, answer) do
+  @doc """
+  The tool calls a reply would run: those of the option it picks and, by
+  part, of the options picked on the requests linked to it.
+  """
+  @spec reply_calls(Project.t(), String.t(), map) :: {:ok, [map]} | {:error, term}
+  def reply_calls(project, request_id, answer) do
     with {:ok, request} <- Omunculus.Store.View.view(project.conn, "request", request_id) do
-      {:ok, request && needs_config?(request, answer)}
+      {:ok, if(request, do: chosen_calls(request, answer), else: [])}
     end
   end
 
-  defp needs_config?(request, answer) do
-    parts = if is_map(answer["parts"]), do: answer["parts"], else: %{}
-    calls = Jason.decode!(request.options)[answer["option"]] || []
+  @spec reply_needs_project_config?(Project.t(), String.t(), map) ::
+          {:ok, boolean} | {:error, term}
+  def reply_needs_project_config?(project, request_id, answer) do
+    with {:ok, calls} <- reply_calls(project, request_id, answer) do
+      {:ok,
+       Enum.any?(calls, &(&1["name"] == "grant" and not is_nil(get_in(&1, ["args", "scope"]))))}
+    end
+  end
 
-    Enum.any?(calls, fn call ->
-      call["name"] == "grant" and not is_nil(get_in(call, ["args", "scope"]))
-    end) or
-      Enum.any?(parts, fn {part, value} ->
-        is_map(value) and Map.has_key?(request.origins, part) and
-          needs_config?(request.origins[part], value)
+  defp chosen_calls(request, answer) do
+    parts = if is_map(answer["parts"]), do: answer["parts"], else: %{}
+    own = Jason.decode!(request.options)[answer["option"]] || []
+
+    own ++
+      Enum.flat_map(parts, fn {part, value} ->
+        if is_map(value) and Map.has_key?(request.origins, part),
+          do: chosen_calls(request.origins[part], value),
+          else: []
       end)
   end
+
+  @doc """
+  The jobs `principal` may read, oldest first: those with `job.read` where
+  the job's conversation is, or the project for a job with none, so whoever
+  reads a conversation can read its jobs.
+  """
+  @spec jobs(Project.t(), principal) :: {:ok, [map]} | {:error, term}
+  def jobs(project, principal) do
+    with {:ok, config} <- Config.load(project.config_path),
+         {:ok, jobs} <- Omunculus.Jobs.list(project.conn) do
+      {:ok, Enum.filter(jobs, &readable?(project, config, principal, &1))}
+    end
+  end
+
+  @doc "The job `ref`, when `principal` may read it."
+  @spec job(Project.t(), principal, String.t()) :: {:ok, map} | {:error, term}
+  def job(project, principal, ref) do
+    with {:ok, config} <- Config.load(project.config_path),
+         {:ok, job} <- Omunculus.Jobs.get(project.conn, ref),
+         true <- readable?(project, config, principal, job) do
+      {:ok, job}
+    else
+      false -> {:error, :not_found}
+      {:error, {:jobs, {:unknown, _ref}}} -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  @doc "The newest `limit` events of the job `ref` (all without it), when `principal` may read it."
+  @spec job_history(Project.t(), principal, String.t(), pos_integer | nil) ::
+          {:ok, [map]} | {:error, term}
+  def job_history(project, principal, ref, limit) do
+    with {:ok, job} <- job(project, principal, ref),
+         do: Omunculus.Jobs.history(project.conn, job["id"], limit)
+  end
+
+  @doc "The thread of the job `ref` (`Omunculus.Jobs.messages/2`), when `principal` may read the job."
+  @spec job_messages(Project.t(), principal, String.t()) :: {:ok, [map]} | {:error, term}
+  def job_messages(project, principal, ref) do
+    with {:ok, job} <- job(project, principal, ref),
+         do: Omunculus.Jobs.messages(project.conn, job["id"])
+  end
+
+  @doc """
+  The messages of every job that delivers to `principal` as its owner, newest
+  first: the Inbox of a mailbox, one thread per job, each message with its
+  job's name as `sender`.
+  """
+  @spec owner_messages(Project.t(), principal) :: {:ok, [map]} | {:error, term}
+  def owner_messages(project, principal) do
+    owner = Omunculus.Participant.human(principal.issuer, principal.subject)
+
+    with {:ok, jobs} <- jobs(project, principal) do
+      jobs
+      |> Enum.filter(&(&1["delivery"] == "owner_inbox" and &1["owner"] == owner))
+      |> Enum.reduce_while({:ok, []}, fn job, {:ok, acc} ->
+        case Omunculus.Jobs.messages(project.conn, job["id"]) do
+          {:ok, messages} -> {:cont, {:ok, acc ++ messages}}
+          error -> {:halt, error}
+        end
+      end)
+      |> case do
+        {:ok, messages} -> {:ok, Enum.sort_by(messages, & &1["at"], :desc)}
+        error -> error
+      end
+    end
+  end
+
+  defp readable?(project, config, principal, job),
+    do: check(project.conn, config.access, principal, "job.read", job["conversation_id"]) == :ok
 
   @spec create_conversation(Project.t(), principal, String.t() | nil) ::
           {:ok, map} | {:error, term}
