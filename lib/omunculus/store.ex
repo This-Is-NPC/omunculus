@@ -12,7 +12,7 @@ defmodule Omunculus.Store do
   """
 
   alias Omunculus.Store.Actions.Helpers
-  alias Omunculus.Store.{Connection, Interception, Query, Runs, Schema, View}
+  alias Omunculus.Store.{Connection, Interception, Log, Query, Runs, Schema, View}
 
   @spec open(String.t()) :: {:ok, Connection.t()} | {:error, term}
   def open(path) do
@@ -49,6 +49,7 @@ defmodule Omunculus.Store do
   defdelegate conversation_runs(conn, conversation_id), to: View
   defdelegate answered_requests(conn, run_id), to: View
   defdelegate recent_runs(conn, limit), to: View
+  defdelegate log(conn, last), to: Log, as: :read
   defdelegate conversation_roots(conn, conversation_id), to: View
   defdelegate opener_run(conn, request_id), to: View
   defdelegate latest_run(conn), to: View

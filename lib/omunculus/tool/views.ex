@@ -64,6 +64,10 @@ defmodule Omunculus.Tool.Views do
     one a job's fire opened (`Omunculus.Jobs.in_fire?/2`); with
     `relation = "preview"`, what the `args` `schedule`, `timezone` and
     `agent` or `workflow` would do (`Omunculus.Jobs.Preview`), or its `error`.
+  - `log`: the rows of the project's event log, for process mining, of its
+    last `last` conversations (the call's `last` argument, a positive
+    integer; all of them without it): works, runs, requests, the events
+    that matter to a process and the job fires (`Omunculus.Store.Log`).
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`,
     `report_required`, `skills`:
     computed by the harness for the call, each only when a view asks for
@@ -75,7 +79,7 @@ defmodule Omunculus.Tool.Views do
     `description` and `dir`.
 
   Every read is of the call's conversation, through those relations only,
-  but for the project's unread inbox and its recent runs; tools never open
+  but for the project's unread inbox, its recent runs and its log; tools never open
   the store.
   """
 
@@ -252,6 +256,10 @@ defmodule Omunculus.Tool.Views do
     end
   end
 
+  defp source_spec("log", table, spec) do
+    with :ok <- only_keys(table, []), do: {:ok, spec}
+  end
+
   defp source_spec("memories", table, spec) do
     with :ok <- only_keys(table, []), do: {:ok, %{spec | from: ["run"]}}
   end
@@ -302,7 +310,7 @@ defmodule Omunculus.Tool.Views do
     do: anchors_within(spec, from, ["work"])
 
   defp check_anchors(%{source: source} = spec)
-       when source in ~w(runs events prompts memories jobs),
+       when source in ~w(runs events prompts memories jobs log),
        do: {:ok, spec}
 
   defp check_anchors(%{from: []} = spec), do: {:ok, spec}
@@ -421,6 +429,9 @@ defmodule Omunculus.Tool.Views do
   defp read(conn, %{source: "runs", relation: "recent", limit: limit}, _scope),
     do: Store.recent_runs(conn, limit)
 
+  defp read(conn, %{source: "log"}, %{args: args}),
+    do: Store.log(conn, last(args))
+
   defp read(conn, %{source: "prompts", relation: "assembled", from: from}, scope) do
     with {:ok, run} <- assembled_run(conn, from, scope) do
       case run.prompt_id do
@@ -502,6 +513,26 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "inbox"}, _anchor, id, _scope),
     do: Store.unread_inbox(conn, id)
+
+  # The conversations a call limits the log to: its `last`, or its evidence's,
+  # a positive integer or, from the command line, its text.
+  defp last(args) do
+    evidence = if is_map(args["evidence"]), do: args["evidence"], else: %{}
+
+    case args["last"] || evidence["last"] do
+      count when is_integer(count) and count > 0 ->
+        count
+
+      text when is_binary(text) ->
+        case Integer.parse(text) do
+          {count, ""} when count > 0 -> count
+          _other -> nil
+        end
+
+      _none ->
+        nil
+    end
+  end
 
   defp anchor(conn, from, scope) do
     Enum.find_value(from, fn anchor ->
