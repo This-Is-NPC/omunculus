@@ -446,6 +446,28 @@ defmodule Omunculus.JobsTest do
       assert Enum.map(history, & &1["op"]) == ["create", "fire", "fire", "fire", "fire", "fire"]
     end
 
+    test "two succeeded fires, one scheduled and one run now, are both counted", %{conn: conn} do
+      {:ok, %{"fire_id" => a}} =
+        Jobs.record_fire(conn, "review", %{
+          "state" => "due",
+          "scheduled_for" => "2026-01-01T00:00:00Z"
+        })
+
+      {:ok, %{"fire_id" => b}} =
+        Jobs.record_fire(conn, "review", %{
+          "state" => "due",
+          "scheduled_for" => "2026-01-01T00:00:30Z",
+          "manual" => true
+        })
+
+      for id <- [a, b], state <- ["running", "succeeded"] do
+        {:ok, _} = Jobs.record_fire(conn, "review", %{"fire_id" => id, "state" => state})
+      end
+
+      assert {:ok, %{"fires" => %{"fires" => 2, "succeeded" => 2, "success_rate" => 1.0}}} =
+               Jobs.get(conn, "review")
+    end
+
     test "states follow their order and a slot is taken once", %{conn: conn} do
       due = %{"state" => "due", "scheduled_for" => "2026-01-01T00:00:00Z"}
       {:ok, %{"fire_id" => id}} = Jobs.record_fire(conn, "review", due)
