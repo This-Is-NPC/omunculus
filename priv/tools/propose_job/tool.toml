@@ -1,0 +1,92 @@
+name = "propose_job"
+kind = "tool"
+triggers = ["model"]
+description = "Proposes a scheduled job: a message sent to an agent or a workflow, or a tool called with no model, on a schedule. The proposal is checked first: a name that is taken, a target or schedule that is not valid, a schedule that fires more often than the project allows, a cited run that does not exist or a job the person already refused is refused here, with why. One that passes becomes a request to the person with the job in words and its next fires, and the run ends until they approve, edit or deny it; approve creates the job as its owner. Where the project lets agents create jobs without approval, the job is created at once, owned by you, and the run goes on. Jobs cannot be created from a run that a job's fire opened. schedule is a 5-field cron expression, \"every 30m\" or \"every 2h\", or \"daily at 09:00\", read in timezone, an IANA name such as Europe/Paris."
+tags = ["jobs"]
+groups = ["scheduling"]
+module = "Omunculus.Tools.ProposeJob"
+chains = ["end"]
+
+[parameters]
+type = "object"
+required = ["name", "schedule", "timezone", "reason"]
+
+[parameters.properties.name]
+type = "string"
+description = "The job's name: letters, digits, dot, underscore and dash."
+
+[parameters.properties.agent]
+type = "string"
+description = "Target: an agent of depth 0 that is sent the message at each fire."
+
+[parameters.properties.workflow]
+type = "string"
+description = "Target: a workflow that is sent the message at each fire."
+
+[parameters.properties.tool]
+type = "string"
+description = "Target: a tool called at each fire with no model, with args."
+
+[parameters.properties.args]
+type = "object"
+description = "The arguments of the tool target."
+
+[parameters.properties.message]
+type = "string"
+description = "What an agent or workflow target is sent at each fire."
+
+[parameters.properties.schedule]
+type = "string"
+
+[parameters.properties.timezone]
+type = "string"
+
+[parameters.properties.conversation_id]
+type = "string"
+description = "The conversation every fire goes to; without it each fire opens its own."
+
+[parameters.properties.workspace]
+type = "string"
+
+[parameters.properties.condition]
+type = "string"
+description = "A tool that gates each fire before any model is spent."
+
+[parameters.properties.condition_args]
+type = "object"
+
+[parameters.properties.end_at]
+type = "string"
+description = "An ISO 8601 instant after which no fire starts."
+
+[parameters.properties.owner]
+type = "string"
+description = "An [accounts] name or an agent the fires act as. Without it, you; the person sees it before approving."
+
+[parameters.properties.delivery]
+type = "string"
+enum = ["owner_inbox"]
+description = "owner_inbox: each fire's final reply arrives in the owner's mailbox as a message from the job. Use it when the person asks to be sent a result."
+
+[parameters.properties.runs]
+type = "array"
+description = "The ids of the runs that show why, as runs prints them; each must be one of the project's recent closed runs. Leave out when no run is the reason."
+
+[parameters.properties.runs.items]
+type = "string"
+
+[parameters.properties.reason]
+type = "string"
+description = "Why, for the person deciding."
+
+[views.recent]
+source = "runs"
+relation = "recent"
+limit = 40
+
+[views.answered]
+source = "requests"
+relation = "answered"
+
+[views.jobs]
+source = "jobs"

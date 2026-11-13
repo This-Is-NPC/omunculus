@@ -198,6 +198,40 @@ Marks a notification as read: the next inbox listing leaves it out.
 | --- | --- | --- | --- |
 | `inbox_id` | string | yes | The notification, by the id inbox lists. |
 
+### `omunculus jobs`
+
+```text
+omunculus jobs <action> [--agent <agent>] [--args <args>] [--as <as>] [--channel <channel>] [--condition <condition>] [--condition_args <condition_args>] [--conversation_id <conversation_id>] [--delivery <delivery>] [--end_at <end_at>] [--message <message>] [--name <name>] [--owner <owner>] [--reason <reason>] [--request_id <request_id>] [--schedule <schedule>] [--state <state>] [--timezone <timezone>] [--tool <tool>] [--workflow <workflow>] [--workspace <workspace>]
+```
+
+Reads and changes the project's scheduled jobs. action is list, show, history, create, edit, duplicate, pause, resume, run, archive or read. list prints each job with its state, schedule, next fire and what its fires cost; show prints one job (name) with its next fires and totals; history prints the newest events of one: its changes, its moves between states and its fires. create takes a name, a target (agent with message, workflow with message, or tool with args), a schedule and a timezone: the schedule is a 5-field cron expression, "every 30m" or "every 2h", or "daily at 09:00", read in the timezone, an IANA name such as America/Sao_Paulo; the job runs as owner, an account or agent name, or as whoever created it. edit changes the fields it is given on a job and bumps its version; an empty text clears a field. duplicate copies a job under the name given as, as a draft; resume starts it. pause and resume move a job between paused and active; run queues one fire now; archive removes a job and keeps its history; read marks what the job delivered as read. A job with delivery owner_inbox hands the final reply of each fire to its owner's mailbox as a message from the job. It needs job.create for create and duplicate, job.manage for the other changes and job.read for the reads and read. Refused without a [jobs] table in omunculus.toml.
+
+Also called by a chain.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string | yes |  |
+| `agent` | string | no | Target: an agent of depth 0 that is sent the message at each fire. |
+| `args` | JSON object | no | The arguments of the tool target, as a JSON object. |
+| `as` | string | no | For duplicate, the name of the copy. |
+| `channel` | string | no | How the call came, kept in the job's history; cli without it. |
+| `condition` | string | no | A tool that gates each fire before any model is spent: the fire is skipped when it fails. |
+| `condition_args` | JSON object | no | The arguments of the condition tool, as a JSON object. |
+| `conversation_id` | string | no | For create, the conversation every fire goes to; it cannot change later. Without it each fire opens its own. Whoever reads the conversation reads the job. |
+| `delivery` | string | no | owner_inbox: each fire's final agent reply arrives in the owner's mailbox as a message from the job, one thread per job. Empty for none. |
+| `end_at` | string | no | An ISO 8601 instant, such as 2026-12-31T23:59:00Z, after which no fire starts. |
+| `message` | string | no | What an agent or workflow target is sent at each fire. |
+| `name` | string | no | The job: its name, or its id for a job that was archived. For create, the new job's name: letters, digits, dot, underscore and dash. |
+| `owner` | string | no | An [accounts] name or an agent: who the fires act as. Without it, whoever creates the job. |
+| `reason` | string | no | For pause and resume, why; the history keeps it. |
+| `request_id` | string | no | The request whose approval this call carries; set when an approved proposal chains it. |
+| `schedule` | string | no | A 5-field cron expression, "every 30m" or "every 2h", or "daily at 09:00". |
+| `state` | string | no | For create, whether the job starts active (the default) or as a draft that resume starts. |
+| `timezone` | string | no | The IANA time zone the schedule is read in, such as UTC or Europe/Paris. |
+| `tool` | string | no | Target: a tool called at each fire with no model, with args. |
+| `workflow` | string | no | Target: a workflow that is sent the message at each fire. |
+| `workspace` | string | no | The workspace the fires work in. |
+
 ### `omunculus login`
 
 ```text
