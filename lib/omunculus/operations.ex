@@ -75,6 +75,27 @@ defmodule Omunculus.Operations do
     |> Enum.join("\n\n")
   end
 
+  @doc """
+  What the runs of a command begun with `start/3` last said to the person: the
+  latest model reply or question to an account, whichever came last, as the
+  person reads it, with no request id. Without either, the last report on a
+  root work, else the command's output.
+  """
+  @spec last_word(Omunculus.Project.t(), {String.t(), [String.t()]}) :: String.t()
+  def last_word(project, {output, event_ids}) do
+    {:ok, said} = Store.said(project.conn, event_ids)
+
+    word =
+      Enum.find(Enum.reverse(said), &(&1.kind in ~w(reply question))) ||
+        Enum.find(Enum.reverse(said), &(&1.kind == "report"))
+
+    case word do
+      %{kind: "reply", text: body} -> Record.answer(body)
+      %{text: text} -> text
+      nil -> output
+    end
+  end
+
   defp told(%{kind: "reply", text: body}), do: Record.answer(body)
   defp told(%{kind: "report", text: text}), do: text
 

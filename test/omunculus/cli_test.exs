@@ -107,6 +107,32 @@ defmodule Omunculus.CLITest do
       Project.close(project)
       assert output == "**done:** opened\n\nQuestion (request #{request.id}): Which file?"
     end
+
+    test "the last word is the question put to the person, not the report or its request id",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["ask", "end", "work"]
+      """)
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        if assembled =~ "## Work\n",
+          do: call.("ask", %{"question" => "Which file?"}),
+          else: create_root(call, "Edit")
+      end)
+
+      project = open_project(dir)
+
+      {:ok, started} =
+        Omunculus.Cycle.run(project, nil, fn project ->
+          Omunculus.Operations.start(project, "send", %{"agent" => "concierge", "message" => "go"})
+        end)
+
+      assert Omunculus.Operations.last_word(project, started) == "Which file?"
+      Project.close(project)
+    end
   end
 
   test "CLI refuses an unknown account and an ask nobody could receive without creating a request",
