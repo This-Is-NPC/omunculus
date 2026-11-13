@@ -11,7 +11,9 @@ defmodule Omunculus.Config.Packs do
   `roles`, the `auth` providers its secrets name and, in `[pack.requires]`,
   each tool it uses that it does not bring with where to get it, and it may hold
   `[agents.<name>]`, each on one of its roles, `[workflows.<name>]`,
-  `[secrets.<tool>]`, `[[mcp.servers]]` and `[policy.depth.<n>]`. Beside it,
+  `[secrets.<tool>]`, `[[mcp.servers]]`, `[policy.depth.<n>]` and
+  `[jobs.<name>]`, the templates of the jobs it makes when imported
+  (`Omunculus.Jobs.Templates`, not laid into the config). Beside it,
   `tools/` and `skills/` are its tools and skills, `workspace/` the files a
   workspace of the team starts with and `environment/` what the team needs
   on the machine; the last two are not configuration.
@@ -28,7 +30,7 @@ defmodule Omunculus.Config.Packs do
   requires, which `lacking/2` checks against the config's catalog.
   """
 
-  @pack_keys ~w(pack agents workflows secrets mcp policy)
+  @pack_keys ~w(pack agents workflows secrets mcp policy jobs)
   @import_keys ~w(path models auth depth)
 
   @spec expand(map, String.t()) ::

@@ -46,6 +46,42 @@ server's tools are known only once a run starts it, so a pack cannot
 require one. An agent can propose the same import
 to the person with `propose_pack`, whose `apply` option calls `pack`.
 
+## Job templates
+
+A pack may offer scheduled jobs. Each `[jobs.<name>]` table of `pack.toml`
+is a template with the fields of a job (`agent` or `workflow` with `message`,
+or `tool` with `args`; `schedule`, `timezone`, `workspace`, `condition`,
+`condition_args`, `delivery`, `end_at`) and a `state`, `active` or
+`proposed`, which is required. A template names no `owner` or
+`conversation_id`: they belong to the project.
+
+```toml
+[jobs.digest]
+agent = "chief"
+message = "Summarize the week's work."
+schedule = "daily at 09:00"
+timezone = "Europe/Paris"
+delivery = "owner_inbox"
+state = "proposed"
+```
+
+When the `pack` tool imports the pack, each template becomes a job named
+`<pack>.<name>` (here `team.digest`), created like any job, owned by whoever
+imports the pack, with the channel `pack` and the pack's name in its origin.
+The templates are checked against the config the pack imports into: one the
+project's `[jobs]` policy refuses (a schedule faster than
+`min_interval_minutes`, an agent the pack lacks) stops the import before
+anything is written. A project without a `[jobs]` table imports the pack
+and skips its templates, saying so.
+
+Importing again creates the jobs the project lacks and leaves those it has,
+as they are, even when the template changed. A job archived since is created
+again. A pack's `[jobs]` tables are not laid into the config, so the
+project's own `[jobs]` policy is never the pack's. Packs cannot be removed
+today (delete the `[[packs]]` entry from the TOML), so there is no removal
+step that pauses their jobs; pause or archive one with
+[`jobs`](how-to-schedule-a-job.md).
+
 ## How a team talks
 
 Pack questions use `ask`, permission forms use `request_access`, and
@@ -115,6 +151,9 @@ The default preset imports the system team (`priv/packs/system`):
 
 The auditor and the refiner are granted `config`, `overview` and
 `propose_config` but not `propose_pack`: importing a pack is the steward's.
+They are also granted `propose_job`: the refiner proposes a scheduled job
+for a request the runs show the person making by hand, with those runs
+cited, and the auditor for a routine the config says is done by hand.
 
 Their proposals go to whoever gave the agent its work; see
 [requests](requests.md#who-a-request-goes-to).
