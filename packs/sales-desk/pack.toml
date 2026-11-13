@@ -16,6 +16,7 @@
 name = "sales-desk"
 version = "0.2.0"
 description = "Front office of a web agency: a front desk that answers each client in their language, a seller that scopes and prices from a table, and a project manager that hands the work to the design and dev teams and reports what the client must decide. Nothing is sold, shown, built or published without its owner's decision."
+omunculus = ">= 0.3.0"
 roles = ["team"]
 
 # The only agent that talks with the client: opens, forwards and relays.

@@ -6,6 +6,7 @@
 name = "dream-team"
 version = "0.1.0"
 description = "Takes a request from a conversation to a published app: asks until it is clear, builds, reviews, publishes to homologation and, once the person approves, to production."
+omunculus = ">= 0.3.0"
 roles = ["team"]
 auth = ["homologation", "production"]
 

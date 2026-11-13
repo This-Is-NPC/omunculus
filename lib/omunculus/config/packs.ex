@@ -8,6 +8,9 @@ defmodule Omunculus.Config.Packs do
   depth layer of the pack moves down that many.
 
   A pack is a folder with a `pack.toml`: `[pack]` gives its `name`, its
+  `version`, a one-line `description` and the least `omunculus` it runs on
+  (a version requirement such as `\">= 0.3.0\"`; one the running version
+  does not meet is refused), which `header/1` needs to export it, its
   `roles`, the `auth` providers its secrets name and, in `[pack.requires]`,
   each tool it uses that it does not bring with where to get it, and it may hold
   `[agents.<name>]`, each on one of its roles, `[workflows.<name>]`,
@@ -84,12 +87,79 @@ defmodule Omunculus.Config.Packs do
          {:ok, pack} <- Toml.decode_file(file),
          [] <- Map.keys(pack) -- @pack_keys,
          {:ok, name} <- name(pack),
+         :ok <- compatible(name, get_in(pack, ["pack", "omunculus"])),
          true <- requires?(pack) || {:error, {name, :requires, :invalid}} do
       {:ok, pack}
     else
       [key | _] -> {:error, {:unknown_key, key}}
       {:error, _reason} = error -> error
     end
+  end
+
+  @doc """
+  The header of `pack` an `.omupack` carries: `name`, a semver `version`, a
+  one-line `description` and the `omunculus` requirement, each as text.
+  """
+  @spec header(map) :: {:ok, %{String.t() => String.t()}} | {:error, term}
+  def header(pack) do
+    table = Map.get(pack, "pack", %{})
+    name = table["name"]
+
+    Enum.reduce_while(~w(name version description omunculus), {:ok, %{}}, fn key, {:ok, acc} ->
+      value = table[key]
+
+      if valid?(key, value),
+        do: {:cont, {:ok, Map.put(acc, key, value)}},
+        else: {:halt, {:error, {name || "(unnamed)", :header, key}}}
+    end)
+  end
+
+  # A name is a folder's: letters, digits, dots, dashes and underscores.
+  defp valid?(_key, value) when not is_binary(value), do: false
+  defp valid?("name", value), do: value =~ ~r/^[A-Za-z0-9][A-Za-z0-9._-]*$/
+  defp valid?("version", value), do: match?({:ok, _}, Version.parse(value))
+  defp valid?("description", value), do: value != "" and not String.contains?(value, "\n")
+  defp valid?("omunculus", value), do: match?({:ok, _}, Version.parse_requirement(value))
+
+  @doc "`:ok` when the running omunculus meets `requirement`, which a pack without one always does."
+  @spec compatible(String.t(), String.t() | nil) :: :ok | {:error, term}
+  def compatible(_name, nil), do: :ok
+
+  def compatible(name, requirement) when is_binary(requirement) do
+    running = Omunculus.Tools.Version.current()
+
+    case Version.parse_requirement(requirement) do
+      {:ok, parsed} ->
+        if Version.match?(running, parsed),
+          do: :ok,
+          else: {:error, {name, :omunculus, {requirement, running}}}
+
+      :error ->
+        {:error, {name, :header, "omunculus"}}
+    end
+  end
+
+  def compatible(name, _requirement), do: {:error, {name, :header, "omunculus"}}
+
+  @doc """
+  `entries` (`[[packs]]` tables) without the one that imports the pack of
+  `entry` again: from the same folder or under the same name.
+  """
+  @spec without([map], map, String.t()) :: [map]
+  def without(entries, entry, config_dir) do
+    folder = Path.expand(entry["path"] || "", config_dir)
+
+    name =
+      case load(entry, config_dir) do
+        {:ok, _folder, pack} -> pack["pack"]["name"]
+        {:error, _reason} -> nil
+      end
+
+    Enum.reject(entries, fn other ->
+      Path.expand(other["path"] || "", config_dir) == folder or
+        (name != nil and
+           match?({:ok, _, %{"pack" => %{"name" => ^name}}}, load(other, config_dir)))
+    end)
   end
 
   defp requires(pack), do: get_in(pack, ["pack", "requires"]) || %{}

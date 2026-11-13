@@ -480,10 +480,10 @@ defmodule Omunculus.Config do
          do: {:ok, config}
   end
 
-  defp with_pack(data, path, %{"path" => folder} = entry) do
+  defp with_pack(data, path, entry) do
     dir = Path.dirname(Path.expand(path))
-    same = &(Path.expand(&1["path"] || "", dir) == Path.expand(folder, dir))
-    data = Map.put(data, "packs", Enum.reject(Map.get(data, "packs", []), same) ++ [entry])
+    entries = Packs.without(Map.get(data, "packs", []), entry, dir)
+    data = Map.put(data, "packs", entries ++ [entry])
 
     with {:ok, config} <- parse(data, path, true), do: {:ok, data, config}
   end
