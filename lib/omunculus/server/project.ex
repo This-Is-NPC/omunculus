@@ -193,13 +193,7 @@ defmodule Omunculus.Server.Project do
     with {:ok, %{calls: calls, parents: parents}} <-
            Access.usage(project, principal, conversation_id),
          {:ok, config} <- Config.load(project.config_path) do
-      {:ok,
-       Omunculus.Server.Contract.usage(
-         calls,
-         parents,
-         Map.new(config.agents, fn {name, agent} -> {name, agent.model} end),
-         Map.new(config.models, fn {name, _model} -> {name, Config.price(config, name)} end)
-       )}
+      {:ok, Omunculus.Server.Contract.usage(calls, parents, config)}
     end
   end
 

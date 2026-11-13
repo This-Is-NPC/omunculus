@@ -446,7 +446,7 @@ price = { input = 0.10, output = 0.50, cache_write = 0.125, cache_read = 0.01 }
 that entered the provider's cache, `cache_read` for those it served from the
 cache and `output` for the tokens written. A rate is a number of at least
 zero; a missing rate, an extra key or another type refuses the config.
-With it the server prices each reply by the model that answered, in
+With it the server prices each reply by the `[models.<key>]` that made it (each reply is recorded with that key next to the provider's own id), in
 [`GET /usage`](server.md), and the console's COST tab shows the dollars per
 work, per agent and in all. A model with no `price` has no dollars: the tab says "no
 price set for <model> in the project config".

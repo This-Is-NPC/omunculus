@@ -56,8 +56,8 @@ defmodule Omunculus.Jobs.Cost do
   defp add(total, row, config) do
     reply = Usage.reply(row.body)
     sum = Usage.sum([reply])
-    model = reply["model"] || get_in(config.agents, [row.agent, Access.key(:model)])
-    price = config.models |> Map.get(model, %{}) |> Map.get(:price)
+    key = Config.model_key(config, row.agent, reply)
+    price = key && Config.price(config, key)
 
     %{
       calls: total.calls + 1,

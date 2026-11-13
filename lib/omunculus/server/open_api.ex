@@ -548,13 +548,14 @@ defmodule Omunculus.Server.OpenAPI do
                         object(
                           %{
                             model: nullable_string(),
+                            provider: nullable_string(),
                             usd: %{type: ["number", "null"]},
                             fresh: %{type: "number"},
                             cache_write: %{type: "number"},
                             cached: %{type: "number"},
                             output: %{type: "number"}
                           },
-                          ~w(model usd fresh cache_write cached output)
+                          ~w(model provider usd fresh cache_write cached output)
                         )
                       )
                   },

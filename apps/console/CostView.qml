@@ -55,9 +55,9 @@ FocusScope {
   function used(tally) { return [replies(tally), read(tally), written(tally)].join(Theme.type.meta.separator) }
   // An entry's cost, "-" when none of its calls has a price.
   function spent(entry) { return entry.usd === null || entry.usd === undefined ? "-" : Usage.money(entry.usd) }
-  // One call of a work: its model, tokens and dollars.
+  // One call of a work: its model, with the provider's id when it differs, tokens and dollars.
   function callLine(call) {
-    return [call.model || "-", Omunculus.tokens(call.fresh + call.cache_write + call.cached) + " read", Omunculus.tokens(call.output) + " written", spent(call)].join(Theme.type.meta.separator)
+    return [(call.model || "-") + (call.provider && call.provider !== call.model ? " (" + call.provider + ")" : ""), Omunculus.tokens(call.fresh + call.cache_write + call.cached) + " read", Omunculus.tokens(call.output) + " written", spent(call)].join(Theme.type.meta.separator)
   }
 
   Keys.onEscapePressed: leave()

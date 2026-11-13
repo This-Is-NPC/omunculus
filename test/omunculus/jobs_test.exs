@@ -468,6 +468,49 @@ defmodule Omunculus.JobsTest do
                Jobs.get(conn, "review")
     end
 
+    test "a fire's runs are priced by the config model, though the reply names the provider's id",
+         %{conn: conn} do
+      config =
+        Fixtures.config("""
+        [models.haiku]
+        api = "openai-completions"
+        url = "http://localhost:1/v1"
+        timeout_ms = 1000
+        model = "claude-haiku-5-5"
+        price = { input = 1.0, output = 2.0, cache_write = 0.0, cache_read = 0.0 }
+
+        [agents.front]
+        depth = 0
+        model = "haiku"
+        text = "front"
+        """)
+
+      run = Fixtures.insert(conn, :runs, %{agent: "front"})
+
+      for {extra, sequence} <- [{%{}, 901}, {%{"model_key" => "haiku"}, 902}] do
+        body =
+          Jason.encode!(
+            Map.merge(
+              %{
+                "model" => "claude-haiku-5-5",
+                "usage" => %{"input_tokens" => 1000, "output_tokens" => 500}
+              },
+              extra
+            )
+          )
+
+        Fixtures.insert(conn, :events, %{
+          type: "model",
+          sequence: sequence,
+          run_id: run,
+          body: body
+        })
+      end
+
+      assert {:ok, %{calls: 2, usd: usd}} = Jobs.Cost.of_runs(conn, config, [run])
+      assert_in_delta usd, 2 * (1000 * 1.0 + 500 * 2.0) / 1.0e6, 1.0e-12
+    end
+
     test "states follow their order and a slot is taken once", %{conn: conn} do
       due = %{"state" => "due", "scheduled_for" => "2026-01-01T00:00:00Z"}
       {:ok, %{"fire_id" => id}} = Jobs.record_fire(conn, "review", due)

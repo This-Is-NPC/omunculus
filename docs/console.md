@@ -654,7 +654,7 @@ A conversation's level, in place of the project's once one is opened:
   replies, tokens read and tokens written in columns, or, under 700 px, on
   lines of their own so none is cut, and its cost at the top right. The
   figures are the server's (`GET /usage?conversation=`), which prices each
-  call at the `price` of the model that answered it in the project config;
+  call at the `price` of the model that made it in the project config, shown by its config name with the provider's id beside it when they differ;
   the console only displays them and refreshes them as model events arrive. A
   call whose model has no price has no dollars, an entry with none shows "-",
   and a line says "no price set for haiku in the project config" for each such
