@@ -114,6 +114,14 @@ ColumnLayout {
     visible: paths.length > 0 && !composer.noting
   }
 
+  // While `/job` is typed Enter opens the form of a job, and sends nothing.
+  Caption {
+    Layout.fillWidth: true
+    visible: !composer.noting && text !== ""
+    text: Jobs.commandHint(entry.text)
+    color: Theme.primary
+  }
+
   InputFrame {
     Layout.fillWidth: true
     implicitHeight: row.implicitHeight

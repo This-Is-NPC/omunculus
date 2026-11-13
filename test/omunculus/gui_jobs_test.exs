@@ -212,3 +212,8 @@ defmodule Omunculus.GuiJobsTest do
     """)
   end
 end
+    same(Jobs.command("/JOB nightly"), "nightly", "any case");
+    same(Jobs.commandHint("/job"), "Enter opens the job form", "said as soon as it is typed");
+    same(Jobs.commandHint("/job every day"), "Enter opens the job form", "with its words");
+    same(Jobs.commandHint("/jo"), "", "not yet");
+    same(Jobs.commandHint("hello"), "", "plain text says nothing");
