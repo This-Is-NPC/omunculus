@@ -169,6 +169,13 @@ defmodule Omunculus.Server.OpenAPI do
       request: "JobWrite",
       idempotent: true
     },
+    preview_job: %{
+      summary:
+        "Preview a job before it exists: its next three fires and an estimate of what a fire costs from the target's recent fires or runs; needs job.create",
+      status: 200,
+      response: "JobPreview",
+      request: "JobPreviewRequest"
+    },
     list_job_messages: %{
       summary:
         "List, newest first, the messages jobs deliver to you as their owner: the Inbox of a mailbox, each from its job",
@@ -837,6 +844,24 @@ defmodule Omunculus.Server.OpenAPI do
             unread: %{type: "boolean"}
           },
           ~w(id job_id sender at text unread)
+        ),
+      "JobPreviewRequest" =>
+        object(
+          %{
+            schedule: string(),
+            timezone: string(),
+            target: object(%{agent: string(), workflow: string()})
+          },
+          ~w(schedule timezone target)
+        ),
+      "JobPreview" =>
+        object(
+          %{
+            next: array(string()),
+            estimate_usd: %{type: ["number", "null"]},
+            basis: string()
+          },
+          ~w(next estimate_usd basis)
         ),
       "JobMessages" => object(%{items: array(ref("JobMessage"))}, ["items"]),
       "JobEvents" => object(%{events: array(%{type: "object"})}, ["events"]),

@@ -539,3 +539,36 @@ source of zones. A fire's run has `via = "job"`; `Jobs.write/3` walks a run's
 For the scheduler, `Jobs` offers `due/2` (active jobs with unclaimed slots,
 lazily), `pending/1` (fires not finished), `record_fire/3` (a fire's states, in
 order, each event carrying telemetry) and `transition/5`.
+
+### The scheduler
+
+`Server` starts a `Jobs.Scheduler` beside each `Server.Project`, so it lives and
+stops with the project's process. Every second it calls `plan/3`, which is the
+whole decision for an instant `now` and so is driven in tests with any clock and
+no waiting (`Server.start_link/2` takes a `clock` for the same reason). `plan/3`
+reads `[jobs]` from the file each time, then: at the first call after the start,
+fails the fires a stopped server left `running` and applies `missed` to the slots
+that passed while it was down; claims every slot that has come as a `due` fire
+(`record_fire/3` refuses a slot taken twice); ends the jobs whose `end_at` has
+passed; and goes through the `due` and `late` fires, oldest first, cancelling
+those of a paused job, marking `late` (and asking the owner, a request from the
+owner to the owner, since the scheduler is no run and a run's inbox reaches no one)
+those past `lateness_seconds`, holding those that would pass `max_parallel`, and
+running each remaining one's condition (`Jobs.Fire.condition/2`, no model). A fire
+that passes is recorded `running` before its process starts, so a second `plan/3`
+counts it against `max_parallel`.
+
+`Jobs.Fire.run/3` acts as the job's owner: `Operations.start/4` with the owner as
+principal, the job's conversation (or one `Access.create_conversation/2` makes), and
+`via = "job"`, which `Harness.follow_up/4` stamps on every run the call opens
+whatever tool event made them; the runs below carry it through `cause_id`, which is
+how `Jobs.write/3` refuses jobs from a fire. `Cycle.command/3` waits for those runs.
+`Jobs.Cost` finds them (the runs the call's events caused, transitively, as
+`Store.said/2` does) and sums their model replies at the models' prices (`Usage`;
+an unpriced model adds zero). Consecutive failures count the fires that finished
+`failed` since the job's anchor, which a resume moves.
+
+A run that the server's crash left to `Run.recover/1` is reopened from its
+events, where the call that made it is not kept, so its `via` is not `job`: a
+recovered fire's run may create jobs. `Jobs.Preview` reads the same history for
+the cost estimate.

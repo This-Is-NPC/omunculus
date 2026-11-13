@@ -251,6 +251,15 @@ defmodule Omunculus.Server.Router do
     job_command(conn, opts, project_id, "create", nil)
   end
 
+  OpenAPI.route :post, "/v1/projects/:project_id/jobs/preview", :preview_job do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, preview} <- Project.job_preview(project_id, principal, conn.body_params) do
+      reply(conn, 200, preview)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :get, "/v1/projects/:project_id/jobs/:job", :get_job do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, found} <- Project.job(project_id, principal, job) do

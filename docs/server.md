@@ -102,6 +102,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET, POST /conversations` | List visible conversations or create one. |
 | `GET /works?state={state}` | List the works of every conversation you may read, oldest first, each with its `conversation_id`; `state` (`open`, `waiting`, `done` or `cancelled`) keeps those in it alone, and any other value is `400`. |
 | `GET /jobs`, `GET /jobs/{job}` | List the jobs you may read, or read one by name or id: `id`, `name`, `state`, `version`, the target, `schedule`, `timezone`, `conversation_id`, `workspace`, `condition`, `end_at`, `owner`, `delivery`, `origin`, `state_reason`, `fires` (totals of the fires that finished: counts by state, `usd`, `calls`, tokens, `duration_ms`, `success_rate`), `last_fire` and `next_fire`. A job is read with `job.read` where its conversation is, else in the project. |
+| `POST /jobs/preview` | Preview a job before it exists, from `{"schedule","timezone","target":{"agent"|"workflow"}}`: `{"next":[three ISO 8601 instants],"estimate_usd":number|null,"basis":"..."}`. `estimate_usd` is the mean cost of the target's latest fires in jobs, or of its latest runs, and `null` when there is no history; `basis` says which, in words. It needs `job.create`; a schedule or target the store would refuse is `422 job_refused`. |
 | `GET /jobs/{job}/history?limit=n` | The newest `n` events of a job, oldest first: `create`, `change`, `transition`, `read` and `fire`. |
 | `POST /jobs`, `POST /jobs/{job}/actions/{action}` | Create a job, or `edit`, `duplicate` (`as` names the copy), `pause`, `resume`, `run`, `archive` or `read` one. The body is the `jobs` tool's fields; `channel` is `api` or `console`. They need an `Idempotency-Key` and `job.create` or `job.manage`; a job the store refuses is `422 job_refused` with the sentence in `message`. |
 | `GET /jobs/{job}/messages`, `GET /job-messages` | The messages jobs deliver ([Jobs](#jobs)). |
@@ -138,6 +139,10 @@ explicit null or empty values return `400`. A person escalates through
 `/requests/escalate`, below.
 
 ## Jobs
+
+Each project the server serves has a scheduler that starts the fires of its jobs
+([how to schedule a job](how-to-schedule-a-job.md#what-happens-when-it-is-due)).
+A fire without a fixed conversation opens one as the job's owner.
 
 A job with `delivery = "owner_inbox"` turns the final reply of each fire into a
 message of its thread: `{"id","job_id","sender":{"kind":"job","name"},"at","text","conversation_id","run_ids","unread"}`.

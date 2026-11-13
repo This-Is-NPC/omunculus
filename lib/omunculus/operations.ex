@@ -23,12 +23,12 @@ defmodule Omunculus.Operations do
            subject: principal.subject,
            principal: principal,
            capability: authorization.capability,
-           conversation_id: authorization.conversation_id,
+           conversation_id: authorization.conversation_id || Map.get(actor, :conversation_id),
            command_id: Map.get(actor, :command_id),
            command_hash: Map.get(actor, :command_hash)
          },
          {:ok, out, events} <- Harness.dispatch(project, name, args, ctx),
-         :ok <- maybe_follow_up(follow_up?, project, events) do
+         :ok <- maybe_follow_up(follow_up?, project, events, Map.get(actor, :via)) do
       {:ok, out, events}
     end
   end
@@ -48,12 +48,13 @@ defmodule Omunculus.Operations do
   @doc """
   `command/4` for a caller that waits for the runs it opened: its output and
   the ids of the events it wrote, which `reply/2` takes once they have
-  finished.
+  finished. `actor` may name the `principal`, the `conversation_id` the
+  command works in and the `via` its runs carry, as a scheduled job's fire does.
   """
-  @spec start(Omunculus.Project.t(), String.t(), map) ::
+  @spec start(Omunculus.Project.t(), String.t(), map, map) ::
           {:ok, {String.t(), [String.t()]}} | {:error, term}
-  def start(project, name, args) do
-    with {:ok, out, events} <- call(project, name, args, %{}),
+  def start(project, name, args, actor \\ %{}) do
+    with {:ok, out, events} <- call(project, name, args, actor),
          {:ok, output} <- output(out),
          do: {:ok, {output, Enum.map(events, & &1.id)}}
   end
@@ -143,6 +144,11 @@ defmodule Omunculus.Operations do
     end
   end
 
+  # A root work a fire opens in a conversation is a message sent to it.
+  defp operation(_project, _config, "work", _args, %{conversation_id: id}, _principal)
+       when is_binary(id),
+       do: {:ok, "conversation.send", id}
+
   defp operation(project, _config, "ask", args, actor, principal) do
     id = Map.get(actor, :conversation_id) || args["conversation_id"]
 
@@ -207,6 +213,7 @@ defmodule Omunculus.Operations do
   @job_creates ~w(create duplicate)
 
   defp job_operation(_project, %{"action" => "list"}), do: {:ok, "job.read", nil}
+  defp job_operation(_project, %{"action" => "preview"}), do: {:ok, "job.create", nil}
 
   defp job_operation(_project, %{"action" => "create"} = args),
     do: {:ok, "job.create", Omunculus.Tools.Args.present(args, "conversation_id")}
@@ -274,6 +281,8 @@ defmodule Omunculus.Operations do
     %{issuer: "local", subject: to_string(File.stat!("/proc/self").uid)}
   end
 
-  defp maybe_follow_up(true, project, events), do: Harness.follow_up(project, events)
-  defp maybe_follow_up(false, _project, _events), do: :ok
+  defp maybe_follow_up(true, project, events, via),
+    do: Harness.follow_up(project, events, [], via)
+
+  defp maybe_follow_up(false, _project, _events, _via), do: :ok
 end
