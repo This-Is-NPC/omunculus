@@ -51,22 +51,33 @@ is [how to import a pack](how-to-import-a-pack.md).
    models needed for: team
    sales-desk 0.2.0: Front office of a web agency: …
    agents: front-desk, project-manager, seller
-   runs these executables: tools/_proposal/handoff.py, …, tools/wait_client/tool.toml
+   runs these executables:
+     next_stage: tools/next_stage/run
+     proposal: tools/proposal/run
+     …
+     wait_client: tools/wait_client/run
    needs these logins: none
    needs these secrets: none
    job templates: none
    ```
 
-   The output is cut where `…` stands. The executables line lists every file of the pack's `tools/`: they run
-   on the receiver's machine, so read it.
+   The output is cut where `…` stands. The executables are the tools the pack brings, each with the program it
+   runs, and the commands of its MCP servers. They run on the receiver's
+   machine, so read them.
 
 3. Install it, each role on a model of the project, and a login for each
    provider the card names (`--auth provider=login`). `pack` checks every
    hash, extracts to `.omunculus/packs/<name>-<version>/` beside the
-   project's store and imports from there as it does for a folder.
+   project's store and imports from there as it does for a folder. The
+   card is printed again before the result, on every install from a file.
+   If the project's config then refuses the import, the folder this
+   install made is removed again.
 
    ```console
    $ omunculus pack --file sales-desk-0.2.0.omupack --models team=fake
+   sales-desk 0.2.0: Front office of a web agency: …
+   …
+   job templates: none
    installed sales-desk 0.2.0 in /tmp/omu-share/p2/.omunculus/packs/sales-desk-0.2.0
    imported sales-desk
    ```
@@ -75,6 +86,8 @@ is [how to import a pack](how-to-import-a-pack.md).
 
    ```console
    $ omunculus pack --file sales-desk-0.2.0.omupack --models team=fake
+   …
+   job templates: none
    sales-desk 0.2.0 is already in /tmp/omu-share/p2/.omunculus/packs/sales-desk-0.2.0
    imported sales-desk
    ```
@@ -87,6 +100,8 @@ is [how to import a pack](how-to-import-a-pack.md).
    $ omunculus pack --file sales-desk-0.3.0.omupack --models team=fake
    cannot import sales-desk-0.3.0.omupack: sales-desk is already imported at version 0.2.0 from /tmp/omu-share/p2/.omunculus/packs/sales-desk-0.2.0; installing 0.3.0 replaces it: add --upgrade to do that
    $ omunculus pack --file sales-desk-0.3.0.omupack --models team=fake --upgrade
+   …
+   job templates: none
    installed sales-desk 0.3.0 in /tmp/omu-share/p2/.omunculus/packs/sales-desk-0.3.0
    upgraded sales-desk from 0.2.0; the old folder /tmp/omu-share/p2/.omunculus/packs/sales-desk-0.2.0 stays until you remove it by hand
    imported sales-desk

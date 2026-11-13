@@ -877,10 +877,12 @@ or an `https` URL, with `models`, `auth` and `depth`
 folder inside the archive, every file the manifest's and matching its
 `sha256`, the header agreeing with `pack.toml` and the running omunculus.
 It is then laid in `.omunculus/packs/<name>-<version>` of the project and
-imported from there. A name already imported at another version is refused
+imported from there; a config that refuses the import takes the folder this install made away again. A name already imported at another version is refused
 unless `upgrade` is set; the same version with other files is always
-refused. Without `models` it writes nothing and prints the card of the
-pack: description, agents, executables, logins, secrets and job templates.
+refused. It prints the card of the pack, before the result of an install
+from a file and, without `models`, instead of one: description, agents,
+the tools it brings with the program each runs, logins, secrets and job
+templates.
 
 `propose_pack` takes `file` as it takes `path`. It loads the config the
 import would make from a scratch copy, then asks the person, with the card
