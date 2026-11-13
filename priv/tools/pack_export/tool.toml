@@ -1,0 +1,22 @@
+name = "pack export"
+kind = "tool"
+triggers = ["cli"]
+config = false
+description = """
+Writes the pack in path as one file, <name>-<version>.omupack, a gzip tar of its folder (VCS and build leftovers left out) with a manifest of the sha256 and mode of every file, and prints the file's path and sha256. The pack's [pack] table must give name, version, description and omunculus. Send the file by any means; the receiver installs it with pack --file. It runs without a config.
+"""
+tags = ["cli", "pack"]
+groups = ["cli"]
+module = "Omunculus.Tools.PackExport"
+
+[parameters]
+type = "object"
+required = ["path"]
+
+[parameters.properties.path]
+type = "string"
+description = "The pack's folder, relative to the working directory."
+
+[parameters.properties.out]
+type = "string"
+description = "The file to write; <name>-<version>.omupack in the working directory when left out."

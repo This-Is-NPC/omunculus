@@ -33,6 +33,8 @@ defmodule Omunculus.CLI do
                do: execute(config, {:bootstrap, %{issuer: issuer, subject: subject}})
 
         [name | args] ->
+          {name, args} = subcommand(name, args)
+
           case Map.get(Catalog.unconfigured(), name) do
             %Manifest{config: false} = manifest ->
               project = %Project{
@@ -66,6 +68,14 @@ defmodule Omunculus.CLI do
         System.halt(1)
     end
   end
+
+  # `pack export` is the tool whose name is those two words.
+  defp subcommand(name, [word | args] = all) do
+    joined = name <> " " <> word
+    if Map.has_key?(Catalog.unconfigured(), joined), do: {joined, args}, else: {name, all}
+  end
+
+  defp subcommand(name, []), do: {name, []}
 
   @doc "The line an error prints as, with the command that resolves it when there is one."
   @spec message(term) :: String.t()

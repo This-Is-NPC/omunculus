@@ -11,35 +11,104 @@ defmodule Omunculus.Tools.Pack do
   """
 
   alias Omunculus.{Config, Errors}
-  alias Omunculus.Config.Packs
+  alias Omunculus.Config.{Omupack, Packs}
   alias Omunculus.Jobs.Templates
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
   def run(%{args: args, config_path: config_path} = input) when is_binary(config_path) do
-    dir = Path.expand(args["path"] || "", Path.dirname(config_path))
-
-    with nil <- Args.missing(args, ~w(path)),
-         {:ok, pack} <- Packs.read(dir),
+    with {:ok, source} <- source(args, config_path),
          {:ok, models} <- pairs(args["models"], "models"),
          {:ok, auth} <- pairs(args["auth"], "auth"),
          {:ok, depth} <- depth(args["depth"]) do
-      entry = %{"path" => args["path"], "models" => models, "auth" => auth}
+      entry = %{"path" => source.path, "models" => models, "auth" => auth}
 
       import(
         config_path,
-        dir,
-        pack,
+        source,
         if(depth > 0, do: Map.put(entry, "depth", depth), else: entry),
         Enum.map(get_in(input, [:view, "jobs"]) || [], & &1["name"])
       )
     else
-      {:error, reason} -> Out.fail("cannot import #{args["path"]}: #{inspect(reason)}")
-      message -> Out.fail(message)
+      {:error, reason} -> Out.fail(failure(args["file"] || args["path"], reason))
     end
   end
 
   def run(_input), do: Out.fail("config_path required")
+
+  @doc "A refusal as the sentence `pack` and `propose_pack` print."
+  @spec failure(String.t() | nil, term) :: String.t()
+  def failure(label, {_name, kind, _detail} = reason) when kind in [:omunculus, :header],
+    do: "cannot import #{label}: #{Errors.format({:packs, reason})}"
+
+  def failure(label, reason) when is_binary(reason), do: "cannot import #{label}: #{reason}"
+  def failure(label, reason), do: "cannot import #{label}: #{inspect(reason)}"
+
+  # Where the pack comes from: its folder, or the file that is installed
+  # into the project's own folder once the import is settled.
+  defp source(%{"path" => path} = args, config_path) when is_binary(path) and path != "" do
+    if Args.present(args, "file"),
+      do: {:error, "give the pack's folder as path or its file as file, not both"},
+      else: folder(path, Path.dirname(config_path))
+  end
+
+  defp source(args, config_path) do
+    case Args.present(args, "file") do
+      nil -> {:error, "path or file required"}
+      file -> installable(file, args, config_path)
+    end
+  end
+
+  defp folder(path, base) do
+    dir = Path.expand(path, base)
+
+    with {:ok, pack} <- Packs.read(dir),
+         {:ok, files} <- Omupack.list(dir) do
+      {:ok, %{pack: pack, files: files, folder: dir, path: path, install: fn -> {:ok, nil} end}}
+    end
+  end
+
+  defp installable(file, args, config_path) do
+    base = Path.dirname(config_path)
+
+    with {:ok, archive} <- Omupack.read(file, base),
+         {:ok, replaced} <-
+           Omupack.replaces(config_path, archive.header, Args.flag?(args, "upgrade")) do
+      folder = Omupack.folder(base, archive.header)
+
+      {:ok,
+       %{
+         pack: archive.pack,
+         files: Map.keys(archive.files),
+         folder: folder,
+         path: Path.relative_to(folder, base),
+         install: fn -> install(archive, folder, replaced) end
+       }}
+    end
+  end
+
+  defp install(archive, folder, replaced) do
+    with {:ok, state} <- Omupack.install(archive, folder) do
+      name = "#{archive.header["name"]} #{archive.header["version"]}"
+
+      {:ok,
+       [
+         if(state == :installed,
+           do: "installed #{name} in #{folder}",
+           else: "#{name} is already in #{folder}"
+         )
+         | upgraded(archive.header["name"], replaced)
+       ]}
+    end
+  end
+
+  defp upgraded(_name, nil), do: []
+
+  defp upgraded(name, {version, folder}),
+    do: [
+      "upgraded #{name} from #{version || "an unversioned pack"}; " <>
+        "the old folder #{folder} stays until you remove it by hand"
+    ]
 
   defp depth(nil), do: {:ok, 0}
 
@@ -63,14 +132,19 @@ defmodule Omunculus.Tools.Pack do
     end)
   end
 
-  defp import(config_path, dir, pack, entry, jobs) do
-    needs = needs(pack, entry)
+  defp import(config_path, source, entry, jobs) do
+    needs = needs(source.pack, entry)
 
     if needs == [] do
-      with {:ok, config} <- Config.try_pack(config_path, entry),
-           {:ok, emits, note} <- job_emits(pack, config, jobs),
+      with {:ok, installed} <- source.install.(),
+           {:ok, config} <- Config.try_pack(config_path, entry),
+           {:ok, emits, note} <- job_emits(source.pack, config, jobs),
            {:ok, config} <- Config.import_pack(config_path, entry) do
-        lines = [imported(pack) | copied(dir, config)] ++ note ++ environment(dir)
+        lines =
+          List.wrap(installed) ++
+            [imported(source.pack) | copied(source.folder, config)] ++
+            note ++ environment(source.files, source.folder)
+
         Out.ok(Enum.join(lines, "\n"), emits)
       else
         {:error, {:packs, {_pack, :requires, _lacked}} = reason} ->
@@ -83,7 +157,12 @@ defmodule Omunculus.Tools.Pack do
           Out.fail("cannot import #{entry["path"]}: #{inspect(reason)}")
       end
     else
-      Out.fail(Enum.join(needs ++ environment(dir), "\n"))
+      Out.fail(
+        Enum.join(
+          needs ++ card(source.pack, source.files) ++ environment(source.files, source.folder),
+          "\n"
+        )
+      )
     end
   end
 
@@ -141,18 +220,64 @@ defmodule Omunculus.Tools.Pack do
   defp kept([]), do: ""
   defp kept(files), do: "; kept the project's #{Enum.join(files, ", ")}"
 
-  @doc "What the pack in `dir` holds in `environment/`, hidden files left out, as a line, or none."
-  @spec environment(String.t()) :: [String.t()]
-  def environment(dir) do
-    from = Path.join(dir, "environment")
+  @doc """
+  What the pack with `files` holds in `environment/`, hidden ones left out,
+  as a line saying it is in `folder`, or none.
+  """
+  @spec environment([String.t()], String.t()) :: [String.t()]
+  def environment(files, folder) do
+    names =
+      for file <- files,
+          ["environment", name | _rest] <- [Path.split(file)],
+          not String.starts_with?(name, "."),
+          uniq: true,
+          do: name
 
-    files =
-      if File.dir?(from),
-        do: from |> File.ls!() |> Enum.reject(&String.starts_with?(&1, ".")),
-        else: []
-
-    if files == [],
+    if names == [],
       do: [],
-      else: ["environment, to run yourself: #{Enum.join(Enum.sort(files), ", ")} in #{from}"]
+      else: [
+        "environment, to run yourself: #{Enum.join(Enum.sort(names), ", ")} in #{folder}/environment"
+      ]
+  end
+
+  @doc """
+  What the pack is and does, in words, for whoever decides to import it: its
+  description, its agents, the executables it runs (the files of `tools/` and
+  the commands of its MCP servers), the logins and secrets it needs and its
+  job templates.
+  """
+  @spec card(map, [String.t()]) :: [String.t()]
+  def card(pack, files) do
+    header = Map.get(pack, "pack", %{})
+    servers = get_in(pack, ["mcp", "servers"]) || []
+
+    title = Enum.join(Enum.reject([header["name"], header["version"]], &is_nil/1), " ")
+
+    secrets =
+      Enum.to_list(Map.get(pack, "secrets", %{})) ++
+        for server <- servers, table = server["secrets"], do: {server["name"], table}
+
+    [
+      if(header["description"], do: "#{title}: #{header["description"]}", else: title),
+      listed("agents", pack |> Map.get("agents", %{}) |> Map.keys()),
+      listed(
+        "runs these executables",
+        Enum.filter(files, &String.starts_with?(&1, "tools/")) ++
+          for(%{"command" => command} <- servers, do: Enum.join(command, " "))
+      ),
+      listed("needs these logins", header["auth"] || []),
+      listed(
+        "needs these secrets",
+        for(
+          {tool, table} <- secrets,
+          do: "#{tool} (#{table |> Map.keys() |> Enum.sort() |> Enum.join(", ")})"
+        )
+      ),
+      listed("job templates", pack |> Map.get("jobs", %{}) |> Map.keys())
+    ]
+  end
+
+  defp listed(label, items) do
+    "#{label}: " <> if(items == [], do: "none", else: items |> Enum.sort() |> Enum.join(", "))
   end
 end
