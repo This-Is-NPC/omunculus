@@ -516,6 +516,43 @@ account that gave the asker its work, and needs no entry here
 ([requests](requests.md#who-a-request-goes-to)). `[accounts]` is edited in the
 file only, like `[project]` and `[store]`.
 
+## Jobs
+
+`[jobs]` is optional. It holds the limits and the policy of scheduled jobs
+([how to schedule a job](how-to-schedule-a-job.md)); the jobs themselves are
+data in the store, never in this file. Without the table the project has no
+jobs. With it, every key is required, because nothing has a default:
+
+```toml
+[jobs]
+max_parallel = 2
+min_interval_minutes = 5
+max_jobs = 50
+missed = "skip"
+lateness_seconds = 60
+failures_before_pause = 3
+agent_may_create = false
+```
+
+| Key | Meaning |
+| --- | --- |
+| `max_parallel` | Fires of the project that run at once. |
+| `min_interval_minutes` | The shortest gap a schedule may have between two fires. A cron expression is measured over its next 50 fires. |
+| `max_jobs` | Jobs the project holds that are not archived. |
+| `missed` | What a fire that came due while the server was down becomes: `skip` records it as missed, `run_once` runs the latest one. |
+| `lateness_seconds` | How long after its time a fire may still start before it is late. |
+| `failures_before_pause` | Consecutive failed fires that pause a job. |
+| `agent_may_create` | `true` lets an agent's `propose_job` create the job at once, owned by that agent; `false` asks the person first. |
+
+`missed`, `lateness_seconds`, `failures_before_pause` and `max_parallel` are
+read by the scheduler; the store reads `min_interval_minutes`, `max_jobs` and
+`agent_may_create`. Schedules are read in an IANA time zone from the host's
+`tzdata`, so a zone the host does not know is refused.
+
+The capabilities `job.create`, `job.manage` and `job.read` go in `[access]`
+roles, project or conversation. A job linked to a conversation is read by
+whoever holds `job.read` there, which is how a client sees only its own jobs.
+
 ## Interceptors
 
 `[[interceptors]]` is optional. Each rule turns an action of an agent into a
@@ -777,6 +814,12 @@ needs what is missing:
 | `omunculus.toml is missing [store]` | no store path |
 | `omunculus.toml agent <name> is missing model` | agent without `model` |
 | `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
+| `omunculus.toml [jobs] must be a table` | `[jobs]` is not a table |
+| `omunculus.toml [jobs] must give <key>: it has no default` | a key of `[jobs]` is absent |
+| `omunculus.toml [jobs] has an unknown key <key>` | a key `[jobs]` does not hold |
+| `omunculus.toml [jobs] <key> must be a positive integer` | `max_parallel`, `min_interval_minutes`, `max_jobs`, `lateness_seconds` or `failures_before_pause` invalid |
+| `omunculus.toml [jobs] missed must be skip or run_once` | `missed` invalid |
+| `omunculus.toml [jobs] agent_may_create must be true or false` | `agent_may_create` invalid |
 | `omunculus.toml [accounts] must map names to …` | `[accounts]` is not a table |
 | `omunculus.toml [accounts.<name>] must be {kind = "agent", agent = <an agent>} or {kind = "human", …}` | an account is not an identity, or names an absent agent |
 | `omunculus.toml [accounts.<name>] is also the name of an agent: pick another name` | an account named like an agent |

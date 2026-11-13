@@ -176,6 +176,7 @@ capabilities, as in [Forms and effects](#forms-and-effects).
 | `break`, `reopen`, `retire` | Stop failed work, return it for correction, or retire it when the parent no longer wants it. A resumable question uses a request rather than a break/reopen round trip. |
 | `wait` | A root work that only the person can move on later — a decision they will think over, something they will send — waits for their next message rather than asking again: their answer stays the answer, and the message reopens the work. A work below another cannot wait on a message. |
 | `promote` approval | The release's clerk calls `promote`, a tool of its own; the project declares an interceptor on it, and the review is the approval. Without an interceptor nothing holds the call. |
+| `propose_job` | A validated job proposal with the options `approve` (calls `jobs create`, carrying the request's id, which the store checks is a closed request whose chosen option called `jobs`), `edit` (calls nothing; the reply says what to change) and `deny`. The answerer needs `job.create`. See [tools](tools.md#scheduled-jobs). |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, to whoever gave the agent its work. A text reply records advice without applying the proposal. |
 
 A `propose_config` change is a patch over the file's item: the keys it gives
