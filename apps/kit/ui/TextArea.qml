@@ -11,7 +11,8 @@ ColumnLayout {
   id: area
 
   property alias text: input.text
-  property alias placeholderText: input.placeholderText
+  // Shown while the box is empty, on one line: cut at the box's width, never wrapped under its neighbours.
+  property string placeholderText: ""
   property string label: ""
   property bool dense: false
   property bool invalid: false
@@ -58,6 +59,7 @@ ColumnLayout {
         font.family: Theme.fontFamily
         font.pixelSize: area.dense ? 12 : 13
         color: Theme.foreground
+        placeholderText: placeholder.elidedText
         placeholderTextColor: Theme.dim
         selectionColor: Theme.primary
         selectedTextColor: Theme.badgeForeground
@@ -67,7 +69,7 @@ ColumnLayout {
         topPadding: area.dense ? Theme.space.tight : Theme.space.cell
         bottomPadding: area.dense ? Theme.space.tight : Theme.space.cell
         background: null
-        Accessible.name: area.label !== "" ? area.label : placeholderText
+        Accessible.name: area.label !== "" ? area.label : area.placeholderText
 
         function enter(event) {
           if (event.modifiers & Qt.ShiftModifier || inputMethodComposing)
@@ -88,4 +90,11 @@ ColumnLayout {
   }
 
   FontMetrics { id: metrics; font: input.font }
+  TextMetrics {
+    id: placeholder
+    font: input.font
+    text: area.placeholderText
+    elide: Text.ElideRight
+    elideWidth: Math.max(0, input.width - input.leftPadding - input.rightPadding)
+  }
 }
