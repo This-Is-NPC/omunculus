@@ -732,7 +732,9 @@ tabs:
   words, then its time zone, each said once), the conversation, the workspace, the condition, the end, the owner, the delivery,
   its origin and its version.
 
-The page reads at most the job's newest 500 events, so the longest histories
+Every time of a job (the next and last fire, the fires, the versions, the
+preview, the end) reads in this computer's local time with its zone after it,
+"Today 15:00 -03"; the job's own zone is the one its schedule names. The page reads at most the job's newest 500 events, so the longest histories
 show their newest fires; the totals are the server's and count every fire. Its
 bar has BACK, EDIT (filled), PAUSE or RESUME, RUN NOW, DUPLICATE and ARCHIVE.
 Each is one call of the jobs routes. EDIT opens the form with the job's

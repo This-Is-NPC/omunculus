@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Mailbox.js" as Mailbox
+import "kit/client/Time.js" as Time
 import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 
@@ -94,7 +95,8 @@ SurfaceFrame {
         }
         // The full date gives the address its room on a narrow window.
         Label {
-          text: mail.expanded && Breakpoints.size(Window.width) !== "narrow" ? Mail.stamp(mail.message.at) : Mail.when(mail.message.at)
+          text: (mail.expanded && Breakpoints.size(Window.width) !== "narrow" ? Mail.stamp(mail.message.at) : Mail.when(mail.message.at))
+            + (mail.message.job ? " " + Time.zone(mail.message.at) : "")
           color: Theme.dim
           font.pixelSize: 10
         }

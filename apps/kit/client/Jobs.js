@@ -102,8 +102,9 @@ function took(ms) {
   return seconds < 60 ? seconds + " s" : Math.floor(seconds / 60) + " min " + two(seconds % 60) + " s";
 }
 
-// A moment as the lists say it, "Today 07:00"; "—" for none.
-function at(iso, now) { return iso ? Time.began(iso, now) : "—"; }
+// A moment as the lists say it, in the local time with its zone, "Today 07:00
+// -03"; "—" for none.
+function at(iso, now) { return iso ? Time.zoned(iso, now) : "—"; }
 
 // Where a job came from, "tool by seller"; the author and the channel of its
 // latest create or change.
@@ -247,7 +248,7 @@ function formFields(form) {
 
 // The next fires the preview gives, as the lists say them.
 function nextFires(preview, now) {
-  return ((preview && preview.next) || []).map(iso => Time.began(iso, now));
+  return ((preview && preview.next) || []).map(iso => Time.zoned(iso, now));
 }
 
 // The estimate in words: the cost per fire and what it is drawn from, or the
@@ -291,7 +292,7 @@ function lines(job) {
   return [
     { name: "SENDS", value: sends, detail: false },
     { name: "ONLY WHEN", value: job.condition ? job.condition + " passes" : "", detail: false },
-    { name: "UNTIL", value: job.end_at ? endText(job.end_at) : "", detail: false },
+    { name: "UNTIL", value: job.end_at ? endText(job.end_at) + " " + Time.zone(job.end_at) : "", detail: false },
     { name: "DELIVERS", value: job.delivery === "owner_inbox" ? "each reply to the owner's inbox" : "", detail: false },
     { name: "RUNS AS", value: job.owner ? who(job.owner) : "whoever approves it", detail: true },
     { name: "CHAT", value: job.conversation_id ? "a fixed one" : "a new one each fire", detail: true },

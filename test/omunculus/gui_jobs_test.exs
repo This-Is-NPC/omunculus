@@ -174,6 +174,26 @@ defmodule Omunculus.GuiJobsTest do
     """)
   end
 
+  test "a job's times carry the zone they are read in" do
+    run!(
+      """
+      const now = Date.parse("2026-11-13T12:00:00Z");
+      same(Jobs.at("2026-11-13T18:00:00Z", now), "Today 15:00 -03", "a fire");
+      same(Jobs.nextFires({next: ["2026-11-14T18:00:00Z"]}, now), ["14 Nov 15:00 -03"], "next fires");
+      same(Jobs.at(null, now), "—", "none");
+      same(Time.zone("2026-11-13T18:00:00Z"), "-03", "the zone");
+      """,
+      [{"TZ", "America/Sao_Paulo"}]
+    )
+
+    run!(
+      """
+      same(Time.zone("2026-11-13T18:00:00Z"), "UTC", "no offset");
+      """,
+      [{"TZ", "UTC"}]
+    )
+  end
+
   test "a request proposes a job when its approve option creates one" do
     run!("""
     const create = {action: "create", name: "morning", agent: "front", schedule: "daily at 7:00", timezone: "UTC", message: "go"};
@@ -195,10 +215,19 @@ defmodule Omunculus.GuiJobsTest do
       condition: "paid", end_at: "2026-12-31T21:00:00.000Z", owner: agent("seller"), workspace: "site"};
     same(Jobs.lines(job).map(line => [line.name, line.value, line.detail]), [
       ["SENDS", "front is sent \\u201cgo\\u201d", false], ["ONLY WHEN", "paid passes", false],
-      ["UNTIL", Jobs.endText("2026-12-31T21:00:00.000Z"), false], ["DELIVERS", "each reply to the owner's inbox", false],
+      ["UNTIL", Jobs.endText("2026-12-31T21:00:00.000Z") + " " + Time.zone("2026-12-31T21:00:00.000Z"), false], ["DELIVERS", "each reply to the owner's inbox", false],
       ["RUNS AS", "seller", true], ["CHAT", "a new one each fire", true], ["WORKSPACE", "site", true]], "full");
     same(Jobs.lines({tool: "report", schedule: "every 2h"}).map(line => line.value), ["calls the tool report, with no model", "whoever approves it", "a new one each fire"], "a tool, no extras");
     same(Jobs.lines({workflow: "review", message: "x", conversation_id: "c1"})[0].value, "review workflow is sent \\u201cx\\u201d", "a workflow");
+    """)
+  end
+
+  test "a proposal and its form ask the preview the same thing" do
+    run!("""
+    const created = {action: "create", name: "daily", agent: "front-desk", message: "Summarize", schedule: "daily at 18:00", timezone: "UTC", delivery: "owner_inbox"};
+    const asked = JSON.stringify(Jobs.previewOf(created));
+    same(asked, JSON.stringify(Jobs.previewOf(Jobs.formFields(Jobs.fromJob(created)))), "one request");
+    same(asked, JSON.stringify({schedule: "daily at 18:00", timezone: "UTC", target: {agent: "front-desk"}}), "its target and schedule");
     """)
   end
 
@@ -209,20 +238,11 @@ defmodule Omunculus.GuiJobsTest do
     same(Jobs.command("/jobs"), null, "another word");
     same(Jobs.command("write /job"), null, "not at the start");
     same(Jobs.command("hello"), null, "plain");
-    """)
-  end
-end
     same(Jobs.command("/JOB nightly"), "nightly", "any case");
     same(Jobs.commandHint("/job"), "Enter opens the job form", "said as soon as it is typed");
     same(Jobs.commandHint("/job every day"), "Enter opens the job form", "with its words");
     same(Jobs.commandHint("/jo"), "", "not yet");
     same(Jobs.commandHint("hello"), "", "plain text says nothing");
-  test "a proposal and its form ask the preview the same thing" do
-    run!("""
-    const created = {action: "create", name: "daily", agent: "front-desk", message: "Summarize", schedule: "daily at 18:00", timezone: "UTC", delivery: "owner_inbox"};
-    const asked = JSON.stringify(Jobs.previewOf(created));
-    same(asked, JSON.stringify(Jobs.previewOf(Jobs.formFields(Jobs.fromJob(created)))), "one request");
-    same(asked, JSON.stringify({schedule: "daily at 18:00", timezone: "UTC", target: {agent: "front-desk"}}), "its target and schedule");
     """)
   end
-
+end
