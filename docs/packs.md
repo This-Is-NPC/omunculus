@@ -29,8 +29,9 @@ it writes the pack to `[[packs]]` and copies the pack's `workspace/` into
 the default workspace, keeping the files there, when the config loads with
 it. It lists the pack's `environment/`, which it does not run. Without the
 models it writes nothing and says what the pack needs and, in words, its
-description, agents, executables (the files of `tools/`), logins, secrets
-and job templates.
+description, agents, executables (each tool it brings and the program it
+runs, and its MCP servers' commands), logins, secrets and job templates;
+from a file it prints that card on every install.
 With `[project] conversations`, a conversation's folder starts as a copy
 of the workspace, so those files reach every conversation that starts
 after the import ([config](config.md#a-folder-per-conversation)).
