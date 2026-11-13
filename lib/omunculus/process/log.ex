@@ -196,7 +196,7 @@ defmodule Omunculus.Process.Log do
       end
 
     entering = for event <- moves, stage = next_stage(event), do: {event, stage}
-    start = if created, do: [{created, first}], else: []
+    start = if created && first, do: [{created, first}], else: []
 
     Enum.map(start ++ entering, fn {row, stage} ->
       event(row, :stage, "enter " <> stage, %{runs: %{}}, %{"stage" => stage})

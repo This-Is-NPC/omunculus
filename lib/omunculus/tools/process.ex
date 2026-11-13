@@ -12,7 +12,8 @@ defmodule Omunculus.Tools.Process do
   - with `support` and `confidence`, the Declare rules the works that ended
     done keep, and how many cancelled works break each.
 
-  `workflow` keeps one workflow's works, `last` the last conversations.
+  `workflow` keeps one workflow's works and the works below them, and only
+  their events; `last` the last conversations.
   With `bpmn` (`as-is` or `to-be`) and a `workflow`, the output is that
   workflow's BPMN 2.0 instead: mined from the log, or as the config declares
   it. A case is a work, named with its conversation and its runs.
@@ -93,21 +94,34 @@ defmodule Omunculus.Tools.Process do
   defp bpmn(_kind, _log, _config, _name), do: Out.fail("bpmn is as-is or to-be")
 
   defp report(log, args, workflows, rules) do
-    works = Enum.filter(log.works, &(is_nil(args["workflow"]) or &1.workflow == args["workflow"]))
+    {works, events} = scoped(log, args["workflow"])
 
     [
       "#{plural(length(works))}#{scope(args)}.",
       conformance(works, workflows),
       variants(works),
-      activities(log.events),
+      activities(events),
       declare(works, rules)
     ]
     |> Enum.join("\n\n")
   end
 
+  # With a workflow: its works and the works below them, and their events only.
+  defp scoped(log, nil), do: {log.works, log.events}
+
+  defp scoped(log, workflow) do
+    ids = below(log.works, for(work <- log.works, work.workflow == workflow, do: work.id))
+    {Enum.filter(log.works, &(&1.id in ids)), Enum.filter(log.events, &(&1.case in ids))}
+  end
+
+  defp below(works, ids) do
+    more = for work <- works, work.parent_id in ids, work.id not in ids, do: work.id
+    if more == [], do: MapSet.new(ids), else: below(works, ids ++ more)
+  end
+
   defp scope(args) do
     [
-      args["workflow"] && " of workflow #{args["workflow"]}",
+      args["workflow"] && " of workflow #{args["workflow"]} and the works below them",
       args["last"] && " in the last #{args["last"]} conversations"
     ]
     |> Enum.reject(&is_nil/1)
