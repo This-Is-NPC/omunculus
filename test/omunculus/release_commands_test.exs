@@ -49,8 +49,11 @@ defmodule Omunculus.ReleaseCommandsTest do
       do: send_resp(conn, 200, Map.fetch!(opts.files, name))
   end
 
-  @core "omunculus-0.2.0-1-x86_64.pkg.tar.zst"
-  @apps "omunculus-apps-0.2.0-1-any.pkg.tar.zst"
+  # The running version and the next minor one, so the tests hold at any release.
+  @installed Mix.Project.config()[:version]
+  @next (fn v -> "#{v.major}.#{v.minor + 1}.0" end).(Version.parse!(@installed))
+  @core "omunculus-#{@next}-1-x86_64.pkg.tar.zst"
+  @apps "omunculus-apps-#{@next}-1-any.pkg.tar.zst"
 
   defp sha(data), do: :crypto.hash(:sha256, data) |> Base.encode16(case: :lower)
 
@@ -103,9 +106,9 @@ defmodule Omunculus.ReleaseCommandsTest do
   end
 
   test "update installs the core package alone when apps are not installed", %{dir: dir} do
-    serve("v0.2.0")
+    serve("v#{@next}")
     assert {:ok, output} = CLI.run(["update"], dir)
-    assert output =~ "0.2.0 installed"
+    assert output =~ "#{@next} installed"
     assert [[file]] = sudo_files()
     assert Path.basename(file) == @core
     assert {"systemctl", ["--user", "restart", "omunculus"]} in FakeRunner.log()
@@ -115,7 +118,7 @@ defmodule Omunculus.ReleaseCommandsTest do
     dir: dir
   } do
     Application.put_env(:omunculus, :fake_runner, apps: true, active: false)
-    serve("v0.2.0")
+    serve("v#{@next}")
     assert {:ok, output} = CLI.run(["update"], dir)
     assert output =~ "nothing was restarted"
     assert [files] = sudo_files()
@@ -124,31 +127,34 @@ defmodule Omunculus.ReleaseCommandsTest do
   end
 
   test "update refuses a package whose checksum differs", %{dir: dir} do
-    serve("v0.2.0", %{@core => String.duplicate("0", 64)})
+    serve("v#{@next}", %{@core => String.duplicate("0", 64)})
     assert {:error, reason} = CLI.run(["update"], dir)
     assert CLI.message(reason) =~ "#{@core} does not match its checksum"
     assert sudo_files() == []
   end
 
   test "update --check reports and installs nothing", %{dir: dir} do
-    serve("v0.2.0")
+    serve("v#{@next}")
     assert {:ok, output} = CLI.run(["update", "--check"], dir)
-    assert output =~ "0.2.0 is available (installed 0.1.0)"
+    assert output =~ "#{@next} is available (installed #{@installed})"
     assert output =~ @core
     refute output =~ @apps
     assert sudo_files() == []
   end
 
   test "a release with no package is said in words, and checked without failing", %{dir: dir} do
-    serve("v0.2.0", %{}, %{"notes.txt" => "n"})
+    serve("v#{@next}", %{}, %{"notes.txt" => "n"})
 
     assert {:error, reason} = CLI.run(["update"], dir)
 
     assert CLI.message(reason) ==
-             "v0.2.0 is out but carries no omunculus package yet; nothing was installed"
+             "v#{@next} is out but carries no omunculus package yet; nothing was installed"
 
     assert {:ok, output} = CLI.run(["update", "--check"], dir)
-    assert output =~ "omunculus 0.2.0 is available (installed 0.1.0), but it has no package yet."
+
+    assert output =~
+             "omunculus #{@next} is available (installed #{@installed}), but it has no package yet."
+
     refute output =~ "^"
     assert sudo_files() == []
   end
