@@ -366,7 +366,8 @@ defmodule Omunculus.Jobs do
     |> Map.merge(%{"usd" => 0.0, "success_rate" => nil})
   end
 
-  # What finished fires cost and how they ended, per job.
+  # What finished fires cost and how they ended, per job. Group by position:
+  # `id` names the event's own column, not the job's.
   defp totals(conn) do
     with {:ok, rows} <-
            Query.all(
@@ -380,7 +381,7 @@ defmodule Omunculus.Jobs do
                TOTAL(json_extract(body, '$.output_tokens')) AS output_tokens
              FROM events
              WHERE type = 'job_fire' AND json_extract(body, '$.state') IN ('skipped', 'missed', 'succeeded', 'failed', 'cancelled')
-             GROUP BY id, state
+             GROUP BY 1, 2
              """
            ) do
       {:ok,
