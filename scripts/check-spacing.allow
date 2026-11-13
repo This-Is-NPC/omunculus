@@ -49,5 +49,6 @@ apps/kit/ui/Masthead.qml spacing
 apps/kit/ui/NewProjectDialog.qml implicitHeight
 apps/kit/ui/NewProjectDialog.qml spacing
 apps/kit/ui/NewProjectDialog.qml Layout.topMargin
+apps/console/DuplicateJobDialog.qml implicitHeight
 apps/kit/ui/Panel.qml implicitHeight
 apps/kit/ui/Panel.qml spacing

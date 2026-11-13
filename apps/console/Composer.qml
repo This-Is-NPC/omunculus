@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Jobs.js" as Jobs
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
@@ -56,6 +57,9 @@ ColumnLayout {
     }
   }
 
+  // The person asked for the form of a new job, with these words in it.
+  signal jobWanted(string message)
+
   // Put the keyboard in the box; in a work, `note` makes Enter leave a note.
   function focusEntry(note) {
     noting = !!note && work !== ""
@@ -71,6 +75,14 @@ ColumnLayout {
   }
 
   function submit() {
+    // `/job` opens the form of a new job with the words after it: a way to the
+    // form, not a message and not a second way to make a job.
+    const job = Jobs.command(entry.text)
+    if (job !== null) {
+      entry.clear()
+      composer.jobWanted(job)
+      return
+    }
     const value = entry.text.trim()
     if (!value || composer.sending || composer.unaddressed)
       return
