@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Fails when the mailbox's thread list lays rows over one another. Runs a
+# render loop of the list at 390 px under quickshell, headless: threads
+# arrive, change height, move and leave, and each settled row must clear the
+# one above it and the section titles (scripts/check-list-layout.qml).
+set -euo pipefail
+
+root=${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+command -v quickshell >/dev/null || { echo "check-list-layout: quickshell is not installed" >&2; exit 1; }
+
+# The mailbox's own files, with the harness in place of its shell.
+mkdir -p "$tmp/app" "$tmp/run"
+chmod 700 "$tmp/run"
+for file in "$root"/apps/mailbox/*.qml; do
+  [ "${file##*/}" = shell.qml ] || ln -s "$file" "$tmp/app/"
+done
+ln -s "$root/apps/kit" "$tmp/app/kit"
+cp "$root/scripts/check-list-layout.qml" "$tmp/app/shell.qml"
+
+XDG_RUNTIME_DIR=$tmp/run XDG_CONFIG_HOME=$tmp/config XDG_STATE_HOME=$tmp/state XDG_CACHE_HOME=$tmp/cache \
+  QT_QPA_PLATFORM=offscreen OMUNCULUS_SOCKET= NO_COLOR=1 \
+  timeout 60 quickshell --no-color --path "$tmp/app" >"$tmp/log" 2>&1 || true
+
+result=$(grep -o 'RESULT [0-9]* [0-9]*' "$tmp/log" || true)
+if [ -z "$result" ]; then
+  echo "check-list-layout: the render loop did not finish" >&2
+  sed 's/^/  /' "$tmp/log" >&2
+  exit 1
+fi
+read -r _ rows faults <<<"$result"
+if [ "$faults" -ne 0 ] || [ "$rows" -eq 0 ]; then
+  echo "check-list-layout: $faults faults in $rows rows" >&2
+  grep FAULT "$tmp/log" | sed 's/^/  /' >&2
+  exit 1
+fi
+echo "check-list-layout: $rows rows laid out clear of each other"
