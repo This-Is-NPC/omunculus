@@ -14,7 +14,7 @@ pkgdesc='A hierarchy of AI agents that work a project, with its server and apps'
 arch=('x86_64')
 url='https://github.com/This-Is-NPC/omunculus'
 license=('MIT')
-makedepends=('elixir' 'erlang-nox' 'git')
+makedepends=('elixir' 'erlang' 'git')
 options=('!lto' '!debug')
 
 # The release links the libcrypto of the machine that built it. Naming its
