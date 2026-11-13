@@ -295,4 +295,40 @@ defmodule Omunculus.Tool.ViewsTest do
                work_id: work
              })
   end
+
+  describe "the log" do
+    @log %{"log" => %{"source" => "log"}}
+
+    test "reads the project's works, runs and events, of the last conversations the call asks for",
+         %{conn: conn} do
+      %{works: works} = Omunculus.ProcessFixtures.seed(conn)
+
+      assert {:ok, %{"log" => %{works: all, events: events}}} = hydrate(conn, @log, %{})
+      assert length(all) == 8
+      assert Enum.all?(events, &Map.has_key?(&1, :sequence))
+
+      for args <- [%{"last" => 1}, %{"last" => "1"}, %{"evidence" => %{"last" => 1}}] do
+        assert {:ok, %{"log" => %{works: newest}}} = hydrate(conn, @log, %{args: args})
+
+        assert Enum.sort(Enum.map(newest, & &1.id)) ==
+                 Enum.sort([works.back, works.repeated, works.open])
+      end
+    end
+
+    test "a last that is no count reads everything, and a tool's own check refuses it", %{
+      conn: conn
+    } do
+      Omunculus.ProcessFixtures.seed(conn)
+
+      for args <- [%{"last" => 0}, %{"last" => "x"}, %{"evidence" => "no"}] do
+        assert {:ok, %{"log" => %{works: all}}} = hydrate(conn, @log, %{args: args})
+        assert length(all) == 8
+      end
+    end
+
+    test "takes no option" do
+      assert {:error, {:views, "log", {:unknown_key, "limit"}}} =
+               Views.parse(%{"log" => %{"source" => "log", "limit" => 3}})
+    end
+  end
 end

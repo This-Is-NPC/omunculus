@@ -1,0 +1,21 @@
+name = "ocel"
+kind = "tool"
+triggers = ["cli"]
+description = "Exports the project's event log as OCEL 2.0 JSON, for process mining tools: the objects (conversations, works, runs, requests, artifacts, jobs) and the events (stage moves, tool calls and their refusals, model replies, requests raised, escalated and answered, artifacts, work ends and job fires), each event related to every object it touches, with agent, model, cost, tokens and duration. It prints the JSON, or writes it to out, a path relative to the project's folder. last keeps the last conversations."
+tags = ["cli", "runs"]
+module = "Omunculus.Tools.Ocel"
+
+[parameters]
+type = "object"
+
+[parameters.properties.out]
+type = "string"
+description = "A file to write the JSON to, relative to the project's folder, instead of printing it."
+
+[parameters.properties.last]
+type = "integer"
+minimum = 1
+description = "Only the last conversations, as many as this."
+
+[views.log]
+source = "log"

@@ -14,6 +14,21 @@ defmodule Omunculus.Tools.Args do
     end
   end
 
+  @doc "Like `count/2`, and a count the command line gives as text."
+  @spec count_text(map, String.t()) :: {:ok, pos_integer | nil} | {:error, String.t()}
+  def count_text(args, key) do
+    case Map.get(args, key) do
+      text when is_binary(text) ->
+        case Integer.parse(text) do
+          {n, ""} when n > 0 -> {:ok, n}
+          _invalid -> {:error, "#{key} must be a positive integer"}
+        end
+
+      _other ->
+        count(args, key)
+    end
+  end
+
   @doc "Whether the flag `key` is set: true, or `\"true\"` from the command line."
   @spec flag?(map, String.t()) :: boolean
   def flag?(args, key), do: Map.get(args, key) in [true, "true"]
