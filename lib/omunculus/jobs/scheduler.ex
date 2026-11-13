@@ -9,8 +9,8 @@ defmodule Omunculus.Jobs.Scheduler do
 
   1. at the server's start only (`boot?`), fails the fires a stopped server
      left `running`, and applies `[jobs] missed` to the slots that passed
-     while it was down: `skip` records each as `missed`, `run_once` records
-     all but the latest as `missed` and runs that one;
+     while it was down: `skip` records them as one `missed` fire with their
+     range and count, `run_once` does so for all but the latest and runs that one;
   2. claims every slot of an active job that has come (`Omunculus.Jobs.due/2`)
      as a `due` fire;
   3. moves the active jobs whose end date has passed to `ended`;
@@ -154,22 +154,30 @@ defmodule Omunculus.Jobs.Scheduler do
         {"run_once", passed} -> {Enum.drop(passed, -1), [List.last(passed)]}
       end
 
-    with :ok <-
-           each(missed, fn slot ->
-             with {:ok, fire} <- slot_fire(conn, job, slot),
-                  {:ok, _fire} <-
-                    Jobs.record_fire(conn, job["id"], %{
-                      "fire_id" => fire["fire_id"],
-                      "state" => "missed",
-                      "reason" => "the server was down"
-                    }),
-                  do: :ok
-           end),
+    with :ok <- record_missed(conn, job, missed),
          :ok <- each(current, &with({:ok, _fire} <- slot_fire(conn, job, &1), do: :ok)) do
       collect(once, fn slot ->
         with {:ok, fire} <- slot_fire(conn, job, slot), do: {:ok, fire["fire_id"]}
       end)
     end
+  end
+
+  # The slots missed while the server was down are one fire: their first, their
+  # last and how many.
+  defp record_missed(_conn, _job, []), do: :ok
+
+  defp record_missed(conn, job, [first | _] = slots) do
+    last = List.last(slots)
+
+    with {:ok, _fire} <-
+           Jobs.record_fire(conn, job["id"], %{
+             "state" => "missed",
+             "scheduled_for" => DateTime.to_iso8601(first),
+             "until" => DateTime.to_iso8601(last),
+             "count" => length(slots),
+             "reason" => "the server was down for #{length(slots)} scheduled fires"
+           }),
+         do: :ok
   end
 
   defp slot_fire(conn, job, slot),

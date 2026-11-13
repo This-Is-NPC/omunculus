@@ -265,8 +265,16 @@ defmodule Omunculus.Jobs.SchedulerTest do
 
     with_project(dir, fn project ->
       assert [] = tick(project, after_anchor(project, "away", 17), true)
-      assert ["missed", "missed", "missed"] = states(project, "away")
-      assert [%{"reason" => "the server was down"} | _] = fires(project, "away")
+
+      # One event for the range, which the totals count by its slots, and
+      # which later ticks count from.
+      assert ["missed"] = states(project, "away")
+      assert [%{"count" => 3, "scheduled_for" => first, "until" => last}] = fires(project, "away")
+      assert first < last
+      assert {:ok, %{"fires" => %{"missed" => 3, "fires" => 3}}} = Jobs.get(project.conn, "away")
+      assert [_] = history_states(project, "away")
+      assert [] = tick(project, after_anchor(project, "away", 17, 40))
+      assert ["missed"] = states(project, "away")
     end)
   end
 
@@ -276,7 +284,8 @@ defmodule Omunculus.Jobs.SchedulerTest do
 
     with_project(dir, fn project ->
       assert [_one] = tick(project, after_anchor(project, "away", 17), true)
-      assert ["missed", "missed", "succeeded"] = states(project, "away")
+      assert ["missed", "succeeded"] = states(project, "away")
+      assert [%{"count" => 2}, _] = fires(project, "away")
       # Run on purpose, so it is not late.
       assert [] = requests(project)
     end)
