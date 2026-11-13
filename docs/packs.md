@@ -12,7 +12,8 @@ providers, MCP servers and depth layers, and maps its roles to the config's
 models and its providers to the config's `[auth]`, and may move the whole
 team `depth` depths below its own. The pack's items are laid under the
 config's, an item of the config of the same name overriding it key by key
-(grants it writes joining the pack's tools); two packs' items of one name
+(an agent's `granted` joins the pack's tools, while a `tools` it writes
+replaces them); two packs' items of one name
 are refused but for depth layers, where the workflows they require add up;
 and the pack's `tools/` and `skills/` come before the config's paths.
 
