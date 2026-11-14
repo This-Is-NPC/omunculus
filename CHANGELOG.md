@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/This-Is-NPC/omunculus/compare/v0.3.0...v0.4.0) (2026-11-14)
+
+
+### Features
+
+* **packs:** add a pack header and its version gate ([5e50966](https://github.com/This-Is-NPC/omunculus/commit/5e50966b4eff73da9c2510c9915a72cfa9cc6bf7))
+* **packs:** export and install .omupack files ([cb89590](https://github.com/This-Is-NPC/omunculus/commit/cb8959079478fabc7d10067a10acfd5daffc9de3))
+* **process:** export the event log as OCEL 2.0 ([d4b7cd0](https://github.com/This-Is-NPC/omunculus/commit/d4b7cd0090355b9c4a7afaba41c41a562664a202))
+* **process:** mine process facts and draw BPMN ([bc725ae](https://github.com/This-Is-NPC/omunculus/commit/bc725ae2670e0fd99a70e7d3890367ef20183938))
+* **refiner:** propose with process evidence ([23685c7](https://github.com/This-Is-NPC/omunculus/commit/23685c7e235d40cc18497bf4e121a9529cd6354e))
+
+
+### Bug Fixes
+
+* **packs:** show the card on every file install ([c3c599a](https://github.com/This-Is-NPC/omunculus/commit/c3c599ab4f12d7c30ed6c53888b6da7ab94c3b85))
+* **process:** say once for a single call ([caf0105](https://github.com/This-Is-NPC/omunculus/commit/caf01053481c5d1c74ffd668b67264efd5ff9fce))
+* **process:** scope every section to the workflow ([9b30d61](https://github.com/This-Is-NPC/omunculus/commit/9b30d616681c15cf97af1bd915e62b7ad08c1828))
+
 ## [0.3.0](https://github.com/This-Is-NPC/omunculus/compare/v0.2.1...v0.3.0) (2026-11-13)
 
 
